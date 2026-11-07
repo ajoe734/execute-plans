@@ -1,0 +1,174 @@
+{
+  "schema_version": "pantheon.fe-pulse-baseline-scope.v1",
+  "task_id": "FE-PULSE-BASELINE-SCOPE-20261106",
+  "title": "交易脈動 Baseline 覆蓋：分母改用需要比較的數量、不需比較時顯示明確文字",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "branch": "task/FE-PULSE-BASELINE-SCOPE-20261106",
+  "merge_target": "dev",
+  "base_sha": "bdf2a6640f1fed5fee2d14106325770727ca7684",
+  "prerequisite_bff_task": {
+    "task_id": "BFF-PULSE-BASELINE-SCOPE-20261106",
+    "pantheon_commit": "7ac1763b6758484aa904decd448b34f2b9c7fb68",
+    "pantheon_merge_commit": "7b917b79520eae6f3acf27e2d994d4849eaf02a3"
+  },
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Verified locally via Vitest unit/component/adapter/i18n suites, TypeScript typecheck, contract drift check, Vite production build, and headless Chromium browser screenshot + DOM readback of /management/trading-pulse with all-paper fixture data.",
+  "scoped_artifacts": [
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-PULSE-BASELINE-SCOPE-20261106/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_adapter_maps_baseline_required_count_and_tile_uses_as_denominator": "verified: ManagementTradingPulseCoverage, ManagementTradingPulseSummary, TRADING_PULSE_COVERAGE_NUMBER_KEYS, normalizeTradingPulseSummary, and normalizeTradingPulseCardDetails map both baseline_required_count and baselineRequiredCount; TradingPulseCoverageSummary uses coverage.baselineRequiredCount as the denominator when positive (e.g. 1/1 or 1/2 instead of 1/4).",
+    "2_fallback_to_runtime_count_when_absent": "verified: When baseline_required_count / baselineRequiredCount is absent, normalizeTradingPulseCoverage and normalizeTradingPulseSummary leave it undefined and TradingPulseCoverageSummary falls back to runtimeCount (e.g. 76/90 on older BFF payloads, and '—' when baselineComparisonCount is also absent).",
+    "3_zero_required_shows_localized_not_required_and_no_degraded_badge": "verified: When baseline_required_count is 0, the Baseline coverage tile renders t('mgmt.pulse.notRequired') ('不需比較' in zh-TW, 'Not required' in en-US) instead of 0/N and renders status 'ok' with no degraded badge.",
+    "4_non_empty_missing_baseline_runtime_ids_stays_degraded": "verified: When missing_baseline_runtime_ids is non-empty, the Baseline coverage tile status remains 'degraded' and lists the missing runtime ids via shortList(missingBaseline).",
+    "5_row_not_required_neutral_localized_badge_and_unavailable_warning": "verified: In RuntimeRowsPanel, a row with baselineComparison.status === 'not_required' renders a neutral badge (bg-muted text-muted-foreground border-border from statusTone default branch) with localized text ('不需比較' in zh-TW, 'Not required' in en-US), while 'unavailable' keeps its warning tone (bg-status-warning/15 text-status-warning border-status-warning/30) and raw status text.",
+    "6_focused_tests_i18n_parity_and_typecheck_pass": "verified: Focused tests in src/lib/bff-v1/__tests__/management.test.ts, src/management/pages/oversight/TradingPulsePage.test.tsx, and src/lib/v5/management/__tests__/i18nParity.test.ts cover all four tile states, row badges in both locales, and i18n key parity; tsc -p tsconfig.app.json --noEmit and tsc -p tsconfig.agora.json --noEmit pass.",
+    "7_evidence_records_commands_results_and_all_paper_screenshot": "verified: Exact commands, exit codes, test counts, and headless Chromium 1440x1200 screenshots + DOM readbacks for the 4-runtime all-paper fixture in both zh-TW and en-US are recorded below."
+  },
+  "browser_all_paper_fixture_screenshot": {
+    "route": "GET /bff/management/trading-pulse",
+    "page_url": "/management/trading-pulse",
+    "viewport": {
+      "width": 1440,
+      "height": 1200
+    },
+    "fixture_summary": {
+      "runtime_count": 4,
+      "paper_runtime_count": 4,
+      "baseline_comparison_count": 0,
+      "baseline_required_count": 0,
+      "missing_baseline_runtime_ids": [],
+      "by_baseline_status": {
+        "not_required": 4
+      },
+      "paper_live_drift_surface": {
+        "status": "ok",
+        "message": "No live runtimes require paper/live baseline comparison."
+      }
+    },
+    "zh_TW": {
+      "screenshot_path": "/tmp/fe-pulse-baseline-scope-20261106/trading-pulse-all-paper-zh-TW.png",
+      "sha256": "e88b9970b3d1e23490fb1ac1a7007701a4fe4798199c3481e4b373bd408a62e5",
+      "bytes": 237725,
+      "coverage_tiles": [
+        "Runtime 明細: 4 | active: 4 · 已排除已退役：113",
+        "Telemetry 覆蓋 (ok): 4/4 | 缺: —",
+        "Monitoring 覆蓋 (ok): 4/4 | 缺: —",
+        "Baseline 覆蓋 (ok): 不需比較 | 缺: —",
+        "Row health (ok): 0 | ok: 4 · —"
+      ],
+      "runtime_rows": [
+        {
+          "runtime_id": "rt-535a82a3",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "不需比較",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        },
+        {
+          "runtime_id": "rt-8b0d8649",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "不需比較",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        },
+        {
+          "runtime_id": "rt-c98e4223",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "不需比較",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        },
+        {
+          "runtime_id": "rt-342d76ff",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "不需比較",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        }
+      ]
+    },
+    "en_US": {
+      "screenshot_path": "/tmp/fe-pulse-baseline-scope-20261106/trading-pulse-all-paper-en-US.png",
+      "sha256": "0b508c779dc6875d07da2346639835aae29acbe9fce9bf46cddc30a0340628c9",
+      "bytes": 237186,
+      "coverage_tiles": [
+        "Runtime rows: 4 | active: 4 · Excluded retired: 113",
+        "Telemetry coverage (ok): 4/4 | Missing: —",
+        "Monitoring coverage (ok): 4/4 | Missing: —",
+        "Baseline coverage (ok): Not required | Missing: —",
+        "Row health (ok): 0 | ok: 4 · —"
+      ],
+      "runtime_rows": [
+        {
+          "runtime_id": "rt-535a82a3",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "Not required",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        },
+        {
+          "runtime_id": "rt-8b0d8649",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "Not required",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        },
+        {
+          "runtime_id": "rt-c98e4223",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "Not required",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        },
+        {
+          "runtime_id": "rt-342d76ff",
+          "row_health": "ok",
+          "stage": "paper / active",
+          "baseline_status_text": "Not required",
+          "baseline_badge_tone": "bg-muted text-muted-foreground border-border"
+        }
+      ]
+    }
+  },
+  "verification": {
+    "focused_vitest": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts src/management/components/detail/OwnerFacts.test.tsx",
+      "exit_code": 0,
+      "status": "passed",
+      "test_files": 6,
+      "tests_passed": 128
+    },
+    "contract_drift": {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/dev-root npm run test:contract",
+      "exit_code": 0,
+      "status": "passed",
+      "tests_passed": 7
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/lib/bff-v1/management.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/_core.tsx src/management/pages/oversight/TradingPulsePage.test.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "e2e_build_and_all_paper_screenshot": {
+      "command": "node scripts/build-e2e-server.mjs && node /tmp/fe-pulse-baseline-scope-20261106-capture.mjs && rm -rf dist",
+      "exit_code": 0,
+      "status": "passed"
+    }
+  }
+}

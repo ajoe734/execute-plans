@@ -819,9 +819,108 @@ describe("mgmt façade (PM-Live)", () => {
     });
 
     expect(absentCoverageOut?.summary.retiredRuntimeCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.baselineRequiredCount).toBeUndefined();
     expect(absentCoverageOut?.summary.coverage?.telemetryCoverageCount).toBeUndefined();
     expect(absentCoverageOut?.summary.coverage?.monitoringCoverageCount).toBeUndefined();
     expect(absentCoverageOut?.summary.coverage?.baselineComparisonCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.coverage?.baselineRequiredCount).toBeUndefined();
+  });
+
+  it("maps baseline_required_count and baselineRequiredCount across summary, coverage, and card details including zero", () => {
+    const snakeZeroOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtime_count: 4,
+          baseline_comparison_count: 0,
+          baseline_required_count: 0,
+          by_status: { active: 4 },
+          by_stage: { paper: 4 },
+          by_baseline_status: { not_required: 4 },
+          missing_baseline_runtime_ids: [],
+          coverage: {
+            runtime_count: 4,
+            baseline_comparison_count: 0,
+            baseline_required_count: 0,
+            missing_baseline_runtime_ids: [],
+          },
+        },
+        cards: [
+          {
+            card_id: "baseline-comparison",
+            label: "Baseline Comparison",
+            value: 0,
+            details: {
+              baseline_comparison_count: 0,
+              baseline_required_count: 0,
+              by_baseline_status: { not_required: 4 },
+              missing_baseline_runtime_ids: [],
+            },
+          },
+        ],
+        runtime_rows: [],
+      },
+      meta: {
+        snapshot_at: "2026-11-06T00:00:00Z",
+        surfaces: {},
+        coverage: {
+          baseline_required_count: 0,
+        },
+      },
+    });
+
+    expect(snakeZeroOut?.summary.baselineRequiredCount).toBe(0);
+    expect(snakeZeroOut?.summary.baseline_required_count).toBe(0);
+    expect(snakeZeroOut?.summary.coverage?.baselineRequiredCount).toBe(0);
+    expect(snakeZeroOut?.summary.coverage?.baseline_required_count).toBe(0);
+    expect(snakeZeroOut?.meta.coverage?.baselineRequiredCount).toBe(0);
+    expect(snakeZeroOut?.cards[0].details).toMatchObject({
+      baselineComparisonCount: 0,
+      baselineRequiredCount: 0,
+      baseline_required_count: 0,
+    });
+
+    const camelMixedOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtimeCount: 4,
+          baselineComparisonCount: 1,
+          baselineRequiredCount: 2,
+          byStatus: { active: 4 },
+        },
+        cards: [
+          {
+            cardId: "baseline-comparison",
+            label: "Baseline Comparison",
+            value: 0,
+            details: {
+              baselineComparisonCount: 1,
+              baselineRequiredCount: 2,
+            },
+          },
+        ],
+        runtimeRows: [],
+      },
+      meta: {
+        snapshotAt: "2026-11-06T00:00:00Z",
+        surfaces: {},
+        coverage: {
+          baselineRequiredCount: 2,
+        },
+      },
+    });
+
+    expect(camelMixedOut?.summary.baselineRequiredCount).toBe(2);
+    expect(camelMixedOut?.summary.baseline_required_count).toBe(2);
+    expect(camelMixedOut?.summary.coverage?.baselineRequiredCount).toBe(2);
+    expect(camelMixedOut?.summary.coverage?.baseline_required_count).toBe(2);
+    expect(camelMixedOut?.meta.coverage?.baselineRequiredCount).toBe(2);
+    expect(camelMixedOut?.cards[0].details).toMatchObject({
+      baselineComparisonCount: 1,
+      baselineRequiredCount: 2,
+      baseline_required_count: 2,
+    });
   });
 
   it("adapts legacy Trading Pulse rows as degraded local snapshots", () => {

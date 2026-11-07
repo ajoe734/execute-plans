@@ -22,6 +22,7 @@ export type CreatableEntity = (typeof CREATABLE_ENTITIES)[number];
  * not a way to make a frontend-only mutation appear successful.
  */
 export const DURABLE_CREATE_OWNERS = {
+  strategy: "POST /bff/strategies",
   persona: "POST /bff/management/personas/create-paper-bundle",
   evolutionProgram: "POST /bff/evolution-programs",
 } as const satisfies Partial<Record<CreatableEntity, string>>;

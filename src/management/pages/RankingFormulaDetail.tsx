@@ -5,13 +5,65 @@ import { Button } from "@/components/ui/button";
 import { bffV1 } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
-import type { AuditEvent, RankingFormula, Strategy } from "@/lib/bff-v1";
+import type { AuditEvent, RankingFormula } from "@/lib/bff-v1";
 import { AlertTriangle, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
+
+export interface RankingFormulaScoreRow {
+  id: string;
+  rank: number;
+  name: string;
+  sharpe?: number;
+  drawdown?: number;
+  score: number;
+}
+
+function extractOwnerRankingRows(formula: RankingFormula): RankingFormulaScoreRow[] {
+  const raw = formula as RankingFormula & {
+    rankings?: unknown;
+    ranking_rows?: unknown;
+    rows?: unknown;
+  };
+  const candidate = Array.isArray(raw.rankings)
+    ? raw.rankings
+    : Array.isArray(raw.ranking_rows)
+      ? raw.ranking_rows
+      : Array.isArray(raw.rows)
+        ? raw.rows
+        : [];
+  const rows: RankingFormulaScoreRow[] = [];
+  candidate.forEach((item, index) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const id = String(record.id ?? record.strategy_id ?? record.strategyId ?? record.persona_id ?? "").trim();
+    const name = String(record.name ?? record.display_name ?? id).trim();
+    const score = record.score;
+    if (!id || typeof score !== "number" || !Number.isFinite(score)) return;
+    const rank = typeof record.rank === "number" && Number.isFinite(record.rank) ? record.rank : index + 1;
+    const sharpe = typeof record.sharpe === "number" && Number.isFinite(record.sharpe) ? record.sharpe : undefined;
+    const drawdown = typeof record.drawdown === "number" && Number.isFinite(record.drawdown) ? record.drawdown : undefined;
+    rows.push({ id, rank, name: name || id, sharpe, drawdown, score });
+  });
+  return rows;
+}
+
+export function formatFormulaAppliedTo(appliedTo: unknown): string {
+  if (typeof appliedTo === "number" && Number.isFinite(appliedTo)) {
+    return `${appliedTo} strategies`;
+  }
+  if (typeof appliedTo === "string") {
+    const trimmed = appliedTo.trim();
+    if (trimmed.length > 0 && !/undefined|null/i.test(trimmed)) {
+      return trimmed;
+    }
+  }
+  return "—";
+}
 
 export const RankingFormulaDetail = () => {
   const { id } = useParams();
@@ -22,12 +74,10 @@ export const RankingFormulaDetail = () => {
     (entityId) => bffV1.rankingFormulas.list().then((rows) => rows.find((x) => x.id === entityId)),
     { kinds: ["rankingFormulas"] },
   );
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
     if (!id) return;
-    bffV1.strategies.list().then(setStrategies).catch(() => {});
     bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("ranking.")))).catch(() => {});
   }, [id]);
 
@@ -60,11 +110,11 @@ export const RankingFormulaDetail = () => {
       </>
     );
   }
-  const ranked = [...strategies]
-    .map((s) => ({ ...s, score: 0.6 * s.sharpe - 0.4 * Math.abs(s.drawdown) }))
-    .sort((a, b) => b.score - a.score);
+
+  const ranked = extractOwnerRankingRows(f);
+  const rankingsCenterHref = canonicalCenterUrl("rankings", "rolling");
   const versions = [
-    { v: "v3", at: f.updatedAt, by: f.owner, note: "Current — activated" },
+    { v: "v3", at: f.updatedAt, by: f.owner || "—", note: "Current — activated" },
   ];
 
   return (
@@ -85,26 +135,48 @@ export const RankingFormulaDetail = () => {
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <Field label="Applied to" value={`${f.appliedTo} strategies`} mono />
-                  <Field label={t("table.state")} value={f.state} mono />
-                  <Field label={t("table.owner")} value={f.owner} mono />
+                  <Field label="Applied to" value={formatFormulaAppliedTo(f.appliedTo)} mono />
+                  <Field label={t("table.state")} value={f.state || "—"} mono />
+                  <Field label={t("table.owner")} value={f.owner || "—"} mono />
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("ranking.expression")}</div>
-                  <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{f.expression}</pre>
+                  <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{f.expression || "—"}</pre>
                 </div>
               </Section>
             ),
           },
-          { value: "preview", label: t("rankingDashboard.score"), content: (
-            <DataTable rows={ranked.map((r, i) => ({ ...r, id: r.id, rank: i + 1 }))} onRowClick={(r) => nav(`/management/strategies/${r.id}`)} columns={[
-              { key: "rank", header: "#", cell: (r) => <span className="text-mono text-xs">{r.rank}</span> },
-              { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-              { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{(r.sharpe ?? 0).toFixed(2)}</span> },
-              { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs">{(r.drawdown * 100).toFixed(2)}%</span> },
-              { key: "score", header: t("rankingDashboard.score"), cell: (r) => <span className="text-mono text-xs text-accent">{(r.score ?? 0).toFixed(3)}</span> },
-            ]} />
-          ) },
+          {
+            value: "preview",
+            label: t("rankingDashboard.score"),
+            content:
+              ranked.length > 0 ? (
+                <div data-testid="ranking-formula-owner-rows">
+                  <DataTable
+                    rows={ranked}
+                    onRowClick={(r) => nav(`/management/strategies/${r.id}`)}
+                    columns={[
+                      { key: "rank", header: "#", cell: (r) => <span className="text-mono text-xs">{r.rank}</span> },
+                      { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                      { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{typeof r.sharpe === "number" ? r.sharpe.toFixed(2) : "—"}</span> },
+                      { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs">{typeof r.drawdown === "number" ? `${(r.drawdown * 100).toFixed(2)}%` : "—"}</span> },
+                      { key: "score", header: t("rankingDashboard.score"), cell: (r) => <span className="text-mono text-xs text-accent">{r.score.toFixed(3)}</span> },
+                    ]}
+                  />
+                </div>
+              ) : (
+                <Section>
+                  <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
+                    <p>{t("governanceDecisions.recommendationsImpact.subtitle")}</p>
+                    <Button size="sm" variant="outline" asChild>
+                      <Link data-testid="ranking-formula-open-rankings-center" to={rankingsCenterHref}>
+                        {t("nav.rankingsCenter")}
+                      </Link>
+                    </Button>
+                  </div>
+                </Section>
+              ),
+          },
           { value: "history", label: t("section.history"), content: (
             <DataTable rows={versions.map((v) => ({ ...v, id: v.v }))} columns={[
               { key: "v", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.v}</span> },

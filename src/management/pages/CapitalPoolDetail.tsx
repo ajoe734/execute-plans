@@ -75,7 +75,7 @@ export const CapitalPoolDetail = () => {
       const mentionsPool = (value?: string) => Boolean(value && Array.from(poolIds).some((poolId) => value.includes(poolId)));
 
       const [allStrategies, allRebalances, allApprovals, allAudit, fleetRows] = await Promise.all([
-        bffV1.strategies.list().catch((): Strategy[] => []),
+        bffV1.strategies.listNonDraft().catch((): Strategy[] => []),
         bffV1.rebalances.list().catch((): Rebalance[] => []),
         bffV1.approvals.list().catch((): ApprovalRequest[] => []),
         bffV1.audit.list().catch((): AuditEvent[] => []),

@@ -53,7 +53,7 @@ describe("Bootstrap mock resolver ordering", () => {
     expect(result.items[0].id).toBe("stg_001");
 
     // 4. Domain caller also succeeds on first try
-    const domainList = await strategies.list();
+    const domainList = await strategies.listNonDraft();
     expect(Array.isArray(domainList)).toBe(true);
     expect(domainList.length).toBeGreaterThan(0);
     expect(domainList[0].id).toBe("stg_001");

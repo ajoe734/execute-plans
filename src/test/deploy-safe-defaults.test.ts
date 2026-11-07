@@ -24,6 +24,13 @@ const branchWorkflow = readFileSync(
   resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
 );
+const fixtureE2eRunner = readFileSync(
+  resolve(root, "scripts/run-fixture-e2e.mjs"),
+  "utf8",
+);
+const packageJson = JSON.parse(
+  readFileSync(resolve(root, "package.json"), "utf8"),
+) as { scripts?: Record<string, string> };
 const playwrightConfig = readFileSync(
   resolve(root, "playwright.config.ts"),
   "utf8",
@@ -186,14 +193,22 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(fixtureBlock).toContain(
       'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
     );
+    expect(packageJson.scripts?.["e2e:fixture"]).toBe(
+      "node scripts/run-fixture-e2e.mjs",
+    );
+    expect(fixtureBlock).toContain("npm run e2e:fixture -- \\");
+    expect(fixtureBlock).toContain("--no-serve");
     expect(fixtureBlock).toContain(
       '--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"',
     );
-    expect(fixtureBlock).toContain("--trace=off");
+    expect(fixtureBlock).toContain("--reporter=list,json");
+    expect(fixtureE2eRunner).toContain('FIXTURE_E2E_TRACE = "off"');
+    expect(fixtureE2eRunner).toContain("`--trace=${FIXTURE_E2E_TRACE}`");
     // screenshot and video are Playwright config options, not `playwright test`
     // CLI flags. Keep them out of this command so the gate cannot fail before
     // collecting any tests with "unknown option".
     expect(fixtureBlock).not.toMatch(/--(?:screenshot|video)(?:=|\s)/u);
+    expect(fixtureE2eRunner).not.toMatch(/--(?:screenshot|video)(?:=|\s)/u);
     expect(fixtureBlock).not.toContain("npm run dev --");
     expect(fixtureBlock).not.toContain("VITE_GCP_IDENTITY_API_KEY:");
     expect(fixtureBlock).toContain("VITE_BFF_FALLBACK: strict");
@@ -219,13 +234,19 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "17-a11y-v5",
       "18-perf",
     ]) {
-      expect(fixtureBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
+      expect(fixtureE2eRunner).toMatch(
+        new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"),
+      );
+      expect(fixtureBlock).not.toMatch(
+        new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"),
+      );
     }
-    expect(fixtureBlock).toContain("--project=chromium");
-    expect(fixtureBlock).not.toContain("--project=mobile-chromium");
-    expect(fixtureBlock).toContain(
-      '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
+    expect(fixtureE2eRunner).toContain('FIXTURE_E2E_PROJECT = "chromium"');
+    expect(fixtureE2eRunner).not.toContain("mobile-chromium");
+    expect(fixtureE2eRunner).toContain(
+      'FIXTURE_E2E_GREP_INVERT =\n  "asserts MeResponse tenant/env/user/capabilities shape"',
     );
+    expect(fixtureE2eRunner).toContain("FIXTURE_E2E_RETRIES = 0");
     expect(integrationWorkflow).toContain(
       '"fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}"',
     );

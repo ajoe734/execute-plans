@@ -1,6 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  FIXTURE_E2E_GREP_INVERT,
+  FIXTURE_E2E_PROJECT,
+  FIXTURE_E2E_RETRIES,
+  FIXTURE_E2E_SPECS,
+  FIXTURE_E2E_TRACE,
+  buildFixtureE2eEnv,
+  buildFixtureE2ePlaywrightArgs,
+} from "../../scripts/run-fixture-e2e.mjs";
 
 const root = process.cwd();
 const integrationWorkflow = readFileSync(
@@ -84,6 +93,158 @@ describe("paired Pantheon release workflow", () => {
     }
     expect(Object.fromEntries(prEnv).PANTHEON_FE_BASE_URL).toBe(
       "http://127.0.0.1:4173",
+    );
+  });
+
+  it("runs the release gate's isolated fixture Playwright suite on every PR from the single shared definition", () => {
+    const componentJob = branchWorkflow.slice(
+      branchWorkflow.indexOf("  component-merge:"),
+      branchWorkflow.indexOf("  smoke-alias:"),
+    );
+    const buildIndex = componentJob.indexOf("- name: Build\n");
+    const scanIndex = componentJob.indexOf("- name: Bundle credential scan\n");
+    const fixtureStepStart = componentJob.indexOf(
+      "      - name: Release gate isolated fixture Playwright E2E\n",
+    );
+    expect(buildIndex).toBeGreaterThan(-1);
+    expect(scanIndex).toBeGreaterThan(buildIndex);
+    expect(fixtureStepStart).toBeGreaterThan(scanIndex);
+
+    const prFixtureStep = componentJob.slice(fixtureStepStart);
+    expect(prFixtureStep).toMatch(/\n {8}run: npm run e2e:fixture\n/u);
+    expect(prFixtureStep).not.toContain("continue-on-error");
+    expect(prFixtureStep).not.toContain("secrets.");
+    expect(prFixtureStep).not.toContain("VITE_GCP_IDENTITY_API_KEY");
+    for (const emptyVar of [
+      "PANTHEON_HOSTED_E2E",
+      "FE_INT_GATE_LIVE_BFF",
+      "F08_CREATE_INTENT_LIVE_BFF",
+      "RUN_LIVE_BFF_CONTRACTS",
+      "VITE_BFF_DEV_BEARER_TOKEN",
+    ]) {
+      expect(prFixtureStep).toContain(`${emptyVar}: ""`);
+    }
+    expect(prFixtureStep).toContain("PANTHEON_RELEASE_GATE_CONTEXT: pull_request");
+    expect(prFixtureStep).toContain("VITE_BFF_FALLBACK: strict");
+    expect(prFixtureStep).toContain("BFF_FALLBACK: strict");
+
+    const gateJob = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  integration-gate:"),
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+    const gateJobEnv = gateJob.slice(
+      gateJob.indexOf("    env:\n"),
+      gateJob.indexOf("    steps:\n"),
+    );
+    const releaseStart = integrationWorkflow.indexOf(
+      "      - name: Release-gate Playwright evidence against exact candidate\n",
+    );
+    const releaseEnd = integrationWorkflow.indexOf(
+      "\n      - name: Frontend browser BFF probe\n",
+      releaseStart,
+    );
+    const releaseFixtureStep = integrationWorkflow.slice(releaseStart, releaseEnd);
+    expect(releaseFixtureStep).toContain("id: fixture_e2e");
+    expect(releaseFixtureStep).toContain("npm run e2e:fixture -- \\");
+    expect(releaseFixtureStep).toContain("--no-serve");
+    expect(gateJobEnv).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("pull_request");
+    expect(prFixtureStep).not.toContain("--project=");
+    expect(prFixtureStep).not.toContain("--grep-invert");
+    expect(prFixtureStep).not.toContain("--retries=");
+    expect(releaseFixtureStep).not.toContain("--project=");
+    expect(releaseFixtureStep).not.toContain("--grep-invert");
+    expect(releaseFixtureStep).not.toContain("--retries=");
+
+    expect(FIXTURE_E2E_SPECS).toHaveLength(16);
+    expect(FIXTURE_E2E_PROJECT).toBe("chromium");
+    expect(FIXTURE_E2E_GREP_INVERT).toBe(
+      "asserts MeResponse tenant/env/user/capabilities shape",
+    );
+    expect(FIXTURE_E2E_RETRIES).toBe(0);
+    expect(FIXTURE_E2E_TRACE).toBe("off");
+    expect(buildFixtureE2ePlaywrightArgs()).toEqual([
+      "playwright",
+      "test",
+      ...FIXTURE_E2E_SPECS,
+      "--project=chromium",
+      "--grep-invert",
+      "asserts MeResponse tenant/env/user/capabilities shape",
+      "--retries=0",
+      "--trace=off",
+      "--reporter=list",
+    ]);
+    const isolatedEnv = buildFixtureE2eEnv(
+      { BFF_AUTH_TOKEN: "should-be-cleared" },
+      "http://127.0.0.1:4173",
+    );
+    expect(isolatedEnv.PANTHEON_FE_BASE_URL).toBe("http://127.0.0.1:4173");
+    expect(isolatedEnv.PANTHEON_BFF_BASE_URL).toBe("http://127.0.0.1:4173");
+    expect(isolatedEnv.PANTHEON_RELEASE_GATE_CONTEXT).toBe("pull_request");
+    expect(isolatedEnv.PANTHEON_HOSTED_E2E).toBe("");
+    expect(isolatedEnv.FE_INT_GATE_LIVE_BFF).toBe("");
+    expect(isolatedEnv.F08_CREATE_INTENT_LIVE_BFF).toBe("");
+    expect(isolatedEnv.RUN_LIVE_BFF_CONTRACTS).toBe("");
+    expect(isolatedEnv.BFF_AUTH_TOKEN).toBeUndefined();
+  });
+
+  it("preserves the release gate fixture_e2e non-PR hard-gate context and caller environment under --no-serve", () => {
+    const gateJob = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  integration-gate:"),
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+    const gateJobEnv = gateJob.slice(
+      gateJob.indexOf("    env:\n"),
+      gateJob.indexOf("    steps:\n"),
+    );
+    const releaseStart = integrationWorkflow.indexOf(
+      "      - name: Release-gate Playwright evidence against exact candidate\n",
+    );
+    const releaseEnd = integrationWorkflow.indexOf(
+      "\n      - name: Frontend browser BFF probe\n",
+      releaseStart,
+    );
+    const releaseFixtureStep = integrationWorkflow.slice(releaseStart, releaseEnd);
+
+    expect(gateJobEnv).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("pull_request");
+    expect(releaseFixtureStep).toContain("--no-serve");
+
+    const releaseFixtureStepEnv = Object.fromEntries(
+      [
+        ...releaseFixtureStep.matchAll(
+          /^ {10}([A-Z0-9_]+): (?:"([^"]*)"|([^\n]+))$/gmu,
+        ),
+      ].map(([, key, quoted, bare]) => [key, quoted ?? bare.trim()]),
+    );
+    const gateCallerEnv = {
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_BFF_BASE_URL: "https://api.dev.mvl-cap.tw",
+      BFF_AUTH_TOKEN: "caller-token-preserved",
+      PANTHEON_BFF_SMOKE_BEARER_TOKEN: "smoke-token-preserved",
+      PANTHEON_BFF_OPERATOR_A_TOKEN: "operator-token-preserved",
+      ...releaseFixtureStepEnv,
+    };
+    const noServeEnv = buildFixtureE2eEnv(
+      gateCallerEnv,
+      "http://127.0.0.1:4173",
+      { serve: false },
+    );
+    expect(noServeEnv).toEqual(gateCallerEnv);
+    expect(noServeEnv.PANTHEON_RELEASE_GATE_CONTEXT).toBeUndefined();
+    expect(
+      noServeEnv.GITHUB_EVENT_NAME === "pull_request" ||
+        noServeEnv.PANTHEON_RELEASE_GATE_CONTEXT === "pull_request",
+    ).toBe(false);
+    expect(noServeEnv.PANTHEON_BFF_BASE_URL).toBe("https://api.dev.mvl-cap.tw");
+    expect(noServeEnv.BFF_AUTH_TOKEN).toBe("caller-token-preserved");
+    expect(noServeEnv.PANTHEON_BFF_SMOKE_BEARER_TOKEN).toBe(
+      "smoke-token-preserved",
+    );
+    expect(noServeEnv.PANTHEON_BFF_OPERATOR_A_TOKEN).toBe(
+      "operator-token-preserved",
     );
   });
 

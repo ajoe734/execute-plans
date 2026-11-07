@@ -13,16 +13,42 @@ export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) =
   const nav = useNavigate();
   const location = useLocation();
   const [rows, setRows] = useState<Array<CapitalPool & { boundStrategies: Strategy[] }>>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
-    Promise.all([bffV1.capitalPools.list(), bffV1.strategies.list()]).then(([pools, strs]) => {
-      const filtered = pools
-        .map((pool) => ({
-          ...pool,
-          boundStrategies: strs.filter((s) => s.capitalPoolId === pool.id && s.personaIds.includes(personaId)),
-        }))
-        .filter((p) => p.boundStrategies.length > 0);
-      setRows(filtered);
-    });
+    let cancelled = false;
+    setRows([]);
+    setLoadState("loading");
+    Promise.all([bffV1.capitalPools.list(), bffV1.strategies.listForPersona(personaId)])
+      .then(([pools, strs]) => {
+        if (cancelled) return;
+        const personaStrategies = strs.filter(
+          (s) =>
+            s.personaIds.length === 0 ||
+            s.personaIds.includes(personaId) ||
+            (s as { persona_id?: string; personaId?: string }).persona_id === personaId ||
+            (s as { persona_id?: string; personaId?: string }).personaId === personaId,
+        );
+        const filtered = pools
+          .map((pool) => ({
+            ...pool,
+            boundStrategies: personaStrategies.filter(
+              (s) =>
+                s.capitalPoolId === pool.id ||
+                (s as { capital_pool_id?: string }).capital_pool_id === pool.id,
+            ),
+          }))
+          .filter((p) => p.boundStrategies.length > 0);
+        setRows(filtered);
+        setLoadState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRows([]);
+        setLoadState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [personaId]);
   return (
     <Section title={t("phase13.persona.tabs.capitalBinding")}>
@@ -36,14 +62,47 @@ export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) =
       </div>
       <DataTable
         rows={rows}
+        loading={loadState === "loading"}
         onRowClick={(r) => nav(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(r.id)}`)}
         columns={[
-          { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-          { key: "currency", header: "Currency", cell: (r) => <span className="text-mono text-xs">{r.currency}</span> },
-          { key: "alloc", header: "Allocated", cell: (r) => <span className="text-mono text-xs">${(r.allocated / 1e6).toFixed(1)}M</span> },
-          { key: "bound", header: t("nav.strategies"), cell: (r) => <span className="text-mono text-xs">{r.boundStrategies.length}</span> },
+          {
+            key: "name",
+            header: t("table.name"),
+            cell: (r) => (
+              <div>
+                <div className="font-medium">{r.name}</div>
+                {r.id !== r.name && <div className="text-mono text-xs text-muted-foreground">{r.id}</div>}
+              </div>
+            ),
+          },
+          { key: "currency", header: "Currency", cell: (r) => <span className="text-mono text-xs">{r.currency || t("common.noData")}</span> },
+          {
+            key: "alloc",
+            header: "Allocated",
+            cell: (r) => (
+              <span className="text-mono text-xs">
+                {typeof r.allocated === "number" && Number.isFinite(r.allocated)
+                  ? `$${(r.allocated / 1e6).toFixed(1)}M`
+                  : t("common.noData")}
+              </span>
+            ),
+          },
+          {
+            key: "bound",
+            header: t("nav.strategies"),
+            cell: (r) => (
+              <div className="text-mono text-xs">
+                <span>{r.boundStrategies.length}</span>
+                {r.boundStrategies.length > 0 && (
+                  <span className="ml-1.5 text-muted-foreground">
+                    ({r.boundStrategies.map((s) => s.id).join(", ")})
+                  </span>
+                )}
+              </div>
+            ),
+          },
         ]}
-        empty={t("empty.noResults")}
+        empty={loadState === "error" ? t("status.unavailable") : t("empty.noResults")}
       />
     </Section>
   );

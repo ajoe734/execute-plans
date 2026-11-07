@@ -1,0 +1,144 @@
+{
+  "schema_version": "pantheon.fe-holdings-cost-price-columns.v1",
+  "task_id": "FE-HOLDINGS-COST-PRICE-COLUMNS-20261106",
+  "title": "Performance center holdings table has no entry price or last price and hides PnL off screen",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-HOLDINGS-COST-PRICE-COLUMNS-20261106",
+  "base_sha": "117b734870ea6bccd63c9347c29e0dbd1a840bd7",
+  "status": "ready_for_review",
+  "hosted_verification": {
+    "status": "deferred_to_downstream_task",
+    "downstream_task_id": "HOLDINGS-COST-HOSTED-ACCEPTANCE-20261106",
+    "note": "Per task brief hard rules, no VM/SSH access or hosted workflow dispatch was run; hosted verification belongs to HOLDINGS-COST-HOSTED-ACCEPTANCE-20261106. Functional unit, adapter, i18n, typecheck, and real-browser 1440px scrollbar/column layout evidence are recorded here."
+  },
+  "scope": {
+    "delivered": [
+      "src/lib/v5/management/portfolio.ts: added optional finite number fields averagePrice, markPrice, and realizedPnl to PortfolioHoldingMonitorRow.",
+      "src/lib/bff-v1/management.ts: mapped average_price, mark_price, and realized_pnl via optionalFiniteNumber in adaptPortfolioHoldingMonitorRow while keeping null/absent as undefined and leaving adaptPortfolioHoldingRows untouched.",
+      "src/i18n/locales/zh-TW.ts & src/i18n/locales/en-US.ts: added portfolioBook.table.avgEntry (進場均價 / Avg entry), lastClose (最新收盤價 / Last close), markAsOfFmt (截至 {{date}} / As of {{date}}), and realizedPnlFmt (已實現 {{amount}} / Realized {{amount}}).",
+      "src/management/pages/oversight/PortfolioBook.tsx: fixed fmtHoldingMoney, fmtHoldingPrice, and fmtNum so whole numbers format with minimumFractionDigits=0, maximumFractionDigits=0 and fractional numbers format with minimumFractionDigits=2, maximumFractionDigits=2; added fmtCostPnlPct computing unrealized_pnl / (Math.abs(quantity) * average_price) with explicit sign and 2 decimals; reordered table into 11 columns with Holding, Quantity, Avg entry, Last close, Market value, and Unrealized PnL first.",
+      "src/management/pages/oversight/PortfolioBook.test.tsx, src/lib/bff-v1/__tests__/management-pm12.test.ts, src/lib/v5/management/__tests__/i18nParity.test.ts, e2e/19-management-persona-100-flows.spec.ts, e2e/20-portfolio-book-monitor.spec.ts, e2e/21-portfolio-workflow-hosted.spec.ts: added unit and Playwright e2e coverage for both 2026-11-06 BFF shapes and 1440px column visibility with scrollbars shown."
+    ],
+    "not_changing": [
+      "adaptPortfolioHoldingRows in src/lib/bff-v1/management.ts is untouched.",
+      "src/platform/components/PinnedHorizontalScroll.tsx and ManagementTableScroll minScrollWidth=1520 / min-w-[1520px] remain unchanged because columns 0..5 fit within x=265..1026 inside the x=265..1400 scroller at 1440px while columns 6..10 remain scrollable.",
+      "No backend or BFF files modified."
+    ]
+  },
+  "real_bff_rows_tested": {
+    "hosted_snapshot_source": "BFF 0cd59ab28 on 2026-11-06 (mark_status=available, last_mark_at=2026-11-05T00:00:00Z)",
+    "pre_telemetry_shape": [
+      { "holding_id": "rt-535a82a3:2330.TWSE", "quantity": -5, "mark_price": 2240, "market_value": -11200, "currency": null, "average_price": null, "unrealized_pnl": null, "realized_pnl": null, "broker_id": "" },
+      { "holding_id": "rt-8b0d8649:0050.TWSE", "quantity": -5, "mark_price": 97.15, "market_value": -485.75, "currency": null, "average_price": null, "unrealized_pnl": null, "realized_pnl": null, "broker_id": "" },
+      { "holding_id": "rt-c98e4223:2317.TWSE", "quantity": -3, "mark_price": 235, "market_value": -705, "currency": null, "average_price": null, "unrealized_pnl": null, "realized_pnl": null, "broker_id": "" },
+      { "holding_id": "rt-342d76ff:2330.TW", "quantity": -1, "mark_price": 2240, "market_value": -2240, "currency": null, "average_price": null, "unrealized_pnl": null, "realized_pnl": null, "broker_id": "" }
+    ],
+    "post_telemetry_shape": [
+      { "holding_id": "rt-535a82a3:2330.TWSE", "currency": "TWD", "broker_id": "shioaji_paper", "quantity": -5, "average_price": 2299, "mark_price": 2240, "market_value": -11200, "unrealized_pnl": 295, "realized_pnl": 0, "expected_cost_pnl_pct": "+2.57%" },
+      { "holding_id": "rt-8b0d8649:0050.TWSE", "currency": "TWD", "broker_id": "shioaji_paper", "quantity": -5, "average_price": 101.33, "mark_price": 97.15, "market_value": -485.75, "unrealized_pnl": 20.9, "realized_pnl": 0, "expected_cost_pnl_pct": "+4.13%" },
+      { "holding_id": "rt-c98e4223:2317.TWSE", "currency": "TWD", "broker_id": "shioaji_paper", "quantity": -3, "average_price": 240.166667, "mark_price": 235, "market_value": -705, "unrealized_pnl": 15.5, "realized_pnl": -5.5, "expected_cost_pnl_pct": "+2.15%" },
+      { "holding_id": "rt-342d76ff:2330.TW", "currency": "TWD", "broker_id": "shioaji_paper", "quantity": -1, "average_price": 2240, "mark_price": 2240, "market_value": -2240, "unrealized_pnl": 0, "realized_pnl": 0, "expected_cost_pnl_pct": "0.00%" }
+    ]
+  },
+  "assertion_changes_justification": {
+    "src/management/pages/oversight/PortfolioBook.test.tsx": [
+      "Line 334: preserved table class assertion min-w-[1520px] (unchanged) because columns 0..5 fit within x=265..1026 inside the 1135px scroller at 1440px viewport.",
+      "Line 336: updated header count assertion from toHaveLength(9) to toHaveLength(11) and updated expected header order because Avg entry (進場均價) and Last close (最新收盤價) were added and Quantity/Market value/Unrealized PnL were placed before Stage / capital scope and Runtime / broker per AC2.",
+      "Lines 342-395: shifted cell index assertions to match the new 11-column order (Quantity moved from tds[3] to tds[1], Avg entry at tds[2], Last close at tds[3], Market value at tds[4], Unrealized PnL at tds[5], Source confidence moved from tds[6] to tds[8]) while preserving every existing assertion on quantity, short position label, stale/unavailable market value text, no-average-cost sr-only text, and source confidence."
+    ]
+  },
+  "browser_layout_1440": {
+    "route": "/management/performance?tab=overview",
+    "viewport": { "width": 1440, "height": 900 },
+    "sidebar": { "left": 0, "right": 240, "width": 240, "open": true },
+    "scroller": { "left": 265, "right": 1400, "clientWidth": 1135, "offsetWidth": 1135, "scrollWidth_zh_TW": 1520, "scrollWidth_en_US": 1521, "maxScrollLeft_zh_TW": 385, "maxScrollLeft_en_US": 386 },
+    "pinned_scrollbar": { "height": 16, "offsetHeight": 16, "scrollWidth_zh_TW": 1520, "scrollWidth_en_US": 1521 },
+    "browser_launch": "chromium.launch({ ignoreDefaultArgs: ['--hide-scrollbars'] })",
+    "screenshots": {
+      "zh_TW": {
+        "file": "test-results/20-portfolio-book-monitor--b5557--six-filters-through-reload-chromium/holdings-cost-price-1440-zh-TW.png",
+        "sha256": "227eaf95b7d683d3d385fc12b9fb732d9230f434e1752697fb6ebecf0cf4b30d",
+        "bytes": 169473,
+        "scrollbars_shown": true
+      },
+      "en_US": {
+        "file": "test-results/20-portfolio-book-monitor--b5557--six-filters-through-reload-chromium/holdings-cost-price-1440-en-US.png",
+        "sha256": "b545eb001c1549915fbb4f7a573deb6bfae501bdaf5a356aec460531c09c9be0",
+        "bytes": 165227,
+        "scrollbars_shown": true
+      }
+    },
+    "zh_TW_columns_at_scroll_zero": [
+      { "index": 0, "header": "Holding", "left": 265, "right": 426.58, "width": 161.58, "fullyVisible": true },
+      { "index": 1, "header": "數量", "left": 426.58, "right": 500.8, "width": 74.22, "fullyVisible": true },
+      { "index": 2, "header": "進場均價", "left": 500.8, "right": 603.48, "width": 102.69, "fullyVisible": true },
+      { "index": 3, "header": "最新收盤價", "left": 603.48, "right": 718.75, "width": 115.27, "fullyVisible": true },
+      { "index": 4, "header": "市值", "left": 718.75, "right": 830.09, "width": 111.34, "fullyVisible": true },
+      { "index": 5, "header": "未實現損益", "left": 830.09, "right": 1002.08, "width": 171.98, "fullyVisible": true },
+      { "index": 6, "header": "Stage / capital scope", "left": 1002.08, "right": 1191.02, "width": 188.94, "fullyVisible": true },
+      { "index": 7, "header": "Runtime / broker", "left": 1191.02, "right": 1345.92, "width": 154.91, "fullyVisible": true },
+      { "index": 8, "header": "Source confidence", "left": 1345.92, "right": 1519.33, "width": 173.41, "fullyVisible": false },
+      { "index": 9, "header": "Risk", "left": 1519.33, "right": 1662.31, "width": 142.98, "fullyVisible": false },
+      { "index": 10, "header": "Actions", "left": 1662.31, "right": 1785, "width": 122.69, "fullyVisible": false }
+    ],
+    "zh_TW_columns_at_max_scroll": [
+      { "index": 6, "header": "Stage / capital scope", "left": 617.08, "right": 806.02, "width": 188.94, "fullyVisible": true },
+      { "index": 7, "header": "Runtime / broker", "left": 806.02, "right": 960.92, "width": 154.91, "fullyVisible": true },
+      { "index": 8, "header": "Source confidence", "left": 960.92, "right": 1134.33, "width": 173.41, "fullyVisible": true },
+      { "index": 9, "header": "Risk", "left": 1134.33, "right": 1277.31, "width": 142.98, "fullyVisible": true },
+      { "index": 10, "header": "Actions", "left": 1277.31, "right": 1400, "width": 122.69, "fullyVisible": true }
+    ],
+    "en_US_columns_at_scroll_zero": [
+      { "index": 0, "header": "Holding", "left": 265, "right": 421.75, "width": 156.75, "fullyVisible": true },
+      { "index": 1, "header": "Quantity", "left": 421.75, "right": 519.14, "width": 97.39, "fullyVisible": true },
+      { "index": 2, "header": "Avg entry", "left": 519.14, "right": 618.77, "width": 99.63, "fullyVisible": true },
+      { "index": 3, "header": "Last close", "left": 618.77, "right": 733.94, "width": 115.17, "fullyVisible": true },
+      { "index": 4, "header": "Market value", "left": 733.94, "right": 859.59, "width": 125.66, "fullyVisible": true },
+      { "index": 5, "header": "Unrealized PnL", "left": 859.59, "right": 1026.44, "width": 166.84, "fullyVisible": true },
+      { "index": 6, "header": "Stage / capital scope", "left": 1026.44, "right": 1209.73, "width": 183.3, "fullyVisible": true },
+      { "index": 7, "header": "Runtime / broker", "left": 1209.73, "right": 1360.02, "width": 150.28, "fullyVisible": true },
+      { "index": 8, "header": "Source confidence", "left": 1360.02, "right": 1528.23, "width": 168.22, "fullyVisible": false },
+      { "index": 9, "header": "Risk", "left": 1528.23, "right": 1666.95, "width": 138.72, "fullyVisible": false },
+      { "index": 10, "header": "Actions", "left": 1666.95, "right": 1785.89, "width": 118.94, "fullyVisible": false }
+    ],
+    "en_US_columns_at_max_scroll": [
+      { "index": 6, "header": "Stage / capital scope", "left": 640.44, "right": 823.73, "width": 183.3, "fullyVisible": true },
+      { "index": 7, "header": "Runtime / broker", "left": 823.73, "right": 974.02, "width": 150.28, "fullyVisible": true },
+      { "index": 8, "header": "Source confidence", "left": 974.02, "right": 1142.23, "width": 168.22, "fullyVisible": true },
+      { "index": 9, "header": "Risk", "left": 1142.23, "right": 1280.95, "width": 138.72, "fullyVisible": true },
+      { "index": 10, "header": "Actions", "left": 1280.95, "right": 1399.89, "width": 118.94, "fullyVisible": true }
+    ]
+  },
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/PortfolioBook.test.tsx src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 5,
+      "tests_passed": 113
+    },
+    "public_build_auth_contract": {
+      "command": "./node_modules/.bin/vitest run src/test/public-build-auth-contract.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 1,
+      "tests_passed": 82
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/PortfolioBook.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/lib/v5/management/portfolio.ts src/lib/bff-v1/management.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts e2e/19-management-persona-100-flows.spec.ts e2e/20-portfolio-book-monitor.spec.ts e2e/21-portfolio-workflow-hosted.spec.ts",
+      "exit_code": 0
+    },
+    "playwright": {
+      "command": "./node_modules/.bin/playwright test e2e/20-portfolio-book-monitor.spec.ts e2e/21-portfolio-workflow-hosted.spec.ts e2e/19-management-persona-100-flows.spec.ts -g 'renders every degraded incident|hosted Portfolio Book|portfolio book holdings table'",
+      "exit_code": 0,
+      "tests_passed": 2,
+      "tests_skipped_hosted_only": 2,
+      "note": "e2e/20-portfolio-book-monitor.spec.ts keeps a single top-level test() block and runs the 2026-11-06 BFF holdings 1440px real-scrollbar verification inside a test.step() so src/test/public-build-auth-contract.test.ts:600 sees 2 skipped across e2e/20-portfolio-book-monitor.spec.ts + e2e/22-persona-trade-journal.spec.ts under an external frontend target."
+    }
+  }
+}

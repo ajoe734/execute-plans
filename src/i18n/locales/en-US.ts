@@ -453,6 +453,7 @@ export default {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
+    paper_running: "Paper Running", canary_running: "Canary Running", live_running: "Live Running",
     rejected: "Rejected", revoked: "Revoked", superseded: "Superseded",
     active: "Active", deployed: "Deployed", retired: "Retired", candidate: "Candidate", unavailable: "Unavailable",
   },
@@ -818,6 +819,24 @@ export default {
       run: "Run parameter sweep",
       queued: "Parameter sweep queued",
     },
+    list: {
+      filter: {
+        groupLabel: "Strategy state filter",
+        default: "Default (hide drafts)",
+      },
+      hiddenDraftsWithCount: "{{count}} draft strategies are hidden by default.",
+      hiddenDraftsNoCount: "Draft strategies are hidden by default.",
+      showDraftsWithCount: "Show drafts ({{count}})",
+      showDraftsNoCount: "Show drafts",
+      pagination: {
+        label: "Strategy list pagination",
+        showingRange: "Showing {{start}}–{{end}} of {{total}}",
+        totalCount: "Total: {{total}}",
+        pageOf: "Page {{page}} of {{totalPages}}",
+        first: "First",
+        last: "Last",
+      },
+    },
   },
   runtime: {
     subtitle: "Live operational view of executors, MCP servers, schedulers, and ingest pipelines.",
@@ -891,6 +910,7 @@ export default {
   },
   riskCenter: {
     subtitle: "Aggregated risk view across capital, strategies, personas, runtimes, and capabilities.",
+    draftsExcluded: "Draft strategies excluded",
     kpi: {
       openIncidents: "Open incidents",
       runtimeWarn: "Runtime warnings",
@@ -2736,6 +2756,8 @@ export default {
   strategyDetail: {
     spec: "Spec & Parameters",
     specTitle: "Strategy specification",
+    specBodyNoAlpha: "Edits to spec or parameters create a draft revision and route through governance before deployment.",
+    artifactsUnavailable: "Artifacts unavailable",
     specBody: "Alpha {{alpha}} drives this strategy. Edits to spec or parameters create a draft revision and route through governance before deployment.",
     universe: "Universe", execMode: "Execution mode", benchmark: "Benchmark",
     params: "Parameters",
@@ -3740,6 +3762,7 @@ export default {
       rankingsLabel: "Trading Pulse Rankings",
       noRows: "No rows.",
       retiredExcludedFmt: "Excluded retired: {{count}}",
+      notRequired: "Not required",
     },
     evolution: {
       title: "Evolution Journal",
@@ -4029,6 +4052,9 @@ export default {
       assetClass: "Asset class",
       side: "Side",
       quantity: "Quantity",
+      avgEntry: "Avg entry",
+      lastClose: "Last close",
+      markAsOfFmt: "As of {{date}}",
       marketValue: "Market value",
       weight: "Weight",
       exposure: "Exposure",
@@ -4042,6 +4068,7 @@ export default {
       grossExposure: "Gross exposure",
       netExposure: "Net exposure",
       unrealizedPnl: "Unrealized PnL",
+      realizedPnlFmt: "Realized {{amount}}",
       pnlToday: "PnL today",
       pnl30d: "PnL 30d",
       riskBudgetTotal: "Total risk budget",

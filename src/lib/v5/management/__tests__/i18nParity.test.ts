@@ -76,6 +76,10 @@ describe("Pack PM-i18n parity", () => {
       "mgmt.portfolio.refreshingNotice",
       "mgmt.portfolio.loadErrorBody",
       "mgmt.portfolio.retry",
+      "mgmt.portfolio.avgEntry",
+      "mgmt.portfolio.lastClose",
+      "mgmt.portfolio.markAsOfFmt",
+      "mgmt.portfolio.realizedPnlFmt",
       "mgmt.portfolio.shortPosition",
       "mgmt.portfolio.markStale",
       "mgmt.portfolio.markStaleWithDateFmt",
@@ -251,5 +255,7 @@ describe("Pack PM-i18n parity", () => {
   it("includes Trading Pulse retired runtime exclusion key in both locales", () => {
     expect(enKeys.has("mgmt.pulse.retiredExcludedFmt")).toBe(true);
     expect(zhKeys.has("mgmt.pulse.retiredExcludedFmt")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.notRequired")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.notRequired")).toBe(true);
   });
 });
