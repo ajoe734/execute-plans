@@ -1494,6 +1494,10 @@ export interface AlphaFactoryCard {
   authority_run_ids: string[] | null;
   last_revalidation_at: string | null;
   last_error: string | null;
+  replay_count?: number | null;
+  last_replayed_at?: string | null;
+  revalidation_count?: number | null;
+  strategy_state?: string | null;
   sharpe?: number | null;
   risk?: RiskLevel | null;
 }
@@ -1516,6 +1520,7 @@ export interface AlphaFactoryMeta extends ManagementListMeta {
   snapshot_at?: string;
   surfaces?: {
     alpha_factory?: ManagementSurfaceState;
+    alpha_factory_strategy_state?: ManagementSurfaceState;
     [key: string]: ManagementSurfaceState | undefined;
   };
   filters?: {

@@ -130,13 +130,24 @@ export const AlphaFactoryBoardPage = () => {
               </div>
             )}
           </div>
-          {c.risk !== undefined && (
-            c.risk ? (
-              <RiskBadge level={c.risk} />
-            ) : (
-              <span className="text-xs text-muted-foreground">{t("alphaFactory.card.notReported")}</span>
-            )
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {c.strategy_state?.trim().toLowerCase() === "retired" && (
+              <Badge
+                variant="outline"
+                data-testid={`alpha-factory-card-retired-${c.id}`}
+                className="text-xs"
+              >
+                {t("alphaFactory.card.retired")}
+              </Badge>
+            )}
+            {c.risk !== undefined && (
+              c.risk ? (
+                <RiskBadge level={c.risk} />
+              ) : (
+                <span className="text-xs text-muted-foreground">{t("alphaFactory.card.notReported")}</span>
+              )
+            )}
+          </div>
         </div>
 
         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -164,10 +175,28 @@ export const AlphaFactoryBoardPage = () => {
             <dt className="text-muted-foreground">{t("alphaFactory.card.experimentRunCount")}</dt>
             <dd className="text-mono">{renderValueOrNotReported(experimentRunCount)}</dd>
           </div>
+          {c.replay_count !== undefined && (
+            <div>
+              <dt className="text-muted-foreground">{t("alphaFactory.card.replayCount")}</dt>
+              <dd className="text-mono">{renderValueOrNotReported(c.replay_count)}</dd>
+            </div>
+          )}
+          {c.last_replayed_at && (
+            <div>
+              <dt className="text-muted-foreground">{t("alphaFactory.card.lastReplayedAt")}</dt>
+              <dd className="text-mono truncate">{c.last_replayed_at}</dd>
+            </div>
+          )}
           <div className="col-span-2">
             <dt className="text-muted-foreground">{t("alphaFactory.card.lastRevalidationAt")}</dt>
             <dd className="text-mono truncate">{renderValueOrNotReported(c.last_revalidation_at)}</dd>
           </div>
+          {c.last_error && (
+            <div className="col-span-2" data-testid={`alpha-factory-card-last-error-${c.id}`}>
+              <dt className="text-muted-foreground">{t("alphaFactory.card.lastError")}</dt>
+              <dd className="text-mono text-status-failed break-words">{c.last_error}</dd>
+            </div>
+          )}
         </dl>
 
         {c.sharpe !== undefined && (
@@ -256,11 +285,21 @@ export const AlphaFactoryBoardPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" data-testid="alpha-factory-columns">
             {ALPHA_FACTORY_COLUMNS.map((col) => (
               <div key={col} className="space-y-3" data-testid={`alpha-factory-lane-${col}`}>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold uppercase tracking-wider">
-                    {t(`alphaFactory.col.${col}`)}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold uppercase tracking-wider">
+                      {t(`alphaFactory.col.${col}`)}
+                    </div>
+                    <Badge variant="outline">{buckets[col].length}</Badge>
                   </div>
-                  <Badge variant="outline">{buckets[col].length}</Badge>
+                  {col === "replicated" && (
+                    <p
+                      data-testid="alpha-factory-replicated-caption"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("alphaFactory.replicatedCaption")}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   {loading ? (

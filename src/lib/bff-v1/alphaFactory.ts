@@ -155,6 +155,33 @@ export function normalizeAlphaFactoryCard(
     last_error: cleanString(record.last_error ?? record.lastError),
   };
 
+  if (
+    Object.prototype.hasOwnProperty.call(record, "replay_count") ||
+    Object.prototype.hasOwnProperty.call(record, "replayCount")
+  ) {
+    card.replay_count = nullableInt(record.replay_count ?? record.replayCount);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(record, "last_replayed_at") ||
+    Object.prototype.hasOwnProperty.call(record, "lastReplayedAt")
+  ) {
+    card.last_replayed_at = cleanString(record.last_replayed_at ?? record.lastReplayedAt);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(record, "revalidation_count") ||
+    Object.prototype.hasOwnProperty.call(record, "revalidationCount")
+  ) {
+    card.revalidation_count = nullableInt(
+      record.revalidation_count ?? record.revalidationCount,
+    );
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(record, "strategy_state") ||
+    Object.prototype.hasOwnProperty.call(record, "strategyState")
+  ) {
+    card.strategy_state = cleanString(record.strategy_state ?? record.strategyState);
+  }
+
   if (hasSharpe) {
     card.sharpe = sharpe;
   }
@@ -187,14 +214,132 @@ export const MOCK_REPLICATED: readonly AlphaFactoryCard[] = [
     queue_status: "completed",
     enqueued_at: "2026-08-14T01:06:00Z",
     enqueued_by: "pantheon-dev-operator",
-    attempt_count: 1,
+    attempt_count: 0,
     max_attempts: 2,
     experiment_task_id: "rtask-20260814-001",
-    experiment_run_ids: ["rrun-20260814-001", "rrun-20260901-004"],
+    experiment_run_ids: [
+      "rrun-20260814-001",
+      "rrun-20260901-004",
+      "rrun-20261015-002",
+      "rrun-20261016-003",
+    ],
     authority_task_id: "rtask-20261015-002",
     authority_run_ids: ["rrun-20261015-002"],
     last_revalidation_at: "2026-10-15T08:30:00Z",
     last_error: null,
+    replay_count: 1,
+    last_replayed_at: "2026-10-16T02:54:42Z",
+    revalidation_count: 1,
+    strategy_state: "approved",
+  },
+  {
+    id: "adm-replicated-spy-anchor",
+    admission_id: "adm-replicated-spy-anchor",
+    tenant_id: "default",
+    lane: "replicated",
+    strategy_id:
+      "strat-src-dev-product-20260913T040439Z-7935481ca72f49629606e01098c3a54e-spy-anchor-7e96a8404f3c",
+    strategy_spec_id:
+      "reg-strategy-spec-src-dev-product-20260913T040439Z-7935481ca72f49629606e01098c3a54e-spy-anchor",
+    spec_version: "1.0.0",
+    checksum: "sha256:7e96a8404f3c",
+    approval_decision_id: "apr-spy-anchor",
+    approver: "pantheon-dev-approver",
+    approved_at: "2026-09-13T04:05:00Z",
+    requested_by: "pantheon-dev-operator",
+    review_ref: "mrev-spy-anchor",
+    mode: "paper",
+    created_at: "2026-09-13T04:06:00Z",
+    status: "admitted",
+    admission_status: "admitted",
+    queue_status: "completed",
+    enqueued_at: "2026-09-13T04:07:00Z",
+    enqueued_by: "pantheon-dev-operator",
+    attempt_count: 0,
+    max_attempts: 2,
+    experiment_task_id: "rtask-20260913-001",
+    experiment_run_ids: ["rrun-20260913-001"],
+    authority_task_id: "rtask-20260913-002",
+    authority_run_ids: ["rrun-20260913-002"],
+    last_revalidation_at: "2026-09-13T04:10:00Z",
+    last_error: null,
+    replay_count: 0,
+    last_replayed_at: null,
+    revalidation_count: 1,
+    strategy_state: "approved",
+  },
+  {
+    id: "adm-replicated-h12-01a11",
+    admission_id: "adm-replicated-h12-01a11",
+    tenant_id: "default",
+    lane: "replicated",
+    strategy_id: "strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+    strategy_spec_id: "reg-strategy-spec-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+    spec_version: "1.0.0",
+    checksum: "sha256:e018ff6d0eb8",
+    approval_decision_id: "apr-h12-01a11",
+    approver: "pantheon-dev-approver",
+    approved_at: "2026-10-23T02:00:00Z",
+    requested_by: "pantheon-dev-operator",
+    review_ref: "mrev-h12-01a11",
+    mode: "paper",
+    created_at: "2026-10-23T02:05:00Z",
+    status: "admitted",
+    admission_status: "admitted",
+    queue_status: "completed",
+    enqueued_at: "2026-10-23T02:06:00Z",
+    enqueued_by: "pantheon-dev-operator",
+    attempt_count: 0,
+    max_attempts: 2,
+    experiment_task_id: "rtask-20261023-001",
+    experiment_run_ids: [
+      "rrun-20261023-001",
+      "rrun-20261023-002",
+      "rrun-20261024-001",
+      "rrun-20261024-002",
+    ],
+    authority_task_id: "rtask-20261024-002",
+    authority_run_ids: ["rrun-20261024-002"],
+    last_revalidation_at: "2026-10-24T02:30:00Z",
+    last_error: null,
+    replay_count: 1,
+    last_replayed_at: "2026-10-24T02:28:22Z",
+    revalidation_count: 1,
+    strategy_state: "retired",
+  },
+  {
+    id: "adm-replicated-h12-claude",
+    admission_id: "adm-replicated-h12-claude",
+    tenant_id: "default",
+    lane: "replicated",
+    strategy_id: "strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+    strategy_spec_id: "reg-strategy-spec-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+    spec_version: "1.0.0",
+    checksum: "sha256:106b4057d07a",
+    approval_decision_id: "apr-h12-claude",
+    approver: "pantheon-dev-approver",
+    approved_at: "2026-10-27T01:00:00Z",
+    requested_by: "pantheon-dev-operator",
+    review_ref: "mrev-h12-claude",
+    mode: "paper",
+    created_at: "2026-10-27T01:05:00Z",
+    status: "admitted",
+    admission_status: "admitted",
+    queue_status: "completed",
+    enqueued_at: "2026-10-27T01:06:00Z",
+    enqueued_by: "pantheon-dev-operator",
+    attempt_count: 0,
+    max_attempts: 2,
+    experiment_task_id: "rtask-20261027-001",
+    experiment_run_ids: ["rrun-20261027-001"],
+    authority_task_id: "rtask-20261027-002",
+    authority_run_ids: ["rrun-20261027-002"],
+    last_revalidation_at: "2026-10-27T01:10:00Z",
+    last_error: null,
+    replay_count: 0,
+    last_replayed_at: null,
+    revalidation_count: 1,
+    strategy_state: "retired",
   },
 ];
 
@@ -228,6 +373,10 @@ export const MOCK_SCAFFOLDED: readonly AlphaFactoryCard[] = [
     authority_run_ids: [],
     last_revalidation_at: null,
     last_error: "backtest window incomplete",
+    replay_count: 0,
+    last_replayed_at: null,
+    revalidation_count: 0,
+    strategy_state: "approved",
   },
   {
     id: "adm-pending-2454",
@@ -258,6 +407,10 @@ export const MOCK_SCAFFOLDED: readonly AlphaFactoryCard[] = [
     authority_run_ids: null,
     last_revalidation_at: null,
     last_error: null,
+    replay_count: null,
+    last_replayed_at: null,
+    revalidation_count: null,
+    strategy_state: null,
   },
 ];
 
@@ -304,6 +457,10 @@ export const MOCK_ALPHA_FACTORY_ENVELOPE: AlphaFactoryEnvelope = {
     snapshot_at: "2026-11-04T00:00:00Z",
     surfaces: {
       alpha_factory: {
+        status: "ok",
+        source: "mock_seed",
+      },
+      alpha_factory_strategy_state: {
         status: "ok",
         source: "mock_seed",
       },
