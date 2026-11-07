@@ -187,6 +187,8 @@ export interface StrategyListQueryOptions {
   state?: string;
   excludeState?: string;
   exclude_state?: string;
+  hideRetiredPersonas?: boolean;
+  hide_retired_personas?: boolean;
   personaId?: string;
   persona_id?: string;
   pageSize?: number;
@@ -202,11 +204,16 @@ function buildStrategyListQuery(
   const query: Record<string, string | number | undefined> = {};
   const state = options.state?.trim();
   const excludeState = (options.exclude_state ?? options.excludeState)?.trim();
+  const hideRetiredPersonas =
+    options.hide_retired_personas ?? options.hideRetiredPersonas;
   const personaId = (options.persona_id ?? options.personaId)?.trim();
   const pageSize = options.page_size ?? options.pageSize;
   const pageToken = (options.page_token ?? options.pageToken)?.trim();
   if (state) query.state = state;
   if (excludeState) query.exclude_state = excludeState;
+  if (typeof hideRetiredPersonas === "boolean") {
+    query.hide_retired_personas = hideRetiredPersonas ? "true" : "false";
+  }
   if (personaId) query.persona_id = personaId;
   if (typeof pageSize === "number" && Number.isFinite(pageSize) && pageSize > 0) {
     query.page_size = pageSize;
@@ -215,7 +222,7 @@ function buildStrategyListQuery(
   return Object.keys(query).length > 0 ? query : undefined;
 }
 
-function strictLiveStrategyListLoader<T extends { state?: unknown }>(
+function strictLiveStrategyListLoader<T extends { state?: unknown; operationalStatus?: unknown }>(
   cls: ListClass,
   adaptItem?: (value: unknown) => T | undefined,
 ): (options?: StrategyListQueryOptions) => Promise<ListEnvelope<T>> {
@@ -225,20 +232,44 @@ function strictLiveStrategyListLoader<T extends { state?: unknown }>(
   return async (options?: StrategyListQueryOptions) => {
     const query = buildStrategyListQuery(options);
     const excludeState = (options?.exclude_state ?? options?.excludeState)?.trim().toLowerCase();
+    const hideRetiredPersonas = Boolean(
+      options?.hide_retired_personas ?? options?.hideRetiredPersonas,
+    );
     const data = await bffFetch<unknown>({
       method: "GET",
       path: paths.strategies(),
       ...(query ? { query } : {}),
     });
     const env = normalizeLiveListResponse<unknown>(data, cls);
+    const record = asRecord(data);
+    const rawPageInfo =
+      asRecord(record?.page_info) ??
+      asRecord(asRecord(record?.data)?.page_info) ??
+      asRecord(asRecord(record?.meta)?.page_info);
+    const envMeta = asRecord(env.meta);
+    const meta =
+      envMeta || rawPageInfo
+        ? {
+            ...(envMeta ?? {}),
+            ...(rawPageInfo && envMeta?.page_info === undefined
+              ? { page_info: rawPageInfo }
+              : {}),
+          }
+        : undefined;
     const adapted = adaptItems(env.items);
-    const items = excludeState
+    const stateFiltered = excludeState
       ? adapted.filter((item) => String(item?.state ?? "").trim().toLowerCase() !== excludeState)
       : adapted;
+    const items = hideRetiredPersonas
+      ? stateFiltered.filter(
+          (item) => String(item?.operationalStatus ?? "").trim().toLowerCase() !== "retired",
+        )
+      : stateFiltered;
     return {
       ...env,
       items,
       pageSize: items.length,
+      ...(meta ? { meta } : {}),
     };
   };
 }

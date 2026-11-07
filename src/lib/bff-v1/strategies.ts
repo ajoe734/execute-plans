@@ -1,4 +1,12 @@
-import type { ManagementListMeta, Strategy } from "./dto";
+import type {
+  ManagementListMeta,
+  Strategy,
+  StrategyAdjustableControl,
+  StrategyOperationalStatus,
+  StrategyPersonaState,
+  StrategyRule,
+  StrategyRuleLogic,
+} from "./dto";
 import { bffFetch } from "./client";
 import { makeBffError } from "./errors";
 import { paths } from "./paths";
@@ -6,6 +14,14 @@ import {
   strictLiveDetail,
   strictLivePaginatedList,
 } from "./domainReads";
+
+export type {
+  StrategyAdjustableControl,
+  StrategyOperationalStatus,
+  StrategyPersonaState,
+  StrategyRule,
+  StrategyRuleLogic,
+};
 
 export interface StrategyCreatePayload {
   name: string;
@@ -89,12 +105,21 @@ export async function createStrategy(
   return data;
 }
 
-export async function listNonDraftStrategies(): Promise<Strategy[]> {
+export async function listNonDraftStrategies(options?: {
+  hideRetiredPersonas?: boolean;
+}): Promise<Strategy[]> {
   return strictLivePaginatedList<Strategy>(
     "strategies.listNonDraft",
     paths.strategies(),
     undefined,
-    { query: { exclude_state: "draft" } },
+    {
+      query: {
+        exclude_state: "draft",
+        ...(typeof options?.hideRetiredPersonas === "boolean"
+          ? { hide_retired_personas: options.hideRetiredPersonas ? "true" : "false" }
+          : {}),
+      },
+    },
   );
 }
 

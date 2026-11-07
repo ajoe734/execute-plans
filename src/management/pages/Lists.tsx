@@ -140,7 +140,6 @@ export const STRATEGY_BASE_FILTER_OPTIONS = [
 
 export interface StrategyStateCounts {
   byState: Record<string, number>;
-  defaultCount: number;
   allCount: number;
   draftCount: number | undefined;
 }
@@ -151,7 +150,6 @@ export function extractStrategyStateCounts(meta: unknown): StrategyStateCounts |
   if (!rawCounts || typeof rawCounts !== "object" || Array.isArray(rawCounts)) return null;
   const byState: Record<string, number> = {};
   let hasNumericEntry = false;
-  let defaultCount = 0;
   let allCount = 0;
   for (const [key, value] of Object.entries(rawCounts as Record<string, unknown>)) {
     if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
@@ -159,19 +157,62 @@ export function extractStrategyStateCounts(meta: unknown): StrategyStateCounts |
       byState[key] = value;
       if (key !== "retired") {
         allCount += value;
-        if (key !== "draft") {
-          defaultCount += value;
-        }
       }
     }
   }
   if (!hasNumericEntry) return null;
   return {
     byState,
-    defaultCount,
     allCount,
     draftCount: byState.draft,
   };
+}
+
+export function extractStrategyPageInfoTotal(meta: unknown): number | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const rawPageInfo = (meta as { page_info?: unknown }).page_info;
+  if (!rawPageInfo || typeof rawPageInfo !== "object" || Array.isArray(rawPageInfo)) {
+    return undefined;
+  }
+  const total = (rawPageInfo as { total?: unknown }).total;
+  return typeof total === "number" && Number.isFinite(total) && total >= 0
+    ? total
+    : undefined;
+}
+
+export function extractHiddenRetiredPersonaCount(meta: unknown): number | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const count = (meta as { hidden_retired_persona_count?: unknown }).hidden_retired_persona_count;
+  return typeof count === "number" && Number.isFinite(count) && count >= 0
+    ? count
+    : undefined;
+}
+
+export function normalizeStrategyOperationalStatus(
+  value: unknown,
+): "running" | "idle" | "retired" | "unbound" | "unknown" | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  if (
+    trimmed === "running" ||
+    trimmed === "idle" ||
+    trimmed === "retired" ||
+    trimmed === "unbound" ||
+    trimmed === "unknown"
+  ) {
+    return trimmed;
+  }
+  return "unknown";
+}
+
+function strategyOperationalStatusClass(
+  status: "running" | "idle" | "retired" | "unbound" | "unknown",
+): string {
+  if (status === "running") return "border-status-success/40 text-status-success";
+  if (status === "unknown") return "border-status-warning/40 text-status-warning";
+  if (status === "idle") return "border-border text-foreground";
+  return "border-muted text-muted-foreground";
 }
 
 export function normalizeStrategyFilterParam(rawStateParam: string | null | undefined): string {
@@ -188,6 +229,7 @@ export function resolveStrategyListQuery(
   if (activeFilter === "default") {
     return {
       exclude_state: "draft",
+      hide_retired_personas: true,
       page_size: pageSize,
       ...(pageToken ? { page_token: pageToken } : {}),
     };
@@ -241,6 +283,8 @@ export const StrategiesList = () => {
       createBehavior={{ kind: "drawer", entity: "strategy" }}
       topControls={(ctx) => {
         const stateCounts = extractStrategyStateCounts(ctx.meta);
+        const pageInfoTotal = extractStrategyPageInfoTotal(ctx.meta);
+        const hiddenRetiredCount = extractHiddenRetiredPersonaCount(ctx.meta);
         const baseIds: string[] = [...STRATEGY_BASE_FILTER_OPTIONS];
         if (!baseIds.includes(activeFilter)) {
           baseIds.push(activeFilter);
@@ -253,10 +297,12 @@ export const StrategiesList = () => {
                 ? t("common.all")
                 : t(`status.${id}`, { defaultValue: id });
           const count =
-            stateCounts === null
-              ? undefined
-              : id === "default"
-                ? stateCounts.defaultCount
+            id === "default"
+              ? activeFilter === "default"
+                ? pageInfoTotal
+                : undefined
+              : stateCounts === null
+                ? undefined
                 : id === "all"
                   ? stateCounts.allCount
                   : stateCounts.byState[id];
@@ -265,6 +311,22 @@ export const StrategiesList = () => {
 
         const draftCount = stateCounts?.draftCount;
         const hasDraftCount = typeof draftCount === "number" && Number.isFinite(draftCount);
+        const hasHiddenRetiredCount =
+          typeof hiddenRetiredCount === "number" && Number.isFinite(hiddenRetiredCount);
+
+        const bannerNoticeText =
+          hasDraftCount && hasHiddenRetiredCount
+            ? t("strategy.list.hiddenDraftsAndRetiredPersonasWithCounts", {
+                draftCount,
+                retiredPersonaCount: hiddenRetiredCount,
+              })
+            : hasDraftCount
+              ? t("strategy.list.hiddenDraftsWithCount", { count: draftCount })
+              : hasHiddenRetiredCount
+                ? t("strategy.list.hiddenRetiredPersonasWithCount", {
+                    retiredPersonaCount: hiddenRetiredCount,
+                  })
+                : t("strategy.list.hiddenDraftsNoCount");
 
         return (
           <>
@@ -298,11 +360,7 @@ export const StrategiesList = () => {
                 data-testid="strategy-hidden-drafts-banner"
                 className="mb-3 flex flex-wrap items-center justify-between gap-2 border-border/70 bg-muted/20 p-3 text-sm"
               >
-                <span className="text-foreground">
-                  {hasDraftCount
-                    ? t("strategy.list.hiddenDraftsWithCount", { count: draftCount })
-                    : t("strategy.list.hiddenDraftsNoCount")}
-                </span>
+                <span className="text-foreground">{bannerNoticeText}</span>
                 <Button
                   type="button"
                   size="sm"
@@ -336,6 +394,44 @@ export const StrategiesList = () => {
         );
       }}
       extraColumns={[
+        {
+          key: "operationalStatus",
+          header: t("strategy.list.column.operationalStatus"),
+          cell: (r) => {
+            const status = normalizeStrategyOperationalStatus(r.operationalStatus);
+            if (!status) {
+              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+            }
+            return (
+              <Badge
+                variant="outline"
+                data-testid="strategy-operational-status"
+                data-operational-status={status}
+                className={`text-xs ${strategyOperationalStatusClass(status)}`}
+              >
+                {t(`strategy.operationalStatus.${status}`)}
+              </Badge>
+            );
+          },
+        },
+        {
+          key: "symbols",
+          header: t("strategy.list.column.symbols"),
+          cell: (r) => {
+            const symbols = Array.isArray(r.symbols)
+              ? r.symbols.map((s) => String(s).trim()).filter(Boolean)
+              : [];
+            const symbolsText = symbols.join(", ");
+            return (
+              <span
+                data-testid="strategy-symbols"
+                className={`text-mono text-xs ${symbolsText ? "text-foreground" : "text-muted-foreground"}`}
+              >
+                {symbolsText || noData}
+              </span>
+            );
+          },
+        },
         {
           key: "alpha",
           header: "Alpha",
