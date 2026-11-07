@@ -748,4 +748,160 @@ describe("TradingPulsePage snake_case BFF contract and coverage rendering", () =
       "border-border",
     );
   });
+
+  it("shows localized short-sample caption on sharpe-leaders when rows exist, omits it when empty, preserves values/order/links, and shows no caption on other ranking blocks", async () => {
+    const rankingsWithRows = [
+      {
+        kind: "sharpe-leaders",
+        label: "Sharpe Leaders",
+        eligibleItemCount: 3,
+        missingMetricCount: 1,
+        rows: [
+          {
+            subjectId: "rb-paper-03",
+            subjectLabel: "rt-paper-03",
+            metric: "Sharpe Leaders",
+            metricValue: 15.6,
+            links: { manageHref: "/management/personas/persona-gamma" },
+          },
+          {
+            subjectId: "rb-paper-02",
+            subjectLabel: "rt-paper-02",
+            metric: "Sharpe Leaders",
+            metricValue: 12.8,
+            links: { manageHref: "/management/personas/persona-beta" },
+          },
+          {
+            subjectId: "rb-paper-01",
+            subjectLabel: "rt-paper-01",
+            metric: "Sharpe Leaders",
+            metricValue: 9.3,
+            links: { manageHref: "/management/personas/persona-alpha" },
+          },
+        ],
+      },
+      {
+        kind: "pnl-leaders",
+        label: "P&L Leaders",
+        eligibleItemCount: 2,
+        missingMetricCount: 0,
+        rows: [
+          {
+            subjectId: "rb-paper-01",
+            subjectLabel: "rt-paper-01",
+            metric: "P&L Leaders",
+            metricValue: 620.5,
+            links: { manageHref: "/management/personas/persona-alpha" },
+          },
+          {
+            subjectId: "rb-paper-02",
+            subjectLabel: "rt-paper-02",
+            metric: "P&L Leaders",
+            metricValue: 512,
+            links: { manageHref: "/management/personas/persona-beta" },
+          },
+        ],
+      },
+    ];
+
+    // 1. en-US: sharpe-leaders with rows shows caption below row list; values, row order, and links are unchanged; pnl-leaders has no caption
+    mockTradingPulseModel(SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD, rankingsWithRows);
+    const enPopulatedView = renderPage(<TradingPulsePage />);
+
+    const sharpeCardEn = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    const sharpeItemsEn = within(sharpeCardEn).getAllByRole("listitem");
+    expect(sharpeItemsEn).toHaveLength(3);
+    expect(within(sharpeItemsEn[0]).getByRole("link", { name: "rt-paper-03" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-gamma",
+    );
+    expect(within(sharpeItemsEn[0]).getByText("15.6")).toBeInTheDocument();
+    expect(within(sharpeItemsEn[1]).getByRole("link", { name: "rt-paper-02" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-beta",
+    );
+    expect(within(sharpeItemsEn[1]).getByText("12.8")).toBeInTheDocument();
+    expect(within(sharpeItemsEn[2]).getByRole("link", { name: "rt-paper-01" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-alpha",
+    );
+    expect(within(sharpeItemsEn[2]).getByText("9.3")).toBeInTheDocument();
+
+    const captionEn = within(sharpeCardEn).getByText("Rolling 20-day short sample; for reference only");
+    expect(captionEn).toHaveClass("text-xs", "text-muted-foreground");
+    const rowListEn = within(sharpeCardEn).getByRole("list");
+    expect(rowListEn.compareDocumentPosition(captionEn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      within(sharpeCardEn).queryByText("Building history: Sharpe needs at least 10 daily returns"),
+    ).not.toBeInTheDocument();
+
+    const pnlCardEn = screen.getByText("P&L Leaders").closest("div.p-4") as HTMLElement;
+    expect(within(pnlCardEn).getAllByRole("listitem")).toHaveLength(2);
+    expect(
+      within(pnlCardEn).queryByText("Rolling 20-day short sample; for reference only"),
+    ).not.toBeInTheDocument();
+    enPopulatedView.unmount();
+
+    // 2. zh-TW: sharpe-leaders with rows shows localized zh-TW caption; pnl-leaders has no caption
+    await i18n.changeLanguage("zh-TW");
+    const zhPopulatedView = renderPage(<TradingPulsePage />);
+
+    const sharpeCardZh = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    const sharpeItemsZh = within(sharpeCardZh).getAllByRole("listitem");
+    expect(sharpeItemsZh).toHaveLength(3);
+    expect(within(sharpeItemsZh[0]).getByText("15.6")).toBeInTheDocument();
+    expect(within(sharpeItemsZh[1]).getByText("12.8")).toBeInTheDocument();
+    expect(within(sharpeItemsZh[2]).getByText("9.3")).toBeInTheDocument();
+
+    const captionZh = within(sharpeCardZh).getByText("20 日滾動、樣本短，僅供參考");
+    expect(captionZh).toHaveClass("text-xs", "text-muted-foreground");
+    const rowListZh = within(sharpeCardZh).getByRole("list");
+    expect(rowListZh.compareDocumentPosition(captionZh) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      within(sharpeCardZh).queryByText("樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe"),
+    ).not.toBeInTheDocument();
+
+    const pnlCardZh = screen.getByText("P&L Leaders").closest("div.p-4") as HTMLElement;
+    expect(within(pnlCardZh).queryByText("20 日滾動、樣本短，僅供參考")).not.toBeInTheDocument();
+    zhPopulatedView.unmount();
+
+    // 3. Empty sharpe-leaders block: caption does not appear, building-history text stays as it is
+    const emptyRankings = [
+      {
+        kind: "sharpe-leaders",
+        label: "Sharpe Leaders",
+        eligibleItemCount: 0,
+        missingMetricCount: 4,
+        rows: [],
+      },
+      {
+        kind: "pnl-leaders",
+        label: "P&L Leaders",
+        eligibleItemCount: 0,
+        missingMetricCount: 0,
+        rows: [],
+      },
+    ];
+
+    await i18n.changeLanguage("en-US");
+    mockTradingPulseModel(SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD, emptyRankings);
+    const enEmptyCheck = renderPage(<TradingPulsePage />);
+    const sharpeEmptyEn = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    expect(
+      within(sharpeEmptyEn).getByText("Building history: Sharpe needs at least 10 daily returns"),
+    ).toBeInTheDocument();
+    expect(
+      within(sharpeEmptyEn).queryByText("Rolling 20-day short sample; for reference only"),
+    ).not.toBeInTheDocument();
+    enEmptyCheck.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const zhEmptyCheck = renderPage(<TradingPulsePage />);
+    const sharpeEmptyZh = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    expect(
+      within(sharpeEmptyZh).getByText("樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe"),
+    ).toBeInTheDocument();
+    expect(within(sharpeEmptyZh).queryByText("20 日滾動、樣本短，僅供參考")).not.toBeInTheDocument();
+    zhEmptyCheck.unmount();
+  });
 });

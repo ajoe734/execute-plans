@@ -3766,6 +3766,7 @@ export default {
       notRequired: "不需比較",
       sharpeBuildingBadge: "累積中",
       sharpeBuildingHistory: "樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe",
+      sharpeShortSampleCaption: "20 日滾動、樣本短，僅供參考",
     },
     evolution: {
       title: "演化日誌",
