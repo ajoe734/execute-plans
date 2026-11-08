@@ -58,7 +58,7 @@ function corsHeaders(route: Route): Record<string, string> {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers":
-      "Accept, Accept-Language, Authorization, Content-Language, Content-Type, Idempotency-Key, If-Match, X-BFF-Api-Version, X-Correlation-Id, X-Idempotency-Key, X-Locale, X-Request-Id, X-Tenant-Id",
+      "Accept, Accept-Language, Authorization, Content-Language, Content-Type, Idempotency-Key, If-Match, X-BFF-Api-Version, X-Correlation-Id, X-Locale, X-Request-Id, X-Tenant-Id",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Expose-Headers":
       "X-BFF-Api-Version, X-Correlation-Id, X-Request-Id",
@@ -263,17 +263,11 @@ async function installRuntimeFallbackOverride(
   fallback: "auto" | "strict",
 ) {
   await page.addInitScript((value) => {
-    const runtimeConfig = { VITE_BFF_FALLBACK: value, fallback: value };
-    Object.assign(window as unknown as Record<string, unknown>, {
-      __PANTHEON_BFF_RUNTIME__: runtimeConfig,
-      __PANTHEON_RUNTIME_CONFIG__: runtimeConfig,
-    });
-
     try {
       window.sessionStorage.setItem("pantheon.integration.fallback", value);
       window.sessionStorage.setItem("pantheon.e2e.fallback", value);
     } catch {
-      // Storage can be unavailable in restricted browser contexts; globals still cover bootstrap.
+      // Ignore storage access errors in restricted contexts.
     }
   }, fallback);
 }

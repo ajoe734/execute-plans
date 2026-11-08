@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { LOCAL_FIXTURE_AUTH_TOKEN, installOidcDevLogin } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
@@ -107,6 +108,11 @@ async function installPerfIa003Routes(page: Page) {
       items: [],
       meta: { status: "degraded", source: "mgmt-perf-ia-003-fixture" },
     });
+  });
+  await installOidcDevLogin(page, {
+    goto: false,
+    roles: ["ops", "viewer"],
+    token: LOCAL_FIXTURE_AUTH_TOKEN,
   });
 }
 

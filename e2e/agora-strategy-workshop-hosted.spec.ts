@@ -247,10 +247,12 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
       if (viewport.name === "mobile") {
         await page.getByRole("button", { name: "Next question & readiness" }).click();
         await expect(page.getByTestId("completeness-rail")).toBeVisible();
+        await expect(page.getByTestId("completeness-overall-grade")).toBeVisible();
         await page.getByRole("button", { name: "Conversation" }).click();
         await expect(page.getByTestId("workshop-conversation")).toBeVisible();
       } else {
         await expect(page.getByTestId("completeness-rail")).toBeVisible();
+        await expect(page.getByTestId("completeness-overall-grade")).toBeVisible();
       }
       await expect(page.getByTestId("workshop-card-summary")).toContainText(/Cards: \d+/);
       await expect(page.getByTestId("workshop-event-summary")).toContainText(/Events: \d+/);

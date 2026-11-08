@@ -150,7 +150,7 @@ function loadRoleTokens() {
   return tokens;
 }
 
-function requestHeaders(token, method, requestId, extra = {}) {
+function requestHeaders(token, method, requestId, extra = {}, idempotencyKey = `idk-${requestId}`) {
   const headers = {
     Accept: "application/json",
     "X-Request-Id": requestId,
@@ -161,8 +161,7 @@ function requestHeaders(token, method, requestId, extra = {}) {
   if (method !== "GET") {
     headers["Content-Type"] = "application/json";
     headers["X-Dry-Run"] = "1";
-    headers["Idempotency-Key"] = `idk-${requestId}`;
-    headers["X-Idempotency-Key"] = `idk-${requestId}`;
+    headers["Idempotency-Key"] = idempotencyKey;
   }
   return headers;
 }
@@ -173,6 +172,7 @@ function sleep(ms) {
 
 async function fetchJson(route, { method = "GET", token = "", body, requestPrefix = "live-deep", extraHeaders = {} } = {}) {
   const requestId = `${requestPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const idempotencyKey = `idk-${requestId}`;
   const url = new URL(route, BFF_BASE_URL).toString();
   let last = {
     route,
@@ -188,7 +188,7 @@ async function fetchJson(route, { method = "GET", token = "", body, requestPrefi
     try {
       const res = await fetch(url, {
         method,
-        headers: requestHeaders(token, method, requestId, extraHeaders),
+        headers: requestHeaders(token, method, requestId, extraHeaders, idempotencyKey),
         body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
         signal: AbortSignal.timeout(LIVE_FETCH_TIMEOUT_MS),
       });

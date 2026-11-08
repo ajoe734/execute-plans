@@ -696,7 +696,7 @@ async function executeCommand<T>(
     idempotencyKey,
     correlationId,
     headers: {
-      "X-Idempotency-Key": idempotencyKey,
+      "Idempotency-Key": idempotencyKey,
       "X-Correlation-Id": correlationId,
     },
   });

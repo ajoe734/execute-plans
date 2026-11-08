@@ -142,16 +142,12 @@ function evidenceOverview() {
 
 async function installRuntimeHarness(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const runtimeConfig = {
-      VITE_BFF_MODE: "live",
-      VITE_BFF_BASE_URL: "",
-      VITE_BFF_FALLBACK: "strict",
-      fallback: "strict",
-    };
-    Object.assign(window as unknown as Record<string, unknown>, {
-      __PANTHEON_BFF_RUNTIME__: runtimeConfig,
-      __PANTHEON_RUNTIME_CONFIG__: runtimeConfig,
-    });
+    try {
+      window.sessionStorage.setItem("pantheon.integration.fallback", "strict");
+      window.sessionStorage.setItem("pantheon.e2e.fallback", "strict");
+    } catch {
+      // Ignore storage access errors in restricted contexts.
+    }
 
     class RouteSplitEventSource extends EventTarget {
       static CONNECTING = 0;

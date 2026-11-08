@@ -175,7 +175,7 @@ function classify(status, json) {
   return { category: "other", tag: "unexpected", note: `unexpected status ${status}`, typedEnvelope };
 }
 
-function headersFor(requestId) {
+function headersFor(requestId, idempotencyKey = `idk-${requestId}`) {
   return {
     Authorization: bearerAuthorization(BEARER_TOKEN),
     "Content-Type": "application/json",
@@ -184,8 +184,7 @@ function headersFor(requestId) {
     "X-Request-Id": requestId,
     "X-BFF-Api-Version": "2026-05-07",
     "X-Dry-Run": "1",
-    "Idempotency-Key": `idk-${requestId}`,
-    "X-Idempotency-Key": `idk-${requestId}`,
+    "Idempotency-Key": idempotencyKey,
   };
 }
 
@@ -196,6 +195,7 @@ function sleep(ms) {
 async function probe(ep) {
   const url = new URL(ep.route, BFF_BASE_URL).toString();
   const baseRequestId = `write-probe-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const idempotencyKey = `idk-${baseRequestId}`;
   const { body, marker } = withProbeMarker(ep);
   let last = null;
 
@@ -204,7 +204,7 @@ async function probe(ep) {
     try {
       const res = await fetch(url, {
         method: ep.method,
-        headers: headersFor(requestId),
+        headers: headersFor(requestId, idempotencyKey),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });

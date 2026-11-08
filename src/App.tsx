@@ -9,7 +9,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import { lazyNamedRoute, lazyRoute } from "@/routes/lazyRoute";
-import { LegacyPromotionAllocationRedirect } from "@/routes/management/legacyPromotionAllocationRedirect";
 import { ManagementCanonicalRedirect } from "@/routes/management/managementCanonicalRedirect";
 
 const queryClient = new QueryClient();
@@ -193,8 +192,8 @@ const App = () => (
             <Route path="/management/deployment/:id" element={<DeploymentAliasRedirect />} />
             <Route path="/management/research" element={<Navigate to="/management/experiments" replace />} />
             <Route path="/management/research/:id" element={<ResearchAliasRedirect />} />
-            <Route path="/management/capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
-            <Route path="/management/readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+            <Route path="/management/capital-live" element={<ManagementCanonicalRedirect />} />
+            <Route path="/management/readiness/capital-binding-live" element={<ManagementCanonicalRedirect />} />
             <Route element={<ProtectedRoute><PlatformShellRoute /></ProtectedRoute>}>
               <Route path="/management" element={<ManagementLayoutRoute />}>
                 <Route index element={<Navigate to="/management/cockpit" replace />} />
@@ -215,10 +214,10 @@ const App = () => (
                 <Route path="persona-intent/:id" element={<PersonaIntentTraceDetailRoute />} />
 
                 <Route path="broker-live" element={<Navigate to="/management/readiness/broker-live" replace />} />
-                <Route path="capital-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+                <Route path="capital-live" element={<ManagementCanonicalRedirect />} />
                 <Route path="readiness/ep5" element={<Ep5CanaryReadinessRoute />} />
                 <Route path="readiness/broker-live" element={<BrokerLiveReadinessRoute />} />
-                <Route path="readiness/capital-binding-live" element={<LegacyPromotionAllocationRedirect tab="quarterly-capital" />} />
+                <Route path="readiness/capital-binding-live" element={<ManagementCanonicalRedirect />} />
                 <Route path="readiness/bff-ha" element={<BffHaReadinessRoute />} />
                 <Route path="readiness/strict-publish" element={<StrictPublishAuditRoute />} />
                 <Route path="data-sources" element={<DataSourceManagementRoute />} />

@@ -1188,15 +1188,15 @@ const uiFlows: UiFlow[] = [
   { id: "ui-006-evolution-journal", type: "ui", category: "monitor", path: "/management/evolution-journal", endpoint: "/bff/management/evolution-journal", text: "Restrict route tools" },
   { id: "ui-007-evidence", type: "ui", category: "display", path: "/management/evidence", endpoint: "/bff/management/evidence", text: "ev-mgmt100-risk" },
   { id: "ui-008-persona-intent", type: "ui", category: "display", path: "/management/persona-intent", endpoint: "/bff/management/persona-intent", text: "trace-mgmt100-001" },
-  { id: "ui-009-persona-league", type: "ui", category: "display", path: "/management/persona-league", endpoint: "/bff/management/persona-league", text: PERSONA_NAME },
-  { id: "ui-010-portfolio-book", type: "ui", category: "display", path: "/management/portfolio-book", endpoint: "/bff/management/portfolio-book" },
-  { id: "ui-011-quarterly-ranking", type: "ui", category: "display", path: "/management/quarterly-ranking", endpoint: "/bff/management/quarterly-ranking" },
-  { id: "ui-012-performance-attribution", type: "ui", category: "display", path: "/management/performance-attribution", endpoint: "/bff/management/performance-attribution" },
-  { id: "ui-013-promotion-paper", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=paper-candidates", endpoint: "/bff/management/quarterly-ranking" },
-  { id: "ui-014-promotion-real", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=real-ranking", endpoint: "/bff/management/persona-league", text: PERSONA_NAME },
-  { id: "ui-015-quarterly-capital", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=quarterly-capital", endpoint: "/bff/capital-pools", text: "MGMT100 Core Pool" },
-  { id: "ui-016-formula-policy", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=formula-policy", endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
-  { id: "ui-017-formula-policy-detail", type: "ui", category: "monitor", path: `/management/promotion-allocation?tab=formula-policy&formula_id=${quarterlyFormula.formulaId}`, endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
+  { id: "ui-009-persona-league", type: "ui", category: "display", path: "/management/rankings?tab=rolling", endpoint: "/bff/management/persona-league", text: PERSONA_NAME },
+  { id: "ui-010-portfolio-book", type: "ui", category: "display", path: "/management/performance?tab=overview", endpoint: "/bff/management/portfolio-book" },
+  { id: "ui-011-quarterly-ranking", type: "ui", category: "display", path: "/management/rankings?tab=quarterly", endpoint: "/bff/management/quarterly-ranking" },
+  { id: "ui-012-performance-attribution", type: "ui", category: "display", path: "/management/performance?tab=attribution", endpoint: "/bff/management/performance-attribution" },
+  { id: "ui-013-promotion-paper", type: "ui", category: "monitor", path: "/management/rankings?tab=quarterly", endpoint: "/bff/management/quarterly-ranking" },
+  { id: "ui-014-promotion-real", type: "ui", category: "monitor", path: "/management/rankings?tab=rolling", endpoint: "/bff/management/persona-league", text: PERSONA_NAME },
+  { id: "ui-015-quarterly-capital", type: "ui", category: "monitor", path: "/management/governance-decisions?tab=capital", endpoint: "/bff/capital-pools", text: "MGMT100 Core Pool" },
+  { id: "ui-016-formula-policy", type: "ui", category: "monitor", path: "/management/governance-decisions?tab=policy", endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
+  { id: "ui-017-formula-policy-detail", type: "ui", category: "monitor", path: `/management/governance-decisions?tab=policy&formula_id=${quarterlyFormula.formulaId}`, endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
   { id: "ui-018-deployment-alias", type: "ui", category: "monitor", path: "/management/deployment", endpoint: "/bff/deployments" },
   { id: "ui-019-execution-loop", type: "ui", category: "monitor", path: "/management/loops/execution", endpoint: "/bff/v5/loop-runs" },
   { id: "ui-022-personas-list", type: "ui", category: "display", path: "/management/personas", endpoint: "/bff/personas", text: PERSONA_NAME },
@@ -1405,7 +1405,7 @@ test("portfolio book holdings table renders quantity, stale mark reason, and scr
     await page.addInitScript((lang) => {
       window.localStorage.setItem("pantheon.locale", lang);
     }, locale);
-    await page.goto(frontendUrl("/management/portfolio-book"));
+    await page.goto(frontendUrl("/management/performance?tab=overview"));
     await expect(page.getByTestId("portfolio-holding")).toHaveCount(3);
 
     const staleRow = page.getByTestId("portfolio-holding").filter({ hasText: "rt-482f3e28:2317.TWSE" });

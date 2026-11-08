@@ -63,7 +63,7 @@ export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) =
       <DataTable
         rows={rows}
         loading={loadState === "loading"}
-        onRowClick={(r) => nav(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(r.id)}`)}
+        onRowClick={(r) => nav(`/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(r.id)}`)}
         columns={[
           {
             key: "name",

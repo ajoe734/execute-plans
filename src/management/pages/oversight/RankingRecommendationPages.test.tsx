@@ -12,7 +12,6 @@ import { adaptQuarterlyRankingRows } from "@/lib/bff-v1/management";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
 import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/management/quarterlyRanking";
 import { PersonaLeaguePage } from "./PersonaLeague";
-import { PromotionAllocationPage } from "./PromotionAllocation";
 import { ProposalCell, QuarterlyRankingPage } from "./QuarterlyRanking";
 import { RankingsCenterPage } from "../centers/RankingsCenterPage";
 
@@ -68,18 +67,6 @@ describe("ranking recommendation proposal pages", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mocks.useV5Live.mockReset();
-  });
-
-  it("Promotion & Allocation is a legacy shell that links to the canonical centers, not a tabbed workbench", () => {
-    mocks.useV5Live.mockReturnValue({ data: [], loading: false, refresh: vi.fn() });
-    renderWithRoutes("/management/promotion-allocation", <PromotionAllocationPage />);
-
-    expect(screen.getByRole("heading", { name: "Promotion & Allocation" })).toBeInTheDocument();
-    // MGMT-PERF-IA-005: every other tab now redirects before this page ever
-    // renders (PromotionAllocationLegacyGate) — no internal tab list survives.
-    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open Rankings Center/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open Governance Decisions/ })).toBeInTheDocument();
   });
 
   it("Quarterly ranking page is independently routable", () => {
@@ -237,7 +224,7 @@ describe("ranking recommendation proposal pages", () => {
     const row = { ...defaultPersonaLeague()[0], recommendedAction: "promote_to_canary_candidate" as const };
     mockLive({ rows: [row], proposals: savedProposals(pending(), row.personaId) });
 
-    renderWithRoutes("/management/promotion-allocation", <PersonaLeaguePage />);
+    renderWithRoutes("/management/rankings?tab=rolling", <PersonaLeaguePage />);
 
     expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
     const link = screen.getByRole("link", { name: /Promote to canary candidate · pending/ });
@@ -253,7 +240,7 @@ describe("ranking recommendation proposal pages", () => {
     const row = { ...defaultPersonaLeague()[0], recommendedAction: "promote_to_canary_candidate" as const };
     mockLive({ rows: [row], proposals: proposals() });
 
-    renderWithRoutes("/management/promotion-allocation", <PersonaLeaguePage />);
+    renderWithRoutes("/management/rankings?tab=rolling", <PersonaLeaguePage />);
     expect(screen.queryByText(/Promote to canary candidate/)).not.toBeInTheDocument();
     expect(screen.queryByText("No change")).not.toBeInTheDocument();
   });
@@ -268,7 +255,7 @@ describe("ranking recommendation proposal pages", () => {
     const row = { ...base, quarter: "2026-Q3", recommendation: "promote_to_canary_candidate" as const };
     mockLive({ rows: [row], formula: defaultQuarterlyFormula(), proposals: savedProposals(state, base.personaId) });
 
-    renderWithRoutes("/management/promotion-allocation", <QuarterlyRankingPage />);
+    renderWithRoutes("/management/rankings?tab=quarterly", <QuarterlyRankingPage />);
 
     expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
@@ -279,7 +266,7 @@ describe("ranking recommendation proposal pages", () => {
     const row = { ...defaultQuarterlyRanking()[0], quarter: "2026-Q3" };
     mockLive({ rows: [row], formula: defaultQuarterlyFormula() });
 
-    renderWithRoutes("/management/promotion-allocation", <QuarterlyRankingPage />);
+    renderWithRoutes("/management/rankings?tab=quarterly", <QuarterlyRankingPage />);
 
     expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();

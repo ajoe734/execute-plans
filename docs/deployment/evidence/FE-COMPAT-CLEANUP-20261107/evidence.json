@@ -1,0 +1,43 @@
+{
+  "schema_version": "pantheon.fe-compat-cleanup.v1",
+  "task_id": "FE-COMPAT-CLEANUP-20261107",
+  "taskId": "FE-COMPAT-CLEANUP-20261107",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-COMPAT-CLEANUP-20261107",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-08T00:34:00Z",
+  "scope": {
+    "findings_addressed": [
+      "A03",
+      "A04",
+      "A05",
+      "A14",
+      "A15"
+    ],
+    "delivered": [
+      "A03: Kept PortfolioBook, PerformanceAttribution, PersonaLeague, and QuarterlyRanking embedded in canonical centers (PerformanceCenter, RankingsCenter, GovernanceDecisionsCenter) and migrated all frontend-generated old management links in PersonaCapitalBindingTab, CapitalPoolDetail, IncidentDetail, PersonaTradeJournalTab, RiskCenter, FormulaStudio, OptimizationLoop, PerformanceAttribution, adaptPortfolioHoldingRows, routeLabels, processMapping, B1-platform, B5-misc, and useManagementNlContext to canonical center URLs.",
+      "A03: Removed LegacyPromotionAllocationRedirect, promotionAllocationRedirectHref.ts, PromotionAllocation.tsx, dead promotion-allocation helpers in personaFleetLinks.ts, and unused standalone route exports in src/routes/management/performance.tsx while preserving LEGACY_REDIRECTS / ManagementCanonicalRedirect in managementRouteManifest.ts for public URL compatibility and BFF-supplied holding links.",
+      "A04: Preserved the validated same-origin /runtime-config.js (__PANTHEON_RUNTIME_CONFIG__) and immutable cross-environment bundle contract including optional public write posture (VITE_BFF_REAL_WRITES); removed legacy global readers (__PANTHEON_BFF_RUNTIME__, __PANTHEON_ENV__, window.VITE_BFF_*) from deploymentRuntime.ts, runtimeEnv.ts, and devLoginHelper.ts, and updated immutable-runtime-config.md and tests.",
+      "A05: Consolidated frontend timeout policy definitions into src/lib/v4/asyncTransitionPolicy.ts (retaining ASYNC_TRANSITION_POLICIES plus LOOP_TIMEOUT_POLICIES, getTimeoutPolicy, computeElapsedRatio, evaluateLoopTimeout, formatRemaining, and formatDuration), deleted src/lib/v5/timeoutPolicy.ts and src/lib/v4/asyncTransitions.ts shims, removed stale supersedes claims, labeled frontend provisional thresholds truthfully, and migrated all callers, ESLint rules, and unit tests.",
+      "A14: Removed display:none legacy test-id elements (completeness-grade, workshop-readiness) from WorkshopSessionView.tsx, updated StrategyWorkshopPage.test.tsx and hosted E2E specs (agora-winner-branch-hosted.spec.ts, agora-strategy-workshop-hosted.spec.ts) to assert visible completeness and readiness elements, and preserved durable Workshop vs Persona receipt separation.",
+      "A15: Migrated all maintained frontend requests (managementDataSources.ts), probe scripts (probe-bff-authenticated-live.mjs, probe-bff-routes.mjs, probe-bff-write-paths.mjs, validate-management-live-deep.mjs), and E2E specs (04b-optimization-loop.spec.ts, 08-create-intent.spec.ts, 09-strict-vs-hybrid.spec.ts, 17-a11y-v5.spec.ts) from X-Idempotency-Key to canonical Idempotency-Key and verified retry key retention across retries."
+    ],
+    "supported_client_contract_check": {
+      "finding": "A03",
+      "external_producer": "Pantheon BFF services/control-plane/bff/pm12/service.py:1299 (GET /bff/management/portfolio-book/holdings)",
+      "emitted_link_contract": "Each holding row emits links.performance_attribution = '/management/performance-attribution?<qs>' which PortfolioBook.tsx renders in the holding row Attribution link, and PersonaFleet / PM12 read models may include legacy linkTargets.",
+      "disposition": "Retained ManagementCanonicalRedirect and LEGACY_REDIRECTS in src/management/navigation/managementRouteManifest.ts (plus existing personaFleetLinks canonicalization) without adding any new compatibility facade or resolver, while removing the separate LegacyPromotionAllocationRedirect component, promotionAllocationRedirectHref.ts, PromotionAllocation.tsx, and all frontend-emitted legacy links."
+    }
+  },
+  "verification": {
+    "a04_a05_a14_a15_unit_tests": "npx vitest run src/lib/bff-v1/managementDataSources.test.ts src/lib/bff-v1/__tests__/writes.test.ts src/lib/bff-v1/__tests__/httpClient.test.ts src/lib/bff-v1/__tests__/liveTransportSnapshot.test.ts src/lib/v5/__tests__/loopOverlay.test.ts src/lib/v4/__tests__/batch-iv.test.ts src/config/deploymentRuntime.test.ts src/config/runtimeConfigScript.test.ts src/lib/auth/__tests__/devLoginHelper.test.ts src/lib/auth/__tests__/firebaseClient.test.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx (11 test files, 196/196 passed)",
+    "a03_unit_tests": "npx vitest run src/management/navigation/managementRouteManifest.test.ts src/management/components/detail/PersonaCapitalBindingTab.test.tsx src/management/components/detail/PersonaTradeJournalTab.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/IncidentDetail.tradeJourneys.test.tsx src/management/components/oversight/EmergencyActionsPanel.test.tsx src/management/pages/oversight/RankingRecommendationPages.test.tsx src/management/pages/oversight/PerformanceAttribution.test.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/management/pages/oversight/PerformanceCenter.test.tsx src/management/pages/oversight/GovernanceDecisionsCenter.test.tsx src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/_core.test.ts src/management/pages/oversight/PersonaFleetPage.test.tsx (14 test files, 316/316 passed)",
+    "typecheck": "npm run typecheck (passed with 0 errors)",
+    "lint": "npm run lint (passed with 0 errors)",
+    "build": "VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw npm run build (succeeded in 58.65s)",
+    "browser_e2e_checks": "npx playwright test e2e/08-create-intent.spec.ts e2e/20-portfolio-book-monitor.spec.ts e2e/26-mgmt-perf-ia-canonical-manifest.spec.ts e2e/27-mgmt-perf-ia-003-performance-center.spec.ts (11 passed, 1hosted-only skipped)"
+  }
+}

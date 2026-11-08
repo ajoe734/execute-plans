@@ -350,7 +350,7 @@ function holdingPnl(row: RawPortfolioHolding): number {
 
 function capitalPoolHref(capitalPoolId: string): string | undefined {
   return capitalPoolId !== MISSING
-    ? `/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(capitalPoolId)}`
+    ? `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(capitalPoolId)}`
     : undefined;
 }
 
@@ -418,7 +418,7 @@ function sourceRowsFromHoldings(
     return {
       id: `holding-${holdingId}-${index}`,
       source: "portfolio-book.holdings",
-      sourceHref: "/management/portfolio-book",
+      sourceHref: "/management/performance?tab=overview",
       symbol: holdingSymbol(holding),
       holdingWindow: holdingWindow(holding),
       runtimeId: displayText(holdingRuntimeId(holding), fleetRuntimeId(fleetRow)),
@@ -556,9 +556,10 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   );
   const showAllPersonaHref = useMemo(() => {
     const params = new URLSearchParams();
+    params.set("tab", "attribution");
     params.set("dimension", "persona");
     params.set("period", period);
-    return `/management/performance-attribution?${params.toString()}`;
+    return `/management/performance?${params.toString()}`;
   }, [period]);
 
   const updateDimension = (nextDimension: AttributionDimension | "all") => {
@@ -708,7 +709,7 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
                 : t("mgmt.attribution.focusMissingEntityFmt", { entity: entityFocus })}
             </span>
             <Button asChild size="sm" variant="outline">
-              <Link to={`/management/performance-attribution?dimension=${dimension}&period=${period}`}>
+              <Link to={`/management/performance?tab=attribution&dimension=${dimension}&period=${period}`}>
                 {t("mgmt.attribution.showAllEntities")}
               </Link>
             </Button>

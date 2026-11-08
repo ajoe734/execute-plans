@@ -206,7 +206,7 @@ function corsHeaders(route: Route): Record<string, string> {
   return {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers":
-      "accept,authorization,content-type,idempotency-key,x-bff-api-version,x-correlation-id,x-confirm-token,x-idempotency-key,x-locale,x-request-id",
+      "accept,authorization,content-type,idempotency-key,x-bff-api-version,x-correlation-id,x-confirm-token,x-locale,x-request-id",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Origin": origin,
     "X-BFF-Api-Version": "2026-05-10",

@@ -354,7 +354,14 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
 
         {/* Deep links */}
         <div className="flex flex-wrap gap-3">
-          <Link to="/management/performance-attribution" className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
+          <Link
+            to={
+              personaId
+                ? `/management/performance?tab=attribution&dimension=persona&persona=${encodeURIComponent(personaId)}`
+                : "/management/performance?tab=attribution"
+            }
+            className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+          >
             <Activity className="h-3 w-3" /> Attribution
           </Link>
           <Link to="/management/evidence" className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">

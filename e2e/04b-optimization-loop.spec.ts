@@ -82,7 +82,7 @@ function corsHeaders(route: Route): Record<string, string> {
   return {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers":
-      "accept,authorization,content-type,idempotency-key,x-correlation-id,x-idempotency-key,x-locale,x-request-id",
+      "accept,authorization,content-type,idempotency-key,x-correlation-id,x-locale,x-request-id",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Origin": origin,
     "X-Correlation-Id": "corr-fe-int-gate-c01",

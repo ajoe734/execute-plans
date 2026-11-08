@@ -10,11 +10,11 @@ import {
   resumeLoopRun,
   cancelLoopRun,
 } from "@/lib/v5/loopOverlay";
+import type { LoopRun } from "@/lib/v5";
 import {
   stageTimeoutState,
   DEFAULT_TIMEOUT_POLICY,
-  type LoopRun,
-} from "@/lib/v5";
+} from "@/lib/v4/asyncTransitionPolicy";
 
 beforeEach(() => loopRunOverlay.clear());
 
