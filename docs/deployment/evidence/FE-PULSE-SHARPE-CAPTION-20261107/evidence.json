@@ -1,0 +1,55 @@
+{
+  "schema_version": "pantheon.fe-pulse-sharpe-caption.v1",
+  "task_id": "FE-PULSE-SHARPE-CAPTION-20261107",
+  "title": "Sharpe 排行有數字時要標明是短樣本：避免把 12.8 看成真實績效",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "branch": "task/FE-PULSE-SHARPE-CAPTION-20261107",
+  "merge_target": "dev",
+  "base_sha": "ad56d48f3a2a000564ccb5a9e9c4c906583afceb",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Verified locally via Vitest unit/component/i18n tests, TypeScript application and Agora typechecks, contract drift checks, and ESLint. Hosted environment was not touched.",
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-PULSE-SHARPE-CAPTION-20261107/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_sharpe_leaders_with_rows_shows_localized_caption": "verified: When b.kind === 'sharpe-leaders' and rows are non-empty, RankingBlocks renders <p className=\"mt-2 text-xs text-muted-foreground\">{t(\"mgmt.pulse.sharpeShortSampleCaption\")}</p> below the row <ul> ('20 日滾動、樣本短，僅供參考' in zh-TW, 'Rolling 20-day short sample; for reference only' in en-US).",
+    "2_caption_absent_when_empty_and_building_history_unchanged": "verified: When b.kind === 'sharpe-leaders' and rows are empty, RankingBlocks takes the empty branch and renders only t('mgmt.pulse.sharpeBuildingHistory') ('樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe' in zh-TW, 'Building history: Sharpe needs at least 10 daily returns' in en-US); the short-sample caption is not rendered.",
+    "3_sharpe_values_row_order_and_links_unchanged_no_row_hidden": "verified: All rows in b.rows render through the existing <ul>/<li>/<Link> and formatPulseValue(r.metricValue) markup without filtering, reordering, or altering values (verified with 15.6, 12.8, 9.3).",
+    "4_other_ranking_blocks_show_no_caption": "verified: Ranking blocks with b.kind !== 'sharpe-leaders' (such as 'pnl-leaders') do not render mgmt.pulse.sharpeShortSampleCaption whether populated or empty.",
+    "5_focused_tests_i18n_parity_and_typecheck_pass": "verified: Focused tests in src/management/pages/oversight/TradingPulsePage.test.tsx (8 tests), src/lib/v5/management/__tests__/i18nParity.test.ts (10 tests), npm run typecheck:app, and npm run typecheck:agora all pass.",
+    "6_evidence_records_exact_commands_and_results": "verified: Exact commands, exit codes, and test counts are recorded in verification below."
+  },
+  "verification": {
+    "focused_vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "status": "passed",
+      "test_files": 2,
+      "tests_passed": 18
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/_core.tsx src/management/pages/oversight/TradingPulsePage.test.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "contract_drift": {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/dev-root npm run test:contract",
+      "exit_code": 0,
+      "status": "passed",
+      "tests_passed": 8
+    }
+  }
+}

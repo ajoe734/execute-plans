@@ -1,0 +1,81 @@
+{
+  "schema_version": "pantheon.fe-alerts-not-empty.v1",
+  "task_id": "FE-ALERTS-NOT-EMPTY-20261107",
+  "title": "Alerts page and risk center show no alerts when the alert read timed out",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "branch": "task/FE-ALERTS-NOT-EMPTY-20261107",
+  "merge_target": "dev",
+  "base_sha": "f6fb243929020f48520c3135ec5e8fa7fc3b5de0",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Hosted verification was not run. Per the task brief, hosted verification is deferred to the operator acceptance task MGMT-AI-TRUTH-ACCEPTANCE-20261107; only local functional and typecheck verification was executed.",
+  "scoped_artifacts": [
+    "src/lib/bff-v1/domainReads.ts",
+    "src/lib/bff-v1/operations.ts",
+    "src/lib/bff-v1/lists.ts",
+    "src/lib/bff-v1/__tests__/lists.test.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/Operations.tsx",
+    "src/management/pages/Operations.test.tsx",
+    "src/management/pages/RiskCenter.test.tsx",
+    "src/platform/components/NotificationCenter.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-ALERTS-NOT-EMPTY-20261107/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_alerts_page_unavailable_not_empty_and_cached_rows_preserved": "verified: loadListItems in src/management/pages/Operations.tsx calls assertAlertsNotTimeoutFallback(envelope) (keyed on meta.surfaces.alerts.source === 'timeout_fallback' across read_timeout, read_saturated, and read_error), causing TanStack Query to record an error state without overwriting cached rows. AlertsPage renders <Card role='alert'> with t('page.alertsUnavailable') and hides the empty table when no cached rows exist, while keeping previously cached rows visible if a subsequent refresh returns timeout_fallback.",
+    "2_risk_center_alert_table_error_state_and_other_slices_render": "verified: listAlerts() in src/lib/bff-v1/operations.ts reads the raw /bff/alerts body via strictLiveRead and calls assertAlertsNotTimeoutFallback(body) outside strictLiveRead. RiskCenter's loadSlice catches the rejection for the alerts slice and renders tableEmptyForSlice(alertsSlice, t('empty.noAlerts'), t) -> t('status.unavailable') while strategies, personas, capitalPools, runtimes, and incidents slices continue rendering.",
+    "3_healthy_zero_alerts_empty_state_and_degraded_contributing_surface_rows_rendered": "verified: Healthy empty responses (meta.surfaces.alerts.source === 'bff_composed', status: 'ok', alerts: []) resolve to [] and render t('page.alertsEmpty') on AlertsPage and t('empty.noAlerts') on RiskCenter. Responses with meta.surfaces.alerts.source === 'bff_composed' and status: 'degraded' due to a contributing surface keep resolving and normalize real BFF alert rows (alert_id -> id, summary -> title, category -> source, raised_at -> openedAt, target_ref.target_id -> relatedTarget, acknowledged: false).",
+    "4_global_live_status_not_switched_to_fallback_and_no_site_wide_banner": "verified: assertAlertsNotTimeoutFallback is invoked outside strictLiveRead in listAlerts() and in Operations.tsx loadListItems, so liveStatus.reportFallback is never called, liveStatus.get().effective remains 'live', and LiveStatusBanner renders no fallback or strict-error banner.",
+    "5_lists_alerts_resolves_for_topbar_and_notification_center_and_detail_pages_render": "verified: lists.alerts() continues resolving with ListEnvelope<Alert> (preserving meta) so TopBar's classifyListSource marks alerts degraded without failing. NotificationCenter isolates bffV1.alerts.list() with its own .catch(() => setAlerts([])) so approvals, jobs, and incidents still render when GET /bff/alerts falls back. StrategyDetail, IncidentDetail, and EvolutionDetail continue rendering.",
+    "6_locale_strings_and_i18n_parity": "verified: page.alertsEmpty and page.alertsUnavailable exist in both src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts, and src/lib/v5/management/__tests__/i18nParity.test.ts passes (11/11 tests).",
+    "7_typecheck_and_affected_tests_pass_and_hosted_not_run_stated": "verified: tsc -p tsconfig.app.json --noEmit, tsc -p tsconfig.agora.json --noEmit, tsc --noEmit, and all 5 affected test files pass; hosted verification was not run."
+  },
+  "verification": {
+    "typecheck_app": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "typecheck_agora": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "typecheck_root": {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "affected_vitest_suite": {
+      "command": "./node_modules/.bin/vitest run src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/RiskCenter.test.tsx src/management/pages/Operations.test.tsx",
+      "exit_code": 0,
+      "status": "passed",
+      "test_files": 5,
+      "tests_passed": 149,
+      "breakdown": {
+        "src/lib/v5/management/__tests__/i18nParity.test.ts": 11,
+        "src/lib/bff-v1/__tests__/lists.test.ts": 20,
+        "src/lib/bff-v1/__tests__/management.test.ts": 67,
+        "src/management/pages/RiskCenter.test.tsx": 8,
+        "src/management/pages/Operations.test.tsx": 43
+      }
+    },
+    "contract_drift": {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/dev-root npm run test:contract",
+      "exit_code": 0,
+      "status": "passed",
+      "tests_passed": 8
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/lib/bff-v1/domainReads.ts src/lib/bff-v1/operations.ts src/lib/bff-v1/lists.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/Operations.tsx src/management/pages/Operations.test.tsx src/management/pages/RiskCenter.test.tsx src/platform/components/NotificationCenter.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "status": "passed",
+      "errors": 0
+    }
+  }
+}

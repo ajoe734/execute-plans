@@ -6,6 +6,7 @@ import { lists, type Deployment, type Persona } from "@/lib/bff-v1";
 import {
   DeploymentsList,
   PersonasList,
+  RankingFormulasList,
   extractStrategyStateCounts,
   normalizeStrategyFilterParam,
   resolveStrategyListQuery,
@@ -169,5 +170,29 @@ describe("PersonasList and DeploymentsList show every row across pages", () => {
       expect(screen.getByText("plan-persona-paper-row-21")).toBeInTheDocument();
       expect(screen.getByText("plan-persona-paper-298e138c136c9840b0e4")).toBeInTheDocument();
     });
+  });
+});
+
+describe("RankingFormulasList real payload", () => {
+  it("shows version and weight summary with no blank cells", async () => {
+    vi.spyOn(lists, "rankingFormulas").mockResolvedValue({
+      items: [{
+        id: "pm12-quarterly-ranking-formula",
+        version: "pm12-default-v1",
+        formula_version: "pm12-default-v1",
+        weights: { pnl: 0.35, risk: 0.25, execution: 0.25, activity: 0.15 },
+        components: [
+          { key: "pnl", label: "PnL", weight: 0.35 },
+          { key: "risk", label: "Risk", weight: 0.25 },
+          { key: "execution", label: "Execution", weight: 0.25 },
+          { key: "activity", label: "Activity", weight: 0.15 },
+        ],
+      }],
+      meta: {},
+    } as never);
+    render(<MemoryRouter><RankingFormulasList /></MemoryRouter>);
+    expect(await screen.findByText("pm12-default-v1")).toBeInTheDocument();
+    expect(screen.getByText("PnL 35% · Risk 25% · Execution 25% · Activity 15%")).toBeInTheDocument();
+    document.querySelectorAll("tbody td").forEach((td) => expect(td.textContent?.trim()).not.toBe(""));
   });
 });

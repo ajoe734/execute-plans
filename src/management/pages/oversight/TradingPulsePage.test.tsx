@@ -189,11 +189,11 @@ const SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD = {
   },
 };
 
-function mockTradingPulseModel(rawPayload: unknown) {
+function mockTradingPulseModel(rawPayload: unknown, rankings: unknown[] = []) {
   const adapted = adaptTradingPulseOverview(rawPayload);
   mocks.useV5Live.mockImplementation((_loader, _deps, opts?: { cacheKey?: string }) => {
     if (opts?.cacheKey === "oversight.tradingPulse.rankings") {
-      return { data: [], loading: false, refresh: vi.fn() };
+      return { data: rankings, loading: false, refresh: vi.fn() };
     }
     return { data: adapted, loading: false, refresh: vi.fn() };
   });
@@ -548,5 +548,360 @@ describe("TradingPulsePage snake_case BFF contract and coverage rendering", () =
     expect(within(state4Tile).getByText("1/2")).toBeInTheDocument();
     expect(within(state4Tile).getByText("degraded")).toBeInTheDocument();
     expect(within(state4Tile).getByText("Missing: rt-live-02")).toBeInTheDocument();
+  });
+
+  it("renders Baseline Comparison card not_required through mgmt.pulse.notRequired in en-US and zh-TW while preserving other baseline keys and compactCounts lines", async () => {
+    const allPaperCardPayload = {
+      ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD,
+      data: {
+        ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data,
+        summary: {
+          ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data.summary,
+          runtime_count: 4,
+          baseline_comparison_count: 0,
+          baseline_required_count: 0,
+          by_baseline_status: { not_required: 4 },
+          coverage: {
+            ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data.summary.coverage,
+            runtime_count: 4,
+            baseline_comparison_count: 0,
+            baseline_required_count: 0,
+          },
+        },
+        cards: SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data.cards.map((card) =>
+          card.card_id === "baseline-comparison"
+            ? {
+                ...card,
+                details: {
+                  baseline_comparison_count: 0,
+                  by_baseline_status: { not_required: 4 },
+                  missing_baseline_runtime_ids: [],
+                },
+              }
+            : card,
+        ),
+        runtime_rows: [
+          {
+            ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data.runtime_rows[0],
+            baseline_comparison: {
+              runtime_id: "rt-paper-01",
+              status: "not_required",
+              metric_count: 0,
+              breached_metric_count: 0,
+            },
+          },
+        ],
+      },
+    };
+
+    mockTradingPulseModel(allPaperCardPayload);
+    const enAllPaperView = renderPage(<TradingPulsePage />);
+    expect(screen.getByText("Baseline status: Not required: 4")).toBeInTheDocument();
+    expect(screen.queryByText(/not_required/)).not.toBeInTheDocument();
+    // Shared compactCounts lines remain unchanged
+    expect(screen.getByText("Status: active: 1 · running: 89")).toBeInTheDocument();
+    expect(screen.getByText("Stage: paper: 88 · live_running: 2")).toBeInTheDocument();
+    expect(screen.getByText("Row health: ok: 78 · degraded: 12")).toBeInTheDocument();
+    enAllPaperView.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const zhAllPaperView = renderPage(<TradingPulsePage />);
+    expect(screen.getByText("基準狀態: 不需比較: 4")).toBeInTheDocument();
+    expect(screen.queryByText(/not_required/)).not.toBeInTheDocument();
+    expect(screen.getByText("狀態: active: 1 · running: 89")).toBeInTheDocument();
+    expect(screen.getByText("階段: paper: 88 · live_running: 2")).toBeInTheDocument();
+    expect(screen.getByText("Row health: ok: 78 · degraded: 12")).toBeInTheDocument();
+    zhAllPaperView.unmount();
+
+    // Mixed baseline status keys: other keys render as they do today alongside localized not_required
+    const mixedCardPayload = {
+      ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD,
+      data: {
+        ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data,
+        cards: SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data.cards.map((card) =>
+          card.card_id === "baseline-comparison"
+            ? {
+                ...card,
+                details: {
+                  ...card.details,
+                  by_baseline_status: { ok: 72, watch: 4, breached: 0, not_required: 3 },
+                },
+              }
+            : card,
+        ),
+      },
+    };
+
+    await i18n.changeLanguage("en-US");
+    mockTradingPulseModel(mixedCardPayload);
+    const enMixedView = renderPage(<TradingPulsePage />);
+    expect(
+      screen.getByText("Baseline status: ok: 72 · watch: 4 · breached: 0 · Not required: 3"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/not_required/)).not.toBeInTheDocument();
+    enMixedView.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const zhMixedView = renderPage(<TradingPulsePage />);
+    expect(
+      screen.getByText("基準狀態: ok: 72 · watch: 4 · breached: 0 · 不需比較: 3"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/not_required/)).not.toBeInTheDocument();
+    zhMixedView.unmount();
+  });
+
+  it("renders sharpe-leaders building-history badge and empty message in en-US and zh-TW, preserves row markup when rows exist, and keeps degraded state on other ranking blocks", async () => {
+    const emptySharpeAndOtherMissingRankings = [
+      {
+        kind: "sharpe-leaders",
+        label: "Sharpe Leaders",
+        rows: [],
+        eligibleItemCount: 0,
+        missingMetricCount: 4,
+      },
+      {
+        kind: "pnl-leaders",
+        label: "P&L Leaders",
+        rows: [],
+        eligibleItemCount: 0,
+        missingMetricCount: 2,
+      },
+    ];
+
+    mockTradingPulseModel(SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD, emptySharpeAndOtherMissingRankings);
+    const enEmptyView = renderPage(<TradingPulsePage />);
+
+    const sharpeCardEn = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    const sharpeBadgeEn = within(sharpeCardEn).getByText("Building: 4");
+    expect(sharpeBadgeEn).toHaveClass("bg-muted", "text-muted-foreground", "border-border");
+    expect(within(sharpeCardEn).queryByText(/Metric missing/i)).not.toBeInTheDocument();
+    expect(
+      within(sharpeCardEn).getByText("Building history: Sharpe needs at least 10 daily returns"),
+    ).toBeInTheDocument();
+    expect(within(sharpeCardEn).queryByText("No rows.")).not.toBeInTheDocument();
+
+    const pnlCardEn = screen.getByText("P&L Leaders").closest("div.p-4") as HTMLElement;
+    const pnlBadgeEn = within(pnlCardEn).getByText("Metric missing: 2");
+    expect(pnlBadgeEn).toHaveClass("bg-status-warning/15", "text-status-warning", "border-status-warning/30");
+    expect(within(pnlCardEn).getByText("No rows.")).toBeInTheDocument();
+    enEmptyView.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const zhEmptyView = renderPage(<TradingPulsePage />);
+
+    const sharpeCardZh = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    const sharpeBadgeZh = within(sharpeCardZh).getByText("累積中: 4");
+    expect(sharpeBadgeZh).toHaveClass("bg-muted", "text-muted-foreground", "border-border");
+    expect(within(sharpeCardZh).queryByText(/缺 metric/)).not.toBeInTheDocument();
+    expect(
+      within(sharpeCardZh).getByText("樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe"),
+    ).toBeInTheDocument();
+    expect(within(sharpeCardZh).queryByText("無資料。")).not.toBeInTheDocument();
+
+    const pnlCardZh = screen.getByText("P&L Leaders").closest("div.p-4") as HTMLElement;
+    const pnlBadgeZh = within(pnlCardZh).getByText("缺 metric: 2");
+    expect(pnlBadgeZh).toHaveClass("bg-status-warning/15", "text-status-warning", "border-status-warning/30");
+    expect(within(pnlCardZh).getByText("無資料。")).toBeInTheDocument();
+    zhEmptyView.unmount();
+
+    // When sharpe-leaders has rows, they render through the existing row markup
+    await i18n.changeLanguage("en-US");
+    const populatedSharpeRankings = [
+      {
+        kind: "sharpe-leaders",
+        label: "Sharpe Leaders",
+        eligibleItemCount: 2,
+        missingMetricCount: 2,
+        rows: [
+          {
+            subjectId: "rb-paper-01",
+            subjectLabel: "rt-paper-01",
+            metric: "Sharpe Leaders",
+            metricValue: 1.842,
+            links: { manageHref: "/management/personas/persona-alpha" },
+          },
+          {
+            subjectId: "rb-paper-02",
+            subjectLabel: "rt-paper-02",
+            metric: "Sharpe Leaders",
+            metricValue: 1.215,
+          },
+        ],
+      },
+    ];
+
+    mockTradingPulseModel(SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD, populatedSharpeRankings);
+    renderPage(<TradingPulsePage />);
+
+    const sharpePopulatedCard = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    const row1Link = within(sharpePopulatedCard).getByRole("link", { name: "rt-paper-01" });
+    expect(row1Link).toHaveAttribute("href", "/management/personas/persona-alpha");
+    expect(within(sharpePopulatedCard).getByText("1.842")).toBeInTheDocument();
+    expect(within(sharpePopulatedCard).getByRole("link", { name: "rt-paper-02" })).toBeInTheDocument();
+    expect(within(sharpePopulatedCard).getByText("1.215")).toBeInTheDocument();
+    expect(
+      within(sharpePopulatedCard).queryByText("Building history: Sharpe needs at least 10 daily returns"),
+    ).not.toBeInTheDocument();
+    expect(within(sharpePopulatedCard).getByText("Building: 2")).toHaveClass(
+      "bg-muted",
+      "text-muted-foreground",
+      "border-border",
+    );
+  });
+
+  it("shows localized short-sample caption on sharpe-leaders when rows exist, omits it when empty, preserves values/order/links, and shows no caption on other ranking blocks", async () => {
+    const rankingsWithRows = [
+      {
+        kind: "sharpe-leaders",
+        label: "Sharpe Leaders",
+        eligibleItemCount: 3,
+        missingMetricCount: 1,
+        rows: [
+          {
+            subjectId: "rb-paper-03",
+            subjectLabel: "rt-paper-03",
+            metric: "Sharpe Leaders",
+            metricValue: 15.6,
+            links: { manageHref: "/management/personas/persona-gamma" },
+          },
+          {
+            subjectId: "rb-paper-02",
+            subjectLabel: "rt-paper-02",
+            metric: "Sharpe Leaders",
+            metricValue: 12.8,
+            links: { manageHref: "/management/personas/persona-beta" },
+          },
+          {
+            subjectId: "rb-paper-01",
+            subjectLabel: "rt-paper-01",
+            metric: "Sharpe Leaders",
+            metricValue: 9.3,
+            links: { manageHref: "/management/personas/persona-alpha" },
+          },
+        ],
+      },
+      {
+        kind: "pnl-leaders",
+        label: "P&L Leaders",
+        eligibleItemCount: 2,
+        missingMetricCount: 0,
+        rows: [
+          {
+            subjectId: "rb-paper-01",
+            subjectLabel: "rt-paper-01",
+            metric: "P&L Leaders",
+            metricValue: 620.5,
+            links: { manageHref: "/management/personas/persona-alpha" },
+          },
+          {
+            subjectId: "rb-paper-02",
+            subjectLabel: "rt-paper-02",
+            metric: "P&L Leaders",
+            metricValue: 512,
+            links: { manageHref: "/management/personas/persona-beta" },
+          },
+        ],
+      },
+    ];
+
+    // 1. en-US: sharpe-leaders with rows shows caption below row list; values, row order, and links are unchanged; pnl-leaders has no caption
+    mockTradingPulseModel(SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD, rankingsWithRows);
+    const enPopulatedView = renderPage(<TradingPulsePage />);
+
+    const sharpeCardEn = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    const sharpeItemsEn = within(sharpeCardEn).getAllByRole("listitem");
+    expect(sharpeItemsEn).toHaveLength(3);
+    expect(within(sharpeItemsEn[0]).getByRole("link", { name: "rt-paper-03" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-gamma",
+    );
+    expect(within(sharpeItemsEn[0]).getByText("15.6")).toBeInTheDocument();
+    expect(within(sharpeItemsEn[1]).getByRole("link", { name: "rt-paper-02" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-beta",
+    );
+    expect(within(sharpeItemsEn[1]).getByText("12.8")).toBeInTheDocument();
+    expect(within(sharpeItemsEn[2]).getByRole("link", { name: "rt-paper-01" })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-alpha",
+    );
+    expect(within(sharpeItemsEn[2]).getByText("9.3")).toBeInTheDocument();
+
+    const captionEn = within(sharpeCardEn).getByText("Rolling 20-day short sample; for reference only");
+    expect(captionEn).toHaveClass("text-xs", "text-muted-foreground");
+    const rowListEn = within(sharpeCardEn).getByRole("list");
+    expect(rowListEn.compareDocumentPosition(captionEn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      within(sharpeCardEn).queryByText("Building history: Sharpe needs at least 10 daily returns"),
+    ).not.toBeInTheDocument();
+
+    const pnlCardEn = screen.getByText("P&L Leaders").closest("div.p-4") as HTMLElement;
+    expect(within(pnlCardEn).getAllByRole("listitem")).toHaveLength(2);
+    expect(
+      within(pnlCardEn).queryByText("Rolling 20-day short sample; for reference only"),
+    ).not.toBeInTheDocument();
+    enPopulatedView.unmount();
+
+    // 2. zh-TW: sharpe-leaders with rows shows localized zh-TW caption; pnl-leaders has no caption
+    await i18n.changeLanguage("zh-TW");
+    const zhPopulatedView = renderPage(<TradingPulsePage />);
+
+    const sharpeCardZh = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    const sharpeItemsZh = within(sharpeCardZh).getAllByRole("listitem");
+    expect(sharpeItemsZh).toHaveLength(3);
+    expect(within(sharpeItemsZh[0]).getByText("15.6")).toBeInTheDocument();
+    expect(within(sharpeItemsZh[1]).getByText("12.8")).toBeInTheDocument();
+    expect(within(sharpeItemsZh[2]).getByText("9.3")).toBeInTheDocument();
+
+    const captionZh = within(sharpeCardZh).getByText("20 日滾動、樣本短，僅供參考");
+    expect(captionZh).toHaveClass("text-xs", "text-muted-foreground");
+    const rowListZh = within(sharpeCardZh).getByRole("list");
+    expect(rowListZh.compareDocumentPosition(captionZh) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      within(sharpeCardZh).queryByText("樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe"),
+    ).not.toBeInTheDocument();
+
+    const pnlCardZh = screen.getByText("P&L Leaders").closest("div.p-4") as HTMLElement;
+    expect(within(pnlCardZh).queryByText("20 日滾動、樣本短，僅供參考")).not.toBeInTheDocument();
+    zhPopulatedView.unmount();
+
+    // 3. Empty sharpe-leaders block: caption does not appear, building-history text stays as it is
+    const emptyRankings = [
+      {
+        kind: "sharpe-leaders",
+        label: "Sharpe Leaders",
+        eligibleItemCount: 0,
+        missingMetricCount: 4,
+        rows: [],
+      },
+      {
+        kind: "pnl-leaders",
+        label: "P&L Leaders",
+        eligibleItemCount: 0,
+        missingMetricCount: 0,
+        rows: [],
+      },
+    ];
+
+    await i18n.changeLanguage("en-US");
+    mockTradingPulseModel(SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD, emptyRankings);
+    const enEmptyCheck = renderPage(<TradingPulsePage />);
+    const sharpeEmptyEn = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    expect(
+      within(sharpeEmptyEn).getByText("Building history: Sharpe needs at least 10 daily returns"),
+    ).toBeInTheDocument();
+    expect(
+      within(sharpeEmptyEn).queryByText("Rolling 20-day short sample; for reference only"),
+    ).not.toBeInTheDocument();
+    enEmptyCheck.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const zhEmptyCheck = renderPage(<TradingPulsePage />);
+    const sharpeEmptyZh = screen.getByText("Sharpe Leaders").closest("div.p-4") as HTMLElement;
+    expect(
+      within(sharpeEmptyZh).getByText("樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe"),
+    ).toBeInTheDocument();
+    expect(within(sharpeEmptyZh).queryByText("20 日滾動、樣本短，僅供參考")).not.toBeInTheDocument();
+    zhEmptyCheck.unmount();
   });
 });

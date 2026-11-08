@@ -1645,11 +1645,13 @@ const statusTone = (status: unknown): string => {
   return "bg-muted text-muted-foreground border-border";
 };
 
-const compactCounts = (value: unknown): string => {
+const compactCounts = (value: unknown, formatKey?: (key: string) => string): string => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "—";
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.length === 0) return "—";
-  return entries.map(([key, item]) => `${key}: ${formatPulseValue(item, "runtime-status")}`).join(" · ");
+  return entries
+    .map(([key, item]) => `${formatKey ? formatKey(key) : key}: ${formatPulseValue(item, "runtime-status")}`)
+    .join(" · ");
 };
 
 const pulseRecord = (value: unknown): Record<string, unknown> =>
@@ -1771,7 +1773,7 @@ export const TradingPulsePage = () => {
               {card.cardId === "baseline-comparison" && (
                 <>
                   <div>{t("mgmt.pulse.baselineCoverage")}: {formatPulseValue(card.details?.baselineComparisonCount, "runtime-status")}</div>
-                  <div>{t("mgmt.pulse.byBaseline")}: {compactCounts(card.details?.byBaselineStatus)}</div>
+                  <div>{t("mgmt.pulse.byBaseline")}: {compactCounts(card.details?.byBaselineStatus, (key) => key === "not_required" ? t("mgmt.pulse.notRequired") : key)}</div>
                   <div>{t("mgmt.pulse.missing")}: {shortList(pulseStringList(card.details?.missingBaselineRuntimeIds))}</div>
                 </>
               )}
@@ -1998,7 +2000,9 @@ const RankingBlocks = () => {
           title={t("mgmt.pulse.rankingsLabel")}
           body={t("mgmt.pulse.noRows")}
         />
-      ) : blocks.map((b) => (
+      ) : blocks.map((b) => {
+        const isSharpeLeaders = b.kind === "sharpe-leaders";
+        return (
         <Card key={b.kind} className="p-4">
           <div className="flex items-start justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
@@ -2007,30 +2011,40 @@ const RankingBlocks = () => {
                 <Badge variant="outline">{formatPulseValue(b.eligibleItemCount, "runtime-status")}</Badge>
               )}
               {(b.missingMetricCount ?? b.missing_metric_count ?? 0) > 0 && (
-                <Badge variant="outline" className={statusTone("degraded")}>
-                  {t("mgmt.pulse.metricMissing")}: {formatPulseValue(b.missingMetricCount ?? b.missing_metric_count, "runtime-status")}
+                <Badge variant="outline" className={statusTone(isSharpeLeaders ? "building" : "degraded")}>
+                  {t(isSharpeLeaders ? "mgmt.pulse.sharpeBuildingBadge" : "mgmt.pulse.metricMissing")}: {formatPulseValue(b.missingMetricCount ?? b.missing_metric_count, "runtime-status")}
                 </Badge>
               )}
             </div>
           </div>
           {(b.rows?.length ?? 0) === 0 ? (
-            <p className="mt-2 text-xs text-muted-foreground">{t("mgmt.pulse.noRows")}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t(isSharpeLeaders ? "mgmt.pulse.sharpeBuildingHistory" : "mgmt.pulse.noRows")}
+            </p>
           ) : (
-            <ul className="mt-2 space-y-1 text-xs">
-              {(b.rows ?? []).map((r) => (
-                <li key={r.subjectId} className="flex items-center justify-between gap-2">
-                  <Link to={r.links?.manageHref ?? "#"} className="font-mono text-primary underline-offset-4 hover:underline">
-                    {r.subjectLabel}
-                  </Link>
-                  <span className="text-muted-foreground">
-                    {r.metric}: <span className="text-foreground">{formatPulseValue(r.metricValue)}{r.metricUnit ?? ""}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="mt-2 space-y-1 text-xs">
+                {(b.rows ?? []).map((r) => (
+                  <li key={r.subjectId} className="flex items-center justify-between gap-2">
+                    <Link to={r.links?.manageHref ?? "#"} className="font-mono text-primary underline-offset-4 hover:underline">
+                      {r.subjectLabel}
+                    </Link>
+                    <span className="text-muted-foreground">
+                      {r.metric}: <span className="text-foreground">{formatPulseValue(r.metricValue)}{r.metricUnit ?? ""}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {isSharpeLeaders && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("mgmt.pulse.sharpeShortSampleCaption")}
+                </p>
+              )}
+            </>
           )}
         </Card>
-      ))}
+        );
+      })}
     </div>
   );
 };
