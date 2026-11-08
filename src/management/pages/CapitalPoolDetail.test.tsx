@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
@@ -55,12 +55,18 @@ const emptyEnvelope = (items: CapitalPool[] = []): ListEnvelope<CapitalPool> => 
   totalCountExact: true,
 });
 
+function LocationDisplay() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
+}
+
 function renderDetail(id: string) {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={[`/management/capital/${encodeURIComponent(id)}`]}>
         <Routes>
           <Route path="/management/capital/:id" element={<CapitalPoolDetail />} />
+          <Route path="/management/governance-decisions" element={<LocationDisplay />} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,
@@ -324,6 +330,32 @@ describe("CapitalPoolDetail", () => {
       mocks.auditList.mockReturnValue(new Promise(() => {}));
       await openStrategiesTab();
       expect(await screen.findByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+    });
+
+    it("navigates rebalance rows in the Rebalances tab to canonical Governance Decisions capital tab", async () => {
+      mocks.rebalancesList.mockResolvedValue([
+        {
+          id: "rb_q3_2026",
+          name: "Q3 2026 Rebalance",
+          quarter: "2026-Q3",
+          targetPoolId: poolId,
+          proposedDelta: 0.05,
+          state: "approved",
+          owner: "treasury",
+          updatedAt: "2026-10-01T00:00:00Z",
+          risk: "low",
+        },
+      ]);
+      renderDetail(poolId);
+      await screen.findByText("Strategy Pool");
+      const tab = screen.getByRole("tab", { name: "Rebalances" });
+      fireEvent.mouseDown(tab);
+      fireEvent.click(tab);
+      const rebalanceRow = await screen.findByText("Q3 2026 Rebalance");
+      fireEvent.click(rebalanceRow);
+      expect(await screen.findByTestId("location")).toHaveTextContent(
+        "/management/governance-decisions?tab=capital&rebalance_id=rb_q3_2026",
+      );
     });
   });
 });

@@ -237,7 +237,7 @@ test("renders every degraded incident and persists all six filters through reloa
   });
 
   await page.goto(
-    "/management/portfolio-book?deployment_stage=canary&broker_id=broker-1&runtime_id=runtime-1&source_status=degraded&stale_telemetry=false&risk_state=missing_binding",
+    "/management/performance?tab=overview&deployment_stage=canary&broker_id=broker-1&runtime_id=runtime-1&source_status=degraded&stale_telemetry=false&risk_state=missing_binding",
   );
 
   await expect(page.getByTestId("portfolio-incident")).toHaveCount(14);

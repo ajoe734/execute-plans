@@ -67,6 +67,8 @@ describe("MGMT-PERF-IA-001 canonical route manifest", () => {
       "/management/persona-league",
       "/management/quarterly-ranking",
       "/management/capital-pools",
+      "/management/capital-live",
+      "/management/readiness/capital-binding-live",
       "/management/rebalances",
       "/management/ranking",
       "/management/ranking/formulas",

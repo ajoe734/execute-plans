@@ -310,6 +310,13 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirectRule[] = [
     allowedParams: ["capital_id"],
   },
   {
+    id: "capital-live-to-governance-capital",
+    match: /^\/management\/(readiness\/capital-binding-live|capital-live)$/,
+    center: "governance-decisions",
+    tab: "capital",
+    allowedParams: ["pool", "capital_id", "capital_pool_id"],
+  },
+  {
     id: "rebalance-to-governance-capital",
     match: /^\/management\/rebalances?$/,
     center: "governance-decisions",

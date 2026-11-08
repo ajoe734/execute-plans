@@ -205,7 +205,6 @@ async function fetchEndpoint(route, { method = "GET", body } = {}) {
     if (method !== "GET") {
       headers["X-Dry-Run"] = "1";
       headers["Idempotency-Key"] = `idk-${idempotencyBase}`;
-      headers["X-Idempotency-Key"] = `idk-${idempotencyBase}`;
     }
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";

@@ -180,11 +180,19 @@ describe("PerformanceAttributionPage", () => {
     expect(screen.getByText("Performance source detail")).toBeInTheDocument();
     expect(screen.getByText("performance-attribution")).toBeInTheDocument();
     expect(screen.getByText("portfolio-book.holdings")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "portfolio-book.holdings" })).toHaveAttribute(
+      "href",
+      "/management/performance?tab=overview",
+    );
     expect(screen.getByText("2330.TW")).toBeInTheDocument();
     expect(screen.getByText("2026-06-01T00:00:00Z to 2026-06-07T00:00:00Z")).toBeInTheDocument();
     for (const link of screen.getAllByRole("link", { name: "pool-tw-paper" })) {
-      expect(link).toHaveAttribute("href", "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-tw-paper");
+      expect(link).toHaveAttribute("href", "/management/governance-decisions?tab=capital&capital_id=pool-tw-paper");
     }
+    expect(screen.getByRole("link", { name: "Show all persona attribution" })).toHaveAttribute(
+      "href",
+      "/management/performance?tab=attribution&dimension=persona&period=latest",
+    );
   });
 
   it("does not fall back to unrelated attribution rows when persona focus misses", () => {
@@ -302,7 +310,7 @@ describe("PerformanceAttributionPage", () => {
     expect(screen.getAllByText("runtime-paper-alpha").length).toBeGreaterThan(0);
     expect(screen.getAllByText("strategy-paper-alpha").length).toBeGreaterThan(0);
     for (const link of screen.getAllByRole("link", { name: "pool-paper-alpha" })) {
-      expect(link).toHaveAttribute("href", "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-paper-alpha");
+      expect(link).toHaveAttribute("href", "/management/governance-decisions?tab=capital&capital_id=pool-paper-alpha");
     }
     expect(screen.getByText("operations read model summary")).toBeInTheDocument();
     expect(screen.getByText(/MISSING_ATTRIBUTION_MATCH/)).toBeInTheDocument();
@@ -732,7 +740,7 @@ describe("PerformanceAttributionPage", () => {
           strategy_ids: ["strat-hosted-all12"],
         },
         links: {
-          manage_href: "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-custom-link",
+          manage_href: "/management/capital/pool-custom-link",
         },
       },
     ];
@@ -757,7 +765,7 @@ describe("PerformanceAttributionPage", () => {
     const customPoolRow = within(table).getByText("Custom Linked Pool").closest("tr")!;
     expect(within(customPoolRow).getByRole("link", { name: "Manage →" })).toHaveAttribute(
       "href",
-      "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-custom-link",
+      "/management/capital/pool-custom-link",
     );
   });
 

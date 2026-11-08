@@ -4,7 +4,7 @@
 import type { Job, ApprovalRequest, Alert, Incident, Strategy, Rebalance, ResearchExperiment } from "@/lib/bff-v1";
 import type { LoopRun, LoopStage } from "../types";
 import type { LoopKind, LoopStatus, LoopStageStatus } from "../enums";
-import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION } from "../timeoutPolicy";
+import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION } from "@/lib/v4/asyncTransitionPolicy";
 
 function jobToStageStatus(j: Job): LoopStageStatus {
   switch (j.status) {

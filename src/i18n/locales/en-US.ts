@@ -445,7 +445,7 @@ export default {
       runs: "Optimization runs",
       runsHint: "One run per pending rebalance. Approval is the gating stage.",
       evidence: "Approval",
-      createIntent: "Start a new rebalance from /management/promotion-allocation?tab=quarterly-capital, then return here to monitor the optimization loop.",
+      createIntent: "Start a new rebalance from /management/governance-decisions?tab=capital, then return here to monitor the optimization loop.",
     },
   },
   risk: { info: "Info", low: "Low", medium: "Medium", high: "High", critical: "Critical", unavailable: "Unavailable" },

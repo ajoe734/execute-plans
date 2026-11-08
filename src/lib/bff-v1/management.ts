@@ -4908,7 +4908,7 @@ export function adaptPortfolioHoldingRows(raw: unknown): HoldingRow[] | null {
       links: {
         manageHref: runtimeId
           ? `/management/runtimes?runtime=${encodeURIComponent(runtimeId)}`
-          : `/management/portfolio-book?capital_pool_id=${encodeURIComponent(capitalPoolId)}`,
+          : `/management/performance?tab=overview&capital_pool_id=${encodeURIComponent(capitalPoolId)}`,
       },
     };
   });

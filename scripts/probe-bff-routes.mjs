@@ -123,7 +123,6 @@ async function probe(method, route) {
     if (method !== "GET") {
       headers["Content-Type"] = "application/json";
       headers["Idempotency-Key"] = idempotencyKey;
-      headers["X-Idempotency-Key"] = idempotencyKey;
     }
     if (mode === "authenticated" && AUTH_TOKEN) {
       headers["Authorization"] = `Bearer ${AUTH_TOKEN}`;
