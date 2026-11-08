@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +28,7 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
     bffV1: {
       ...actual.bffV1,
       capitalPools: { ...actual.bffV1.capitalPools, get: mocks.capitalGet },
-      strategies: { ...actual.bffV1.strategies, list: mocks.strategiesList },
+      strategies: { ...actual.bffV1.strategies, listNonDraft: mocks.strategiesList },
       rebalances: { ...actual.bffV1.rebalances, list: mocks.rebalancesList },
       approvals: { ...actual.bffV1.approvals, list: mocks.approvalsList },
       audit: { ...actual.bffV1.audit, list: mocks.auditList },
@@ -260,5 +260,70 @@ describe("CapitalPoolDetail", () => {
 
     await screen.findByText("Paper Pool With Null Window Metrics");
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(mocks.strategiesList).toHaveBeenCalledTimes(1);
+    const loadedStrategy = (await mocks.strategiesList.mock.results[0].value)[0] as Record<string, unknown>;
+    expect(loadedStrategy.capitalPoolId).toBe(poolId);
+    expect(loadedStrategy.personaIds).toEqual(["persona-paper-running-01"]);
+    expect(loadedStrategy.alpha).toBe("alpha.momo.v1");
+    expect("capital_pool_id" in loadedStrategy).toBe(false);
+    expect("persona_id" in loadedStrategy).toBe(false);
+    expect("persona_ids" in loadedStrategy).toBe(false);
+    expect("personaId" in loadedStrategy).toBe(false);
+  });
+
+  describe("strategies tab loading truth", () => {
+    const poolId = "pool-persona-paper-298e138c136c9840b0e4";
+    const realRow = {
+      id: "strategy-persona-298e138c136c9840b0e4",
+      name: "青禾｜2330 台股 Paper 學習 R2",
+      owner: "persona-298e138c136c9840b0e4",
+      updatedAt: "2026-11-06T01:16:27Z",
+      state: "deployed",
+      risk: "medium",
+      alpha: "alpha.paper.v1",
+      capitalPoolId: poolId,
+      personaIds: ["persona-298e138c136c9840b0e4"],
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+    } as unknown as Strategy;
+
+    const openStrategiesTab = async () => {
+      renderDetail(poolId);
+      await screen.findByText("Strategy Pool");
+      const tab = screen.getByRole("tab", { name: "Strategies & Alphas" });
+      fireEvent.mouseDown(tab);
+      fireEvent.click(tab);
+    };
+
+    beforeEach(() => {
+      mocks.capitalGet.mockResolvedValue(
+        normalizeCapitalPool({ id: poolId, name: "Strategy Pool", status: "active", currency: "TWD", budget: 100000 }),
+      );
+    });
+
+    it("shows loading, never no results, while the strategy read is pending", async () => {
+      mocks.strategiesList.mockReturnValue(new Promise(() => {}));
+      await openStrategiesTab();
+      expect(await screen.findByTestId("data-table-loading")).toHaveTextContent("Loading");
+      expect(screen.queryByText("No results found.")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("data-table-empty")).not.toBeInTheDocument();
+    });
+
+    it("shows unavailable, not no results, when the strategy read fails", async () => {
+      mocks.strategiesList.mockRejectedValue(new Error("boom"));
+      await openStrategiesTab();
+      expect(await screen.findByText(/temporarily unavailable/)).toBeInTheDocument();
+      expect(screen.queryByText("No results found.")).not.toBeInTheDocument();
+    });
+
+    it("does not hold strategy rows behind slow rebalances/approvals/audit reads", async () => {
+      mocks.strategiesList.mockResolvedValue([realRow]);
+      mocks.rebalancesList.mockReturnValue(new Promise(() => {}));
+      mocks.approvalsList.mockReturnValue(new Promise(() => {}));
+      mocks.auditList.mockReturnValue(new Promise(() => {}));
+      await openStrategiesTab();
+      expect(await screen.findByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+    });
   });
 });

@@ -308,7 +308,43 @@ export interface BaseObject {
   deploymentStatus?: StrategyDeploymentStatus | string;
 }
 
+/** Allowlisted read-only spec projection from GET /bff/strategies/{id} (data.spec). */
+export interface StrategySpecDetail {
+  spec_version_id?: string | null;
+  spec_version?: string | null;
+  market_scope?: {
+    symbols?: string[];
+    asset_classes?: string[];
+    venues?: string[];
+    markets?: string[];
+    universe?: string[] | string;
+    frequency?: string;
+    alpha?: string;
+  } | null;
+  execution_profile?: {
+    signal_schema_version?: string;
+    quantity_type?: string;
+    rebalance_cadence?: string;
+    execution_mode_hint?: string;
+    mode?: string;
+    capital_pool_id?: string;
+  } | null;
+  evaluation_plan?: {
+    metrics?: string[];
+    candidate_gate?: string;
+    paper_gate?: string;
+    live_gate?: string;
+    benchmark?: string;
+  } | null;
+  metadata?: {
+    market?: string;
+    execution_context?: string;
+    traits?: { instruments?: string[] | string; time_horizon?: string };
+  } | null;
+}
+
 export interface Strategy extends BaseObject {
+  spec?: StrategySpecDetail | null;
   alpha: string;
   capitalPoolId: string;
   personaIds: string[];
@@ -1114,6 +1150,18 @@ export interface MemoryUpdate {
   conflictWith?: string;
 }
 
+/** Retrain run outcome recorded by the owning run (BFF_API_CONTRACT.md, "retrain run outcome"). */
+export type EvolutionRunOutcome = "candidate_created" | "no_candidate" | "evaluation_rejected";
+
+/** Evaluation metrics of one side of a retrain run; any key may be missing or null. */
+export interface EvolutionRunMetrics {
+  sharpe_ratio?: number | null;
+  sharpe_defined?: boolean | null;
+  total_return?: number | null;
+  max_drawdown?: number | null;
+  [key: string]: unknown;
+}
+
 export interface EvolutionRun {
   id: string;
   run_id?: string;
@@ -1133,6 +1181,13 @@ export interface EvolutionRun {
   downstream_status?: string | null;
   detail?: Record<string, unknown> | string | null;
   source?: string | null;
+  /** Structured retrain result; null when the run recorded none. Never parsed from `detail`. */
+  outcome?: EvolutionRunOutcome | (string & {}) | null;
+  outcome_reason?: string | null;
+  candidate_artifact_id?: string | null;
+  baseline_metrics?: EvolutionRunMetrics | null;
+  candidate_metrics?: EvolutionRunMetrics | null;
+  session_id?: string | null;
   bestFitness: number;
   candidates: number;
 }

@@ -1,0 +1,17 @@
+{
+  "task_id": "FE-OPS-JOBS-INCIDENTS-PAGING-20261106",
+  "baselines_measured_before": { "jobs_total": 1521, "incidents_total": 2644, "rows_shown": 20 },
+  "changes": {
+    "ServerPager": "src/platform/components/ServerPager.tsx extracted from StrategiesList; used by strategies, jobs, incidents. Strategy test ids (strategy-list-*, strategy-page-*) and labels unchanged.",
+    "lists": "lists.jobs / lists.incidents accept optional {page_size,page_token}; no-arg calls issue the identical unparameterised request.",
+    "pages": "JobsPage/IncidentsPage page_size=20 + page_token, total from page_info.total, cache key includes page token; jump-to-last disabled (token format not assumed numeric).",
+    "realtime": "job events merged only on first page (deduped by id, capped at page size); later pages untouched.",
+    "drawer": "JobProgressDrawer: removed all Math.random and fixed 0.1 values and the 1s animation tick; uses numeric progress from row/event, success => 1, otherwise indeterminate bar (active) or none. Hydrates with page_size 30; no detail read from list rows."
+  },
+  "validation": {
+    "tsc --noEmit -p tsconfig.app.json": "exit 0, no errors",
+    "vitest ServerPager, JobProgressDrawer, Operations, lists, Lists": "passed (Operations+Lists 46/46 after fix; ServerPager/Drawer/lists passed in the first batch)"
+  },
+  "changed_assertions": "None weakened or deleted. Operations.test.tsx mock gained a runActionSafe passthrough (falls back to actual unless a test sets m.runAction) to test incident advance.",
+  "not_verified": "Hosted verification deferred to the operator acceptance task."
+}

@@ -4,18 +4,25 @@ import {
   asRecord,
   firstArray,
   liveDetailFrom,
-  strictLiveDetailNormalized,
-  strictLiveListNormalized,
+  liveItemsFrom,
+  normalizeDeploymentFields,
+  normalizeDeploymentList,
+  strictLiveDetail,
+  strictLivePaginatedList,
   strictLiveRead,
   type UnknownRecord,
 } from "./domainReads";
 
 export async function listDeployments(): Promise<Deployment[]> {
-  return strictLiveListNormalized("deployments.list", paths.deployments());
+  return strictLivePaginatedList<Deployment>(
+    "deployments.list",
+    paths.deployments(),
+    (body) => normalizeDeploymentList(liveItemsFrom<Deployment>(body)),
+  );
 }
 
 export async function getDeployment(id: string): Promise<Deployment | undefined> {
-  return strictLiveDetailNormalized("deployments.get", paths.deployment(id));
+  return strictLiveDetail<Deployment>("deployments.get", paths.deployment(id)).then(normalizeDeploymentFields);
 }
 
 export async function getDeploymentStages(id: string): Promise<DeploymentStage[]> {

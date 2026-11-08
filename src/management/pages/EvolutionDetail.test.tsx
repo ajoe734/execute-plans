@@ -585,3 +585,194 @@ describe("EvolutionDetail qualification criteria, governance-gated review, and r
     );
   });
 });
+
+describe("EvolutionDetail run outcomes from GET /bff/evolution-programs/{id}/runs", () => {
+  const programId = "evp-outcome-001";
+
+  beforeEach(async () => {
+    await i18n.changeLanguage("en-US");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    liveStatus._reset();
+  });
+
+  const baseRun = {
+    program_id: programId,
+    decision_id: null,
+    downstream_status: "completed",
+    detail: "retrain finished",
+    linked_at: "2026-11-06T01:00:00Z",
+    outcome: null,
+    outcome_reason: null,
+    candidate_artifact_id: null,
+    baseline_metrics: null,
+    candidate_metrics: null,
+    session_id: null,
+  };
+
+  async function renderWithRuns(runs: Record<string, unknown>[]) {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/bff/evolution-programs/${programId}/runs`)) {
+        return jsonResponse({ data: runs, items: runs });
+      }
+      if (url.endsWith(`/bff/evolution-programs/${programId}`)) {
+        return jsonResponse({
+          data: {
+            id: programId,
+            program_id: programId,
+            name: "Outcome Program",
+            status: "active",
+            state: "active",
+            origin_kind: "manual",
+            created_at: "2026-11-06T00:00:00Z",
+            updated_at: "2026-11-06T00:00:00Z",
+          },
+        });
+      }
+      return jsonResponse({ data: [], items: [] });
+    });
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={[`/management/evolution/${programId}`]}>
+            <Routes>
+              <Route path="/management/evolution/:id" element={<EvolutionDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+    await screen.findByText("Outcome Program");
+  }
+
+  it("shows candidate_created with reason, both metric sets side by side, and an artifact link but no promote action", async () => {
+    await renderWithRuns([
+      {
+        ...baseRun,
+        run_id: "resrun-created",
+        status: "completed",
+        outcome: "candidate_created",
+        outcome_reason: "candidate Sharpe exceeded baseline",
+        candidate_artifact_id: "art-child-001",
+        session_id: "ts-001",
+        baseline_metrics: { sharpe_ratio: 0.8, sharpe_defined: true, total_return: 0.1, max_drawdown: 0.2 },
+        candidate_metrics: { sharpe_ratio: 1.2, sharpe_defined: true, total_return: 0.15, max_drawdown: 0.05 },
+      },
+    ]);
+    expect(await screen.findByTestId("evolution-run-outcome-label-resrun-created")).toHaveTextContent(
+      "Candidate created",
+    );
+    expect(screen.getByTestId("evolution-run-outcome-reason-resrun-created")).toHaveTextContent(
+      "candidate Sharpe exceeded baseline",
+    );
+    expect(screen.getByTestId("evolution-run-metric-resrun-created-sharpe_ratio-baseline")).toHaveTextContent("0.8");
+    expect(screen.getByTestId("evolution-run-metric-resrun-created-sharpe_ratio-candidate")).toHaveTextContent("1.2");
+    expect(screen.getByTestId("evolution-run-metric-resrun-created-total_return-baseline")).toHaveTextContent("0.1");
+    expect(screen.getByTestId("evolution-run-metric-resrun-created-total_return-candidate")).toHaveTextContent("0.15");
+    expect(screen.getByTestId("evolution-run-metric-resrun-created-max_drawdown-baseline")).toHaveTextContent("0.2");
+    expect(screen.getByTestId("evolution-run-metric-resrun-created-max_drawdown-candidate")).toHaveTextContent("0.05");
+    expect(screen.getByTestId("evolution-run-candidate-artifact-resrun-created")).toHaveAttribute(
+      "href",
+      "/management/artifacts/art-child-001",
+    );
+    expect(screen.queryByRole("button", { name: /promote/i })).not.toBeInTheDocument();
+  });
+
+  it("never presents a completed no_candidate run as a successful evolution and shows null candidate metrics as not reported, not zero", async () => {
+    await renderWithRuns([
+      {
+        ...baseRun,
+        run_id: "resrun-nocand",
+        status: "completed",
+        outcome: "no_candidate",
+        outcome_reason: "no bounded control change available",
+        baseline_metrics: { sharpe_ratio: 0.8, sharpe_defined: true, total_return: null, max_drawdown: 0.2 },
+        candidate_metrics: null,
+      },
+    ]);
+    expect(await screen.findByTestId("evolution-run-outcome-label-resrun-nocand")).toHaveTextContent(
+      "No candidate produced",
+    );
+    expect(screen.getByTestId("evolution-run-outcome-notice-resrun-nocand")).toHaveTextContent(
+      /not a successful evolution/i,
+    );
+    expect(screen.getByTestId("evolution-run-outcome-reason-resrun-nocand")).toHaveTextContent(
+      "no bounded control change available",
+    );
+    // the raw status stays visible but is never styled as success (StatusBadge maps no "completed" style)
+    expect(screen.getByTestId("evolution-run-status-resrun-nocand")).not.toHaveTextContent(/success|succeeded/i);
+    expect(screen.queryByTestId("evolution-run-candidate-artifact-resrun-nocand")).not.toBeInTheDocument();
+    expect(screen.getByTestId("evolution-run-metric-resrun-nocand-total_return-baseline")).toHaveTextContent(
+      "Not reported",
+    );
+    for (const key of ["sharpe_ratio", "total_return", "max_drawdown"]) {
+      const cell = screen.getByTestId(`evolution-run-metric-resrun-nocand-${key}-candidate`);
+      expect(cell).toHaveTextContent("Not reported");
+      expect(cell).not.toHaveTextContent(/^0/);
+    }
+  });
+
+  it("shows evaluation_rejected as not successful with its reason", async () => {
+    await renderWithRuns([
+      {
+        ...baseRun,
+        run_id: "resrun-rejected",
+        status: "completed",
+        outcome: "evaluation_rejected",
+        outcome_reason: "candidate evaluation rejected: sharpe_ratio_below_threshold",
+        baseline_metrics: { sharpe_ratio: 0.8, sharpe_defined: true, total_return: 0.1, max_drawdown: 0.2 },
+        candidate_metrics: { sharpe_ratio: -0.2, sharpe_defined: true, total_return: 0.02, max_drawdown: 0.08 },
+      },
+    ]);
+    expect(await screen.findByTestId("evolution-run-outcome-label-resrun-rejected")).toHaveTextContent(
+      "Evaluation rejected",
+    );
+    expect(screen.getByTestId("evolution-run-outcome-notice-resrun-rejected")).toHaveTextContent(
+      /not a successful evolution/i,
+    );
+    expect(screen.getByTestId("evolution-run-outcome-reason-resrun-rejected")).toHaveTextContent(
+      "sharpe_ratio_below_threshold",
+    );
+    expect(screen.getByTestId("evolution-run-metric-resrun-rejected-sharpe_ratio-candidate")).toHaveTextContent("-0.2");
+  });
+
+  it("labels failed and running runs without an outcome and states that no evaluation result is recorded", async () => {
+    await renderWithRuns([
+      { ...baseRun, run_id: "resrun-failed", status: "failed", downstream_status: "failed" },
+      { ...baseRun, run_id: "resrun-running", status: "running", downstream_status: "running" },
+    ]);
+    expect(await screen.findByTestId("evolution-run-outcome-label-resrun-failed")).toHaveTextContent("Failed");
+    expect(screen.getByTestId("evolution-run-outcome-label-resrun-running")).toHaveTextContent("Running");
+    expect(screen.getByTestId("evolution-run-no-evaluation-resrun-failed")).toHaveTextContent(
+      "No evaluation result is recorded",
+    );
+  });
+
+  it("shows the raw status and no-evaluation notice for a completed run without an outcome field", async () => {
+    const { outcome: _o, outcome_reason: _r, candidate_artifact_id: _c, baseline_metrics: _b, candidate_metrics: _m, session_id: _s, ...legacy } = baseRun;
+    await renderWithRuns([{ ...legacy, run_id: "resrun-legacy", status: "completed" }]);
+    expect(await screen.findByTestId("evolution-run-status-resrun-legacy")).toHaveTextContent("completed");
+    expect(screen.getByTestId("evolution-run-no-evaluation-resrun-legacy")).toHaveTextContent(
+      "No evaluation result is recorded",
+    );
+    expect(screen.queryByTestId("evolution-run-outcome-label-resrun-legacy")).not.toBeInTheDocument();
+    expect(screen.getByTestId("evolution-run-metrics-resrun-legacy")).toHaveTextContent("—");
+  });
+
+  it("renders outcome labels in zh-TW", async () => {
+    await i18n.changeLanguage("zh-TW");
+    await renderWithRuns([
+      { ...baseRun, run_id: "resrun-zh", status: "completed", outcome: "no_candidate", outcome_reason: "無可調整的控制項" },
+    ]);
+    expect(await screen.findByTestId("evolution-run-outcome-label-resrun-zh")).toHaveTextContent("未產生候選");
+    expect(screen.getByTestId("evolution-run-outcome-notice-resrun-zh")).toHaveTextContent("不代表演化成功");
+  });
+});

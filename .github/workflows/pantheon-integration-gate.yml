@@ -1235,28 +1235,9 @@ jobs:
         run: |
           set -o pipefail
           PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json" \
-          npx playwright test \
-            e2e/01-startup-session.spec.ts \
-            e2e/02-control-room.spec.ts \
-            e2e/03-execution-loop.spec.ts \
-            e2e/04b-optimization-loop.spec.ts \
-            e2e/06-entity-registry.spec.ts \
-            e2e/07-high-risk-confirm.spec.ts \
-            e2e/08-create-intent.spec.ts \
-            e2e/08-sse-reconnect.spec.ts \
-            e2e/09-strict-vs-hybrid.spec.ts \
-            e2e/10-rollback-saga.spec.ts \
-            e2e/11-handoff-sla.spec.ts \
-            e2e/12-approvals.spec.ts \
-            e2e/13-agora.spec.ts \
-            e2e/16-audit-correlation.spec.ts \
-            e2e/17-a11y-v5.spec.ts \
-            e2e/18-perf.spec.ts \
-            --project=chromium \
-            --grep-invert "asserts MeResponse tenant/env/user/capabilities shape" \
-            --retries=0 \
+          npm run e2e:fixture -- \
+            --no-serve \
             --output "$PANTHEON_AUDIT_OUT_DIR/playwright-output" \
-            --trace=off \
             --reporter=list,json \
             2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-fixture-e2e.log"
 

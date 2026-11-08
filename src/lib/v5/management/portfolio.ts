@@ -142,8 +142,11 @@ export interface PortfolioHoldingMonitorRow {
   side?: HoldingSide | string;
   currency?: string | null;
   quantity?: number;
+  averagePrice?: number;
+  markPrice?: number;
   marketValue?: number;
   unrealizedPnl?: number;
+  realizedPnl?: number;
   markStatus?: PortfolioMarkStatus;
   lastMarkAt?: string | null;
   deploymentStage: string;

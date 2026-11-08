@@ -18,6 +18,7 @@ import { GovernanceReview } from "./GovernanceReview";
 import { GovernanceQueuePage } from "./phase2/GovernanceQueue";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
 import { getSharedQueryClient, clearScopedQueries } from "@/lib/bff-v1/queryKeys";
+import { lists } from "@/lib/bff-v1";
 import type { Job, Alert, Incident } from "@/lib/bff-v1";
 
 const m = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const m = vi.hoisted(() => ({
   list: vi.fn(),
   listDecisions: vi.fn(),
   get: vi.fn(),
+  runAction: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   translate: null as ((key: string, params?: Record<string, unknown>) => string) | null,
 }));
@@ -80,6 +82,7 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
       audit: vi.fn().mockResolvedValue({ items: [] }),
     },
     realtime: mockRealtime,
+    runActionSafe: (...args: unknown[]) => (m.runAction.getMockImplementation() ? m.runAction(...args) : (actual.runActionSafe as (...a: unknown[]) => unknown)(...args)),
     bffV1: { approvals: { get: m.get, list: m.list, listDecisions: m.listDecisions }, audit: { list: () => Promise.resolve([]) } },
   };
 });
@@ -864,6 +867,49 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     expect(incidentIdSpan).not.toHaveClass("truncate", "text-ellipsis");
     incidentRender.unmount();
   });
+
+  it("reserves right padding (pr-6) for the sheet close button on the header row in the approval drawer and all three Operations sheet headers while keeping the full 68-character id without truncation", async () => {
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([normalizeApprovalFields(realDecidedBase)]);
+
+    const approvalRender = render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    fireEvent.click(await screen.findByText(realDecidedBase.target_id));
+
+    const approvalDialog = await screen.findByRole("dialog");
+    const approvalIdSpan = await screen.findByText(realDecidedBase.decision_id);
+    expect(approvalIdSpan.textContent).toBe(realDecidedBase.decision_id);
+    expect(approvalIdSpan.textContent).toHaveLength(68);
+    expect(approvalIdSpan.textContent).not.toContain("...");
+    expect(approvalIdSpan.textContent).not.toContain("…");
+    expect(approvalIdSpan).toHaveClass("min-w-0", "break-all", "text-mono", "text-xs", "text-muted-foreground");
+    expect(approvalIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    expect(approvalIdSpan.parentElement).not.toBeNull();
+    expect(approvalIdSpan.parentElement).toHaveClass("flex", "items-center", "gap-2", "mb-2", "pr-6");
+
+    const sheetCloseBtn = Array.from(approvalDialog.children).find((el) => el.tagName === "BUTTON");
+    expect(sheetCloseBtn).toBeDefined();
+    expect(sheetCloseBtn).toHaveClass("absolute", "right-4", "top-4");
+    approvalRender.unmount();
+
+    const alertRender = render(<MemoryRouter><AlertsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Margin threshold 80% reached"));
+    const alertIdSpan = await screen.findByText("alt-201");
+    expect(alertIdSpan.textContent).toBe("alt-201");
+    expect(alertIdSpan).toHaveClass("min-w-0", "break-all");
+    expect(alertIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    expect(alertIdSpan.parentElement).toHaveClass("flex", "items-center", "gap-2", "mb-2", "pr-6");
+    alertRender.unmount();
+
+    const incidentRender = render(<MemoryRouter><IncidentsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Market feed latency spike"));
+    const incidentIdSpan = await screen.findByText("inc-301");
+    expect(incidentIdSpan.textContent).toBe("inc-301");
+    expect(incidentIdSpan).toHaveClass("min-w-0", "break-all");
+    expect(incidentIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    expect(incidentIdSpan.parentElement).toHaveClass("flex", "items-center", "gap-2", "mb-2", "pr-6");
+    incidentRender.unmount();
+  });
 });
 
 describe("GovernanceReview", () => {
@@ -984,5 +1030,92 @@ describe("GovernanceQueuePage batch", () => {
     await select();
     confirm("BATCH.APPROVE");
     await waitFor(() => expect(m.toast.warning).toHaveBeenCalled());
+  });
+});
+
+
+describe("Jobs and incidents server paging (FE-OPS-JOBS-INCIDENTS-PAGING-20261106)", () => {
+  type Listed = { items: unknown[]; cursor: { next?: string }; estimatedTotal: number };
+  const jobRow = (id: string) => ({ id, kind: "backtest", status: "running", owner: "o", startedAt: "2026-09-17T08:00:00Z" });
+  const incRow = (id: string, title: string) => ({ id, title, severity: "high", status: "open", openedAt: "2026-09-17T08:30:00Z" });
+
+  beforeEach(() => {
+    __resetOperationListCacheForTests();
+    vi.clearAllMocks();
+    m.list.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    cleanup();
+    __resetOperationListCacheForTests();
+    m.runAction.mockReset();
+  });
+
+  it("pages jobs through the server with page_size/page_token and shows page_info.total", async () => {
+    const jobs = lists.jobs as unknown as ReturnType<typeof vi.fn>;
+    jobs.mockImplementation(async (q?: { page_token?: string }): Promise<Listed> =>
+      q?.page_token === "20"
+        ? { items: [jobRow("job-page2")], cursor: {}, estimatedTotal: 1521 }
+        : { items: [jobRow("job-page1")], cursor: { next: "20" }, estimatedTotal: 1521 });
+    render(<MemoryRouter><JobsPage /></MemoryRouter>);
+    expect(await screen.findByText("job-page1")).toBeInTheDocument();
+    expect(jobs).toHaveBeenCalledTimes(1);
+    expect(jobs).toHaveBeenLastCalledWith({ page_size: 20 });
+    expect(screen.getByTestId("jobs-list-pagination")).toHaveAttribute("data-total", "1521");
+
+    fireEvent.click(screen.getByTestId("jobs-page-next"));
+    expect(await screen.findByText("job-page2")).toBeInTheDocument();
+    expect(screen.queryByText("job-page1")).toBeNull();
+    expect(jobs).toHaveBeenCalledTimes(2);
+    expect(jobs).toHaveBeenLastCalledWith({ page_size: 20, page_token: "20" });
+    expect(screen.getByTestId("jobs-page-next")).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("jobs-page-prev"));
+    expect(await screen.findByText("job-page1")).toBeInTheDocument();
+  });
+
+  it("merges realtime job events only on the first page and keeps later pages intact", async () => {
+    const jobs = lists.jobs as unknown as ReturnType<typeof vi.fn>;
+    jobs.mockImplementation(async (q?: { page_token?: string }): Promise<Listed> =>
+      q?.page_token === "20"
+        ? { items: [jobRow("job-page2")], cursor: {}, estimatedTotal: 40 }
+        : { items: [jobRow("job-page1")], cursor: { next: "20" }, estimatedTotal: 40 });
+    render(<MemoryRouter><JobsPage /></MemoryRouter>);
+    await screen.findByText("job-page1");
+    await waitFor(() => expect(mockRealtime.on).toHaveBeenCalled());
+    const handler = (mockRealtime.on.mock.calls as unknown as Array<[string, (p: unknown) => void]>).find(([k]) => k === "job")![1];
+    const emit = (id: string) => act(() => handler({ jobId: id, kind: "k", status: "running", owner: "o", ts: "2026-09-17T09:00:00Z" }));
+
+    emit("job-live-1");
+    expect(await screen.findByText("job-live-1")).toBeInTheDocument();
+    expect(screen.getByText("job-page1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("jobs-page-next"));
+    await screen.findByText("job-page2");
+    emit("job-live-2");
+    expect(screen.queryByText("job-live-2")).toBeNull();
+    expect(screen.queryByText("job-live-1")).toBeNull();
+    expect(screen.getByText("job-page2")).toBeInTheDocument();
+    expect(screen.getByTestId("jobs-list-pagination")).toHaveAttribute("data-total", "40");
+  });
+
+  it("pages incidents and an advanced incident updates its row on the current page", async () => {
+    const incidents = lists.incidents as unknown as ReturnType<typeof vi.fn>;
+    incidents.mockImplementation(async (q?: { page_token?: string }): Promise<Listed> =>
+      q?.page_token === "20"
+        ? { items: [incRow("inc-p2", "Second page incident")], cursor: {}, estimatedTotal: 2644 }
+        : { items: [incRow("inc-p1", "First page incident")], cursor: { next: "20" }, estimatedTotal: 2644 });
+    m.runAction.mockResolvedValue({ ok: true });
+    render(<MemoryRouter><IncidentsPage /></MemoryRouter>);
+    await screen.findByText("First page incident");
+    expect(screen.getByTestId("incidents-list-pagination")).toHaveAttribute("data-total", "2644");
+
+    fireEvent.click(screen.getByTestId("incidents-page-next"));
+    fireEvent.click(await screen.findByText("Second page incident"));
+    expect(incidents).toHaveBeenLastCalledWith({ page_size: 20, page_token: "20" });
+    fireEvent.click(await screen.findByText("table_actions.startMitigation"));
+    await waitFor(() => expect(m.runAction).toHaveBeenCalled());
+    await waitFor(() => expect(m.toast.success).toHaveBeenCalled());
+    // mitigating renders as the "running" status badge; the open row showed the warning badge.
+    expect(screen.getAllByText("status.running").length).toBeGreaterThan(0);
   });
 });

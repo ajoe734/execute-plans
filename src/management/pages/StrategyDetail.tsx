@@ -52,6 +52,7 @@ export const StrategyDetail = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [artifactsUnavailable, setArtifactsUnavailable] = useState(false);
   const [experiments, setExperiments] = useState<ResearchExperiment[]>([]);
   const [evolutions, setEvolutions] = useState<EvolutionProgram[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -95,7 +96,15 @@ export const StrategyDetail = () => {
       setApprovals(ap.filter((x) => (x.subject ?? "").includes(entityId)));
       setAlerts(al.filter((x) => x.relatedTarget === entityId || (x.source ?? "").includes(entityId) || (x.title ?? "").includes(entityId)));
       setIncidents(inc.filter((x) => x.affected?.includes(entityId)));
-      setArtifacts(ar.slice(0, 5));
+      // Only artifacts related to this strategy through the lineage graph (exact id match);
+      // a failed catalog or lineage read is "unavailable", never another strategy's rows.
+      const lineageUnavailable = lin.meta?.status === "unavailable";
+      const artifactsFailed = failures.includes("Artifacts") || lineageUnavailable;
+      const relatedArtifactIds = new Set(
+        (lin.nodes ?? []).filter((n) => n.type === "Artifact").map((n) => n.id),
+      );
+      setArtifactsUnavailable(artifactsFailed);
+      setArtifacts(artifactsFailed ? [] : ar.filter((a) => relatedArtifactIds.has(a.id)));
       setExperiments(ex.slice(0, 6));
       setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
       setWatchers(w);
@@ -128,6 +137,21 @@ export const StrategyDetail = () => {
   const params: { key: string; value: string; note: string }[] = [];
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
   const noData = t("common.noData");
+  const joinList = (v: string[] | string | undefined | null): string =>
+    (Array.isArray(v) ? v : typeof v === "string" ? [v] : []).map((x) => String(x).trim()).filter(Boolean).join(", ");
+  const specScope = s.spec?.market_scope;
+  const specMeta = s.spec?.metadata;
+  const universeParts = [
+    specMeta?.market ? `${specMeta.market}` : "",
+    joinList(specMeta?.traits?.instruments) || joinList(specScope?.universe) || joinList(specScope?.symbols) || joinList(specScope?.markets),
+  ].filter(Boolean);
+  const universeDisplay = universeParts.join(" · ") || noData;
+  const execModeDisplay =
+    s.spec?.execution_profile?.execution_mode_hint?.trim() ||
+    s.spec?.execution_profile?.mode?.trim() ||
+    specMeta?.execution_context?.trim() ||
+    noData;
+  const benchmarkName = s.spec?.evaluation_plan?.benchmark?.trim() || "";
   const alphaRaw = s.alpha?.trim() || "";
   const alphaDisplay = alphaRaw || noData;
   const poolDisplay = s.capitalPoolId?.trim() || noData;
@@ -256,12 +280,12 @@ export const StrategyDetail = () => {
               <>
                 <Section title={t("strategyDetail.specTitle")}>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    {t("strategyDetail.specBody", { alpha: alphaDisplay })}
+                    {alphaRaw ? t("strategyDetail.specBody", { alpha: alphaRaw }) : t("strategyDetail.specBodyNoAlpha")}
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
-                    <Field label={t("strategyDetail.universe")} value="Top-50 perp by 30d ADV" />
-                    <Field label={t("strategyDetail.execMode")} value="VWAP / 5min slices" />
-                    <Field label={t("strategyDetail.benchmark")} value="BTC-PERP buy-and-hold" />
+                    <Field label={t("strategyDetail.universe")} value={universeDisplay} />
+                    <Field label={t("strategyDetail.execMode")} value={execModeDisplay} />
+                    <Field label={t("strategyDetail.benchmark")} value={benchmarkName || noData} />
                   </div>
                 </Section>
                 <StrategySpecTab strategy={s} params={params} />
@@ -287,7 +311,7 @@ export const StrategyDetail = () => {
               </Section>
             ),
           },
-          { value: "performance", label: t("phase13.strategy.perf.tab"), content: <StrategyPerformanceTab strategyId={s.id} /> },
+          { value: "performance", label: t("phase13.strategy.perf.tab"), content: <StrategyPerformanceTab strategyId={s.id} benchmarkName={benchmarkName || undefined} /> },
 
           // ── 3. Experiments ──
           {
@@ -446,7 +470,7 @@ export const StrategyDetail = () => {
                     ),
                   },
                 ]}
-                empty={t("empty.noResults")}
+                empty={artifactsUnavailable ? t("strategyDetail.artifactsUnavailable") : t("empty.noResults")}
               />
             ),
           },

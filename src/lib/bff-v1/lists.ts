@@ -10,7 +10,7 @@
 // (jobs, runtimes, alerts, incidents, approvals, audit, mcpTools) so all
 // canonical Management read surfaces have a real adapter when live mode is on.
 
-import type { Alert, Incident, Runtime } from "./dto";
+import type { Alert, Incident } from "./dto";
 import type { ListEnvelope } from "./dto";
 import { bffFetch } from "./client";
 import { paths } from "./paths";
@@ -19,7 +19,18 @@ import {
   normalizeIncidentTimestampFields,
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
-import { normalizeArtifactFields, normalizeBaseObjectFields } from "./domainReads";
+import {
+  adaptRuntimeRow,
+  collectPaginatedListPages,
+  MAX_PAGINATED_LIST_PAGES,
+  normalizeArtifactFields,
+  normalizeBaseObjectFields,
+  normalizeDeploymentFields,
+  numberFrom,
+  PAGINATED_LIST_PAGE_SIZE,
+  stringFrom,
+  type RuntimeListItem,
+} from "./domainReads";
 import { normalizeEvolutionProgram } from "./evolution";
 import { normalizeJobFields } from "./operations";
 import { normalizeResearchTask } from "./research";
@@ -63,24 +74,6 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-
-const stringFrom = (...values: unknown[]): string | undefined => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  }
-  return undefined;
-};
-
-const numberFrom = (...values: unknown[]): number | undefined => {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim().length > 0) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return undefined;
-};
 
 export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): ListEnvelope<T> {
   const rule = LIST_CLASS_RULES[cls];
@@ -190,6 +183,94 @@ export function asListEnvelope<T>(
   return () => loader().then((xs) => envelope(xs, cls));
 }
 
+export interface StrategyListQueryOptions {
+  state?: string;
+  excludeState?: string;
+  exclude_state?: string;
+  personaId?: string;
+  persona_id?: string;
+  pageSize?: number;
+  page_size?: number;
+  pageToken?: string | null;
+  page_token?: string | null;
+}
+
+function buildStrategyListQuery(
+  options?: StrategyListQueryOptions,
+): Record<string, string | number | undefined> | undefined {
+  if (!options) return undefined;
+  const query: Record<string, string | number | undefined> = {};
+  const state = options.state?.trim();
+  const excludeState = (options.exclude_state ?? options.excludeState)?.trim();
+  const personaId = (options.persona_id ?? options.personaId)?.trim();
+  const pageSize = options.page_size ?? options.pageSize;
+  const pageToken = (options.page_token ?? options.pageToken)?.trim();
+  if (state) query.state = state;
+  if (excludeState) query.exclude_state = excludeState;
+  if (personaId) query.persona_id = personaId;
+  if (typeof pageSize === "number" && Number.isFinite(pageSize) && pageSize > 0) {
+    query.page_size = pageSize;
+  }
+  if (pageToken) query.page_token = pageToken;
+  return Object.keys(query).length > 0 ? query : undefined;
+}
+
+function strictLiveStrategyListLoader<T extends { state?: unknown }>(
+  cls: ListClass,
+  adaptItem?: (value: unknown) => T | undefined,
+): (options?: StrategyListQueryOptions) => Promise<ListEnvelope<T>> {
+  const adaptItems = (items: unknown[]): T[] => adaptItem
+    ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
+    : items as T[];
+  return async (options?: StrategyListQueryOptions) => {
+    const query = buildStrategyListQuery(options);
+    const excludeState = (options?.exclude_state ?? options?.excludeState)?.trim().toLowerCase();
+    const data = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.strategies(),
+      ...(query ? { query } : {}),
+    });
+    const env = normalizeLiveListResponse<unknown>(data, cls);
+    const adapted = adaptItems(env.items);
+    const items = excludeState
+      ? adapted.filter((item) => String(item?.state ?? "").trim().toLowerCase() !== excludeState)
+      : adapted;
+    return {
+      ...env,
+      items,
+      pageSize: items.length,
+    };
+  };
+}
+
+export type PagedListQueryOptions = Pick<
+  StrategyListQueryOptions,
+  "pageSize" | "page_size" | "pageToken" | "page_token"
+>;
+
+/** Like strictLiveListLoader, but forwards page_size/page_token when supplied.
+ *  Called with no options (or a non-options argument such as an AbortSignal) it
+ *  issues the same unparameterised request as before, so existing callers are
+ *  unchanged. */
+function strictLivePagedQueryListLoader<T>(
+  path: string,
+  cls: ListClass,
+  adaptItem?: (value: unknown) => T | undefined,
+  normalizeEnvelope?: (payload: unknown, cls: ListClass) => ListEnvelope<T>,
+): (options?: PagedListQueryOptions) => Promise<ListEnvelope<T>> {
+  const adaptItems = (items: unknown[]): T[] => adaptItem
+    ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
+    : items as T[];
+  return async (options?: PagedListQueryOptions) => {
+    const query = buildStrategyListQuery(options);
+    const data = await bffFetch<unknown>({ method: "GET", path, ...(query ? { query } : {}) });
+    if (normalizeEnvelope) return normalizeEnvelope(data, cls);
+    const env = normalizeLiveListResponse<unknown>(data, cls);
+    const items = adaptItems(env.items);
+    return { ...env, items, pageSize: items.length };
+  };
+}
+
 function strictLiveListLoader<T>(
   path: string,
   cls: ListClass,
@@ -210,53 +291,35 @@ function strictLiveListLoader<T>(
   };
 }
 
-const MAX_PAGINATED_LIST_PAGES = 100;
-const PAGINATED_LIST_PAGE_SIZE = 200;
 const ARTIFACT_PAGINATED_LIST_PAGE_SIZE = 100;
 
 function strictLivePaginatedListLoader<T extends { id?: string }>(
   path: string,
   cls: ListClass,
-  adaptItem?: (value: unknown) => T | undefined,
+  adaptItem?: (value: unknown, index: number) => T | undefined,
   pageSize: number = PAGINATED_LIST_PAGE_SIZE,
 ): () => Promise<ListEnvelope<T>> {
   const adaptItems = (items: unknown[]): T[] => adaptItem
-    ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
+    ? items.map((item, index) => adaptItem(item, index)).filter((item): item is T => Boolean(item))
     : items as T[];
   return async () => {
-    const allItems: T[] = [];
-    const seenIds = new Set<string>();
-    const seenTokens = new Set<string>();
     let firstEnv: ListEnvelope<unknown> | undefined;
     let lastEnv: ListEnvelope<unknown> | undefined;
-    let pageToken: string | undefined;
 
-    for (let page = 0; page < MAX_PAGINATED_LIST_PAGES; page += 1) {
-      const data = await bffFetch<unknown>({
-        method: "GET",
-        path,
-        query: pageToken
-          ? { page_size: pageSize, page_token: pageToken }
-          : { page_size: pageSize },
-      });
-      const env = normalizeLiveListResponse<unknown>(data, cls);
-      if (!firstEnv) firstEnv = env;
-      lastEnv = env;
-      for (const item of adaptItems(env.items)) {
-        const itemId = typeof item?.id === "string" ? item.id.trim() : "";
-        if (itemId) {
-          if (seenIds.has(itemId)) continue;
-          seenIds.add(itemId);
-        }
-        allItems.push(item);
-      }
-      const nextToken = env.cursor.next?.trim();
-      if (!nextToken || seenTokens.has(nextToken)) {
-        break;
-      }
-      seenTokens.add(nextToken);
-      pageToken = nextToken;
-    }
+    const allItems = await collectPaginatedListPages<T>({
+      helperName: `lists:${path}`,
+      path,
+      pageSize,
+      maxPages: MAX_PAGINATED_LIST_PAGES,
+      fetchPage: (req) => bffFetch<unknown>(req),
+      extractPageItems: (data) => {
+        const env = normalizeLiveListResponse<unknown>(data, cls);
+        if (!firstEnv) firstEnv = env;
+        lastEnv = env;
+        return adaptItems(env.items);
+      },
+      extractNextToken: () => lastEnv?.cursor.next?.trim() || undefined,
+    });
 
     const baseEnv = lastEnv ?? firstEnv ?? normalizeLiveListResponse<unknown>([], cls);
     return {
@@ -303,101 +366,6 @@ function strictLiveAlertListLoader(
   };
 }
 
-function strictLiveIncidentListLoader(
-  path: string,
-  cls: ListClass = "governanceQueue",
-): () => Promise<ListEnvelope<Incident>> {
-  return async () => {
-    const data = await bffFetch<unknown>({ method: "GET", path });
-    return normalizeIncidentListResponse(data, cls);
-  };
-}
-
-export type RuntimeListItem = Runtime & {
-  runtimeId?: string;
-  runtime_id?: string;
-  runtimeBindingId?: string;
-  runtime_binding_id?: string;
-  personaId?: string;
-  persona_id?: string;
-  artifactId?: string;
-  artifact_id?: string;
-  planId?: string;
-  plan_id?: string;
-  runtimeKind?: string;
-  runtime_kind?: string;
-  deploymentStage?: string;
-  deployment_stage?: string;
-};
-
-const runtimeRatioFrom = (...values: unknown[]): number => {
-  const value = numberFrom(...values);
-  if (value === undefined) return Number.NaN;
-  return value > 1 && value <= 100 ? value / 100 : value;
-};
-
-const runtimePercentFrom = (...values: unknown[]): number => {
-  const value = numberFrom(...values);
-  if (value === undefined) return Number.NaN;
-  return value >= 0 && value <= 1 ? value * 100 : value;
-};
-
-function normalizeRuntimeEnv(value: unknown): Runtime["env"] {
-  const raw = stringFrom(value)?.toLowerCase();
-  if (raw === "live" || raw === "paper" || raw === "research") return raw;
-  return "" as Runtime["env"];
-}
-
-function normalizeRuntimeKind(value: unknown): Runtime["kind"] {
-  const raw = stringFrom(value)?.toLowerCase();
-  if (raw === "executor" || raw === "mcp" || raw === "scheduler" || raw === "ingest") return raw;
-  return (raw ?? "") as Runtime["kind"];
-}
-
-function adaptRuntimeRow(value: unknown, index: number): RuntimeListItem | null {
-  const row = asRecord(value);
-  if (!row) return null;
-  const metadata = asRecord(row.metadata);
-  const runtimeId = stringFrom(row.runtimeId, row.runtime_id, row.runtime, row.runtime_name);
-  const runtimeBindingId = stringFrom(row.runtimeBindingId, row.runtime_binding_id, row.bindingId, row.binding_id, row.id);
-  const id = runtimeId ?? runtimeBindingId ?? stringFrom(row.id) ?? `runtime-${index + 1}`;
-  const name = stringFrom(row.name, row.displayName, row.display_name, runtimeId, runtimeBindingId) ?? id;
-  const personaId = stringFrom(row.personaId, row.persona_id, metadata?.personaId, metadata?.persona_id);
-  const artifactId = stringFrom(row.artifactId, row.artifact_id);
-  const planId = stringFrom(row.planId, row.plan_id, row.deploymentPlanId, row.deployment_plan_id);
-  const runtimeKind = stringFrom(row.kind, row.runtimeKind, row.runtime_kind, row.deploymentMode, row.deployment_mode);
-  const env = normalizeRuntimeEnv(row.env ?? row.executionMode ?? row.execution_mode ?? row.deploymentStage ?? row.deployment_stage ?? row.deploymentMode ?? row.deployment_mode);
-
-  return {
-    ...(row as Partial<RuntimeListItem>),
-    id,
-    name,
-    kind: normalizeRuntimeKind(runtimeKind),
-    env,
-    status: (stringFrom(row.status, row.state) ?? "") as Runtime["status"],
-    cpu: runtimeRatioFrom(row.cpu, row.cpuPct, row.cpu_pct, row.cpuUtilization, row.cpu_utilization),
-    memory: runtimeRatioFrom(row.memory, row.mem, row.memoryPct, row.memory_pct, row.memoryUtilization, row.memory_utilization),
-    latencyP95Ms: numberFrom(row.latencyP95Ms, row.latency_p95_ms, row.p95LatencyMs, row.p95_latency_ms) ?? Number.NaN,
-    uptimePct: runtimePercentFrom(row.uptimePct, row.uptime_pct, row.uptimePercent, row.uptime_percent),
-    region: stringFrom(row.region, row.zone, row.cluster, row.tenantId, row.tenant_id) ?? "",
-    updatedAt: stringFrom(row.updatedAt, row.updated_at, row.effectiveAt, row.effective_at, row.createdAt, row.created_at) ?? "",
-    runtimeId,
-    runtime_id: runtimeId,
-    runtimeBindingId,
-    runtime_binding_id: runtimeBindingId,
-    personaId,
-    persona_id: personaId,
-    artifactId,
-    artifact_id: artifactId,
-    planId,
-    plan_id: planId,
-    runtimeKind,
-    runtime_kind: runtimeKind,
-    deploymentStage: stringFrom(row.deploymentStage, row.deployment_stage),
-    deployment_stage: stringFrom(row.deploymentStage, row.deployment_stage),
-  };
-}
-
 export function normalizeRuntimeListResponse(payload: unknown, cls: ListClass = "entityRegistry"): ListEnvelope<RuntimeListItem> {
   const env = normalizeLiveListResponse<unknown>(payload, cls);
   return {
@@ -412,10 +380,11 @@ function strictLiveRuntimeListLoader(
   path: string,
   cls: ListClass = "entityRegistry",
 ): () => Promise<ListEnvelope<RuntimeListItem>> {
-  return async () => {
-    const data = await bffFetch<unknown>({ method: "GET", path });
-    return normalizeRuntimeListResponse(data, cls);
-  };
+  return strictLivePaginatedListLoader<RuntimeListItem>(
+    path,
+    cls,
+    (item, index) => adaptRuntimeRow(item, index) ?? undefined,
+  );
 }
 
 /** Per-entity list-class map (Pack D D22).
@@ -447,12 +416,12 @@ export const LIST_CLASS_BY_KEY = {
  *  BFF-LUV-FE-002 covers all Management Console route families with real
  *  live adapters. */
 export const lists = {
-  strategies:      strictLiveListLoader(paths.strategies(),         LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
-  personas:        strictLiveListLoader(paths.personas(),           LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
+  strategies:      strictLiveStrategyListLoader(LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
+  personas:        strictLivePaginatedListLoader(paths.personas(),    LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
   capitalPools:    strictLivePaginatedListLoader(paths.capitalPools(), LIST_CLASS_BY_KEY.capitalPools, normalizeCapitalPool),
   rankingFormulas: strictLiveListLoader(paths.rankingFormulas(),    LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),
   rebalances:      strictLiveListLoader(paths.rebalances(),         LIST_CLASS_BY_KEY.rebalances, normalizeBaseObjectFields),
-  deployments:     strictLiveListLoader(paths.deployments(),        LIST_CLASS_BY_KEY.deployments, normalizeBaseObjectFields),
+  deployments:     strictLivePaginatedListLoader(paths.deployments(), LIST_CLASS_BY_KEY.deployments, normalizeDeploymentFields),
   evolution:       strictLiveListLoader(paths.evolutionPrograms(),  LIST_CLASS_BY_KEY.evolution, normalizeEvolutionProgram),
   research:        strictLiveListLoader(paths.researchTasks(),      LIST_CLASS_BY_KEY.research, normalizeResearchTask),
   artifacts:       strictLivePaginatedListLoader(
@@ -466,10 +435,10 @@ export const lists = {
   mcpTools:        strictLiveListLoader(paths.mcpTools(),           LIST_CLASS_BY_KEY.mcpTools, normalizeBaseObjectFields),
   skills:          strictLiveListLoader(paths.skills(),             LIST_CLASS_BY_KEY.skills, normalizeBaseObjectFields),
   channels:        strictLiveListLoader(paths.channels(),           LIST_CLASS_BY_KEY.channels, normalizeBaseObjectFields),
-  jobs:            strictLiveListLoader(paths.jobs(),               LIST_CLASS_BY_KEY.jobs, normalizeJobFields),
+  jobs:            strictLivePagedQueryListLoader(paths.jobs(),     LIST_CLASS_BY_KEY.jobs, normalizeJobFields),
   runtimes:        strictLiveRuntimeListLoader(paths.runtimes(),    LIST_CLASS_BY_KEY.runtimes),
   alerts:          strictLiveAlertListLoader(paths.alerts(),        LIST_CLASS_BY_KEY.alerts),
-  incidents:       strictLiveIncidentListLoader(paths.incidents(),  LIST_CLASS_BY_KEY.incidents),
+  incidents:       strictLivePagedQueryListLoader<Incident>(paths.incidents(), LIST_CLASS_BY_KEY.incidents, undefined, normalizeIncidentListResponse),
   approvals:       strictLiveListLoader(paths.approvals(),          LIST_CLASS_BY_KEY.approvals, normalizeBaseObjectFields),
   audit:           strictLiveListLoader(paths.audit(),              LIST_CLASS_BY_KEY.audit, normalizeBaseObjectFields),
 } as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;

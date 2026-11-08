@@ -113,12 +113,20 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.getByText("Persona interaction")).toBeInTheDocument();
   });
 
-  it("redirects a BFF identity whose strict auth readiness is false", () => {
+  it("admits a verified viewer BFF session when business authReady is false (no auth loop)", () => {
     state.value.session = { idToken: "viewer-token" };
     state.value.bffSession = {
       identity: { roles: ["viewer"], capabilities: [] },
       readiness: { authReady: false, providerReady: true, operatorRoleReady: false },
     };
+    renderRoute();
+    expect(screen.getByText("Persona interaction")).toBeInTheDocument();
+    expect(screen.queryByText("Authentication page")).not.toBeInTheDocument();
+  });
+
+  it("still rejects an absent BFF session even with a first-factor token", () => {
+    state.value.session = { idToken: "viewer-token" };
+    state.value.bffSession = null;
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();

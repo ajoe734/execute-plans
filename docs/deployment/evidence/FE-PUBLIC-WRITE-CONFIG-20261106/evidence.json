@@ -1,0 +1,30 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PUBLIC-WRITE-CONFIG-20261106",
+  "owner": "Claude",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-PUBLIC-WRITE-CONFIG-20261106",
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "adopted": [
+      "deploymentRuntime accepts optional VITE_BFF_REAL_WRITES, strictly the strings 'true'|'false'; absent keeps read-only default.",
+      "Absent key leaves canonical payload bytes and configSha256 identical to legacy; explicit key joins the same canonical digest.",
+      "runtimeEnv spread of safeDefaults consumes the value unchanged; no change to writes.ts, ObjectListPage or runtimeEnv.ts."
+    ],
+    "not_changed": [
+      "No deployment variables, Prod/Stage resources or product data; no live activation.",
+      "BFF stub-writes / embedded-bearer flags stay false; mode live; fallback strict; dev storage overrides stay disabled on Prod/Stage."
+    ]
+  },
+  "validation": {
+    "focused": [
+      "npx vitest run src/config/deploymentRuntime.test.ts src/lib/bff-v1/__tests__/runtimeEnv.test.ts -> 16 passed",
+      "npx tsc --noEmit -p tsconfig.app.json -> clean",
+      "npx eslint on the three changed ts files -> clean"
+    ],
+    "hosted_save_verified": false,
+    "note": "Consumer capability only; hosted save is not claimed as passed."
+  }
+}

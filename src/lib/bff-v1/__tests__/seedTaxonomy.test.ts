@@ -69,7 +69,8 @@ describe("seed taxonomy live gating", () => {
     expect(getSeedHelperCategory("bff.watchers.forSubject")).toBe("mock_only_dev");
     expect(getSeedHelperCategory("bff.fitnessFormulas.list")).toBe("deferred");
     expect(getSeedHelperCategory("bff.evolutionRuns.list")).toBe("live_required");
-    expect(getSeedHelperCategory("bff.strategies.list")).toBe("live_required");
+    expect(getSeedHelperCategory("bff.strategies.listNonDraft")).toBe("live_required");
+    expect(getSeedHelperCategory("bff.strategies.listForPersona")).toBe("live_required");
     expect(getSeedHelperLiveBehavior("bff.fitnessFormulas.list")).toBe("empty_state");
     expect(getSeedHelperLiveBehavior("bff.evolutionRuns.list")).toBe("live_required");
   });
@@ -222,10 +223,13 @@ describe("seed taxonomy live gating", () => {
     );
     globalThis.fetch = fetchSpy;
 
-    expect(seedHelperMustReturnEmptyInLive("bff.strategies.list")).toBe(false);
-    await expect(strategies.list()).resolves.toEqual([{ id: "live_strategy", name: "Live Strategy" }]);
+    expect(seedHelperMustReturnEmptyInLive("bff.strategies.listNonDraft")).toBe(false);
+    expect(seedHelperMustReturnEmptyInLive("bff.strategies.listForPersona")).toBe(false);
+    await expect(strategies.listNonDraft()).resolves.toEqual([
+      expect.objectContaining({ id: "live_strategy", name: "Live Strategy" }),
+    ]);
     expect(fetchSpy).toHaveBeenCalledOnce();
-    expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/strategies");
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/strategies?exclude_state=draft&page_size=200");
   });
 
   it("routes research reads to /bff/research-tasks and evolution.create to POST /bff/evolution-programs with only name", async () => {

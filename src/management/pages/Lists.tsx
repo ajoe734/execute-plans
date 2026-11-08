@@ -1,10 +1,13 @@
 import { useCallback, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ObjectListPage } from "./ObjectListPage";
+import { ServerPager, freshServerPageCursor, useServerPageCursor } from "@/platform/components/ServerPager";
 import {
   lists,
   mgmt,
   EVOLUTION_QUALIFICATION_CRITERIA,
   type EvolutionQualificationReport,
+  type StrategyListQueryOptions,
 } from "@/lib/bff-v1";
 import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
 import { useT } from "@/platform/hooks";
@@ -12,6 +15,7 @@ import { safeDateTime } from "@/lib/utils";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, Artifact, ListEnvelope, RiskLevel } from "@/lib/bff-v1";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 // `lists.*` loaders are generically typed by `strictLiveListLoader<T>` in
@@ -122,15 +126,214 @@ const currencyBreakdown = (rows: CapitalPool[], pick: (row: CapitalPool) => numb
   };
 };
 
+export const STRATEGY_PAGE_SIZE = 20;
+
+export const STRATEGY_BASE_FILTER_OPTIONS = [
+  "default",
+  "approved",
+  "review",
+  "retired",
+  "draft",
+  "all",
+] as const;
+
+export interface StrategyStateCounts {
+  byState: Record<string, number>;
+  defaultCount: number;
+  allCount: number;
+  draftCount: number | undefined;
+}
+
+export function extractStrategyStateCounts(meta: unknown): StrategyStateCounts | null {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return null;
+  const rawCounts = (meta as { state_counts?: unknown }).state_counts;
+  if (!rawCounts || typeof rawCounts !== "object" || Array.isArray(rawCounts)) return null;
+  const byState: Record<string, number> = {};
+  let hasNumericEntry = false;
+  let defaultCount = 0;
+  let allCount = 0;
+  for (const [key, value] of Object.entries(rawCounts as Record<string, unknown>)) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      hasNumericEntry = true;
+      byState[key] = value;
+      if (key !== "retired") {
+        allCount += value;
+        if (key !== "draft") {
+          defaultCount += value;
+        }
+      }
+    }
+  }
+  if (!hasNumericEntry) return null;
+  return {
+    byState,
+    defaultCount,
+    allCount,
+    draftCount: byState.draft,
+  };
+}
+
+export function normalizeStrategyFilterParam(rawStateParam: string | null | undefined): string {
+  const trimmed = rawStateParam?.trim().toLowerCase() ?? "";
+  if (!trimmed || trimmed === "default") return "default";
+  return trimmed;
+}
+
+export function resolveStrategyListQuery(
+  activeFilter: string,
+  pageToken?: string,
+  pageSize: number = STRATEGY_PAGE_SIZE,
+): StrategyListQueryOptions {
+  if (activeFilter === "default") {
+    return {
+      exclude_state: "draft",
+      page_size: pageSize,
+      ...(pageToken ? { page_token: pageToken } : {}),
+    };
+  }
+  if (activeFilter === "all") {
+    return {
+      page_size: pageSize,
+      ...(pageToken ? { page_token: pageToken } : {}),
+    };
+  }
+  return {
+    state: activeFilter,
+    page_size: pageSize,
+    ...(pageToken ? { page_token: pageToken } : {}),
+  };
+}
+
 export const StrategiesList = () => {
   const t = useT();
   const noData = t("common.noData");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeFilter = normalizeStrategyFilterParam(searchParams.get("state"));
+
+  const [effectivePageCursor, setPageCursorState] = useServerPageCursor(activeFilter);
+
+  const loadStrategiesPage = useCallback(() => {
+    const query = resolveStrategyListQuery(activeFilter, effectivePageCursor.currentToken, STRATEGY_PAGE_SIZE);
+    return asEntityLoader<Strategy>(() => lists.strategies(query))();
+  }, [activeFilter, effectivePageCursor.currentToken]);
+
+  const reloadKey = `strategies:${activeFilter}:${effectivePageCursor.currentToken ?? ""}`;
+
+  const selectStateFilter = (targetFilter: string) => {
+    const normalized = normalizeStrategyFilterParam(targetFilter);
+    setPageCursorState(freshServerPageCursor(normalized));
+    const nextParams = new URLSearchParams(searchParams);
+    if (normalized === "default") {
+      nextParams.delete("state");
+    } else {
+      nextParams.set("state", normalized);
+    }
+    setSearchParams(nextParams);
+  };
+
   return (
     <ObjectListPage<Strategy>
       title={t("nav.strategies")}
-      loader={asEntityLoader<Strategy>(lists.strategies)}
+      loader={loadStrategiesPage}
+      reloadKey={reloadKey}
       basePath="/management/strategies" liveKinds={["Strategy"]}
       createBehavior={{ kind: "drawer", entity: "strategy" }}
+      topControls={(ctx) => {
+        const stateCounts = extractStrategyStateCounts(ctx.meta);
+        const baseIds: string[] = [...STRATEGY_BASE_FILTER_OPTIONS];
+        if (!baseIds.includes(activeFilter)) {
+          baseIds.push(activeFilter);
+        }
+        const filterOptions = baseIds.map((id) => {
+          const label =
+            id === "default"
+              ? t("strategy.list.filter.default")
+              : id === "all"
+                ? t("common.all")
+                : t(`status.${id}`, { defaultValue: id });
+          const count =
+            stateCounts === null
+              ? undefined
+              : id === "default"
+                ? stateCounts.defaultCount
+                : id === "all"
+                  ? stateCounts.allCount
+                  : stateCounts.byState[id];
+          return { id, label, count };
+        });
+
+        const draftCount = stateCounts?.draftCount;
+        const hasDraftCount = typeof draftCount === "number" && Number.isFinite(draftCount);
+
+        return (
+          <>
+            <div
+              role="group"
+              aria-label={t("strategy.list.filter.groupLabel")}
+              data-testid="strategy-state-filter"
+              className="mb-3 flex flex-wrap items-center gap-2"
+            >
+              {filterOptions.map((option) => {
+                const selected = activeFilter === option.id;
+                const hasCount = typeof option.count === "number" && Number.isFinite(option.count);
+                return (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    size="sm"
+                    variant={selected ? "default" : "outline"}
+                    aria-pressed={selected}
+                    data-strategy-state={option.id}
+                    data-state-count={hasCount ? option.count : undefined}
+                    onClick={() => selectStateFilter(option.id)}
+                  >
+                    {hasCount ? `${option.label} (${option.count})` : option.label}
+                  </Button>
+                );
+              })}
+            </div>
+            {activeFilter === "default" && !ctx.isInitialLoading && !ctx.isDegradedEmpty && (
+              <Card
+                data-testid="strategy-hidden-drafts-banner"
+                className="mb-3 flex flex-wrap items-center justify-between gap-2 border-border/70 bg-muted/20 p-3 text-sm"
+              >
+                <span className="text-foreground">
+                  {hasDraftCount
+                    ? t("strategy.list.hiddenDraftsWithCount", { count: draftCount })
+                    : t("strategy.list.hiddenDraftsNoCount")}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  data-testid="strategy-show-drafts-button"
+                  onClick={() => selectStateFilter("draft")}
+                >
+                  {hasDraftCount
+                    ? t("strategy.list.showDraftsWithCount", { count: draftCount })
+                    : t("strategy.list.showDraftsNoCount")}
+                </Button>
+              </Card>
+            )}
+          </>
+        );
+      }}
+      bottomControls={(ctx) => {
+        if (ctx.isInitialLoading || ctx.isDegradedEmpty) return null;
+        return (
+          <ServerPager
+            cursor={effectivePageCursor}
+            setCursor={setPageCursorState}
+            pageSize={STRATEGY_PAGE_SIZE}
+            total={ctx.estimatedTotal}
+            visibleCount={ctx.visibleRows.length}
+            nextToken={ctx.cursor?.next}
+            loading={ctx.loading}
+            testIdPrefix="strategy"
+            ariaLabel={t("strategy.list.pagination.label")}
+          />
+        );
+      }}
       extraColumns={[
         {
           key: "alpha",
@@ -480,6 +683,7 @@ export const RebalancesList = () => {
 
 export const DeploymentsList = () => {
   const t = useT();
+  const noData = t("common.noData");
   return (
     <ObjectListPage<Deployment>
       title={t("nav.deployments")}
@@ -487,8 +691,8 @@ export const DeploymentsList = () => {
       basePath="/management/deployments" liveKinds={["Deployment","DeploymentStage"]}
       createBehavior={{ kind: "drawer", entity: "deployment" }}
       extraColumns={[
-        { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target}</span> },
-        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+        { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target || noData}</span> },
+        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
       ]}
     />
   );
@@ -835,20 +1039,22 @@ export const ArtifactsList = () => {
       columns={[
         {
           key: "name",
-          minWidth: 180,
+          minWidth: 170,
+          className: "px-3",
           header: t("common.name"),
-          cell: (r) => <div className="font-medium">{r.name || r.id}</div>,
+          cell: (r) => <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>,
         },
         {
           key: "source",
-          minWidth: 90,
+          minWidth: 130,
+          className: "px-3",
           header: t("artifact.sourceKind", { defaultValue: t("table.source") }),
           cell: (r) => {
             const sourceKind = typeof (r.source_kind ?? r.sourceKind) === "string"
               ? String(r.source_kind ?? r.sourceKind).trim()
               : "";
             return sourceKind ? (
-              <Badge variant="outline" data-source-kind={sourceKind} className="font-mono text-[11px]">
+              <Badge variant="outline" data-source-kind={sourceKind} className="font-mono text-[11px] whitespace-normal text-left [overflow-wrap:anywhere]">
                 {sourceKind}
               </Badge>
             ) : (
@@ -858,12 +1064,13 @@ export const ArtifactsList = () => {
         },
         {
           key: "kind",
-          minWidth: 150,
+          minWidth: 120,
+          className: "px-3",
           header: t("table.kind"),
           cell: (r) => {
             const kind = typeof r.kind === "string" ? r.kind.trim() : "";
             return kind ? (
-              <span className="text-mono text-xs">{kind}</span>
+              <span className="text-mono text-xs [overflow-wrap:anywhere]" title={kind}>{kind}</span>
             ) : (
               <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
@@ -872,6 +1079,7 @@ export const ArtifactsList = () => {
         {
           key: "ver",
           minWidth: 70,
+          className: "px-3",
           header: t("table.version"),
           cell: (r) => {
             const version = typeof r.version === "string" ? r.version.trim() : "";
@@ -885,6 +1093,7 @@ export const ArtifactsList = () => {
         {
           key: "state",
           minWidth: 90,
+          className: "px-3",
           header: t("common.state"),
           cell: (r) => {
             const state = typeof r.state === "string" ? r.state.trim() : "";
@@ -898,6 +1107,7 @@ export const ArtifactsList = () => {
         {
           key: "risk",
           minWidth: 80,
+          className: "px-3",
           header: t("common.risk"),
           cell: (r) => {
             const risk = typeof r.risk === "string" ? r.risk.trim() : "";
@@ -911,6 +1121,7 @@ export const ArtifactsList = () => {
         {
           key: "size",
           minWidth: 90,
+          className: "px-3",
           header: t("detail.label.size", { defaultValue: "Size" }),
           cell: (r) =>
             hasNumber(r.sizeMb) ? (
@@ -921,7 +1132,8 @@ export const ArtifactsList = () => {
         },
         {
           key: "hash",
-          minWidth: 170,
+          minWidth: 150,
+          className: "px-3",
           header: t("detail.section.hash", { defaultValue: "Hash" }),
           cell: (r) => {
             const hash = typeof r.hash === "string" ? r.hash.trim() : "";
@@ -940,12 +1152,13 @@ export const ArtifactsList = () => {
         },
         {
           key: "owner",
-          minWidth: 190,
+          minWidth: 120,
+          className: "px-3",
           header: t("common.owner"),
           cell: (r) => {
             const owner = typeof r.owner === "string" ? r.owner.trim() : "";
             return owner ? (
-              <span className="text-mono text-xs break-all" title={owner}>{owner}</span>
+              <span className="text-mono text-xs block max-w-[120px] truncate whitespace-nowrap" title={owner} data-full-owner={owner}>{owner}</span>
             ) : (
               <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
@@ -954,6 +1167,7 @@ export const ArtifactsList = () => {
         {
           key: "updated",
           minWidth: 150,
+          className: "px-3",
           header: t("common.updated"),
           cell: (r) => (
             <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">

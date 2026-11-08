@@ -1,0 +1,19 @@
+{
+  "task": "FE-CAPITAL-POOL-DETAIL-LOADING-20261106",
+  "kind": "functional",
+  "hosted_verification": "deferred to operator acceptance task",
+  "change": "CapitalPoolDetail strategy state split into its own loading/ready/error status; strategies read no longer waits on rebalances/approvals/audit/personaFleet (fleet only awaited for paper pools to derive persona-bound rows, and directly bound rows render before it). Strategy tab uses DataTable loading state (common.loading) and EmptyState with common.listUnavailableTitle/Desc on failure. No new i18n strings; DataTable and locale files unchanged.",
+  "tests": {
+    "file": "src/management/pages/CapitalPoolDetail.test.tsx",
+    "command": "npx vitest run src/management/pages/CapitalPoolDetail.test.tsx",
+    "result": "8 passed (5 existing, unchanged; 3 added)",
+    "acceptance": {
+      "1_loading_not_no_results": "strategy read held pending: data-table-loading shown, no empty/'No results found.'",
+      "2_failure_unavailable": "strategy read rejects: 'temporarily unavailable' shown, no 'No results found.'",
+      "3_slow_unrelated_reads": "rebalances/approvals/audit pending forever; strategy row still rendered",
+      "4_real_row": "row id strategy-persona-298e138c136c9840b0e4, capitalPoolId pool-persona-paper-298e138c136c9840b0e4 shown in tab",
+      "5_existing_tests": "none weakened, deleted or modified"
+    }
+  },
+  "note": "Existing test expectation personaFleetGet called 2 times preserved: one call from the pool fallback, one from the strategy effect."
+}
