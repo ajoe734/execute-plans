@@ -8,6 +8,7 @@ export type AssetClass =
   | "equity" | "futures" | "option" | "fx" | "crypto" | "fund" | "cash" | "other";
 export type HoldingSide = "long" | "short" | "flat";
 export type PortfolioMarkStatus = "available" | "stale" | "unavailable" | string;
+export type PortfolioInstrumentKind = "cash_share" | "stock_future" | string;
 
 export interface PortfolioSummary {
   asOf: string;
@@ -87,6 +88,12 @@ export interface HoldingRow {
   strategyId?: string;
   personaId?: string;
   symbol: string;
+  instrumentId?: string;
+  instrumentKind?: PortfolioInstrumentKind;
+  contractMonth?: string;
+  multiplier?: number;
+  marginReserved?: number;
+  reasonCode?: string;
   assetClass: AssetClass;
   side: HoldingSide;
   quantity: number;
@@ -139,6 +146,12 @@ export interface PortfolioHoldingMonitorRow {
   capitalPoolId?: string;
   brokerId?: string;
   symbol: string;
+  instrumentId?: string;
+  instrumentKind?: PortfolioInstrumentKind;
+  contractMonth?: string;
+  multiplier?: number;
+  marginReserved?: number;
+  reasonCode?: string;
   side?: HoldingSide | string;
   currency?: string | null;
   quantity?: number;

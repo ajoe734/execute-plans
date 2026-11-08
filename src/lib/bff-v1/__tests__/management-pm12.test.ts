@@ -738,4 +738,112 @@ describe("performance attribution live adapter and dimension guard", () => {
       await expect(mgmt.performanceAttribution.listLiveOnly(unsupported, "latest")).resolves.toEqual([]);
     }
   });
+
+  it("adaptPortfolioHoldingsMonitor preserves instrument kind, contract month, multiplier, margin reserved, reason code, and BFF market value / unrealized PnL without recomputation, and tolerates absent fields", () => {
+    const out = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 2,
+          incident_count: 0,
+          source_coverage: {
+            source_row_count: 2,
+            runtime_count: 2,
+            telemetry_runtime_count: 2,
+            stale_row_count: 0,
+            missing_binding_count: 0,
+            degraded_source_count: 0,
+          },
+        },
+        items: [
+          {
+            holding_id: "rt-fut-1:ssf:QFF:202611",
+            runtime_id: "rt-fut-1",
+            persona_id: "persona-fut-1",
+            capital_pool_id: "pool-fut-1",
+            broker_id: "shioaji_paper",
+            symbol: "2330.TWSE",
+            instrument_id: "ssf:QFF:202611",
+            instrument_kind: "stock_future",
+            contract_month: "202611",
+            multiplier: 100,
+            margin_reserved: 92000,
+            reason_code: "short_via_future",
+            side: "long",
+            currency: "TWD",
+            quantity: 2,
+            average_price: 2300,
+            mark_price: 2250,
+            market_value: 450000,
+            unrealized_pnl: -10000,
+            realized_pnl: 0,
+            mark_status: "available",
+            last_mark_at: "2026-11-07T06:00:00Z",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: "ledger-fut-1",
+            },
+            links: {},
+          },
+          {
+            holding_id: "rt-cash-1:2330.TWSE",
+            runtime_id: "rt-cash-1",
+            symbol: "2330.TWSE",
+            currency: "TWD",
+            quantity: 5,
+            average_price: 2299,
+            mark_price: 2240,
+            market_value: 11200,
+            unrealized_pnl: -295,
+            mark_status: "available",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: "ledger-cash-1",
+            },
+            links: {},
+          },
+        ],
+      },
+      meta: {
+        incidents: [],
+        surfaces: { portfolio_book_holdings: { status: "ok" } },
+      },
+    });
+
+    expect(out?.items).toHaveLength(2);
+    expect(out?.items[0]).toMatchObject({
+      holdingId: "rt-fut-1:ssf:QFF:202611",
+      symbol: "2330.TWSE",
+      instrumentId: "ssf:QFF:202611",
+      instrumentKind: "stock_future",
+      contractMonth: "202611",
+      multiplier: 100,
+      marginReserved: 92000,
+      reasonCode: "short_via_future",
+      quantity: 2,
+      averagePrice: 2300,
+      markPrice: 2250,
+      marketValue: 450000,
+      unrealizedPnl: -10000,
+    });
+    expect(out?.items[1].instrumentId).toBeUndefined();
+    expect(out?.items[1].instrumentKind).toBeUndefined();
+    expect(out?.items[1].contractMonth).toBeUndefined();
+    expect(out?.items[1].multiplier).toBeUndefined();
+    expect(out?.items[1].marginReserved).toBeUndefined();
+    expect(out?.items[1].reasonCode).toBeUndefined();
+    expect(out?.items[1].marketValue).toBe(11200);
+    expect(out?.items[1].unrealizedPnl).toBe(-295);
+  });
 });

@@ -3233,4 +3233,70 @@ describe("evolutionQualification BFF contract", () => {
       acknowledged: false,
     });
   });
+
+  it("adaptPortfolioHoldingRows maps optional instrument fields and preserves BFF market value without recomputation", () => {
+    const rows = adaptPortfolioHoldingRows({
+      data: {
+        items: [
+          {
+            holding_id: "rt-fut:ssf:QFF:202611",
+            capital_pool_id: "pool-fut",
+            symbol: "2330.TWSE",
+            instrument_id: "ssf:QFF:202611",
+            kind: "stock_future",
+            contract_month: "202611",
+            multiplier: 100,
+            margin_reserved: 92000,
+            reason_code: "short_via_future",
+            quantity: 2,
+            average_price: 2300,
+            mark_price: 2250,
+            market_value: 450000,
+            notional: 450000,
+            weight_pct: 0.45,
+            unrealized_pnl: -10000,
+            realized_pnl: 0,
+            pnl_pct: -0.0217,
+            exposure_pct: 0.45,
+            currency: "TWD",
+          },
+          {
+            holding_id: "rt-cash:2330.TWSE",
+            capital_pool_id: "pool-cash",
+            symbol: "2330.TWSE",
+            quantity: 1,
+            average_price: 2299,
+            mark_price: 2240,
+            market_value: 2240,
+            notional: 2240,
+            weight_pct: 0.1,
+            unrealized_pnl: -59,
+            realized_pnl: 0,
+            pnl_pct: -0.0257,
+            exposure_pct: 0.1,
+            currency: "TWD",
+          },
+        ],
+      },
+    });
+
+    expect(rows).toHaveLength(2);
+    expect(rows?.[0]).toMatchObject({
+      holdingId: "rt-fut:ssf:QFF:202611",
+      instrumentId: "ssf:QFF:202611",
+      instrumentKind: "stock_future",
+      contractMonth: "202611",
+      multiplier: 100,
+      marginReserved: 92000,
+      reasonCode: "short_via_future",
+      marketValue: 450000,
+      unrealizedPnl: -10000,
+    });
+    expect(rows?.[1]?.instrumentId).toBeUndefined();
+    expect(rows?.[1]?.instrumentKind).toBeUndefined();
+    expect(rows?.[1]?.contractMonth).toBeUndefined();
+    expect(rows?.[1]?.multiplier).toBeUndefined();
+    expect(rows?.[1]?.marginReserved).toBeUndefined();
+    expect(rows?.[1]?.reasonCode).toBeUndefined();
+  });
 });

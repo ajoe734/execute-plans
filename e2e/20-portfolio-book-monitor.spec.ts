@@ -394,12 +394,22 @@ test("renders every degraded incident and persists all six filters through reloa
 
           await expect(row2330Tw.locator("td").nth(2)).toHaveText("NT$2,240");
           await expect(row2330Tw.locator("td").nth(5)).toHaveText("NT$0 (0.00%)");
+          await expect(row2330.locator("td").nth(6)).toHaveText("—");
+          await expect(row2330.locator("td").nth(7)).toHaveText("—");
+          await expect(row2330.locator("td").nth(8)).toHaveText("—");
+          await expect(row2330.locator("td").nth(9)).toHaveText("—");
+          await expect(row2330.locator("td").nth(10)).toHaveText("—");
         } else {
           await expect(row2330.locator("td").nth(2)).toHaveText("NT$2,299");
           await expect(row2330.locator("td").nth(3)).toContainText("NT$2,240");
           await expect(row2330.locator("td").nth(3)).toContainText("As of 2026-11-05");
           await expect(row2317.locator("td").nth(5)).toContainText("NT$15.50 (+2.15%)");
           await expect(row2317.locator("td").nth(5)).toContainText("Realized -NT$5.50");
+          await expect(row2330.locator("td").nth(6)).toHaveText("—");
+          await expect(row2330.locator("td").nth(7)).toHaveText("—");
+          await expect(row2330.locator("td").nth(8)).toHaveText("—");
+          await expect(row2330.locator("td").nth(9)).toHaveText("—");
+          await expect(row2330.locator("td").nth(10)).toHaveText("—");
         }
 
         const metrics = await holdingsPage.evaluate(() => {
@@ -444,8 +454,22 @@ test("renders every degraded incident and persists all six filters through reloa
             }
           }
 
-          scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth;
-          const maxScrollLeft = scroller.scrollLeft;
+          const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+          const midScrollLeft = Math.round(maxScrollLeft / 2);
+          scroller.scrollLeft = midScrollLeft;
+          const columnsAtMidScroll = ths.map((th, idx) => {
+            const r = th.getBoundingClientRect();
+            return {
+              index: idx,
+              header: (th.textContent ?? "").trim(),
+              left: Number(r.left.toFixed(2)),
+              right: Number(r.right.toFixed(2)),
+              width: Number(r.width.toFixed(2)),
+              fullyVisible: r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5,
+            };
+          });
+
+          scroller.scrollLeft = maxScrollLeft;
           const columnsAtMaxScroll = ths.map((th, idx) => {
             const r = th.getBoundingClientRect();
             return {
@@ -470,6 +494,15 @@ test("renders every degraded incident and persists all six filters through reloa
           if (pinned) pinned.scrollLeft = 0;
 
           const pinnedRect = pinned?.getBoundingClientRect();
+          const remainingReachableAcrossScroll = ths.slice(6).every((_, offset) => {
+            const colIndex = offset + 6;
+            return (
+              Boolean(columnsAtZero[colIndex]?.fullyVisible) ||
+              Boolean(columnsAtMidScroll[colIndex]?.fullyVisible) ||
+              Boolean(columnsAtMaxScroll[colIndex]?.fullyVisible)
+            );
+          });
+          const lastColumnVisibleAtMax = Boolean(columnsAtMaxScroll[ths.length - 1]?.fullyVisible);
           return {
             viewport: { width: window.innerWidth, height: window.innerHeight },
             sidebar: sidebarRect
@@ -496,10 +529,11 @@ test("renders every degraded incident and persists all six filters through reloa
                 }
               : null,
             firstSixVisibleAtZero: firstSixHeadersVisible && firstSixCellsVisible,
-            remainingReachableAtMaxScroll: columnsAtMaxScroll.slice(6).every((col) => col.fullyVisible),
+            remainingReachableAtMaxScroll: remainingReachableAcrossScroll && lastColumnVisibleAtMax,
             overlapsAtZero,
             overlapsAtMax,
             columnsAtZero,
+            columnsAtMidScroll,
             columnsAtMaxScroll,
           };
         });
@@ -530,6 +564,47 @@ test("renders every degraded incident and persists all six filters through reloa
             ignoreDefaultArgs: ["--hide-scrollbars"],
           },
         };
+      }
+
+      // 3. Instrument expression columns (stock_future with multiplier 100 and cash_share)
+      activeItems = [
+        {
+          ...REAL_BFF_HOLDINGS_POST_TELEMETRY_20261106[0],
+          id: "rt-fut:ssf:QFF:202611",
+          holding_id: "rt-fut:ssf:QFF:202611",
+          symbol: "2330.TWSE",
+          instrument_id: "ssf:QFF:202611",
+          instrument_kind: "stock_future",
+          contract_month: "202611",
+          multiplier: 100,
+          margin_reserved: 92000,
+          reason_code: "short_via_future",
+          side: "long",
+          quantity: 2,
+          average_price: 2300,
+          mark_price: 2250,
+          market_value: 450000,
+          unrealized_pnl: -10000,
+          realized_pnl: 0,
+        },
+        ...REAL_BFF_HOLDINGS_POST_TELEMETRY_20261106.slice(1),
+      ];
+      for (const locale of ["zh-TW", "en-US"] as const) {
+        await holdingsPage.evaluate((lang) => {
+          window.localStorage.setItem("pantheon.locale", lang);
+        }, locale);
+        await holdingsPage.reload({ waitUntil: "domcontentloaded" });
+        const futRow = holdingsPage.getByTestId("portfolio-holding").filter({ hasText: "rt-fut:ssf:QFF:202611" });
+        await expect(futRow.locator("td").nth(4)).toHaveText("NT$450,000");
+        await expect(futRow.locator("td").nth(5)).toHaveText("-NT$10,000 (-2.17%)");
+        await expect(futRow.locator("td").nth(6)).toContainText(
+          locale === "zh-TW" ? "股票期貨" : "Stock future",
+        );
+        await expect(futRow.locator("td").nth(6)).toContainText("stock_future · ssf:QFF:202611");
+        await expect(futRow.locator("td").nth(7)).toHaveText("202611");
+        await expect(futRow.locator("td").nth(8)).toHaveText("100");
+        await expect(futRow.locator("td").nth(9)).toHaveText("NT$92,000");
+        await expect(futRow.locator("td").nth(10)).toHaveText("short_via_future");
       }
 
       console.log("HOLDINGS_1440_EVIDENCE:", JSON.stringify(evidenceByLocale));
