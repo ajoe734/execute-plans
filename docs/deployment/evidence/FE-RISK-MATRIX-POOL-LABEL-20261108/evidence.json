@@ -1,0 +1,52 @@
+{
+  "task_id": "FE-RISK-MATRIX-POOL-LABEL-20261108",
+  "title": "Risk matrix capital row label nests the excluded count and wraps",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-RISK-MATRIX-POOL-LABEL-20261108",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "prerequisites": {},
+  "hosted_verification": {
+    "status": "not_run",
+    "statement": "Hosted verification was not run in this task; this file records functional unit, typecheck, and lint evidence only. The coordinator verifies the hosted page in a real browser after deployment."
+  },
+  "acceptance_evidence": {
+    "ac1_breach_matrix_capital_row_label_form": {
+      "status": "passed",
+      "detail": "BreachMatrix in src/management/pages/RiskCenter.tsx builds the capital row label as `${t(\"riskCenter.tab.capital\")} (${t(\"riskCenter.archivedPoolsExcluded\")})`, matching the strategy row form `${t(\"riskCenter.tab.strategy\")} (${t(\"riskCenter.draftsExcluded\")})` with no count and no nested parentheses (rendering 'Capital (Archived capital pools excluded)' in en-US and '資金 (不含已封存資金池)' in zh-TW)."
+    },
+    "ac2_matrix_header_and_capital_tab_notes_keep_excluded_count": {
+      "status": "passed",
+      "detail": "RiskCenter keeps archivedPoolsNote (`riskCenter.archivedPoolsExcludedWithCount` when poolsSlice.status === 'ready', else `riskCenter.archivedPoolsExcluded`) on data-testid='risk-matrix-archived-pools-excluded' and data-testid='risk-capital-archived-pools-excluded' unchanged."
+    },
+    "ac3_unit_test_asserts_exact_capital_row_label_and_existing_exclusion_tests_stay_green": {
+      "status": "passed",
+      "detail": "src/management/pages/RiskCenter.test.tsx includes a dedicated test asserting the exact capital row label text ('Capital (Archived capital pools excluded)' in en-US and '資金 (不含已封存資金池)' in zh-TW, with no digits and no nested parentheses) for a ready pool read while verifying the excluded count (142) remains on risk-matrix-archived-pools-excluded and risk-capital-archived-pools-excluded, and all existing exclusion tests stay green without weakened assertions."
+    },
+    "ac4_unused_archivedPoolsNote_prop_removed_from_BreachMatrix_and_scope_preserved": {
+      "status": "passed",
+      "detail": "The archivedPoolsNote prop and its type declaration were removed from BreachMatrix and its call site in src/management/pages/RiskCenter.tsx. No other row, page, or locale file was modified."
+    },
+    "ac5_typecheck_lint_and_RiskCenter_test_pass_and_hosted_not_run": {
+      "status": "passed",
+      "detail": "Repository typecheck (tsconfig.json, tsconfig.app.json, tsconfig.agora.json), eslint on src/management/pages/RiskCenter.tsx and src/management/pages/RiskCenter.test.tsx, and Vitest on src/management/pages/RiskCenter.test.tsx all exited 0. Hosted verification was not run."
+    }
+  },
+  "verification_results": [
+    {
+      "command": "./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "0 TypeScript errors across root, app, and agora configs"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/RiskCenter.tsx src/management/pages/RiskCenter.test.tsx",
+      "exit_code": 0,
+      "summary": "0 errors (1 pre-existing react-refresh warning on isDrawdownBreach export in RiskCenter.tsx)"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/RiskCenter.test.tsx",
+      "exit_code": 0,
+      "summary": "1 test file passed, 12 tests passed"
+    }
+  ]
+}

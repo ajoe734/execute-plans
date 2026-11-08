@@ -928,8 +928,14 @@ describe("RiskCenter", () => {
       });
 
       const capitalMatrixRow = screen.getByTestId("breach-matrix-row-capital");
-      expect(capitalMatrixRow).toHaveTextContent("Capital (Archived capital pools excluded (136))");
+      expect(capitalMatrixRow.firstElementChild?.textContent).toBe(
+        "Capital (Archived capital pools excluded)",
+      );
+      expect(
+        within(capitalMatrixRow).getByText("Capital (Archived capital pools excluded)"),
+      ).toBeInTheDocument();
       expect(within(capitalMatrixRow).getByText("6")).toBeInTheDocument();
+      expect(within(capitalMatrixRow).queryByText("136")).not.toBeInTheDocument();
       expect(within(capitalMatrixRow).queryByText("142")).not.toBeInTheDocument();
 
       const tableRows = screen.getAllByRole("row").slice(1); // exclude header row
@@ -949,6 +955,8 @@ describe("RiskCenter", () => {
       expect(screen.getByTestId("risk-matrix-archived-pools-excluded")).toHaveTextContent(
         "不含已封存資金池（已排除 136 筆）",
       );
+      expect(capitalMatrixRow.firstElementChild?.textContent).toBe("資金 (不含已封存資金池)");
+      expect(within(capitalMatrixRow).getByText("資金 (不含已封存資金池)")).toBeInTheDocument();
     });
 
     it("keeps pools with status active, suspended, or no status in every view and excludes archived and retired pools from the table, matrix, utilization breach card, and critical/high cards", async () => {
@@ -1019,6 +1027,9 @@ describe("RiskCenter", () => {
         expect(screen.getByTestId("risk-capital-archived-pools-excluded")).toHaveTextContent(
           "Archived capital pools excluded (2)",
         );
+        expect(screen.getByTestId("risk-matrix-archived-pools-excluded")).toHaveTextContent(
+          "Archived capital pools excluded (2)",
+        );
       });
 
       // Capital tab table keeps active, suspended, and no-status pools and drops archived + retired
@@ -1042,8 +1053,80 @@ describe("RiskCenter", () => {
 
       // Breach matrix capital row shows 1 low, 1 high, 1 critical (total 3, excluding the 2 retired pools)
       const capitalMatrixRow = screen.getByTestId("breach-matrix-row-capital");
-      expect(capitalMatrixRow).toHaveTextContent("Capital (Archived capital pools excluded (2))");
+      expect(capitalMatrixRow.firstElementChild?.textContent).toBe(
+        "Capital (Archived capital pools excluded)",
+      );
+      expect(
+        within(capitalMatrixRow).getByText("Capital (Archived capital pools excluded)"),
+      ).toBeInTheDocument();
       expect(within(capitalMatrixRow).getAllByText("1")).toHaveLength(3);
+    });
+
+    it("renders the exact breach matrix capital row label without count or nested parentheses for a ready pool read while keeping the excluded count in the matrix header and capital tab notes (FE-RISK-MATRIX-POOL-LABEL-20261108)", async () => {
+      const normalizedPools = normalizeCapitalPools([
+        buildRealRawCapitalPoolRow({
+          id: "pool-active-1",
+          name: "Active Pool 1",
+          status: "active",
+          budget: 1_000_000,
+        }),
+        ...Array.from({ length: 142 }, (_, idx) =>
+          buildRealRawCapitalPoolRow({
+            id: `pool-archived-${idx + 1}`,
+            name: `Archived Pool ${idx + 1}`,
+            status: "archived",
+            budget: null,
+          }),
+        ),
+      ]);
+
+      vi.spyOn(bffV1.capitalPools, "list").mockResolvedValue(normalizedPools);
+      vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([]);
+      vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.alerts, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.incidents, "list").mockResolvedValue([]);
+
+      renderRiskCenter();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("risk-matrix-archived-pools-excluded")).toHaveTextContent(
+          /^Archived capital pools excluded \(142\)$/,
+        );
+        expect(screen.getByTestId("risk-capital-archived-pools-excluded")).toHaveTextContent(
+          /^Archived capital pools excluded \(142\)$/,
+        );
+      });
+
+      const strategyMatrixRow = screen.getByTestId("breach-matrix-row-strategy");
+      const capitalMatrixRow = screen.getByTestId("breach-matrix-row-capital");
+      expect(strategyMatrixRow.firstElementChild?.textContent).toBe(
+        "Strategy (Draft strategies excluded)",
+      );
+      expect(capitalMatrixRow.firstElementChild?.textContent).toBe(
+        "Capital (Archived capital pools excluded)",
+      );
+      expect(capitalMatrixRow.firstElementChild?.textContent).not.toMatch(/\d/);
+      expect(capitalMatrixRow.firstElementChild?.textContent).not.toMatch(/\(.*\(|\).*\)/);
+
+      await act(async () => {
+        await i18n.changeLanguage("zh-TW");
+      });
+
+      expect(screen.getByTestId("risk-matrix-archived-pools-excluded")).toHaveTextContent(
+        /^不含已封存資金池（已排除 142 筆）$/,
+      );
+      expect(screen.getByTestId("risk-capital-archived-pools-excluded")).toHaveTextContent(
+        /^不含已封存資金池（已排除 142 筆）$/,
+      );
+      expect(strategyMatrixRow.firstElementChild?.textContent).toBe("策略 (不含草稿策略)");
+      expect(capitalMatrixRow.firstElementChild?.textContent).toBe("資金 (不含已封存資金池)");
+      expect(capitalMatrixRow.firstElementChild?.textContent).not.toMatch(/\d/);
+      expect(capitalMatrixRow.firstElementChild?.textContent).not.toContain("（");
+      expect(capitalMatrixRow.firstElementChild?.textContent).not.toContain("）");
     });
 
     it("shows loading state on pending pool read and unavailable state on failed pool read without ever showing 0", async () => {
