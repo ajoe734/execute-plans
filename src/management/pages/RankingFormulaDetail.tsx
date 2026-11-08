@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,50 @@ export function formatFormulaAppliedTo(appliedTo: unknown): string {
   return "—";
 }
 
+type Translate = (key: string, opts?: Record<string, unknown>) => string;
+
+const hasText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
+
+/** Readable label for a known code; unknown codes fall back to the raw code. */
+export function formulaCodeLabel(t: Translate, group: string, code: string): string {
+  return t(`rankingFormula.${group}.${code}`, { defaultValue: code });
+}
+
+export function formulaVersion(f: RankingFormula): string | undefined {
+  return [f.version, f.formula_version].find(hasText);
+}
+
+export interface FormulaComponentRow { key: string; label: string; weight?: number }
+
+/** Components from the payload; falls back to the weights map. Empty when neither is present. */
+export function formulaComponents(f: RankingFormula): FormulaComponentRow[] {
+  const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+  if (Array.isArray(f.components) && f.components.length > 0) {
+    return f.components
+      .filter((c) => c && hasText(c.key))
+      .map((c) => ({
+        key: c.key,
+        label: hasText(c.label) ? c.label : c.key,
+        weight: isNum(c.weight) ? c.weight : isNum(f.weights?.[c.key]) ? f.weights?.[c.key] : undefined,
+      }));
+  }
+  if (f.weights && typeof f.weights === "object") {
+    return Object.entries(f.weights)
+      .filter(([, w]) => isNum(w))
+      .map(([key, weight]) => ({ key, label: key, weight }));
+  }
+  return [];
+}
+
+export const formatWeightPercent = (w: number): string => `${Number((w * 100).toFixed(2))}%`;
+
+/** One-line weight summary, e.g. "PnL 35% · Risk 25%"; undefined when the payload has no weights. */
+export function formulaWeightSummary(f: RankingFormula): string | undefined {
+  const rows = formulaComponents(f).filter((r) => typeof r.weight === "number");
+  if (rows.length === 0) return undefined;
+  return rows.map((r) => `${r.label} ${formatWeightPercent(r.weight as number)}`).join(" · ");
+}
+
 export const RankingFormulaDetail = () => {
   const { id } = useParams();
   const t = useT();
@@ -113,15 +157,27 @@ export const RankingFormulaDetail = () => {
 
   const ranked = extractOwnerRankingRows(f);
   const rankingsCenterHref = canonicalCenterUrl("rankings", "rolling");
-  const versions = [
-    { v: "v3", at: f.updatedAt, by: f.owner || "—", note: "Current — activated" },
-  ];
+  const noData = t("rankingFormula.noData");
+  const versions = (Array.isArray(f.version_history) ? f.version_history : []).map((h, index) => ({
+    id: h.id || `${h.version ?? h.formula_version ?? "version"}-${index}`,
+    v: h.version || h.formula_version || "",
+    at: h.effective_at,
+    changeType: h.change_type,
+    note: h.description,
+    refs: h.governance_evidence_refs ?? [],
+  }));
+  const version = formulaVersion(f);
+  const components = formulaComponents(f);
+  const cc = f.change_control;
+  const evidenceRefs = Array.from(new Set([...(f.governance_evidence_refs ?? []), ...(cc?.governance_evidence_refs ?? [])]));
+  const cell = (v: ReactNode) => v ?? <span className="text-muted-foreground">{noData}</span>;
 
   return (
     <>
       <ObjectDetailLayout
         object={f}
         subtitle={f.id}
+        headerOmit={{ state: !hasText(f.state), risk: !hasText(f.risk), owner: !hasText(f.owner), updated: !hasText(f.updatedAt) }}
         actions={
           <Button size="sm" variant="outline" asChild>
             <Link to="/management/governance-decisions?tab=policy">
@@ -135,14 +191,50 @@ export const RankingFormulaDetail = () => {
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <Field label="Applied to" value={formatFormulaAppliedTo(f.appliedTo)} mono />
-                  <Field label={t("table.state")} value={f.state || "—"} mono />
-                  <Field label={t("table.owner")} value={f.owner || "—"} mono />
+                  <Field label={t("rankingFormula.version")} value={cell(version)} mono />
+                  <Field label={t("rankingFormula.scoreField")} value={cell(hasText(f.score_field) ? f.score_field : undefined)} mono />
+                  <Field label={t("rankingFormula.basis")} value={cell(hasText(f.basis) ? formulaCodeLabel(t, "basisLabels", f.basis) : undefined)} />
+                  <Field label={t("rankingFormula.policy")} value={cell(hasText(f.policy) ? formulaCodeLabel(t, "policyLabels", f.policy) : undefined)} />
+                  {formatFormulaAppliedTo(f.appliedTo) !== "—" && <Field label="Applied to" value={formatFormulaAppliedTo(f.appliedTo)} mono />}
+                  {hasText(f.state) && <Field label={t("table.state")} value={f.state} mono />}
+                  {hasText(f.owner) && <Field label={t("table.owner")} value={f.owner} mono />}
                 </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("ranking.expression")}</div>
-                  <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{f.expression || "—"}</pre>
+                <div data-testid="ranking-formula-components">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("rankingFormula.components")}</div>
+                  {components.length > 0 ? (
+                    <ul className="text-sm space-y-1">
+                      {components.map((comp) => (
+                        <li key={comp.key} className="flex gap-3" data-testid={`ranking-formula-component-${comp.key}`}>
+                          <span className="min-w-[8rem]">{comp.label}</span>
+                          <span className="text-mono">{typeof comp.weight === "number" ? formatWeightPercent(comp.weight) : noData}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{noData}</p>
+                  )}
                 </div>
+                {cc && (
+                  <div data-testid="ranking-formula-change-control" className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <Field label={t("rankingFormula.versionPolicy")} value={cell(hasText(cc.version_policy) ? formulaCodeLabel(t, "versionPolicyLabels", cc.version_policy) : undefined)} />
+                    <Field label={t("rankingFormula.requiresEvidence")} value={typeof cc.requires_governance_evidence === "boolean" ? t(cc.requires_governance_evidence ? "rankingFormula.yes" : "rankingFormula.no") : cell(undefined)} />
+                    <Field label={t("rankingFormula.authority")} value={cell(hasText(cc.authority) ? formulaCodeLabel(t, "policyLabels", cc.authority) : undefined)} />
+                  </div>
+                )}
+                {evidenceRefs.length > 0 && (
+                  <div data-testid="ranking-formula-evidence-refs">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("rankingFormula.evidenceRefs")}</div>
+                    <ul className="text-sm text-mono space-y-0.5">
+                      {evidenceRefs.map((ref) => <li key={ref}>{ref}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {hasText(f.expression) && (
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{t("ranking.expression")}</div>
+                    <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{f.expression}</pre>
+                  </div>
+                )}
               </Section>
             ),
           },
@@ -177,12 +269,15 @@ export const RankingFormulaDetail = () => {
                 </Section>
               ),
           },
-          { value: "history", label: t("section.history"), content: (
-            <DataTable rows={versions.map((v) => ({ ...v, id: v.v }))} columns={[
-              { key: "v", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.v}</span> },
-              { key: "at", header: t("table.updated"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.at)}</span> },
-              { key: "by", header: t("table.actor"), cell: (r) => <span className="text-mono text-xs">{r.by}</span> },
-              { key: "note", header: t("table.description"), cell: (r) => <span className="text-xs text-muted-foreground">{r.note}</span> },
+          { value: "history", label: t("section.history"), content: versions.length === 0 ? (
+            <Section><p className="text-sm text-muted-foreground">{noData}</p></Section>
+          ) : (
+            <DataTable rows={versions} columns={[
+              { key: "v", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.v || noData}</span> },
+              { key: "at", header: t("rankingFormula.effectiveAt"), cell: (r) => <span className="text-mono text-xs">{r.at ? safeDateTime(r.at) : noData}</span> },
+              { key: "type", header: t("rankingFormula.changeType"), cell: (r) => <span className="text-xs">{r.changeType ? formulaCodeLabel(t, "changeTypeLabels", r.changeType) : noData}</span> },
+              { key: "note", header: t("table.description"), cell: (r) => <span className="text-xs text-muted-foreground">{r.note || noData}</span> },
+              { key: "refs", header: t("rankingFormula.evidenceRefs"), cell: (r) => <span className="text-mono text-xs">{r.refs.length > 0 ? r.refs.join(", ") : noData}</span> },
             ]} />
           ) },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },

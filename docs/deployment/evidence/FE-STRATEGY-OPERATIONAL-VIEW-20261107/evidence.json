@@ -1,0 +1,78 @@
+{
+  "task_id": "FE-STRATEGY-OPERATIONAL-VIEW-20261107",
+  "title": "Strategy page shows approved for dead strategies and no rule or parameters",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-STRATEGY-OPERATIONAL-VIEW-20261107",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "prerequisites": {
+    "BFF-STRATEGY-OPERATIONAL-TRUTH-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "pantheon_commit": "3a26706412f0275a472781348e90f7d9836c97f7"
+    }
+  },
+  "hosted_verification": {
+    "status": "not_run",
+    "statement": "Hosted verification was not run in this task; this file records functional unit, typecheck, and fixture e2e evidence only. Hosted acceptance is owned by downstream task STRATEGY-VIEW-HOSTED-ACCEPTANCE-20261107."
+  },
+  "acceptance_evidence": {
+    "ac1_default_tab_query_count_and_notice": {
+      "status": "passed",
+      "detail": "Default tab of /management/strategies requests GET /bff/strategies?exclude_state=draft&hide_retired_personas=true&page_size=20, derives its tab count from page_info.total instead of a client-side sum, and displays the notice reporting both hidden draft count from meta.state_counts.draft and hidden retired-persona strategy count from meta.hidden_retired_persona_count."
+    },
+    "ac2_other_tabs_and_unreported_counts": {
+      "status": "passed",
+      "detail": "Approved, review, retired, draft, and all tabs preserve their existing queries and counts; when meta.state_counts or meta.hidden_retired_persona_count is null or omitted, no label or notice displays an unreported or invented number."
+    },
+    "ac3_list_operational_status_and_symbols_columns": {
+      "status": "passed",
+      "detail": "/management/strategies renders an operationalStatus run-status column with distinct localized labels and badges for running, idle, retired, unbound, and unknown (never displaying unknown as running or retired), plus a symbols column derived from row.symbols."
+    },
+    "ac4_detail_overview_operational_status_and_bound_personas": {
+      "status": "passed",
+      "detail": "/management/strategies/:id Overview tab renders operationalStatus and each bound persona from personaStates with its state badge and a direct link to /management/personas/<personaId> next to LifecycleStepper."
+    },
+    "ac5_spec_tab_fields_and_rule_sentences": {
+      "status": "passed",
+      "detail": "StrategySpecTab renders spec.title, spec.hypothesis, and spec.objective when present, formats each close_to_close_momentum rule into one plain-language sentence via strategyRuleText.ts from strategyLogic and parameters, labels rollback_baseline rules as a no-order rollback baseline, and reports any other strategyLogic.kind as unsupported with its raw kind without inventing a sentence."
+    },
+    "ac6_readonly_parameters_and_removed_empty_params": {
+      "status": "passed",
+      "detail": "StrategyParamsEditor renders trading rule parameters read-only with each adjustableControls entry showing currentValue, allowedRange (min..max), and step, and each immutableParameters key marked fixed; the constant empty params array in StrategyDetail.tsx is removed and no edit or submit control is offered."
+    },
+    "ac7_degraded_and_empty_truth_states": {
+      "status": "passed",
+      "detail": "rules: null renders a rules-unavailable state on both Spec and Parameters tabs, rules: [] renders that no trading rule is recorded, and operationalStatus: 'unknown' states that persona state could not be read; covered by StrategyDetail.spec.test.tsx with the exact real BFF payload shapes from the task brief."
+    },
+    "ac8_strategy_rule_text_unit_coverage": {
+      "status": "passed",
+      "detail": "strategyRuleText.test.ts covers the real trading bundle (artifact-persona-paper-b9f9e2e4d44cdd44d160), the real rollback baseline bundle (artifact-persona-paper-baseline-b9f9e2e4d44cdd44d160), threshold 0.005 with lookback_bars 5, and unknown action values in both zh-TW and en-US."
+    },
+    "ac9_dto_i18n_parity_and_scope": {
+      "status": "passed",
+      "detail": "Strategy and StrategySpecDetail in src/lib/bff-v1/dto.ts gain the new optional operational and rule fields, all new strings exist in both src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts, i18nParity.test.ts passes, and no unrelated pages were modified."
+    },
+    "ac10_typecheck_tests_and_fixture_e2e": {
+      "status": "passed",
+      "detail": "Repository typechecks (tsconfig.json, tsconfig.app.json, tsconfig.agora.json), all 11 affected unit/component test suites (113 tests), and the Playwright fixture e2e run (e2e/06-entity-registry.spec.ts: 4 passed, 1 live-opt-in skipped) all exited 0."
+    }
+  },
+  "verification_results": [
+    {
+      "command": "./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "0 TypeScript errors across root, app, and agora configs"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/components/detail/strategyRuleText.test.ts src/lib/bff-v1/strategies.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/Lists.test.tsx src/management/pages/ObjectListPage.test.tsx src/management/pages/StrategyDetail.spec.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx",
+      "exit_code": 0,
+      "summary": "11 test files passed, 113 tests passed"
+    },
+    {
+      "command": "npm_config_cache=/tmp/npm-cache PATH=\"$PWD/node_modules/.bin:$PATH\" ./node_modules/.bin/playwright test e2e/06-entity-registry.spec.ts --project=chromium",
+      "exit_code": 0,
+      "summary": "4 passed, 1 skipped (live BFF opt-in probe) in 1.3m"
+    }
+  ]
+}

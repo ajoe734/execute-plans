@@ -132,4 +132,102 @@ describe("RankingFormulaDetail retired activate flow gate", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("1.425")).toBeInTheDocument();
   });
+
+  const REAL = {
+    id: "pm12-quarterly-ranking-formula",
+    formula_id: "pm12-quarterly-ranking-formula",
+    version: "pm12-default-v1",
+    formula_version: "pm12-default-v1",
+    weights: { pnl: 0.35, risk: 0.25, execution: 0.25, activity: 0.15 },
+    score_field: "overall_score",
+    components: [
+      { key: "pnl", label: "PnL", weight: 0.35 },
+      { key: "risk", label: "Risk", weight: 0.25 },
+      { key: "execution", label: "Execution", weight: 0.25 },
+      { key: "activity", label: "Activity", weight: 0.15 },
+    ],
+    basis: "latest_available_persona_league_metrics_with_quarter_window",
+    policy: "read_only_governance_advisory",
+    governance_evidence_refs: ["pm12-quarterly-ranking-formula-v1-governance"],
+    version_history: [
+      {
+        id: "pm12-quarterly-ranking-formula-pm12-default-v1",
+        version: "pm12-default-v1",
+        formula_version: "pm12-default-v1",
+        effective_at: "2026-05-23T00:00:00Z",
+        change_type: "baseline",
+        governance_evidence_refs: ["pm12-quarterly-ranking-formula-v1-governance"],
+        description: "Baseline formula accepted for PM-12 quarterly ranking reads.",
+      },
+    ],
+    change_control: {
+      version_policy: "formula_version_changes_require_governance_evidence",
+      requires_governance_evidence: true,
+      governance_evidence_refs: ["pm12-quarterly-ranking-formula-v1-governance"],
+      authority: "read_only_governance_advisory",
+    },
+  };
+
+  const renderDetail = (row: Record<string, unknown>) => {
+    vi.spyOn(bffV1.rankingFormulas, "list").mockResolvedValue([row as unknown as import("@/lib/bff-v1").RankingFormula]);
+    vi.spyOn(bffV1.audit, "list").mockResolvedValue([]);
+    return render(
+      <MemoryRouter initialEntries={[`/management/ranking/formulas/${row.id}`]}>
+        <Routes>
+          <Route path="/management/ranking/formulas/:id" element={<RankingFormulaDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  };
+
+  it("renders the real BFF payload without dashes, no-data badges or invented fields", async () => {
+    const { container } = renderDetail(REAL);
+    expect(await screen.findByTestId("ranking-formula-components")).toBeInTheDocument();
+    expect(screen.getAllByText("pm12-default-v1").length).toBeGreaterThan(0);
+    expect(screen.getByText("overall_score")).toBeInTheDocument();
+    expect(screen.getByTestId("ranking-formula-component-pnl")).toHaveTextContent("PnL35%");
+    expect(screen.getByTestId("ranking-formula-component-activity")).toHaveTextContent("Activity15%");
+    expect(screen.getByTestId("ranking-formula-change-control")).toBeInTheDocument();
+    expect(screen.getByTestId("ranking-formula-evidence-refs")).toHaveTextContent("pm12-quarterly-ranking-formula-v1-governance");
+    expect(container.textContent).not.toContain("—");
+    expect(container.textContent).not.toContain("undefined");
+    expect(container.textContent).not.toMatch(/無資料|No data|Unavailable|不可用/);
+    expect(container.textContent).not.toContain("read_only_governance_advisory");
+    expect(container.querySelector("a[href*='pm12-quarterly-ranking-formula-v1-governance']")).toBeNull();
+  });
+
+  it("lists version_history on the history tab and drops the hardcoded v3 row", async () => {
+    renderDetail(REAL);
+    const tab = await screen.findByRole("tab", { name: /歷程|歷史|History/i });
+    fireEvent.pointerDown(tab);
+    fireEvent.mouseDown(tab);
+    fireEvent.pointerUp(tab);
+    fireEvent.mouseUp(tab);
+    fireEvent.click(tab);
+    expect(await screen.findByText("Baseline formula accepted for PM-12 quarterly ranking reads.")).toBeInTheDocument();
+    expect(screen.queryByText("v3")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Current — activated/)).not.toBeInTheDocument();
+  });
+
+  it("renders another version with a fifth component, raw unknown codes, and no-data without weights", async () => {
+    const five = {
+      ...REAL,
+      id: "alt",
+      version: "alt-v2",
+      formula_version: "alt-v2",
+      basis: "some_unknown_basis",
+      components: [...REAL.components, { key: "liquidity", label: "Liquidity", weight: 0.1 }],
+    };
+    const first = renderDetail(five);
+    expect(await screen.findByTestId("ranking-formula-component-liquidity")).toHaveTextContent("Liquidity10%");
+    expect(screen.getByText("some_unknown_basis")).toBeInTheDocument();
+    first.unmount();
+    vi.restoreAllMocks();
+
+    const bare = renderDetail({ id: "bare", version: "bare-v1" });
+    const box = await screen.findByTestId("ranking-formula-components");
+    expect(box).toHaveTextContent(/無資料|No data/);
+    expect(box.textContent).not.toMatch(/\d%/);
+    expect(bare.container.textContent).not.toContain("undefined");
+  });
 });

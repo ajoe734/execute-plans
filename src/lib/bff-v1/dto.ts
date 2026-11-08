@@ -308,10 +308,55 @@ export interface BaseObject {
   deploymentStatus?: StrategyDeploymentStatus | string;
 }
 
+export type StrategyOperationalStatus =
+  | "running"
+  | "idle"
+  | "retired"
+  | "unbound"
+  | "unknown";
+
+export interface StrategyPersonaState {
+  personaId: string;
+  state: string;
+}
+
+export interface StrategyAdjustableControl {
+  parameter_key: string;
+  value_type?: string;
+  current_value?: unknown;
+  allowed_range?: {
+    min?: number;
+    max?: number;
+  };
+  step?: number;
+}
+
+export interface StrategyRuleLogic {
+  kind?: string;
+  lookback_parameter?: string;
+  threshold_parameter?: string;
+  positive_action?: string;
+  non_positive_action?: string;
+  [key: string]: unknown;
+}
+
+export interface StrategyRule {
+  registryId: string;
+  version?: string | null;
+  role: "trading" | "rollback_baseline" | (string & {});
+  strategyLogic?: StrategyRuleLogic | null;
+  parameters?: Record<string, unknown> | null;
+  adjustableControls?: StrategyAdjustableControl[];
+  immutableParameters?: string[];
+}
+
 /** Allowlisted read-only spec projection from GET /bff/strategies/{id} (data.spec). */
 export interface StrategySpecDetail {
   spec_version_id?: string | null;
   spec_version?: string | null;
+  title?: string | null;
+  hypothesis?: string | null;
+  objective?: string | null;
   market_scope?: {
     symbols?: string[];
     asset_classes?: string[];
@@ -348,6 +393,10 @@ export interface Strategy extends BaseObject {
   alpha: string;
   capitalPoolId: string;
   personaIds: string[];
+  personaStates?: StrategyPersonaState[];
+  operationalStatus?: StrategyOperationalStatus;
+  symbols?: string[];
+  rules?: StrategyRule[] | null;
   pnl?: number | null;
   pnl30d: number | null;
   sharpe: number | null;
@@ -392,9 +441,44 @@ export interface CapitalPool extends BaseObject {
   summary?: string;
 }
 
+export interface RankingFormulaComponent {
+  key: string;
+  label?: string;
+  weight?: number;
+}
+
+export interface RankingFormulaVersionHistoryEntry {
+  id?: string;
+  version?: string;
+  formula_version?: string;
+  effective_at?: string;
+  change_type?: string;
+  description?: string;
+  governance_evidence_refs?: string[];
+}
+
+export interface RankingFormulaChangeControl {
+  version_policy?: string;
+  requires_governance_evidence?: boolean;
+  governance_evidence_refs?: string[];
+  authority?: string;
+}
+
 export interface RankingFormula extends BaseObject {
-  expression: string;
-  appliedTo: number;
+  /** Legacy fields: the live BFF does not currently return these. */
+  expression?: string;
+  appliedTo?: number;
+  formula_id?: string;
+  version?: string;
+  formula_version?: string;
+  weights?: Record<string, number>;
+  score_field?: string;
+  components?: RankingFormulaComponent[];
+  basis?: string;
+  policy?: string;
+  governance_evidence_refs?: string[];
+  version_history?: RankingFormulaVersionHistoryEntry[];
+  change_control?: RankingFormulaChangeControl;
 }
 
 export interface RebalanceLine {

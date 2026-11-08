@@ -1,0 +1,210 @@
+{
+  "schema_version": "pantheon.fe-pulse-labels.v1",
+  "task_id": "FE-PULSE-LABELS-20261107",
+  "title": "交易脈動：Baseline 卡片不再印 not_required 原字串，Sharpe 樣本累積中要明說",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "branch": "task/FE-PULSE-LABELS-20261107",
+  "merge_target": "dev",
+  "base_sha": "b7cd3d847977a38c9d2b5a6f119d433fbc001b28",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Verified locally via Vitest unit/component/i18n tests, TypeScript application and Agora typechecks, contract drift checks, ESLint, Vite production build, and headless Chromium browser screenshots + DOM readbacks of /management/trading-pulse using fixture data in zh-TW and en-US. Hosted environment was not touched.",
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-PULSE-LABELS-20261107/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_baseline_card_not_required_localized_and_raw_string_absent": "verified: compactCounts accepts an optional formatKey function passed on the Baseline Comparison card status line (line 1776 of src/management/pages/oversight/_core.tsx) mapping 'not_required' to t('mgmt.pulse.notRequired') ('不需比較' in zh-TW, 'Not required' in en-US), and the raw string 'not_required' no longer appears anywhere on the page.",
+    "2_other_baseline_status_keys_unchanged": "verified: Keys other than 'not_required' (such as 'ok', 'watch', 'breached', 'unavailable') return the key unchanged from the formatKey callback and render as they do today.",
+    "3_shared_compact_counts_lines_unchanged": "verified: The byStatus, byStage, and rowHealth lines call compactCounts without formatKey and render identically to today.",
+    "4_sharpe_leaders_empty_shows_building_history_text": "verified: When b.kind === 'sharpe-leaders' and rows are empty, RankingBlocks renders t('mgmt.pulse.sharpeBuildingHistory') ('樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe' in zh-TW, 'Building history: Sharpe needs at least 10 daily returns' in en-US) instead of t('mgmt.pulse.noRows').",
+    "5_sharpe_leaders_missing_badge_neutral_tone_and_building_label": "verified: When b.kind === 'sharpe-leaders' and missingMetricCount > 0, RankingBlocks renders the badge with statusTone('building') ('bg-muted text-muted-foreground border-border') and t('mgmt.pulse.sharpeBuildingBadge') ('累積中: <count>' in zh-TW, 'Building: <count>' in en-US) instead of the degraded metricMissing badge.",
+    "6_sharpe_leaders_rows_render_existing_markup": "verified: When the sharpe-leaders block has rows, RankingBlocks takes the non-empty branch and renders each row through the existing <ul>/<li>/<Link> markup.",
+    "7_other_ranking_blocks_keep_degraded_badge_and_no_rows": "verified: Ranking blocks with b.kind !== 'sharpe-leaders' keep statusTone('degraded') ('bg-status-warning/15 text-status-warning border-status-warning/30'), t('mgmt.pulse.metricMissing'), and t('mgmt.pulse.noRows') when empty.",
+    "8_focused_tests_i18n_parity_and_typecheck_pass": "verified: Focused tests in src/management/pages/oversight/TradingPulsePage.test.tsx (7 tests), src/lib/v5/management/__tests__/i18nParity.test.ts (10 tests), npm run typecheck:app, and npm run typecheck:agora all pass.",
+    "9_evidence_records_commands_results_and_fixture_screenshots": "verified: Exact commands, exit codes, test counts, and 1440x1200 headless Chromium screenshots + DOM readbacks of /management/trading-pulse in zh-TW and en-US using fixture data are recorded below."
+  },
+  "browser_fixture_screenshot": {
+    "routes_mocked": [
+      "GET /bff/management/trading-pulse",
+      "GET /bff/management/trading-pulse/rankings"
+    ],
+    "page_url": "/management/trading-pulse",
+    "viewport": {
+      "width": 1440,
+      "height": 1200
+    },
+    "zh_TW": {
+      "screenshot_path": "/tmp/fe-pulse-labels-20261107/trading-pulse-labels-zh-TW.png",
+      "sha256": "6841f164077c92e93b9ab07fe1625502386a538dba5fd4490d7ee88abb53f295",
+      "bytes": 269959,
+      "contains_raw_not_required": false,
+      "cards": [
+        "Runtime Status: 4 | 狀態: active: 4 | 階段: paper: 4",
+        "Row Health: 0 | Row health: ok: 4 | 降級 rows: —",
+        "P&L: 1,842.5 | Telemetry 覆蓋: 4 | Metric 覆蓋: 4/4",
+        "Worst Drawdown: 0.031 | Metric 覆蓋: 4/4",
+        "Execution Quality: 0.978 | 最差滑價 bps: 3.1 | Metric 覆蓋: 4/4",
+        "Baseline Comparison: 0 | Baseline 覆蓋: 0 | 基準狀態: 不需比較: 4 | 缺: —"
+      ],
+      "ranking_cards": [
+        {
+          "title": "P&L Leaders",
+          "badges": ["4"],
+          "empty_text": null,
+          "rows": [
+            "rt-535a82a3 | P&L Leaders: 620.5",
+            "rt-c98e4223 | P&L Leaders: 512",
+            "rt-8b0d8649 | P&L Leaders: 410",
+            "rt-342d76ff | P&L Leaders: 300"
+          ]
+        },
+        {
+          "title": "Drawdown Guard",
+          "badges": ["4"],
+          "empty_text": null,
+          "rows": [
+            "rt-342d76ff | Drawdown Guard: 0.015",
+            "rt-535a82a3 | Drawdown Guard: 0.018",
+            "rt-8b0d8649 | Drawdown Guard: 0.022",
+            "rt-c98e4223 | Drawdown Guard: 0.031"
+          ]
+        },
+        {
+          "title": "Sharpe Leaders",
+          "badges": [
+            {
+              "text": "0",
+              "tone": "outline"
+            },
+            {
+              "text": "累積中: 4",
+              "tone": "bg-muted text-muted-foreground border-border"
+            }
+          ],
+          "empty_text": "樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe",
+          "rows": []
+        },
+        {
+          "title": "Execution Quality",
+          "badges": [
+            {
+              "text": "0",
+              "tone": "outline"
+            },
+            {
+              "text": "缺 metric: 2",
+              "tone": "bg-status-warning/15 text-status-warning border-status-warning/30"
+            }
+          ],
+          "empty_text": "無資料。",
+          "rows": []
+        }
+      ]
+    },
+    "en_US": {
+      "screenshot_path": "/tmp/fe-pulse-labels-20261107/trading-pulse-labels-en-US.png",
+      "sha256": "acfe39cfa2a3606c4af01eb142fd2f0f5c8642cfd5ab0c50131e98c4a5f8da17",
+      "bytes": 266018,
+      "contains_raw_not_required": false,
+      "cards": [
+        "Runtime Status: 4 | Status: active: 4 | Stage: paper: 4",
+        "Row Health: 0 | Row health: ok: 4 | Degraded rows: —",
+        "P&L: 1,842.5 | Telemetry coverage: 4 | Metric coverage: 4/4",
+        "Worst Drawdown: 0.031 | Metric coverage: 4/4",
+        "Execution Quality: 0.978 | Worst slippage bps: 3.1 | Metric coverage: 4/4",
+        "Baseline Comparison: 0 | Baseline coverage: 0 | Baseline status: Not required: 4 | Missing: —"
+      ],
+      "ranking_cards": [
+        {
+          "title": "P&L Leaders",
+          "badges": ["4"],
+          "empty_text": null,
+          "rows": [
+            "rt-535a82a3 | P&L Leaders: 620.5",
+            "rt-c98e4223 | P&L Leaders: 512",
+            "rt-8b0d8649 | P&L Leaders: 410",
+            "rt-342d76ff | P&L Leaders: 300"
+          ]
+        },
+        {
+          "title": "Drawdown Guard",
+          "badges": ["4"],
+          "empty_text": null,
+          "rows": [
+            "rt-342d76ff | Drawdown Guard: 0.015",
+            "rt-535a82a3 | Drawdown Guard: 0.018",
+            "rt-8b0d8649 | Drawdown Guard: 0.022",
+            "rt-c98e4223 | Drawdown Guard: 0.031"
+          ]
+        },
+        {
+          "title": "Sharpe Leaders",
+          "badges": [
+            {
+              "text": "0",
+              "tone": "outline"
+            },
+            {
+              "text": "Building: 4",
+              "tone": "bg-muted text-muted-foreground border-border"
+            }
+          ],
+          "empty_text": "Building history: Sharpe needs at least 10 daily returns",
+          "rows": []
+        },
+        {
+          "title": "Execution Quality",
+          "badges": [
+            {
+              "text": "0",
+              "tone": "outline"
+            },
+            {
+              "text": "Metric missing: 2",
+              "tone": "bg-status-warning/15 text-status-warning border-status-warning/30"
+            }
+          ],
+          "empty_text": "No rows.",
+          "rows": []
+        }
+      ]
+    }
+  },
+  "verification": {
+    "focused_vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "status": "passed",
+      "test_files": 2,
+      "tests_passed": 17
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/_core.tsx src/management/pages/oversight/TradingPulsePage.test.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "contract_drift": {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/dev-root npm run test:contract",
+      "exit_code": 0,
+      "status": "passed",
+      "tests_passed": 8
+    },
+    "e2e_build_and_fixture_screenshot": {
+      "command": "node scripts/build-e2e-server.mjs && node /tmp/fe-pulse-labels-20261107-capture.mjs && rm -rf dist",
+      "exit_code": 0,
+      "status": "passed"
+    }
+  }
+}

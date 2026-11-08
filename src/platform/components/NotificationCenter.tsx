@@ -41,9 +41,25 @@ export const NotificationCenter = () => {
 
   useEffect(() => {
     if (!open) return;
-    void Promise.all([bffV1.alerts.list(), bffV1.approvals.list(), bffV1.jobs.list(), bffV1.incidents.list()]).then(
-      ([a, ap, j, inc]) => { setAlerts(a); setApprovals(ap); setJobs(j); setIncidents(inc); },
-    );
+    let cancelled = false;
+    void bffV1.alerts
+      .list()
+      .then((a) => {
+        if (!cancelled) setAlerts(a);
+      })
+      .catch(() => {
+        if (!cancelled) setAlerts([]);
+      });
+    void Promise.all([
+      bffV1.approvals.list().catch(() => [] as ApprovalRequest[]),
+      bffV1.jobs.list().catch(() => [] as Job[]),
+      bffV1.incidents.list().catch(() => [] as Incident[]),
+    ]).then(([ap, j, inc]) => {
+      if (cancelled) return;
+      setApprovals(ap);
+      setJobs(j);
+      setIncidents(inc);
+    });
     const offAlert = realtime.on("alert", (p) => {
       const a = normalizeAlertTimestampFields(p as Alert) ?? (p as Alert);
       setAlerts((cur) => [a, ...cur].slice(0, 50));
@@ -56,7 +72,12 @@ export const NotificationCenter = () => {
       const event = e as { kind?: string } | undefined;
       if (event?.kind === "Incident") void bffV1.incidents.list().then(setIncidents);
     });
-    return () => { offAlert?.(); offJob?.(); offData?.(); };
+    return () => {
+      cancelled = true;
+      offAlert?.();
+      offJob?.();
+      offData?.();
+    };
   }, [open]);
 
   const go = (path: string) => { setOpen(false); navigate(path); };

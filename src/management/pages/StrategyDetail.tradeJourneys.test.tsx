@@ -18,5 +18,6 @@ describe("StrategyDetail Trade Journeys cross-link", () => {
     expect(params.get("strategy_id")).toBe("stg_001");
     expect(params.get("tenant_id")).toBe("tenant-a");
     expect(params.get("return_to")).toBe("/management/strategies/stg_001?tenant_id=tenant-a");
+    expect(screen.getByTestId("strategy-overview-operational-status")).toBeInTheDocument();
   });
 });

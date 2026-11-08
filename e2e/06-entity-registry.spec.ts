@@ -188,6 +188,9 @@ const REGISTRIES: RegistryFixture[] = [
       alpha: "b06-momentum-alpha",
       capitalPoolId: "pool-b06-core",
       personaIds: ["persona-b06-risk"],
+      personaStates: [{ personaId: "persona-b06-risk", state: "paper_running" }],
+      operationalStatus: "running",
+      symbols: ["2330.TW"],
       pnl30d: 0.028,
       sharpe: 1.41,
       drawdown: -0.017,
@@ -798,6 +801,24 @@ function listEnvelope(registry: RegistryFixture): JsonRecord {
       totalCount: items.length,
       total_count: items.length,
       totalCountExact: true,
+      ...(registry.key === "strategies"
+        ? {
+            state_counts: {
+              draft: 3217,
+              review: 1,
+              approved: 140,
+              retired: 1556,
+            },
+            operational_counts: {
+              running: 1,
+              idle: 0,
+              retired: 134,
+              unbound: 0,
+              unknown: 0,
+            },
+            hidden_retired_persona_count: 134,
+          }
+        : {}),
     },
   };
 }
@@ -1173,6 +1194,15 @@ test.describe("F07 entity registry", () => {
 
     for (const registry of REGISTRIES) {
       await gotoRegistry(page, registry);
+      if (registry.key === "strategies") {
+        await expect(page.getByTestId("strategy-operational-status")).toHaveAttribute(
+          "data-operational-status",
+          "running",
+        );
+        await expect(page.getByTestId("strategy-symbols")).toHaveText("2330.TW");
+        await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("3217");
+        await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("134");
+      }
       if (registry.key === "evolution-programs") {
         await expect(page.getByTestId("evolution-qualification-summary")).toBeVisible();
         await expect(page.getByTestId("qualification-policy-version")).toHaveText(

@@ -257,5 +257,69 @@ describe("Pack PM-i18n parity", () => {
     expect(zhKeys.has("mgmt.pulse.retiredExcludedFmt")).toBe(true);
     expect(enKeys.has("mgmt.pulse.notRequired")).toBe(true);
     expect(zhKeys.has("mgmt.pulse.notRequired")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeBuildingBadge")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeBuildingBadge")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeBuildingHistory")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeBuildingHistory")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeShortSampleCaption")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeShortSampleCaption")).toBe(true);
+  });
+
+  it("includes alerts page empty and unavailable keys in both locales", () => {
+    expect(enKeys.has("page.alertsEmpty")).toBe(true);
+    expect(zhKeys.has("page.alertsEmpty")).toBe(true);
+    expect(enKeys.has("page.alertsUnavailable")).toBe(true);
+    expect(zhKeys.has("page.alertsUnavailable")).toBe(true);
+    expect(en.page.alertsEmpty).toBe("No active alerts.");
+    expect(zh.page.alertsEmpty).toBe("目前沒有警報。");
+    expect(en.page.alertsUnavailable).toBe("Alerts are temporarily unavailable.");
+    expect(zh.page.alertsUnavailable).toBe("暫時無法取得警報資料。");
+  });
+
+  it("includes strategy operational view, rule, and read-only parameter keys in both locales", () => {
+    const strategyKeys = [
+      "strategy.params.readOnlyHint",
+      "strategy.params.adjustableSection",
+      "strategy.params.immutableSection",
+      "strategy.params.currentValue",
+      "strategy.params.allowedRange",
+      "strategy.params.step",
+      "strategy.params.fixed",
+      "strategy.operationalStatus.running",
+      "strategy.operationalStatus.idle",
+      "strategy.operationalStatus.retired",
+      "strategy.operationalStatus.unbound",
+      "strategy.operationalStatus.unknown",
+      "strategy.list.column.operationalStatus",
+      "strategy.list.column.symbols",
+      "strategy.list.hiddenDraftsAndRetiredPersonasWithCounts",
+      "strategy.list.hiddenRetiredPersonasWithCount",
+      "strategyDetail.specTitleField",
+      "strategyDetail.objective",
+      "strategyDetail.operationalStatusLabel",
+      "strategyDetail.boundPersonasLabel",
+      "strategyDetail.personaStateMissing",
+      "strategyDetail.rulesSectionTitle",
+      "strategyDetail.rulesUnavailable",
+      "strategyDetail.rulesEmpty",
+      "strategyDetail.ruleRole.trading",
+      "strategyDetail.ruleRole.rollback_baseline",
+    ];
+    for (const k of strategyKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
+
+  it("includes risk center archived capital pool exclusion keys in both locales", () => {
+    const riskCenterKeys = [
+      "riskCenter.draftsExcluded",
+      "riskCenter.archivedPoolsExcluded",
+      "riskCenter.archivedPoolsExcludedWithCount",
+    ];
+    for (const k of riskCenterKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
   });
 });
