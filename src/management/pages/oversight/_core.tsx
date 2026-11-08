@@ -2588,21 +2588,21 @@ export const EvolutionJournalPage = () => {
                 )}
               </div>
             </div>
-            <div className="font-mono text-xs text-muted-foreground">{e.id}</div>
+            <div className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{e.id}</div>
             {e.summary && <p className="text-sm text-muted-foreground">{e.summary}</p>}
             <dl className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
               {hasMetrics && (
                 <>
-                  <div><dt className="text-muted-foreground">{t("mgmt.evolution.before")}</dt><dd className="text-foreground">{e.before!.toFixed(2)}</dd></div>
-                  <div><dt className="text-muted-foreground">{t("mgmt.evolution.after")}</dt><dd className="text-foreground">{e.after!.toFixed(2)}</dd></div>
+                  <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.before")}</dt><dd className="[overflow-wrap:anywhere] text-foreground">{e.before!.toFixed(2)}</dd></div>
+                  <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.after")}</dt><dd className="[overflow-wrap:anywhere] text-foreground">{e.after!.toFixed(2)}</dd></div>
                 </>
               )}
-              {action && <div><dt className="text-muted-foreground">{t("mgmt.evolution.action", { defaultValue: "Action" })}</dt><dd className="text-foreground">{action}</dd></div>}
-              {risk && <div><dt className="text-muted-foreground">{t("mgmt.evolution.risk", { defaultValue: "Risk" })}</dt><dd className="text-foreground">{risk}</dd></div>}
-              {target && <div><dt className="text-muted-foreground">{t("mgmt.evolution.target", { defaultValue: "Target" })}</dt><dd className="font-mono text-foreground">{target}</dd></div>}
-              {evidenceClass && <div><dt className="text-muted-foreground">{t("mgmt.evolution.evidenceClass")}</dt><dd className="text-foreground">{evidenceClassLabel}</dd></div>}
-              {approvalStatus && <div><dt className="text-muted-foreground">{t("mgmt.evolution.approvalStatus", { defaultValue: "Approval status" })}</dt><dd className="text-foreground">{approvalStatus}</dd></div>}
-              {when && <div><dt className="text-muted-foreground">{t("mgmt.evolution.landed")}</dt><dd className="text-foreground">{when}</dd></div>}
+              {action && <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.action", { defaultValue: "Action" })}</dt><dd className="[overflow-wrap:anywhere] text-foreground">{action}</dd></div>}
+              {risk && <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.risk", { defaultValue: "Risk" })}</dt><dd className="[overflow-wrap:anywhere] text-foreground">{risk}</dd></div>}
+              {target && <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.target", { defaultValue: "Target" })}</dt><dd className="[overflow-wrap:anywhere] font-mono text-foreground">{target}</dd></div>}
+              {evidenceClass && <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.evidenceClass")}</dt><dd className="[overflow-wrap:anywhere] text-foreground">{evidenceClassLabel}</dd></div>}
+              {approvalStatus && <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.approvalStatus", { defaultValue: "Approval status" })}</dt><dd className="[overflow-wrap:anywhere] text-foreground">{approvalStatus}</dd></div>}
+              {when && <div className="min-w-0"><dt className="text-muted-foreground">{t("mgmt.evolution.landed")}</dt><dd className="[overflow-wrap:anywhere] text-foreground">{when}</dd></div>}
             </dl>
           </Card>
         );
