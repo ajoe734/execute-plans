@@ -5,7 +5,6 @@ export * from "./enums";
 export * from "./types";
 export * from "./list";
 export * from "./events";
-export * from "./timeoutPolicy";
 export * from "./health";
 export { adaptPersonaHealth } from "./adapters/persona";
 export { adaptStrategyHealth } from "./adapters/strategy";

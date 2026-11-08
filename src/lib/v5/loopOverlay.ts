@@ -111,7 +111,3 @@ export function cancelLoopRun(run: LoopRun): LoopRunPatch {
   }
   return loopRunOverlay.patch(run.id, { stageStatuses, runStatus: "cancelled" });
 }
-
-// ---------- Stage timeout state ----------
-
-export { stageTimeoutState, type StageTimeoutState } from "./timeoutPolicy";

@@ -40,6 +40,32 @@ describe("IncidentDetail Trade Journeys cross-link", () => {
     expect(params.get("return_to")).toBe("/management/incidents/in_021");
   });
 
+  it("navigates affected capital pool buttons to canonical Governance Decisions capital tab", async () => {
+    const listNonDraftSpy = vi.spyOn(bffV1.strategies, "listNonDraft");
+    render(
+      <MemoryRouter initialEntries={["/management/incidents/in_021"]}>
+        <Routes>
+          <Route path="/management/incidents/:id" element={<IncidentDetail />} />
+          <Route path="/management/governance-decisions" element={<Location />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(listNonDraftSpy).toHaveBeenCalledTimes(1);
+    });
+    const affectedTab = await screen.findByRole("tab", { name: "影響範圍" });
+    fireEvent.pointerDown(affectedTab);
+    fireEvent.mouseDown(affectedTab);
+    fireEvent.pointerUp(affectedTab);
+    fireEvent.mouseUp(affectedTab);
+    fireEvent.click(affectedTab);
+    const capitalBtn = await screen.findByRole("button", { name: "pool_001" });
+    fireEvent.click(capitalBtn);
+    expect(await screen.findByTestId("location")).toHaveTextContent(
+      "/management/governance-decisions?tab=capital&capital_id=pool_001",
+    );
+  });
+
   it("RebalanceDetail resolves strategies from bffV1.strategies.listNonDraft", async () => {
     const listNonDraftSpy = vi.spyOn(bffV1.strategies, "listNonDraft");
     render(

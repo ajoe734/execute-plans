@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  PUBLIC_RUNTIME_CONFIG_GLOBAL_KEY,
+  PUBLIC_RUNTIME_CONFIG_SCHEMA,
+  resetDeploymentRuntimeAuditForTests,
+} from "@/config/deploymentRuntime";
 import { getLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
@@ -13,8 +18,10 @@ function stubLiveEnv(fallback: "auto" | "strict" = "auto") {
 
 describe("BFF live transport snapshot", () => {
   afterEach(() => {
+    delete (window as unknown as Record<string, unknown>)[PUBLIC_RUNTIME_CONFIG_GLOBAL_KEY];
     delete (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__;
     delete (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__;
+    resetDeploymentRuntimeAuditForTests();
     window.sessionStorage.clear();
     window.localStorage.clear();
     vi.unstubAllEnvs();
@@ -56,10 +63,30 @@ describe("BFF live transport snapshot", () => {
     expect(snap.seedFallbackArmed).toBe(false);
   });
 
-  it("allows pre-bootstrap runtime config to select strict real mode", () => {
+  it("enforces strict real mode from validated __PANTHEON_DEPLOYMENT_CONFIG__ and ignores legacy runtime globals", () => {
     stubLiveEnv("auto");
     Object.assign(window as unknown as Record<string, unknown>, {
       __PANTHEON_BFF_RUNTIME__: { VITE_BFF_FALLBACK: "strict" },
+      __PANTHEON_RUNTIME_CONFIG__: { VITE_BFF_FALLBACK: "strict" },
+    });
+
+    // Legacy globals are ignored; transport stays hybrid until validated deployment config or session storage is set.
+    expect(getLiveStatusSnapshot().transportMode).toBe("hybrid");
+
+    Object.assign(window as unknown as Record<string, unknown>, {
+      [PUBLIC_RUNTIME_CONFIG_GLOBAL_KEY]: {
+        schemaVersion: PUBLIC_RUNTIME_CONFIG_SCHEMA,
+        environment: "dev",
+        configRef: "dev-runtime-20261107-01",
+        bffBaseUrl: "https://api.dev.mvl-cap.tw",
+        gcpIdentity: {
+          apiKey: "AIzaSyDevRuntimeConfigKey00000000000003",
+          projectId: "pantheon-dev-20260902",
+          authDomain: "pantheon-dev-20260902.firebaseapp.com",
+          issuer: "https://securetoken.google.com/pantheon-dev-20260902",
+          audience: "pantheon-dev-20260902",
+        },
+      },
     });
 
     const snap = getLiveStatusSnapshot();

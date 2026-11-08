@@ -276,10 +276,62 @@ describe("managementDataSources client", () => {
         const calledReq = bffFetchSpy.mock.calls[0][0];
         expect(calledReq.method).toBe("POST");
         expect(calledReq.path).toBe("/bff/management/data-sources");
+        expect(calledReq.headers?.["Idempotency-Key"]).toBe(calledReq.idempotencyKey);
+        expect(calledReq.headers?.["X-Idempotency-Key"]).toBeUndefined();
         const body = (calledReq.body ?? {}) as Record<string, unknown>;
         expect(body.secret_scope).toBe("env_isolated");
         expect(body.source_instance_id).toBe("ds-test-create");
         expect(body.license_scope).toBe("official_reference");
+      } finally {
+        liveGateSpy.mockRestore();
+        bffFetchSpy.mockRestore();
+        liveStatusModule.liveStatus._reset();
+      }
+    });
+
+    it("retains the same Idempotency-Key header across retries without sending X-Idempotency-Key", async () => {
+      const writeGateModule = await import("./writeGate");
+      const clientModule = await import("./client");
+      const liveStatusModule = await import("./liveStatus");
+      liveStatusModule.liveStatus._reset({ mode: "live", effective: "live" });
+      const liveGateSpy = vi.spyOn(writeGateModule, "liveWriteGated").mockResolvedValue(true);
+      const bffFetchSpy = vi.spyOn(clientModule, "bffFetch")
+        .mockRejectedValueOnce(new Error("transient network failure"))
+        .mockResolvedValueOnce({
+          data: {
+            receipt: {
+              receipt_id: "rcp-test-retry-001",
+              command_id: "cmd-test-retry-001",
+              source_instance_id: "ds-test-retry",
+              command_type: "create",
+              status: "succeeded",
+            },
+          },
+        } as unknown as Awaited<ReturnType<typeof clientModule.bffFetch>>);
+
+      try {
+        const retryKey = "idem-ds-retry-fixed-key";
+        const payload = {
+          source_instance_id: "ds-test-retry",
+          definition_id: "twse-openapi-daily",
+          provider: "TWSE",
+          source_class: "market_daily",
+          secret_scope: "env_isolated" as const,
+          license_scope: "official_reference" as const,
+          idempotencyKey: retryKey,
+        };
+        await expect(managementDataSourceWrites.createDataSource(payload)).rejects.toThrow(/transient network failure/);
+        const receipt = await managementDataSourceWrites.createDataSource(payload);
+        expect(receipt.receipt_id).toBe("rcp-test-retry-001");
+        expect(bffFetchSpy).toHaveBeenCalledTimes(2);
+        const firstReq = bffFetchSpy.mock.calls[0][0];
+        const secondReq = bffFetchSpy.mock.calls[1][0];
+        expect(firstReq.idempotencyKey).toBe(retryKey);
+        expect(secondReq.idempotencyKey).toBe(retryKey);
+        expect(firstReq.headers?.["Idempotency-Key"]).toBe(retryKey);
+        expect(secondReq.headers?.["Idempotency-Key"]).toBe(retryKey);
+        expect(firstReq.headers?.["X-Idempotency-Key"]).toBeUndefined();
+        expect(secondReq.headers?.["X-Idempotency-Key"]).toBeUndefined();
       } finally {
         liveGateSpy.mockRestore();
         bffFetchSpy.mockRestore();

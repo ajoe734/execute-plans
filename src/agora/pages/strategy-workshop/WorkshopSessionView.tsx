@@ -41,7 +41,6 @@ import type { StrategyWorkshop } from "@/lib/bff-v1/agora/workshops";
 import { DailyInteractionTimeline, type DailyRuntimeState } from "@/agora/components/DailyInteractionTimeline";
 import { ConnectedGovernedProposalCard } from "@/agora/components/ConnectedGovernedProposalCard";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
-import { materializeWorkshopCompleteness } from "@/agora/components/workshopCompletenessDisplay";
 import {
   ArrowLeft,
   Bot,
@@ -875,7 +874,6 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
     cardState.cards
       .filter((c) => c.card_type === "completeness_update")
       .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
-  const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
   const nextQuestionText = (() => {
     if (!nextQuestion || nextQuestion.card_type !== "next_question") return null;
     const question = nextQuestion.payload?.question;
@@ -1783,18 +1781,6 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             );
           })()}
         </div>
-
-        {/* Legacy test-id shims for existing tests */}
-        {displayCompleteness && (
-          <div data-testid="completeness-grade" style={{ display: "none" }}>
-            {displayCompleteness.overall_grade}
-          </div>
-        )}
-        {readiness && (
-          <div data-testid="workshop-readiness" style={{ display: "none" }}>
-            {readiness.highest_ready_gate ?? "Not ready"}
-          </div>
-        )}
       </div>
     </div>
   );

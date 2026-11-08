@@ -9,13 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
+import type { LoopRun, LoopStage } from "@/lib/v5";
 import {
   DEFAULT_TIMEOUT_POLICY,
   V5_TIMEOUT_POLICY_VERSION,
   stageTimeoutState,
-  type LoopRun,
-  type LoopStage,
-} from "@/lib/v5";
+} from "@/lib/v4/asyncTransitionPolicy";
 import { bffV1 } from "@/lib/bff-v1";
 import { v5 } from "@/lib/bff-v1/v5Client";
 import type { ApprovalRequest } from "@/lib/bff-v1";
@@ -119,7 +118,7 @@ export const LoopRunDrawer = ({ run, onClose, triggerRef }: Props) => {
                 <Badge variant="outline" className={stageTone[run.status] ?? ""}>{run.status}</Badge>
               </div>
               <SheetDescription className="text-xs">
-                {run.loopKind} · {t("v5.col.updated")}: {safeDateTime(run.updatedAt)} · {t("v5.kpi.timeoutPolicy")}: {V5_TIMEOUT_POLICY_VERSION}
+                {run.loopKind} · {t("v5.col.updated")}: {safeDateTime(run.updatedAt)} · {t("v5.kpi.timeoutPolicy")}: {run.stages.some((s) => s.timeoutPolicySource === "backend") ? "backend" : V5_TIMEOUT_POLICY_VERSION}
               </SheetDescription>
             </SheetHeader>
 

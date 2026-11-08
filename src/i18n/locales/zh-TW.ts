@@ -436,7 +436,7 @@ export default {
       runs: "最佳化執行",
       runsHint: "一個 pending rebalance 對應一條 run，approval 為門檻階段。",
       evidence: "核准單",
-      createIntent: "請先在 /management/promotion-allocation?tab=quarterly-capital 建立新的調倉，再回到此處監控最佳化迴圈。",
+      createIntent: "請先在 /management/governance-decisions?tab=capital 建立新的調倉，再回到此處監控最佳化迴圈。",
     },
   },
   risk: { info: "資訊", low: "低", medium: "中", high: "高", critical: "極高", unavailable: "無資料" },

@@ -146,17 +146,11 @@ async function installRuntimeFallbackOverride(
   fallback: "auto" | "strict",
 ) {
   await page.addInitScript((value) => {
-    const runtimeConfig = { VITE_BFF_FALLBACK: value, fallback: value };
-    Object.assign(window as unknown as Record<string, unknown>, {
-      __PANTHEON_BFF_RUNTIME__: runtimeConfig,
-      __PANTHEON_RUNTIME_CONFIG__: runtimeConfig,
-    });
-
     try {
       window.sessionStorage.setItem("pantheon.integration.fallback", value);
       window.sessionStorage.setItem("pantheon.e2e.fallback", value);
     } catch {
-      // Storage can be unavailable; runtime globals still cover bootstrap.
+      // Ignore storage access errors in restricted contexts.
     }
   }, fallback);
 }

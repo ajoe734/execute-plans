@@ -198,6 +198,10 @@ describe("PersonaTradeJournalTab Component Tests", () => {
       expect(screen.getByText("AAPL")).toBeDefined();
       expect(screen.getByText("LONG")).toBeDefined();
     });
+    expect(screen.getByRole("link", { name: /Attribution/i })).toHaveAttribute(
+      "href",
+      "/management/performance?tab=attribution&dimension=persona&persona=per_quant",
+    );
   });
 
   it("opens a typed Challenge from the selected journal episode without direct interaction submission", async () => {

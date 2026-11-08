@@ -53,10 +53,10 @@ function normalizeManagementHref(value: unknown): string | null {
   if (!isUsableToken(value)) return null;
   const href = value.trim();
   let normalized: string | null = null;
-  if (href.startsWith("/management/") || href === "/management") normalized = normalizeRetiredPromotionHref(href);
-  else if (href.startsWith("management/")) normalized = normalizeRetiredPromotionHref(`/${href}`);
-  else if (href.startsWith("/bff/management/")) normalized = normalizeRetiredPromotionHref(href.replace(/^\/bff/, ""));
-  else if (href.startsWith("bff/management/")) normalized = normalizeRetiredPromotionHref(`/${href.replace(/^bff\//, "")}`);
+  if (href.startsWith("/management/") || href === "/management") normalized = href;
+  else if (href.startsWith("management/")) normalized = `/${href}`;
+  else if (href.startsWith("/bff/management/")) normalized = href.replace(/^\/bff/, "");
+  else if (href.startsWith("bff/management/")) normalized = `/${href.replace(/^bff\//, "")}`;
   else if (href.startsWith("/personas/")) normalized = `/management${href}`;
   else if (href.startsWith("personas/")) normalized = `/management/${href}`;
 
@@ -64,120 +64,6 @@ function normalizeManagementHref(value: unknown): string | null {
     return cleanQueryParameters(normalized);
   }
   return null;
-}
-
-function normalizeRetiredPromotionHref(href: string): string {
-  if (href.startsWith("/management/rebalances") || href.startsWith("/management/rebalance")) {
-    return promotionAllocationHref(
-      href,
-      "quarterly-capital",
-      "rebalance_id",
-      detailIdFromRetiredHref(href, ["/management/rebalances", "/management/rebalance"])
-        ?? queryIdFromHref(href, ["rebalance_id", "rebalanceId", "rebalance", "id"]),
-    );
-  }
-  if (href.startsWith("/management/capital") || href.startsWith("/management/capital-pools")) {
-    return promotionAllocationHref(
-      href,
-      "quarterly-capital",
-      "capital_id",
-      detailIdFromRetiredHref(href, ["/management/capital-pools", "/management/capital"])
-        ?? queryIdFromHref(href, ["capital_id", "capitalPoolId", "capital_pool_id", "pool_id", "pool", "id"]),
-    );
-  }
-  if (href.startsWith("/management/ranking") || href.startsWith("/management/ranking-formulas")) {
-    return promotionAllocationHref(
-      href,
-      "formula-policy",
-      "formula_id",
-      detailIdFromRetiredHref(href, ["/management/ranking/formulas", "/management/ranking-formulas"])
-        ?? queryIdFromHref(href, ["formula_id", "formulaId", "formula", "id"]),
-    );
-  }
-  return href;
-}
-
-function detailIdFromRetiredHref(href: string, prefixes: string[]): string | null {
-  const [path = ""] = href.split(/[?#]/, 1);
-  for (const prefix of prefixes) {
-    const detailPrefix = `${prefix}/`;
-    if (!path.startsWith(detailPrefix)) continue;
-    const [encodedId = ""] = path.slice(detailPrefix.length).split("/", 1);
-    try {
-      const id = decodeURIComponent(encodedId);
-      return isUsableToken(id) ? id : null;
-    } catch {
-      return isUsableToken(encodedId) ? encodedId : null;
-    }
-  }
-  return null;
-}
-
-function queryIdFromHref(href: string, keys: string[]): string | null {
-  const [beforeHash] = href.split("#", 1);
-  const [, query = ""] = beforeHash.split("?", 2);
-  if (!query) return null;
-  const params = new URLSearchParams(query);
-  for (const key of keys) {
-    const value = params.get(key);
-    if (isUsableToken(value)) return value.trim();
-  }
-  return null;
-}
-
-function promotionAllocationHref(href: string, tab: string, idParamName?: string, id?: string | null): string {
-  const [beforeHash, hash = ""] = href.split("#", 2);
-  const [, query = ""] = beforeHash.split("?", 2);
-  const params = new URLSearchParams(query);
-  const targetTab = params.get("tab") || tab;
-
-  if (targetTab === "emergency-actions" || targetTab === "emergency" || targetTab === "containment") {
-    params.set("tab", targetTab);
-    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
-    const suffix = params.toString();
-    return `/management/promotion-allocation${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
-  }
-
-  if (targetTab === "real-ranking" || targetTab === "league" || targetTab === "persona-league") {
-    params.set("tab", "rolling");
-    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
-    const suffix = params.toString();
-    return `/management/rankings${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
-  }
-  if (targetTab === "paper-candidates") {
-    params.set("tab", "quarterly");
-    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
-    const suffix = params.toString();
-    return `/management/rankings${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
-  }
-  if (targetTab === "quarterly-capital" || targetTab === "rebalance" || targetTab === "quarterly-rebalance") {
-    params.set("tab", "capital");
-    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
-    const suffix = params.toString();
-    return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
-  }
-  if (targetTab === "formula-policy" || targetTab === "ranking-formulas" || targetTab === "formula") {
-    params.set("tab", "policy");
-    if (idParamName && isUsableToken(id)) params.set(idParamName, id);
-    const suffix = params.toString();
-    return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
-  }
-
-  params.set("tab", targetTab);
-  if (idParamName && isUsableToken(id)) params.set(idParamName, id);
-  const suffix = params.toString();
-  return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
-}
-
-function promotionAllocationCapitalHref(href: string): string | null {
-  if (!href.startsWith("/management/promotion-allocation") && !href.startsWith("/management/governance-decisions")) return null;
-  const [beforeHash, hash = ""] = href.split("#", 2);
-  const [, query = ""] = beforeHash.split("?", 2);
-  const params = new URLSearchParams(query);
-  if (!isUsableToken(params.get("capital_id"))) return null;
-  params.set("tab", "capital");
-  const suffix = params.toString();
-  return `/management/governance-decisions${suffix ? `?${suffix}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
 function sourceProviderKey(source?: ManagementDataSource): string | null {

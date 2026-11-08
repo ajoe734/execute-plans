@@ -20,7 +20,7 @@ void i18n.changeLanguage("en-US");
 function renderPanel() {
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={["/management/promotion-allocation?tab=emergency-actions"]}>
+      <MemoryRouter initialEntries={["/management/governance-decisions?tab=capital"]}>
         <EmergencyActionsPanel />
       </MemoryRouter>
     </I18nextProvider>,

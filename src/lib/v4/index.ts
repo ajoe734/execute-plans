@@ -111,10 +111,22 @@ export type { CorrelationFields } from "./correlation";
 export { assessBreach } from "./capitalBreach";
 export type { BreachLevel, BreachInputs, BreachAssessment } from "./capitalBreach";
 export {
-  ASYNC_TRANSITION_DEFAULTS,
-  findTransition,
+  ASYNC_TRANSITION_POLICIES,
+  ASYNC_TRANSITION_POLICY_SOURCE,
+  findAsyncTransitionPolicy,
   transitionTimeoutFor,
-} from "./asyncTransitions";
-export type { AsyncTransitionDescriptor, FailureReasonCode } from "./asyncTransitions";
+  V5_TIMEOUT_POLICY_VERSION,
+  DEFAULT_TIMEOUT_POLICY,
+  stageTimeoutState,
+} from "./asyncTransitionPolicy";
+export type {
+  AsyncTransitionPolicy,
+  AsyncTransitionDescriptor,
+  FailureReasonCode,
+  TransitionEntityType,
+  TransitionStatus,
+  TimeoutPolicy,
+  StageTimeoutState,
+} from "./asyncTransitionPolicy";
 export { METRIC_REGISTRY, findMetric } from "./metricRegistry";
 export type { MetricDef, MetricUnit } from "./metricRegistry";

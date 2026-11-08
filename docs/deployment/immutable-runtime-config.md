@@ -70,7 +70,8 @@ window.__PANTHEON_DEPLOYMENT_CONFIG__ = {
   - `issuer` defaults to and must equal `https://securetoken.google.com/${projectId}`.
   - `audience` defaults to and must equal `${projectId}`.
 - **Secret and Token Rejection**:
-  - `assertNoPublicRuntimeCredentials` inspects both keys and string values across `window.__PANTHEON_DEPLOYMENT_CONFIG__` and legacy `window.__PANTHEON_BFF_RUNTIME__` / `window.__PANTHEON_RUNTIME_CONFIG__`.
+  - `window.__PANTHEON_DEPLOYMENT_CONFIG__` is the sole public runtime configuration global reader (`readBffEnv`, `resolveDeploymentRuntimeConfig`, and `devLoginHelper` do not read configuration or credentials from retired `window.__PANTHEON_BFF_RUNTIME__` or `window.__PANTHEON_RUNTIME_CONFIG__` globals).
+  - `assertNoPublicRuntimeCredentials` inspects both keys and string values across `window.__PANTHEON_DEPLOYMENT_CONFIG__` and still rejects any secrets or tokens injected into retired `window.__PANTHEON_BFF_RUNTIME__` / `window.__PANTHEON_RUNTIME_CONFIG__` globals.
   - Any key matching `token`, `secret`, `password`, `private_key`, `service_role`, `credential`, `authorization`, or `cookie`, or any value shaped like a `Bearer ...` header, JWT, PEM private key, or secret key prefix (`sk-...`, `ghp_...`, `ya29....`) is rejected immediately.
 
 ### 3.3 Auditable Config Reference and Canonical SHA-256 Digest

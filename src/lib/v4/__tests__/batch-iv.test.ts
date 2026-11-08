@@ -7,10 +7,13 @@ import {
 } from "../correlation";
 import { assessBreach } from "../capitalBreach";
 import {
-  ASYNC_TRANSITION_DEFAULTS,
-  findTransition,
+  ASYNC_TRANSITION_POLICIES,
+  findAsyncTransitionPolicy,
   transitionTimeoutFor,
-} from "../asyncTransitions";
+  stageTimeoutState,
+  DEFAULT_TIMEOUT_POLICY,
+  V5_TIMEOUT_POLICY_VERSION,
+} from "../asyncTransitionPolicy";
 import { METRIC_REGISTRY, findMetric } from "../metricRegistry";
 import { writeOverlay } from "@/lib/bff-v1/writeOverlay";
 
@@ -49,12 +52,32 @@ describe("Pack D Batch IV — capital breach formula", () => {
 });
 
 describe("Pack D Batch IV — AsyncTransitionDescriptor", () => {
-  it("registers exactly 12 v0 transitions", () => {
-    expect(ASYNC_TRANSITION_DEFAULTS.length).toBe(12);
+  it("registers 15 canonical transition policies", () => {
+    expect(ASYNC_TRANSITION_POLICIES.length).toBe(15);
+    expect(V5_TIMEOUT_POLICY_VERSION).toBe("v0-mock");
   });
-  it("findTransition resolves canonical triggers", () => {
-    expect(findTransition("deployment.execute")?.timeoutMs).toBe(600_000);
+  it("findAsyncTransitionPolicy and transitionTimeoutFor resolve canonical triggers including rollback", () => {
+    expect(findAsyncTransitionPolicy("deployment.execute")?.timeoutMs).toBe(600_000);
+    expect(findAsyncTransitionPolicy("deployment.rollback")?.failureState).toBe("rollback_required");
+    expect(findAsyncTransitionPolicy("rollback.saga")?.timeoutMs).toBe(900_000);
     expect(transitionTimeoutFor("rebalance.apply")).toBe(900_000);
+  });
+  it("stageTimeoutState honors backend stage thresholds when present and falls back to provisional policy", () => {
+    const now = Date.now();
+    expect(
+      stageTimeoutState(
+        { status: "running", startedAt: new Date(now - 60_000).toISOString(), warnAfterMs: 30_000 },
+        DEFAULT_TIMEOUT_POLICY,
+        now,
+      ),
+    ).toBe("warn");
+    expect(
+      stageTimeoutState(
+        { status: "blocked", startedAt: new Date(now - 120_000).toISOString(), timeoutMs: 60_000 },
+        DEFAULT_TIMEOUT_POLICY,
+        now,
+      ),
+    ).toBe("escalate");
   });
 });
 
