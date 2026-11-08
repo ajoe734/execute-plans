@@ -4879,6 +4879,8 @@ export function adaptPortfolioHoldingRows(raw: unknown): HoldingRow[] | null {
   return items.map((item, index) => {
     const runtimeId = asString(item.runtime_id ?? item.runtimeId) || undefined;
     const capitalPoolId = asString(item.capital_pool_id ?? item.capitalPoolId ?? item.pool_id);
+    const instrument = isObject(item.instrument) ? item.instrument : {};
+    const decision = isObject(item.decision) ? item.decision : {};
     return {
       holdingId: asString(item.holding_id ?? item.holdingId ?? item.id, `holding-${index}`),
       capitalPoolId,
@@ -4887,6 +4889,37 @@ export function adaptPortfolioHoldingRows(raw: unknown): HoldingRow[] | null {
       strategyId: asString(item.strategy_id ?? item.strategyId) || undefined,
       personaId: asString(item.persona_id ?? item.personaId) || undefined,
       symbol: asString(item.symbol, "Unknown"),
+      instrumentId: optionalString(
+        item.instrument_id ?? item.instrumentId ?? instrument.instrument_id ?? instrument.instrumentId,
+      ),
+      instrumentKind: optionalString(
+        item.instrument_kind ??
+          item.kind ??
+          item.instrumentKind ??
+          instrument.instrument_kind ??
+          instrument.kind ??
+          instrument.instrumentKind,
+      ),
+      contractMonth: optionalString(
+        item.contract_month ?? item.contractMonth ?? instrument.contract_month ?? instrument.contractMonth,
+      ),
+      multiplier: optionalFiniteNumber(item.multiplier ?? instrument.multiplier),
+      marginReserved: optionalFiniteNumber(
+        item.margin_reserved ??
+          item.initial_margin_reserved ??
+          item.marginReserved ??
+          instrument.margin_reserved ??
+          instrument.initial_margin_reserved ??
+          instrument.marginReserved,
+      ),
+      reasonCode: optionalString(
+        item.reason_code ??
+          item.reasonCode ??
+          decision.reason_code ??
+          decision.reasonCode ??
+          instrument.reason_code ??
+          instrument.reasonCode,
+      ),
       assetClass: asString(item.asset_class ?? item.assetClass, "other") as HoldingRow["assetClass"],
       side: asString(item.side, "flat") as HoldingRow["side"],
       quantity: requiredNumber(item.quantity),
@@ -4945,6 +4978,7 @@ function normalizePortfolioCapitalScopeKind(value: unknown): PortfolioCapitalSco
 function adaptPortfolioHoldingMonitorRow(item: Record<string, unknown>): PortfolioHoldingMonitorRow {
   const scope = isObject(item.capital_scope) ? item.capital_scope : {};
   const instrument = isObject(item.instrument) ? item.instrument : {};
+  const decision = isObject(item.decision) ? item.decision : {};
   return {
     holdingId: asString(item.holding_id ?? item.id, "unknown-holding"),
     runtimeId: asString(item.runtime_id) || undefined,
@@ -4952,13 +4986,44 @@ function adaptPortfolioHoldingMonitorRow(item: Record<string, unknown>): Portfol
     capitalPoolId: asString(item.capital_pool_id) || undefined,
     brokerId: asString(item.broker_id) || undefined,
     symbol: asString(item.symbol ?? instrument.symbol, "—"),
+    instrumentId: optionalString(
+      item.instrument_id ?? item.instrumentId ?? instrument.instrument_id ?? instrument.instrumentId,
+    ),
+    instrumentKind: optionalString(
+      item.instrument_kind ??
+        item.kind ??
+        item.instrumentKind ??
+        instrument.instrument_kind ??
+        instrument.kind ??
+        instrument.instrumentKind,
+    ),
+    contractMonth: optionalString(
+      item.contract_month ?? item.contractMonth ?? instrument.contract_month ?? instrument.contractMonth,
+    ),
+    multiplier: optionalFiniteNumber(item.multiplier ?? instrument.multiplier),
+    marginReserved: optionalFiniteNumber(
+      item.margin_reserved ??
+        item.initial_margin_reserved ??
+        item.marginReserved ??
+        instrument.margin_reserved ??
+        instrument.initial_margin_reserved ??
+        instrument.marginReserved,
+    ),
+    reasonCode: optionalString(
+      item.reason_code ??
+        item.reasonCode ??
+        decision.reason_code ??
+        decision.reasonCode ??
+        instrument.reason_code ??
+        instrument.reasonCode,
+    ),
     side: optionalString(item.side),
     currency: nullableString(item.currency ?? instrument.currency),
     quantity: optionalFiniteNumber(item.quantity),
     averagePrice: optionalFiniteNumber(item.average_price ?? item.avgPrice),
     markPrice: optionalFiniteNumber(item.mark_price ?? item.markPrice),
-    marketValue: optionalFiniteNumber(item.market_value),
-    unrealizedPnl: optionalFiniteNumber(item.unrealized_pnl),
+    marketValue: optionalFiniteNumber(item.market_value ?? item.marketValue),
+    unrealizedPnl: optionalFiniteNumber(item.unrealized_pnl ?? item.unrealizedPnl),
     realizedPnl: optionalFiniteNumber(item.realized_pnl ?? item.realizedPnl),
     markStatus: optionalString(item.mark_status ?? item.markStatus),
     lastMarkAt: nullableString(item.last_mark_at ?? item.lastMarkAt),

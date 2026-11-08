@@ -1,0 +1,79 @@
+{
+  "task_id": "FE-HOLDINGS-INSTRUMENT-COLUMNS-20261107",
+  "title": "Portfolio book shows the instrument behind each holding",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-HOLDINGS-INSTRUMENT-COLUMNS-20261107",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "prerequisites": {
+    "INSTRUMENT-AWARE-TELEMETRY-BFF-DRIFT-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "pantheon_commit": "1c1a95dc827b9bd52202695d1601b0c46fd02df7"
+    },
+    "FE-STRATEGY-OPERATIONAL-VIEW-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_commit": "d3de20a7b"
+    },
+    "FE-RISK-CENTER-ARCHIVED-POOLS-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_commit": "e743051dd"
+    },
+    "FE-EVO-ALPHA-PAGE-LABELS-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_commit": "4759795f3"
+    }
+  },
+  "hosted_verification": {
+    "status": "not_run",
+    "statement": "The hosted page was not verified in a browser by this task; this file records functional unit, contract-drift, i18n parity, typecheck, lint, production build, and local loopback Playwright fixture evidence only. Hosted deployment and live logged-in browser verification are owned by the downstream operator acceptance task INSTRUMENT-EXPRESSION-HOSTED-ACCEPTANCE-20261107."
+  },
+  "acceptance_evidence": {
+    "ac1_instrument_columns_and_em_dash_fallback": {
+      "status": "passed",
+      "detail": "adaptPortfolioHoldingMonitorRow and adaptPortfolioHoldingRows in src/lib/bff-v1/management.ts map instrument_id, instrument_kind/kind, contract_month, multiplier, margin_reserved/initial_margin_reserved, and reason_code onto PortfolioHoldingMonitorRow and HoldingRow (src/lib/v5/management/portfolio.ts). PortfolioBook.tsx and PortfolioExposure.tsx render Instrument kind (商品種類), Contract month (契約月), Multiplier (乘數), Margin reserved (保留保證金), and Reason code (決策原因) columns with an em dash ('—') when any field is absent or null, while existing cash share rows render Holding, Quantity, Avg entry, Last close, Market value, and Unrealized PnL identically to FE-HOLDINGS-COST-PRICE-COLUMNS-20261106."
+    },
+    "ac2_bff_market_value_and_unrealized_pnl_for_futures_multiplier_100": {
+      "status": "passed",
+      "detail": "Market value and unrealized PnL per row are read directly from BFF row.marketValue and row.unrealizedPnl without recomputing quantity * price in the browser. PortfolioBook.test.tsx, PortfolioExposure.test.tsx, and e2e/20-portfolio-book-monitor.spec.ts assert that a stock_future row (ssf:QFF:202611) with quantity 2, mark_price 2250, average_price 2300, and multiplier 100 displays the BFF market_value NT$450,000 (not NT$4,500) and BFF unrealized_pnl -NT$10,000 (-2.17%)."
+    },
+    "ac3_locale_labels_i18n_parity_and_contract_drift": {
+      "status": "passed",
+      "detail": "Both src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts define mgmt.portfolio.instrumentKind ('Instrument kind' / '商品種類'), mgmt.portfolio.instrumentKindCashShare ('Cash share' / '現股'), mgmt.portfolio.instrumentKindStockFuture ('Stock future' / '股票期貨'), mgmt.portfolio.contractMonth ('Contract month' / '契約月'), mgmt.portfolio.multiplier ('Multiplier' / '乘數'), mgmt.portfolio.marginReserved ('Margin reserved' / '保留保證金'), and mgmt.portfolio.reasonCode ('Reason code' / '決策原因'). src/lib/v5/management/__tests__/i18nParity.test.ts and src/lib/bff-v1/__tests__/contract-drift.test.ts pass with explicit assertions for all new keys and optional BFF fields."
+    },
+    "ac4_evidence_commands_and_hosted_disclaimer": {
+      "status": "passed",
+      "detail": "Exact validation commands and results are recorded below, and hosted_verification.statement states plainly that the hosted page was not verified in a browser by this task."
+    }
+  },
+  "verification_results": [
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "0 TypeScript errors across tsconfig.app.json and tsconfig.agora.json"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/PortfolioBook.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/management/pages/oversight/PortfolioExposure.tsx src/management/pages/oversight/PortfolioExposure.test.tsx src/lib/v5/management/portfolio.ts src/lib/bff-v1/management.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/i18n/locales/zh-TW.ts src/i18n/locales/en-US.ts e2e/20-portfolio-book-monitor.spec.ts",
+      "exit_code": 0,
+      "summary": "0 ESLint errors or warnings across all 13 touched source, locale, and test files"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/code/pantheon npm run contract:drift && ./node_modules/.bin/vitest run src/management/pages/oversight/PortfolioBook.test.tsx src/management/pages/oversight/PortfolioExposure.test.tsx src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "summary": "contract-drift-check.mjs aligned (49 schemas, 99 routes, 75 sha256 entries) and 6 Vitest files passed (127 tests passed: PortfolioBook.test.tsx 13, PortfolioExposure.test.tsx 4, management-pm12.test.ts 19, management.test.ts 68, contract-drift.test.ts 10, i18nParity.test.ts 13)"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "summary": "Production dev-target Vite bundle built cleanly in 50.11s"
+    },
+    {
+      "command": "./node_modules/.bin/playwright test e2e/20-portfolio-book-monitor.spec.ts --project=chromium",
+      "exit_code": 0,
+      "summary": "Loopback Playwright fixture test passed (1 passed in 9.6s): verified 16-column layout at 1440px in zh-TW and en-US (firstSixVisibleAtZero=true, remainingReachableAtMaxScroll=true, overlapsAtZero=0, overlapsAtMax=0), em-dash fallbacks on cash share rows, and ssf:QFF:202611 stock_future row with multiplier 100 showing BFF market value NT$450,000 and unrealized PnL -NT$10,000 (-2.17%). Hosted page was not verified in a browser by this task."
+    }
+  ]
+}

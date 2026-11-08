@@ -120,4 +120,84 @@ describe("PortfolioExposurePage", () => {
     expect(screen.getByText("Exposure source is unavailable.")).toBeInTheDocument();
     expect(screen.queryByTestId("exposure-pool-row")).not.toBeInTheDocument();
   });
+
+  it("renders focused pool holdings with instrument columns, em-dash fallbacks, and BFF market value for futures rows", () => {
+    mocks.useV5Live
+      .mockReturnValueOnce({ loading: false, refresh: vi.fn(), data: monitor })
+      .mockReturnValueOnce({
+        loading: false,
+        refresh: vi.fn(),
+        data: {
+          items: [
+            {
+              holdingId: "rt-fut:ssf:QFF:202611",
+              symbol: "2330.TWSE",
+              instrumentId: "ssf:QFF:202611",
+              instrumentKind: "stock_future",
+              contractMonth: "202611",
+              multiplier: 100,
+              marginReserved: 92000,
+              reasonCode: "short_via_future",
+              currency: "TWD",
+              quantity: 2,
+              averagePrice: 2300,
+              markPrice: 2250,
+              marketValue: 450000,
+              unrealizedPnl: -10000,
+              deploymentStage: "paper",
+              sourceStatus: "ok",
+              telemetryStale: false,
+              riskState: "paper_exposure",
+              sourceIssues: [],
+              capitalScope: { stage: "paper", scopeKind: "paper_ledger", scopeId: "ledger-fut" },
+              links: {},
+            },
+            {
+              holdingId: "rt-cash:2317.TWSE",
+              symbol: "2317.TWSE",
+              currency: "TWD",
+              quantity: 1,
+              marketValue: 235,
+              unrealizedPnl: 5,
+              deploymentStage: "paper",
+              sourceStatus: "ok",
+              telemetryStale: false,
+              riskState: "paper_exposure",
+              sourceIssues: [],
+              capitalScope: { stage: "paper", scopeKind: "paper_ledger", scopeId: "ledger-cash" },
+              links: {},
+            },
+          ],
+          incidents: [],
+          surfaceStatus: "ok",
+          coverage: {
+            holdingCount: 2,
+            sourceRowCount: 2,
+            runtimeCount: 2,
+            telemetryRuntimeCount: 2,
+            staleRowCount: 0,
+            missingBindingCount: 0,
+            degradedSourceCount: 0,
+            incidentCount: 0,
+          },
+        },
+      });
+
+    renderPage("/management/performance?tab=exposure&capital_pool_id=pool-alpha");
+
+    const rows = screen.getAllByTestId("exposure-holding-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("2330.TWSE");
+    expect(rows[0]).toHaveTextContent("NT$450,000");
+    expect(rows[0]).toHaveTextContent("-NT$10,000");
+    expect(rows[0]).toHaveTextContent("Stock future");
+    expect(rows[0]).toHaveTextContent("stock_future · ssf:QFF:202611");
+    expect(rows[0]).toHaveTextContent("202611");
+    expect(rows[0]).toHaveTextContent("100");
+    expect(rows[0]).toHaveTextContent("NT$92,000");
+    expect(rows[0]).toHaveTextContent("short_via_future");
+    expect(rows[1]).toHaveTextContent("2317.TWSE");
+    expect(rows[1]).toHaveTextContent("NT$235");
+    expect(rows[1]).toHaveTextContent("—");
+  });
 });

@@ -76,6 +76,7 @@ const fmtCostPnlPct = (
   unrealizedPnl?: number | null,
   quantity?: number | null,
   averagePrice?: number | null,
+  multiplier?: number | null,
 ): string | null => {
   if (
     typeof unrealizedPnl !== "number" || !Number.isFinite(unrealizedPnl) ||
@@ -84,7 +85,11 @@ const fmtCostPnlPct = (
   ) {
     return null;
   }
-  const costBasis = Math.abs(quantity) * averagePrice;
+  const effectiveMultiplier =
+    typeof multiplier === "number" && Number.isFinite(multiplier) && multiplier > 0
+      ? multiplier
+      : 1;
+  const costBasis = Math.abs(quantity) * effectiveMultiplier * averagePrice;
   if (!(costBasis > 0) || !Number.isFinite(costBasis)) return null;
   const rawPct = (unrealizedPnl / costBasis) * 100;
   if (!Number.isFinite(rawPct)) return null;
@@ -350,6 +355,11 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                       t("mgmt.portfolio.lastClose", { defaultValue: "Last close" }),
                       t("mgmt.portfolio.marketValue", { defaultValue: "Market value" }),
                       t("mgmt.portfolio.unrealizedPnl", { defaultValue: "Unrealized PnL" }),
+                      t("mgmt.portfolio.instrumentKind", { defaultValue: "Instrument kind" }),
+                      t("mgmt.portfolio.contractMonth", { defaultValue: "Contract month" }),
+                      t("mgmt.portfolio.multiplier", { defaultValue: "Multiplier" }),
+                      t("mgmt.portfolio.marginReserved", { defaultValue: "Margin reserved" }),
+                      t("mgmt.portfolio.reasonCode", { defaultValue: "Reason code" }),
                       "Stage / capital scope",
                       "Runtime / broker",
                       "Source confidence",
@@ -375,11 +385,30 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                       typeof row.realizedPnl === "number" &&
                       Number.isFinite(row.realizedPnl) &&
                       row.realizedPnl !== 0;
-                    const unrealizedPnlPct = fmtCostPnlPct(row.unrealizedPnl, row.quantity, row.averagePrice);
+                    const unrealizedPnlPct = fmtCostPnlPct(
+                      row.unrealizedPnl,
+                      row.quantity,
+                      row.averagePrice,
+                      row.multiplier,
+                    );
                     const lastMarkDate = fmtMarkDate(row.lastMarkAt);
                     const isStaleRow = row.markStatus === "stale" || row.telemetryStale;
                     const effectiveSourceStatus = isStaleRow && row.sourceStatus === "ok" ? "stale" : row.sourceStatus;
                     const noAverageCostLabel = t("mgmt.portfolio.noAverageCost", { defaultValue: "Source reports no average cost" });
+                    const rawInstrumentKind = row.instrumentKind?.trim();
+                    const rawInstrumentId = row.instrumentId?.trim();
+                    const instrumentKindLabel =
+                      rawInstrumentKind === "cash_share"
+                        ? t("mgmt.portfolio.instrumentKindCashShare", { defaultValue: "Cash share" })
+                        : rawInstrumentKind === "stock_future"
+                          ? t("mgmt.portfolio.instrumentKindStockFuture", { defaultValue: "Stock future" })
+                          : rawInstrumentKind || null;
+                    const instrumentMetaText = [rawInstrumentKind, rawInstrumentId]
+                      .filter((part): part is string => Boolean(part))
+                      .join(" · ");
+                    const hasMultiplier = typeof row.multiplier === "number" && Number.isFinite(row.multiplier);
+                    const hasMarginReserved =
+                      typeof row.marginReserved === "number" && Number.isFinite(row.marginReserved);
                     return (
                       <tr key={row.holdingId} className="border-b border-border/50 align-top" data-testid="portfolio-holding">
                         <td className="px-3 py-3 whitespace-nowrap">
@@ -469,6 +498,34 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                           ) : null}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
+                          {instrumentKindLabel ? (
+                            <>
+                              <div>{instrumentKindLabel}</div>
+                              {instrumentMetaText && instrumentMetaText !== instrumentKindLabel ? (
+                                <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                                  {instrumentMetaText}
+                                </div>
+                              ) : null}
+                            </>
+                          ) : rawInstrumentId ? (
+                            <span className="font-mono">{rawInstrumentId}</span>
+                          ) : (
+                            <span className="font-mono">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 font-mono whitespace-nowrap">
+                          {row.contractMonth?.trim() ? row.contractMonth.trim() : "—"}
+                        </td>
+                        <td className="px-3 py-3 font-mono whitespace-nowrap">
+                          {hasMultiplier ? fmtNum(row.multiplier) : "—"}
+                        </td>
+                        <td className="px-3 py-3 font-mono whitespace-nowrap">
+                          {hasMarginReserved ? fmtHoldingMoney(row.marginReserved, row.currency) : "—"}
+                        </td>
+                        <td className="px-3 py-3 font-mono whitespace-nowrap">
+                          {row.reasonCode?.trim() ? row.reasonCode.trim() : "—"}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <Badge variant="outline">{row.deploymentStage || "unknown"}</Badge>
                           <div className="mt-1 text-xs text-muted-foreground">
                             {scopeLabel(row.capitalScope.scopeKind, row.capitalScope.scopeId)}
@@ -516,7 +573,7 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                   })}
                   {monitor.items.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={11}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={16}>
                         {monitor.surfaceStatus === "unavailable"
                           ? "Portfolio holdings source is unavailable."
                           : "No holdings match the current filters."}
