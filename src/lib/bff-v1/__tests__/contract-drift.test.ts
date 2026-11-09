@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { paths } from "../paths";
+import { normalizeAlphaFactoryCard, normalizeAlphaFactoryEnvelope } from "../alphaFactory";
 import { normalizeEvolutionRun } from "../evolution";
 import { queryKeys } from "../queryKeys";
 import { ERROR_CODES } from "@/lib/v4/errorCodes";
@@ -251,6 +252,60 @@ describe("Evolution run outcome fields (BFF_API_CONTRACT.md retrain run outcome)
       baseline_metrics: null,
       candidate_metrics: null,
       session_id: null,
+    });
+  });
+
+  it("normalizes AlphaFactory card replay, revalidation, strategy_state, and surface fields (BFF-EVO-ALPHA-PAGE-TRUTH-20261107)", () => {
+    const card = normalizeAlphaFactoryCard(
+      {
+        id: "adm-h12-01a11",
+        admission_id: "adm-h12-01a11",
+        lane: "replicated",
+        strategy_id: "strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+        strategy_spec_id: "reg-strategy-spec-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+        status: "admitted",
+        queue_status: "completed",
+        attempt_count: 0,
+        replay_count: 1,
+        revalidation_count: 1,
+        last_replayed_at: "2026-10-24T02:28:22Z",
+        last_error: null,
+        strategy_state: "retired",
+        experiment_run_ids: ["r1", "r2", "r3", "r4"],
+      },
+      "replicated",
+    );
+    expect(card).toMatchObject({
+      id: "adm-h12-01a11",
+      attempt_count: 0,
+      replay_count: 1,
+      revalidation_count: 1,
+      last_replayed_at: "2026-10-24T02:28:22Z",
+      last_error: null,
+      strategy_state: "retired",
+    });
+
+    const envelope = normalizeAlphaFactoryEnvelope({
+      data: {
+        id: "alpha-factory",
+        discovered_reason: "no_candidate_source",
+        discovered: [],
+        scaffolded: [],
+        replicated: [card],
+        items: [card],
+      },
+      items: [card],
+      page_info: { page: 1, page_size: 20, total: 1, next_page_token: null },
+      meta: {
+        surfaces: {
+          alpha_factory: { status: "ok", source: "research_orchestrator" },
+          alpha_factory_strategy_state: { status: "ok", source: "bff_strategy_registry" },
+        },
+      },
+    });
+    expect(envelope.meta.surfaces?.alpha_factory_strategy_state).toEqual({
+      status: "ok",
+      source: "bff_strategy_registry",
     });
   });
 });

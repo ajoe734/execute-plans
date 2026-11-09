@@ -49,10 +49,22 @@ describe("buildAlphaFactoryBuckets", () => {
     expect(buckets.discoveredReason).toBe("no_candidate_source");
     expect(buckets.scaffolded).toEqual(MOCK_SCAFFOLDED);
     expect(buckets.replicated).toEqual(MOCK_REPLICATED);
+    expect(buckets.replicated).toHaveLength(4);
     expect(buckets.replicated[0]).toMatchObject({
       strategy_id: "strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
       authority_task_id: "rtask-20261015-002",
       queue_status: "completed",
+      attempt_count: 0,
+      replay_count: 1,
+      last_replayed_at: "2026-10-16T02:54:42Z",
+      revalidation_count: 1,
+      strategy_state: "approved",
+    });
+    expect(buckets.replicated[2]).toMatchObject({
+      strategy_id: "strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+      replay_count: 1,
+      last_replayed_at: "2026-10-24T02:28:22Z",
+      strategy_state: "retired",
     });
   });
 
@@ -74,7 +86,7 @@ describe("buildAlphaFactoryBuckets", () => {
       includeReplicated: true,
       t,
     });
-    expect(withoutSharpe.replicated).toHaveLength(1);
+    expect(withoutSharpe.replicated).toHaveLength(MOCK_REPLICATED.length);
     expect(withoutSharpe.replicated[0].sharpe).toBeUndefined();
 
     const withNullSharpe = buildAlphaFactoryBuckets(
@@ -122,11 +134,22 @@ describe("classifyAlphaFactorySource", () => {
     expect(classifyAlphaFactorySource({ mode: "live", effective: "mock" }, undefined)).toBe("fallback");
   });
 
-  it("classifies healthy alpha_factory surface as live", () => {
+  it("classifies healthy alpha_factory surface as live even if alpha_factory_strategy_state is unavailable", () => {
     expect(
       classifyAlphaFactorySource(
         { mode: "live", effective: "live" },
         { surfaces: { alpha_factory: { status: "ok", source: "research_orchestrator" } } },
+      ),
+    ).toBe("live");
+    expect(
+      classifyAlphaFactorySource(
+        { mode: "live", effective: "live" },
+        {
+          surfaces: {
+            alpha_factory: { status: "ok", source: "research_orchestrator" },
+            alpha_factory_strategy_state: { status: "unavailable", source: "bff_strategy_registry" },
+          },
+        },
       ),
     ).toBe("live");
   });

@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button";
 import { bffV1 } from "@/lib/bff-v1";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
-import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
+import {
+  getPersonaManagement,
+  runPersonaAction,
+  testPersonaPrompt,
+  type PersonaManagementEnvelope,
+} from "@/lib/bff-v1/personas";
 import { interaction, type EligibilityResponse } from "@/lib/bff-v1/agora/interaction";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
@@ -118,6 +123,8 @@ export const PersonaDetail = () => {
   const [routedState, setRoutedState] = useState<"loading" | "ready" | "error">("loading");
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [auditState, setAuditState] = useState<"loading" | "ready" | "error">("loading");
+  const [management, setManagement] = useState<PersonaManagementEnvelope | null>(null);
+  const [managementState, setManagementState] = useState<"loading" | "ready" | "error">("loading");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   const [interactionBusy, setInteractionBusy] = useState<string | null>(null);
@@ -134,6 +141,8 @@ export const PersonaDetail = () => {
       setRoutedState("ready");
       setAudit([]);
       setAuditState("ready");
+      setManagement(null);
+      setManagementState("ready");
       return;
     }
 
@@ -141,6 +150,20 @@ export const PersonaDetail = () => {
     setRoutedState("loading");
     setAudit([]);
     setAuditState("loading");
+    setManagement(null);
+    setManagementState("loading");
+
+    Promise.resolve(typeof getPersonaManagement === "function" ? getPersonaManagement(id) : undefined)
+      .then((envelope) => {
+        if (cancelled) return;
+        setManagement(envelope ?? null);
+        setManagementState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setManagement(null);
+        setManagementState("error");
+      });
 
     bffV1.strategies
       .listForPersona(id)
@@ -398,7 +421,16 @@ export const PersonaDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (
               <Section>
-                <PersonaReadinessCard personaId={p.id} persona={p} personaName={p.name} className="mb-4" />
+                <PersonaReadinessCard
+                  personaId={p.id}
+                  persona={p}
+                  management={management}
+                  managementUnavailable={
+                    managementState === "error" || (managementState === "ready" && !management?.data)
+                  }
+                  personaName={p.name}
+                  className="mb-4"
+                />
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label={t("table.type")} value={p.archetype} />
                   <Field label={t("nav.strategies")} value={p.routedStrategies} mono />

@@ -27,9 +27,11 @@ interface Props {
   actions?: ReactNode;
   /** Hide the back button (default: shown). */
   hideBack?: boolean;
+  /** Omit header items the object's payload does not carry (default: all shown). */
+  omit?: { state?: boolean; risk?: boolean; owner?: boolean; updated?: boolean };
 }
 
-export const EntityHeader = ({ object, state, risk, env, subtitle, actions, hideBack }: Props) => {
+export const EntityHeader = ({ object, state, risk, env, subtitle, actions, hideBack, omit }: Props) => {
   const t = useT();
   const navigate = useNavigate();
   const label = (object.labelKey ? t(object.labelKey, { defaultValue: object.name }) : object.name) || object.id;
@@ -45,8 +47,8 @@ export const EntityHeader = ({ object, state, risk, env, subtitle, actions, hide
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-mono text-[10px]">{object.id}</Badge>
             <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight">{label}</h1>
-            <StatusBadge state={badgeState} />
-            <RiskBadge level={badgeRisk} />
+            {!omit?.state && <StatusBadge state={badgeState} />}
+            {!omit?.risk && <RiskBadge level={badgeRisk} />}
             {env && (
               <Badge variant="secondary" className="text-mono text-[10px] uppercase">
                 {t(`env.${env}`, { defaultValue: env })}
@@ -54,14 +56,20 @@ export const EntityHeader = ({ object, state, risk, env, subtitle, actions, hide
             )}
           </div>
           {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-            <span>
-              {t("common.owner")}: <span className="text-mono text-foreground/80">{owner}</span>
-            </span>
-            <span>
-              {t("common.updated")}: <span className="text-mono text-foreground/80">{safeDateTime(object.updatedAt)}</span>
-            </span>
-          </div>
+          {(!omit?.owner || !omit?.updated) && (
+            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+              {!omit?.owner && (
+                <span>
+                  {t("common.owner")}: <span className="text-mono text-foreground/80">{owner}</span>
+                </span>
+              )}
+              {!omit?.updated && (
+                <span>
+                  {t("common.updated")}: <span className="text-mono text-foreground/80">{safeDateTime(object.updatedAt)}</span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex max-w-full flex-wrap items-center justify-start gap-2 sm:justify-end">
           {!hideBack && (

@@ -39,14 +39,63 @@ const REAL_HOSTED_REPLICATED_RECORD = {
   queue_status: "completed",
   enqueued_at: "2026-08-14T01:06:00Z",
   enqueued_by: "pantheon-dev-operator",
-  attempt_count: 1,
+  attempt_count: 0,
   max_attempts: 2,
   experiment_task_id: "rtask-20260814-001",
-  experiment_run_ids: ["rrun-20260814-001", "rrun-20260901-004"],
+  experiment_run_ids: [
+    "rrun-20260814-001",
+    "rrun-20260901-004",
+    "rrun-20261015-002",
+    "rrun-20261016-003",
+  ],
   authority_task_id: "rtask-20261015-002",
   authority_run_ids: ["rrun-20261015-002"],
   last_revalidation_at: "2026-10-15T08:30:00Z",
   last_error: null,
+  replay_count: 1,
+  last_replayed_at: "2026-10-16T02:54:42Z",
+  revalidation_count: 1,
+  strategy_state: "approved",
+};
+
+const REAL_HOSTED_REPLICATED_RETIRED_RECORD = {
+  id: "adm-replicated-h12-01a11",
+  admission_id: "adm-replicated-h12-01a11",
+  tenant_id: "default",
+  lane: "replicated",
+  strategy_id: "strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+  strategy_spec_id: "reg-strategy-spec-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+  spec_version: "1.0.0",
+  checksum: "sha256:e018ff6d0eb8",
+  approval_decision_id: "apr-h12-01a11",
+  approver: "pantheon-dev-approver",
+  approved_at: "2026-10-23T02:00:00Z",
+  requested_by: "pantheon-dev-operator",
+  review_ref: "mrev-h12-01a11",
+  mode: "paper",
+  created_at: "2026-10-23T02:05:00Z",
+  status: "admitted",
+  admission_status: "admitted",
+  queue_status: "completed",
+  enqueued_at: "2026-10-23T02:06:00Z",
+  enqueued_by: "pantheon-dev-operator",
+  attempt_count: 0,
+  max_attempts: 2,
+  experiment_task_id: "rtask-20261023-001",
+  experiment_run_ids: [
+    "rrun-20261023-001",
+    "rrun-20261023-002",
+    "rrun-20261024-001",
+    "rrun-20261024-002",
+  ],
+  authority_task_id: "rtask-20261024-002",
+  authority_run_ids: ["rrun-20261024-002"],
+  last_revalidation_at: "2026-10-24T02:30:00Z",
+  last_error: null,
+  replay_count: 1,
+  last_replayed_at: "2026-10-24T02:28:22Z",
+  revalidation_count: 1,
+  strategy_state: "retired",
 };
 
 const REAL_HOSTED_SCAFFOLDED_RECORD = {
@@ -78,6 +127,10 @@ const REAL_HOSTED_SCAFFOLDED_RECORD = {
   authority_run_ids: [],
   last_revalidation_at: null,
   last_error: "backtest window incomplete",
+  replay_count: 0,
+  last_replayed_at: null,
+  revalidation_count: 0,
+  strategy_state: "approved",
 };
 
 const REAL_HOSTED_PENDING_SCAFFOLDED_RECORD = {
@@ -109,6 +162,10 @@ const REAL_HOSTED_PENDING_SCAFFOLDED_RECORD = {
   authority_run_ids: null,
   last_revalidation_at: null,
   last_error: null,
+  replay_count: null,
+  last_replayed_at: null,
+  revalidation_count: null,
+  strategy_state: null,
 };
 
 describe("alphaFactory BFF v1 client", () => {
@@ -149,26 +206,32 @@ describe("alphaFactory BFF v1 client", () => {
                 label: "Scaffolded",
                 items: [REAL_HOSTED_SCAFFOLDED_RECORD, REAL_HOSTED_PENDING_SCAFFOLDED_RECORD],
               },
-              { id: "replicated", label: "Replicated", items: [REAL_HOSTED_REPLICATED_RECORD] },
+              {
+                id: "replicated",
+                label: "Replicated",
+                items: [REAL_HOSTED_REPLICATED_RECORD, REAL_HOSTED_REPLICATED_RETIRED_RECORD],
+              },
             ],
             discovered: [],
             scaffolded: [REAL_HOSTED_SCAFFOLDED_RECORD, REAL_HOSTED_PENDING_SCAFFOLDED_RECORD],
-            replicated: [REAL_HOSTED_REPLICATED_RECORD],
+            replicated: [REAL_HOSTED_REPLICATED_RECORD, REAL_HOSTED_REPLICATED_RETIRED_RECORD],
             items: [
               REAL_HOSTED_REPLICATED_RECORD,
+              REAL_HOSTED_REPLICATED_RETIRED_RECORD,
               REAL_HOSTED_SCAFFOLDED_RECORD,
               REAL_HOSTED_PENDING_SCAFFOLDED_RECORD,
             ],
           },
           items: [
             REAL_HOSTED_REPLICATED_RECORD,
+            REAL_HOSTED_REPLICATED_RETIRED_RECORD,
             REAL_HOSTED_SCAFFOLDED_RECORD,
             REAL_HOSTED_PENDING_SCAFFOLDED_RECORD,
           ],
           page_info: {
             page: 1,
             page_size: 20,
-            total: 3,
+            total: 4,
             next_page_token: null,
           },
           meta: {
@@ -177,6 +240,10 @@ describe("alphaFactory BFF v1 client", () => {
               alpha_factory: {
                 status: "ok",
                 source: "research_orchestrator",
+              },
+              alpha_factory_strategy_state: {
+                status: "ok",
+                source: "bff_strategy_registry",
               },
             },
             filters: {
@@ -209,26 +276,57 @@ describe("alphaFactory BFF v1 client", () => {
 
     expect(envelope.data.discovered).toEqual([]);
     expect(envelope.data.discovered_reason).toBe("no_candidate_source");
-    expect(envelope.data.replicated).toHaveLength(1);
+    expect(envelope.data.replicated).toHaveLength(2);
     expect(envelope.data.replicated[0]).toMatchObject({
       id: "adm-replicated-2330",
       strategy_id: "strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
       approver: "pantheon-dev-approver",
       approved_at: "2026-08-14T01:00:00Z",
       queue_status: "completed",
-      attempt_count: 1,
+      attempt_count: 0,
+      replay_count: 1,
+      last_replayed_at: "2026-10-16T02:54:42Z",
+      revalidation_count: 1,
+      strategy_state: "approved",
       last_revalidation_at: "2026-10-15T08:30:00Z",
-      experiment_run_ids: ["rrun-20260814-001", "rrun-20260901-004"],
+      experiment_run_ids: [
+        "rrun-20260814-001",
+        "rrun-20260901-004",
+        "rrun-20261015-002",
+        "rrun-20261016-003",
+      ],
       authority_task_id: "rtask-20261015-002",
+    });
+    expect(envelope.data.replicated[1]).toMatchObject({
+      id: "adm-replicated-h12-01a11",
+      strategy_id: "strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+      attempt_count: 0,
+      replay_count: 1,
+      last_replayed_at: "2026-10-24T02:28:22Z",
+      revalidation_count: 1,
+      strategy_state: "retired",
+      last_error: null,
     });
     expect(envelope.data.replicated[0].sharpe).toBeUndefined();
     expect(envelope.data.replicated[0].risk).toBeUndefined();
 
     expect(envelope.data.scaffolded).toHaveLength(2);
+    expect(envelope.data.scaffolded[0]).toMatchObject({
+      id: "adm-scaffolded-2317",
+      attempt_count: 2,
+      replay_count: 0,
+      last_replayed_at: null,
+      last_error: "backtest window incomplete",
+      strategy_state: "approved",
+    });
     expect(envelope.data.scaffolded[1]).toMatchObject({
       id: "adm-pending-2454",
       queue_status: null,
       attempt_count: null,
+      replay_count: null,
+      last_replayed_at: null,
+      revalidation_count: null,
+      strategy_state: null,
       last_revalidation_at: null,
       experiment_run_ids: null,
       authority_task_id: null,
@@ -236,6 +334,10 @@ describe("alphaFactory BFF v1 client", () => {
     expect(envelope.meta.surfaces?.alpha_factory).toEqual({
       status: "ok",
       source: "research_orchestrator",
+    });
+    expect(envelope.meta.surfaces?.alpha_factory_strategy_state).toEqual({
+      status: "ok",
+      source: "bff_strategy_registry",
     });
   });
 

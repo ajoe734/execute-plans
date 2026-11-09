@@ -1,0 +1,90 @@
+{
+  "task_id": "FE-EVO-ALPHA-PAGE-LABELS-20261107",
+  "title": "Alpha factory says replicated for admission checks only",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-EVO-ALPHA-PAGE-LABELS-20261107",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "prerequisites": {
+    "BFF-EVO-ALPHA-PAGE-TRUTH-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "pantheon_commit": "e9a1a196805663b175423964c2ccdc21bf2d24ea"
+    },
+    "FE-RISK-CENTER-ARCHIVED-POOLS-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_commit": "e743051dd"
+    }
+  },
+  "hosted_verification": {
+    "status": "not_run",
+    "statement": "Hosted verification was not run in this task; this file records functional unit, contract, typecheck, lint, production build, and isolated fixture E2E evidence only. Hosted deployment and live browser verification are owned by downstream task EVO-ALPHA-PAGES-HOSTED-ACCEPT-20261107."
+  },
+  "acceptance_evidence": {
+    "ac1_replicated_column_title_and_caption": {
+      "status": "passed",
+      "detail": "In src/i18n/locales/zh-TW.ts and src/i18n/locales/en-US.ts, alphaFactory.col.replicated reads '已通過准入檢查' and 'Admission checks passed', and AlphaFactoryBoard.tsx renders alphaFactory.replicatedCaption (data-testid='alpha-factory-replicated-caption') beneath the replicated column header stating that these checks review the strategy spec, lineage, and governance records and do not rerun a backtest."
+    },
+    "ac2_subtitle_names_three_columns_without_english_scaffolded_in_zh_tw": {
+      "status": "passed",
+      "detail": "alphaFactory.subtitle names the three columns with the updated wording in both locales ('Discovered → Scaffolded → Admission checks passed: ...' in en-US and '探索發現 → 結構建立 → 已通過准入檢查：...' in zh-TW), and the zh-TW subtitle no longer contains the English word 'Scaffolded'."
+    },
+    "ac3_card_check_runs_failures_replays_and_last_replayed_at": {
+      "status": "passed",
+      "detail": "AlphaFactoryBoard.tsx renders experiment_run_ids count as '檢查執行次數' / 'Check runs', attempt_count as '本輪失敗次數' / 'Failures since last replay', replay_count as '重新排入次數' / 'Replays', and last_replayed_at ('最後重排時間' / 'Last replayed at') when present; null values preserve the existing '未回報' / 'Not reported' marker."
+    },
+    "ac4_non_empty_last_error_rendered_and_null_omitted": {
+      "status": "passed",
+      "detail": "When card.last_error is a non-empty string, AlphaFactoryBoard.tsx renders the last failure reason row (data-testid='alpha-factory-card-last-error-<id>', label '最後失敗原因' / 'Last failure reason'); when card.last_error is null or empty, nothing is added."
+    },
+    "ac5_retired_strategy_state_badge_without_hiding_or_moving_cards": {
+      "status": "passed",
+      "detail": "When card.strategy_state === 'retired', AlphaFactoryBoard.tsx renders an outline Badge (data-testid='alpha-factory-card-retired-<id>') with '已退役' in zh-TW and 'Retired' in en-US; when strategy_state is 'approved', null, or any other value, no badge is rendered and all 4 replicated cards remain in the replicated lane. Degraded alpha_factory_strategy_state surface metadata does not flip the board out of live mode."
+    },
+    "ac6_evolution_journal_zh_tw_history_labels_drop_true_word": {
+      "status": "passed",
+      "detail": "In src/i18n/locales/zh-TW.ts, mgmt.evolution.viewHistory reads '演化歷史', mgmt.evolution.showHistory reads '返回演化歷史', and mgmt.evolution.emptyHistoryTitle reads '目前尚無已執行的演化歷史' (dropping '真實'), while src/i18n/locales/en-US.ts is unchanged. EvolutionJournalPage.test.tsx verifies both the single-row-per-decision history (page_info.total 3) and deduplicated auto_proposals (page_info.total 2571) shapes and the updated zh-TW labels."
+    },
+    "ac7_dto_normalizer_and_mock_fixtures_aligned_with_hosted_shapes": {
+      "status": "passed",
+      "detail": "AlphaFactoryCard in src/lib/bff-v1/dto.ts and normalizeAlphaFactoryCard / MOCK_REPLICATED / MOCK_SCAFFOLDED / MOCK_ALPHA_FACTORY_ENVELOPE in src/lib/bff-v1/alphaFactory.ts carry replay_count, last_replayed_at, revalidation_count, strategy_state, and meta.surfaces.alpha_factory_strategy_state matching the real hosted records from BFF-EVO-ALPHA-PAGE-TRUTH-20261107 so mock and live share one code path."
+    },
+    "ac8_i18n_parity_typecheck_tests_build_and_fixture_e2e_pass": {
+      "status": "passed",
+      "detail": "Both locales carry every new label and i18nParity.test.ts passes; typecheck:app, typecheck:agora, eslint, test:contract, all affected Vitest suites, production vite build, and Playwright e2e:fixture all exited 0. Hosted verification was not run."
+    }
+  },
+  "verification_results": [
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "0 TypeScript errors across tsconfig.app.json and tsconfig.agora.json"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/phase2/AlphaFactoryBoard.tsx src/management/pages/phase2/AlphaFactoryBoard.test.tsx src/management/pages/phase2/alphaFactoryData.ts src/management/pages/phase2/alphaFactoryData.test.ts src/lib/bff-v1/alphaFactory.ts src/lib/bff-v1/__tests__/alphaFactory.test.ts src/lib/bff-v1/dto.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/management/pages/oversight/EvolutionJournalPage.test.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "summary": "0 ESLint errors or warnings across all 12 touched source, locale, and test files"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/phase2/AlphaFactoryBoard.test.tsx src/management/pages/phase2/alphaFactoryData.test.ts src/lib/bff-v1/__tests__/alphaFactory.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/management/pages/oversight/EvolutionJournalPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/StrategyDetail.metrics.test.tsx",
+      "exit_code": 0,
+      "summary": "7 test files passed, 64 tests passed (AlphaFactoryBoard.test.tsx: 6 passed; alphaFactoryData.test.ts: 11 passed; alphaFactory.test.ts: 8 passed; contract-drift.test.ts: 9 passed; EvolutionJournalPage.test.tsx: 9 passed; i18nParity.test.ts: 14 passed; StrategyDetail.metrics.test.tsx: 7 passed)"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/code/pantheon npm run test:contract",
+      "exit_code": 0,
+      "summary": "contract-drift-check.mjs aligned (49 schemas, 99 routes, 75 sha256 entries) and src/lib/bff-v1/__tests__/contract-drift.test.ts passed (9 tests)"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "summary": "Production dev-target Vite bundle built cleanly in 53.46s"
+    },
+    {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com npm run build && npm run e2e:fixture",
+      "exit_code": 0,
+      "summary": "Production CI Vite bundle built cleanly in 50.15s and isolated loopback fixture Playwright E2E suite passed (49 passed, 11 skipped, 0 failed)"
+    }
+  ]
+}

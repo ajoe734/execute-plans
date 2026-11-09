@@ -384,4 +384,119 @@ describe("strategies BFF client", () => {
     );
     expect((strategies as Record<string, unknown>).list).toBeUndefined();
   });
+
+  it("preserves operationalStatus, personaStates, symbols, spec fields, and rules from GET /bff/strategies/{id}", async () => {
+    const detailDto = {
+      id: "strategy-persona-b9f9e2e4d44cdd44d160",
+      name: "Pantheon Dev Paper Release 42345302114 Attempt 1",
+      owner: "persona-22582e56e0ad8a4f0ca7",
+      updatedAt: "2026-11-07T07:40:00Z",
+      state: "approved" as const,
+      risk: "low" as const,
+      alpha: "",
+      capitalPoolId: "pool-persona-paper-b9f9e2e4d44cdd44d160",
+      personaIds: ["persona-22582e56e0ad8a4f0ca7"],
+      personaStates: [{ personaId: "persona-22582e56e0ad8a4f0ca7", state: "paper_running" }],
+      operationalStatus: "running" as const,
+      symbols: ["2330.TW"],
+      pnl: 0,
+      pnl30d: 0,
+      sharpe: null,
+      drawdown: null,
+      totalTrades: 0,
+      metricsAsOf: "2026-11-07T07:40:00Z",
+      metricsResolution: "fresh" as const,
+      metricsPersonaId: "persona-22582e56e0ad8a4f0ca7",
+      availableActions: ["archive"],
+      labelKey: "strategy.strategy-persona-b9f9e2e4d44cdd44d160",
+      lifecycleStatus: "approved",
+      spec: {
+        spec_version_id: "reg-strategy-spec-persona-b9f9e2e4d44cdd44d160",
+        spec_version: "1.0.0",
+        title: "Pantheon Dev Paper Release 42345302114 Attempt 1",
+        hypothesis: "Paper-only lifecycle verification in dev",
+        objective: "Verify close-to-close momentum execution in paper mode",
+        market_scope: { symbols: ["2330.TW"], asset_classes: ["equity"], frequency: "1d" },
+        execution_profile: {
+          signal_schema_version: "1.0",
+          quantity_type: "SHARES",
+          rebalance_cadence: "1d bar close, paper only",
+          execution_mode_hint: "paper",
+        },
+        evaluation_plan: { metrics: ["sharpe", "max_drawdown"] },
+        metadata: { market: "TW", execution_context: "paper" },
+      },
+      rules: [
+        {
+          registryId: "artifact-persona-paper-b9f9e2e4d44cdd44d160",
+          version: "1.0.0",
+          role: "trading" as const,
+          strategyLogic: {
+            kind: "close_to_close_momentum",
+            lookback_parameter: "lookback_bars",
+            threshold_parameter: "momentum_threshold",
+            positive_action: "BUY",
+            non_positive_action: "SELL",
+          },
+          parameters: {
+            market: "TW",
+            symbols: ["2330.TW"],
+            data_source: "source-ingest:paper/persona-bootstrap",
+            bar_frequency: "1d",
+            lookback_bars: 2,
+            quantity_type: "SHARES",
+            order_quantity: 1,
+            momentum_threshold: 0,
+            zero_momentum_action: "SELL",
+          },
+          adjustableControls: [
+            {
+              parameter_key: "lookback_bars",
+              value_type: "integer",
+              current_value: 2,
+              allowed_range: { min: 2, max: 60 },
+              step: 1,
+            },
+            {
+              parameter_key: "momentum_threshold",
+              value_type: "number",
+              current_value: 0.0,
+              allowed_range: { min: 0.0, max: 0.05 },
+              step: 0.001,
+            },
+          ],
+          immutableParameters: [
+            "symbols",
+            "bar_frequency",
+            "data_source",
+            "order_quantity",
+            "quantity_type",
+            "zero_momentum_action",
+            "market",
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: detailDto }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const detail = await getStrategy("strategy-persona-b9f9e2e4d44cdd44d160");
+    expect(detail?.operationalStatus).toBe("running");
+    expect(detail?.personaStates).toEqual([
+      { personaId: "persona-22582e56e0ad8a4f0ca7", state: "paper_running" },
+    ]);
+    expect(detail?.symbols).toEqual(["2330.TW"]);
+    expect(detail?.spec?.title).toBe("Pantheon Dev Paper Release 42345302114 Attempt 1");
+    expect(detail?.spec?.hypothesis).toBe("Paper-only lifecycle verification in dev");
+    expect(detail?.spec?.objective).toBe(
+      "Verify close-to-close momentum execution in paper mode",
+    );
+    expect(detail?.rules).toHaveLength(1);
+    expect(detail?.rules?.[0].registryId).toBe("artifact-persona-paper-b9f9e2e4d44cdd44d160");
+  });
 });

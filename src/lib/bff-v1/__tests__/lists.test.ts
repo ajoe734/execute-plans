@@ -1,7 +1,10 @@
+import React from "react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { render, renderHook, act, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import {
   lists,
+  listAlerts,
   useLiveListV1,
   asListEnvelope,
   normalizeLiveListResponse,
@@ -10,6 +13,14 @@ import {
   normalizeRuntimeListResponse,
   type ListEnvelope,
 } from "@/lib/bff-v1";
+import { TopBar } from "@/platform/components/TopBar";
+import { markRoutePrimaryReady, resetRoutePrimaryReadyForTests } from "@/platform/routePrimaryReady";
+import { mockMe } from "@/lib/v4/session/me";
+import i18n from "@/i18n";
+
+vi.mock("@/lib/auth/AuthProvider", () => ({
+  useAuth: () => ({ signOut: vi.fn() }),
+}));
 import { realtime } from "@/lib/bff-v1";
 import { makeBffError } from "@/lib/bff-v1/errors";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
@@ -154,14 +165,16 @@ describe("VI-1 lists facade", () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
 
     const realApprovedRow = {
-      id: "strategy-persona-59b2143dcecf205acbf1",
-      strategy_id: "strategy-persona-59b2143dcecf205acbf1",
-      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      id: "strategy-persona-b9f9e2e4d44cdd44d160",
+      name: "Pantheon Dev Paper Release 42345302114 Attempt 1",
       state: "approved",
       risk: "low",
-      alpha: "alpha.tw.2330",
-      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
-      personaIds: ["persona-be19a1fac471247f2b2a"],
+      alpha: "",
+      capitalPoolId: "pool-persona-paper-b9f9e2e4d44cdd44d160",
+      personaIds: ["persona-22582e56e0ad8a4f0ca7"],
+      personaStates: [{ personaId: "persona-22582e56e0ad8a4f0ca7", state: "paper_running" }],
+      operationalStatus: "running",
+      symbols: ["2330.TW"],
     };
 
     const fetchUrls: string[] = [];
@@ -174,42 +187,62 @@ describe("VI-1 lists facade", () => {
           items: [realApprovedRow],
           meta: {
             state_counts: {
-              draft: 4764,
+              draft: 3217,
               review: 1,
-              approved: 133,
+              approved: 140,
               paper_running: 0,
               canary_running: 0,
               live_running: 0,
               deployed: 0,
               paused: 0,
-              retired: 2,
+              retired: 1556,
             },
+            operational_counts: {
+              running: 5,
+              idle: 0,
+              retired: 134,
+              unbound: 2,
+              unknown: 0,
+            },
+            hidden_retired_persona_count: 134,
           },
-          page_info: { page_size: 20, total: 134, next_page_token: "20" },
+          page_info: { page_size: 20, total: 7, next_page_token: null },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     });
 
-    const env = await lists.strategies({ exclude_state: "draft", page_size: 20, page_token: "20" });
-    expect(fetchUrls).toEqual(["/bff/strategies?exclude_state=draft&page_size=20&page_token=20"]);
+    const env = await lists.strategies({
+      exclude_state: "draft",
+      hide_retired_personas: true,
+      page_size: 20,
+      page_token: "20",
+    });
+    expect(fetchUrls).toEqual([
+      "/bff/strategies?exclude_state=draft&hide_retired_personas=true&page_size=20&page_token=20",
+    ]);
     expect(env.items).toHaveLength(1);
     expect(env.items[0]).toMatchObject({
-      id: "strategy-persona-59b2143dcecf205acbf1",
-      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      id: "strategy-persona-b9f9e2e4d44cdd44d160",
+      name: "Pantheon Dev Paper Release 42345302114 Attempt 1",
       state: "approved",
       risk: "low",
-      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
+      capitalPoolId: "pool-persona-paper-b9f9e2e4d44cdd44d160",
+      operationalStatus: "running",
+      personaStates: [{ personaId: "persona-22582e56e0ad8a4f0ca7", state: "paper_running" }],
+      symbols: ["2330.TW"],
     });
-    expect(env.estimatedTotal).toBe(134);
-    expect(env.cursor.next).toBe("20");
+    expect(env.estimatedTotal).toBe(7);
+    expect(env.cursor.next).toBeUndefined();
     expect(env.meta).toMatchObject({
       state_counts: {
-        draft: 4764,
+        draft: 3217,
         review: 1,
-        approved: 133,
-        retired: 2,
+        approved: 140,
+        retired: 1556,
       },
+      hidden_retired_persona_count: 134,
+      page_info: { page_size: 20, total: 7, next_page_token: null },
     });
   });
 
@@ -458,5 +491,249 @@ describe("VI-1 useLiveListV1", () => {
     await waitFor(() => expect(result.current.items).toEqual([{ id: "strategy-persona-59b2143dcecf205acbf1-page2" }]));
     expect(result.current.cursor?.next).toBeUndefined();
     expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  describe("alerts timeout_fallback vs bff_composed handling (FE-ALERTS-NOT-EMPTY-20261107)", () => {
+    const buildTimeoutFallbackPayload = (reason: string = "read_timeout") => ({
+      alerts: [],
+      summary: {
+        total_active: 0,
+        highest_severity: null,
+        by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        by_category: { incident: 0, runtime: 0, risk: 0, governance: 0 },
+      },
+      meta: {
+        snapshot_at: "2026-11-07T00:00:00Z",
+        acknowledgement_supported: true,
+        surfaces: {
+          alerts: {
+            status: "degraded",
+            source: "timeout_fallback",
+            message: "Alert aggregation timed out under concurrent read fanout; degraded empty response returned.",
+            reason,
+          },
+        },
+      },
+    });
+
+    const realAlertRow = {
+      alert_id: "alert-incident-inc-001",
+      severity: "critical",
+      category: "incident",
+      raised_at: "2026-04-18T06:05:00Z",
+      summary: "Active incident: Unexpected drawdown in persona-alpha.",
+      target_ref: {
+        surface_id: "PKT-002",
+        label: "Open incident response",
+        href: "/management/incidents/inc-001",
+        target_id: "inc-001",
+      },
+    };
+
+    it("keeps lists.alerts resolving with meta on timeout_fallback so TopBar classifyListSource marks alerts degraded without triggering global fallback", async () => {
+      await i18n.changeLanguage("en-US");
+      vi.useFakeTimers();
+      vi.stubGlobal("requestIdleCallback", undefined);
+      vi.stubGlobal("cancelIdleCallback", undefined);
+      resetRoutePrimaryReadyForTests();
+      vi.stubEnv("MODE", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("VITE_BFF_MODE", "live");
+      vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        const path = url.split("?")[0];
+        if (path.endsWith("/bff/management/shell-summary")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                counts: { pending_approvals: 2, open_alerts: 0, running_jobs: 1 },
+                session: { operator_id: "op-1", roles: ["admin"] },
+                transport: { bff_status: "ok", service: "operator-bff", api_version: "1.0" },
+              },
+              meta: {
+                snapshot_at: "2026-11-07T00:00:00Z",
+                surfaces: { shell_summary: { status: "unavailable", source: "bff_composed" } },
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (path.endsWith("/bff/approvals")) {
+          return new Response(
+            JSON.stringify({
+              items: [{ id: "a1", state: "pending" }],
+              meta: { surfaces: { approvals: { status: "ok", source: "bff_composed" } } },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (path.endsWith("/bff/alerts")) {
+          return new Response(JSON.stringify(buildTimeoutFallbackPayload("read_timeout")), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (path.endsWith("/bff/me")) {
+          return new Response(JSON.stringify(mockMe()), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (path.endsWith("/health")) {
+          return new Response(JSON.stringify({ status: "ok" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({}), { status: 404 });
+      });
+
+      const env = await lists.alerts();
+      expect(env.items).toEqual([]);
+      expect(env.meta).toMatchObject({
+        acknowledgement_supported: true,
+        surfaces: {
+          alerts: {
+            status: "degraded",
+            source: "timeout_fallback",
+            reason: "read_timeout",
+          },
+        },
+      });
+
+      const topBarRender = render(
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ["/management"] },
+          React.createElement(TopBar),
+        ),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() => {
+        markRoutePrimaryReady("/management");
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+
+      const badge = screen.getByText("SNAPSHOT DATA");
+      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveAttribute("title", expect.stringContaining("alerts"));
+      expect(liveStatus.get().effective).toBe("live");
+      expect(liveStatus.get().lastError).toBeUndefined();
+
+      topBarRender.unmount();
+      resetRoutePrimaryReadyForTests();
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it("rejects listAlerts outside strictLiveRead for timeout_fallback across read_timeout, read_saturated, and read_error without switching liveStatus to fallback", async () => {
+      vi.stubEnv("MODE", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("VITE_BFF_MODE", "live");
+      vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      for (const reason of ["read_timeout", "read_saturated", "read_error"]) {
+        vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+          new Response(JSON.stringify(buildTimeoutFallbackPayload(reason)), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+
+        await expect(listAlerts()).rejects.toThrow(
+          /Alert aggregation timed out under concurrent read fanout; degraded empty response returned\./,
+        );
+        expect(liveStatus.get().effective).toBe("live");
+        expect(liveStatus.get().lastError).toBeUndefined();
+      }
+    });
+
+    it("resolves healthy empty bff_composed payloads as [] and preserves real alert rows when a contributing surface is degraded", async () => {
+      vi.stubEnv("MODE", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("VITE_BFF_MODE", "live");
+      vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      const healthyEmptyPayload = {
+        alerts: [],
+        summary: {
+          total_active: 0,
+          highest_severity: null,
+          by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+          by_category: { incident: 0, runtime: 0, risk: 0, governance: 0 },
+        },
+        meta: {
+          snapshot_at: "2026-11-07T00:00:00Z",
+          acknowledgement_supported: true,
+          surfaces: {
+            alerts: { status: "ok", source: "bff_composed" },
+          },
+        },
+      };
+
+      const degradedContributingPayload = {
+        alerts: [realAlertRow],
+        summary: {
+          total_active: 1,
+          highest_severity: "critical",
+          by_severity: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
+          by_category: { incident: 1, runtime: 0, risk: 0, governance: 0 },
+        },
+        meta: {
+          snapshot_at: "2026-11-07T00:00:00Z",
+          acknowledgement_supported: true,
+          surfaces: {
+            alerts: {
+              status: "degraded",
+              source: "bff_composed",
+              message: "Operator alert feed is available, but one or more contributing surfaces are degraded.",
+            },
+            telemetry_summary: {
+              status: "degraded",
+              source: "service_store",
+              message: "Telemetry summary missing for one or more runtimes.",
+            },
+          },
+        },
+      };
+
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(healthyEmptyPayload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(degradedContributingPayload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+
+      await expect(listAlerts()).resolves.toEqual([]);
+
+      const rows = await listAlerts();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        id: "alert-incident-inc-001",
+        title: "Active incident: Unexpected drawdown in persona-alpha.",
+        severity: "critical",
+        source: "incident",
+        openedAt: "2026-04-18T06:05:00Z",
+        relatedTarget: "inc-001",
+        acknowledged: false,
+      });
+      expect(liveStatus.get().effective).toBe("live");
+    });
   });
 });

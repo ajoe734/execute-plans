@@ -584,7 +584,8 @@ describe("EvolutionJournalPage Rendering", () => {
     expect(screen.getByTestId("evolution-evidence-class-incident_severity")).toHaveTextContent(
       "重大事件門檻 (incident_severity)",
     );
-    expect(screen.getByTestId("evolution-view-toggle")).toHaveTextContent("返回真實演化歷史");
+    expect(screen.getByTestId("evolution-view-toggle")).toHaveTextContent("返回演化歷史");
+    expect(screen.getByTestId("evolution-view-toggle")).not.toHaveTextContent("真實");
     zhView.unmount();
 
     await i18n.changeLanguage("en-US");
@@ -636,8 +637,9 @@ describe("EvolutionJournalPage Rendering", () => {
     await i18n.changeLanguage("zh-TW");
     const zhView = renderJournal("/management/evolution-journal");
     expect(screen.getByTestId("evolution-history-empty")).toHaveTextContent(
-      "目前尚無已執行的真實演化歷史",
+      "目前尚無已執行的演化歷史",
     );
+    expect(screen.getByTestId("evolution-history-empty")).not.toHaveTextContent("真實");
     expect(screen.getByTestId("evolution-history-empty")).toHaveTextContent(
       "共有 2674 筆自動提案等待處理（事件後續追蹤：322 筆、重大事件門檻：325 筆、事後檢討草稿：2027 筆）。",
     );
@@ -1033,7 +1035,8 @@ describe("EvolutionJournalPage Rendering", () => {
     expect(screen.getByTestId("auto-proposal-postmortem-draft")).toHaveTextContent("2088");
 
     // 3. Active view badge, partial-read badge, and honest per-source summary counts are visible
-    expect(screen.getByTestId("evolution-active-view-badge")).toHaveTextContent("真實演化歷史");
+    expect(screen.getByTestId("evolution-active-view-badge")).toHaveTextContent("演化歷史");
+    expect(screen.getByTestId("evolution-active-view-badge")).not.toHaveTextContent("真實");
     expect(screen.getByTestId("evolution-partial-read-badge")).toHaveTextContent("部分讀取（已驗證來源）");
     expect(screen.getByTestId("evolution-journal-summary")).toHaveTextContent(
       "已驗證來源篩選結果：共 6 筆（本頁 6 筆，未含未知來源）",
@@ -1091,5 +1094,219 @@ describe("EvolutionJournalPage Rendering", () => {
     expect(screen.getByTestId("evolution-journal-summary")).not.toHaveTextContent("Rollbacks: 0");
     expect(screen.getByTestId("evolution-journal-summary")).not.toHaveTextContent("Freeze orders: 0");
     enView.unmount();
+  });
+
+  it("renders 3 deduplicated decision rows with nested mutation_review for view=history and 2571 for view=auto_proposals with updated zh-TW labels", async () => {
+    const makeHostedDecisionRow = (
+      decisionId: string,
+      status: string,
+      createdById: string,
+      planId: string,
+      occurredAt: string,
+    ) => ({
+      id: `evolution_decision:${decisionId}`,
+      entry_type: "evolution_decision",
+      source_id: decisionId,
+      title: `Freeze decision · ${decisionId}`,
+      summary: `Governed freeze proposal for ${planId}`,
+      status,
+      risk_level: "medium",
+      action_type: "freeze",
+      target: {
+        type: "candidate_artifact",
+        id: `${planId}-execution-artifact`,
+        version: "1.0.0",
+      },
+      occurred_at: occurredAt,
+      evidence_class: "incident_severity",
+      origin: "unknown",
+      record: {
+        action_type: "freeze",
+        approval_decision_id: `apr-${decisionId}`,
+        artifact_id: `${planId}-execution-artifact`,
+        artifact_ref: `artref-${decisionId}`,
+        capital_pool_id: null,
+        cooldown_ends_at: null,
+        cooldown_started_at: null,
+        created_at: occurredAt,
+        created_by_id: createdById,
+        created_by_role: "operator",
+        decision_id: decisionId,
+        decision_state: status,
+        evidence_class: "incident_severity",
+        evidence_refs: [],
+        execution_result: null,
+        id: decisionId,
+        incident_ref: "inc-drift-87d6930c62ee",
+        is_active: status === "approved",
+        linked_incident_id: "inc-drift-87d6930c62ee",
+        linked_postmortem_id: null,
+        metadata: { deployment_plan_id: planId },
+        notes: "",
+        observation_window_ends_at: null,
+        observation_window_started_at: null,
+        origin: "unknown",
+        persona_id: null,
+        program_id: null,
+        proposed_changes: {},
+        provenance: {},
+        rationale: "Incident severity threshold reached",
+        required_approvals: 1,
+        review_chain: [],
+        risk_assessment: {},
+        risk_level: "medium",
+        rollback_followthrough: null,
+        score: null,
+        status,
+        superseded_by: null,
+        supersedes_decision_id: null,
+        target_id: `${planId}-execution-artifact`,
+        target_stage: "paper",
+        target_type: "candidate_artifact",
+        target_version: "1.0.0",
+        tenant_id: "default",
+        threshold_snapshots: [],
+        updated_at: occurredAt,
+      },
+      mutation_review: {
+        action_type: "freeze",
+        allowedActions: [],
+        approval_decision: null,
+        approval_decision_id: `apr-${decisionId}`,
+        created_at: occurredAt,
+        decision_id: decisionId,
+        decision_state: status,
+        evidence_class: "incident_severity",
+        evidence_refs: [],
+        linked_incident_id: "inc-drift-87d6930c62ee",
+        linked_postmortem_id: null,
+        meta: {},
+        metadata: { deployment_plan_id: planId },
+        origin: "unknown",
+        proposed_changes: {},
+        provenance: {},
+        required_approvals: 1,
+        review_chain: [],
+        risk_assessment: {},
+        risk_level: "medium",
+        rollback_followthrough: null,
+        target_id: `${planId}-execution-artifact`,
+        target_type: "candidate_artifact",
+        target_version: "1.0.0",
+      },
+    });
+
+    const threeHistoryRows = [
+      makeHostedDecisionRow(
+        "evo-sweep-inc-drift-87d6930c62ee",
+        "approved",
+        "evolution-daily-sweep",
+        "hosted-all12-h12-claude-20261027-4923",
+        "2026-11-03T01:58:28Z",
+      ),
+      makeHostedDecisionRow(
+        "evo-h12-01a11-20261023-9aeb-duplicate-execution-usera",
+        "executed",
+        "operator-a",
+        "hosted-all12-h12-01a11-20261023-9aeb",
+        "2026-10-26T16:11:17Z",
+      ),
+      makeHostedDecisionRow(
+        "evo-h12-01a11-20261023-9aeb-duplicate-execution",
+        "canceled",
+        "operator-a",
+        "hosted-all12-h12-01a11-20261023-9aeb",
+        "2026-10-26T11:42:21Z",
+      ),
+    ];
+
+    mocks.useV5Live.mockImplementation((loader, deps: unknown[]) => {
+      if (loader.toString().includes("evolutionJournal")) {
+        const [view] = deps;
+        if (view === "auto_proposals") {
+          return {
+            data: {
+              data: {
+                id: "management_evolution_journal",
+                items: [threeHistoryRows[0]],
+                summary: {
+                  total_items: 2571,
+                  returned_items: 1,
+                  decision_count: 443,
+                  mutation_review_count: 443,
+                  postmortem_count: 2128,
+                  rollback_count: 0,
+                  freeze_order_count: 0,
+                },
+                auto_proposal_counts: {
+                  incident_followup: 434,
+                  incident_severity: 9,
+                  postmortem_draft: 2128,
+                  total: 2571,
+                },
+              },
+              page_info: { next_page_token: "1", page_size: 5, total: 2571 },
+              meta: {
+                snapshot_at: "2026-11-07T07:40:00Z",
+                surfaces: { evolution_decisions: { status: "ok", source: "service" } },
+              },
+            },
+            loading: false,
+            error: null,
+          };
+        }
+        return {
+          data: {
+            data: {
+              id: "management_evolution_journal",
+              items: threeHistoryRows,
+              summary: {
+                total_items: 3,
+                returned_items: 3,
+                decision_count: 3,
+                mutation_review_count: 3,
+                postmortem_count: 0,
+                rollback_count: 0,
+                freeze_order_count: 0,
+                by_status: { approved: 1, executed: 1, canceled: 1 },
+              },
+              auto_proposal_counts: {
+                incident_followup: 434,
+                incident_severity: 9,
+                postmortem_draft: 2128,
+                total: 2571,
+              },
+            },
+            page_info: { next_page_token: null, page_size: 20, total: 3 },
+            meta: {
+              snapshot_at: "2026-11-07T07:40:00Z",
+              surfaces: { evolution_decisions: { status: "ok", source: "service" } },
+            },
+          },
+          loading: false,
+          error: null,
+        };
+      }
+      return { data: [], loading: false, error: null };
+    });
+
+    await i18n.changeLanguage("zh-TW");
+    const zhView = renderJournal("/management/evolution-journal");
+    expect(screen.getByTestId("evolution-active-view-badge")).toHaveTextContent("演化歷史");
+    expect(screen.getByTestId("evolution-active-view-badge")).not.toHaveTextContent("真實");
+    expect(screen.getByTestId("evolution-journal-summary")).toHaveTextContent(
+      "篩選結果：共 3 筆（本頁 3 筆）",
+    );
+    expect(screen.getByTestId("evolution-journal-pager")).toHaveTextContent("顯示第 1–3 筆，共 3 筆");
+    expect(screen.getByTestId("evolution-auto-proposals-summary")).toHaveTextContent(
+      "自動提案：共 2571 筆（事件後續追蹤：434 筆、重大事件門檻：9 筆、事後檢討草稿：2128 筆）",
+    );
+    fireEvent.click(screen.getByTestId("evolution-view-toggle"));
+    expect(screen.getByTestId("evolution-view-toggle")).toHaveTextContent("返回演化歷史");
+    expect(screen.getByTestId("evolution-journal-summary")).toHaveTextContent(
+      "篩選結果：共 2571 筆（本頁 1 筆）",
+    );
+    zhView.unmount();
+    await i18n.changeLanguage("en-US");
   });
 });

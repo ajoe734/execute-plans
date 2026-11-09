@@ -1,0 +1,17 @@
+{
+  "task_id": "FE-RANKING-FORMULA-OVERVIEW-20261107",
+  "kind": "functional",
+  "hosted_verification": "deferred to operator acceptance task; none performed here",
+  "changes": {
+    "dto": "RankingFormula gains optional version/formula_version/weights/score_field/components/basis/policy/governance_evidence_refs/version_history/change_control; expression and appliedTo made optional",
+    "detail": "Overview shows version, score field, components with percent weights (any count, no hardcoded keys), readable basis/policy/change control (raw code for unknown), evidence refs as plain text; legacy expression/appliedTo/state/owner rendered only when present; history tab from version_history, hardcoded v3 row removed",
+    "header": "EntityHeader/ObjectDetailLayout gain optional omit/headerOmit props (default off, other detail pages unchanged); RankingFormulaDetail omits state/risk/owner/updated only when the payload lacks them",
+    "list": "RankingFormulasList columns: name, version, weight summary (legacy expression fallback, else no-data text)"
+  },
+  "tests": {
+    "RankingFormulaDetail.test.tsx": "3 existing tests unchanged; 3 added using the exact real payload, a 5-component alt version with unknown basis code, and an absent weights/components payload",
+    "Lists.test.tsx": "1 added with the real payload",
+    "assertion_changes": "none; no existing test weakened or deleted",
+    "runs": "vitest src/platform src/management: 79 files / 726 tests passed; tsc -p tsconfig.app.json clean"
+  }
+}

@@ -149,10 +149,21 @@ describe("Pack PM-i18n parity", () => {
       expect(enKeys.has(k), `en missing ${k}`).toBe(true);
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
+    expect(en.mgmt.evolution.viewHistory).toBe("Evolution history");
+    expect(en.mgmt.evolution.showHistory).toBe("Back to evolution history");
+    expect(en.mgmt.evolution.emptyHistoryTitle).toBe("No evolution has been executed yet");
+    expect(zh.mgmt.evolution.viewHistory).toBe("演化歷史");
+    expect(zh.mgmt.evolution.showHistory).toBe("返回演化歷史");
+    expect(zh.mgmt.evolution.emptyHistoryTitle).toBe("目前尚無已執行的演化歷史");
   });
 
   it("includes Alpha Factory replication card, empty-state, and unavailable keys in both locales and removes legacy replicated note", () => {
     const alphaFactoryKeys = [
+      "alphaFactory.subtitle",
+      "alphaFactory.col.discovered",
+      "alphaFactory.col.scaffolded",
+      "alphaFactory.col.replicated",
+      "alphaFactory.replicatedCaption",
       "alphaFactory.source.surface",
       "alphaFactory.empty.noCandidateSource",
       "alphaFactory.unavailable.title",
@@ -162,8 +173,12 @@ describe("Pack PM-i18n parity", () => {
       "alphaFactory.card.approvedAt",
       "alphaFactory.card.queueStatus",
       "alphaFactory.card.attemptCount",
+      "alphaFactory.card.replayCount",
+      "alphaFactory.card.lastReplayedAt",
       "alphaFactory.card.lastRevalidationAt",
       "alphaFactory.card.experimentRunCount",
+      "alphaFactory.card.lastError",
+      "alphaFactory.card.retired",
       "alphaFactory.card.authorityTask",
       "alphaFactory.card.openStrategy",
       "alphaFactory.card.openExperiment",
@@ -175,6 +190,19 @@ describe("Pack PM-i18n parity", () => {
     }
     expect(enKeys.has("alphaFactory.replicated.note")).toBe(false);
     expect(zhKeys.has("alphaFactory.replicated.note")).toBe(false);
+    expect(en.alphaFactory.col.replicated).toBe("Admission checks passed");
+    expect(zh.alphaFactory.col.replicated).toBe("已通過准入檢查");
+    expect(zh.alphaFactory.subtitle).not.toContain("Scaffolded");
+    expect(en.alphaFactory.card.experimentRunCount).toBe("Check runs");
+    expect(zh.alphaFactory.card.experimentRunCount).toBe("檢查執行次數");
+    expect(en.alphaFactory.card.attemptCount).toBe("Failures since last replay");
+    expect(zh.alphaFactory.card.attemptCount).toBe("本輪失敗次數");
+    expect(en.alphaFactory.card.replayCount).toBe("Replays");
+    expect(zh.alphaFactory.card.replayCount).toBe("重新排入次數");
+    expect(en.alphaFactory.card.lastError).toBe("Last failure reason");
+    expect(zh.alphaFactory.card.lastError).toBe("最後失敗原因");
+    expect(en.alphaFactory.card.retired).toBe("Retired");
+    expect(zh.alphaFactory.card.retired).toBe("已退役");
   });
 
   it("includes all evolution program qualification, list column, origin, human review, governance gate, and runs keys in both locales", () => {
@@ -257,5 +285,69 @@ describe("Pack PM-i18n parity", () => {
     expect(zhKeys.has("mgmt.pulse.retiredExcludedFmt")).toBe(true);
     expect(enKeys.has("mgmt.pulse.notRequired")).toBe(true);
     expect(zhKeys.has("mgmt.pulse.notRequired")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeBuildingBadge")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeBuildingBadge")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeBuildingHistory")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeBuildingHistory")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeShortSampleCaption")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeShortSampleCaption")).toBe(true);
+  });
+
+  it("includes alerts page empty and unavailable keys in both locales", () => {
+    expect(enKeys.has("page.alertsEmpty")).toBe(true);
+    expect(zhKeys.has("page.alertsEmpty")).toBe(true);
+    expect(enKeys.has("page.alertsUnavailable")).toBe(true);
+    expect(zhKeys.has("page.alertsUnavailable")).toBe(true);
+    expect(en.page.alertsEmpty).toBe("No active alerts.");
+    expect(zh.page.alertsEmpty).toBe("目前沒有警報。");
+    expect(en.page.alertsUnavailable).toBe("Alerts are temporarily unavailable.");
+    expect(zh.page.alertsUnavailable).toBe("暫時無法取得警報資料。");
+  });
+
+  it("includes strategy operational view, rule, and read-only parameter keys in both locales", () => {
+    const strategyKeys = [
+      "strategy.params.readOnlyHint",
+      "strategy.params.adjustableSection",
+      "strategy.params.immutableSection",
+      "strategy.params.currentValue",
+      "strategy.params.allowedRange",
+      "strategy.params.step",
+      "strategy.params.fixed",
+      "strategy.operationalStatus.running",
+      "strategy.operationalStatus.idle",
+      "strategy.operationalStatus.retired",
+      "strategy.operationalStatus.unbound",
+      "strategy.operationalStatus.unknown",
+      "strategy.list.column.operationalStatus",
+      "strategy.list.column.symbols",
+      "strategy.list.hiddenDraftsAndRetiredPersonasWithCounts",
+      "strategy.list.hiddenRetiredPersonasWithCount",
+      "strategyDetail.specTitleField",
+      "strategyDetail.objective",
+      "strategyDetail.operationalStatusLabel",
+      "strategyDetail.boundPersonasLabel",
+      "strategyDetail.personaStateMissing",
+      "strategyDetail.rulesSectionTitle",
+      "strategyDetail.rulesUnavailable",
+      "strategyDetail.rulesEmpty",
+      "strategyDetail.ruleRole.trading",
+      "strategyDetail.ruleRole.rollback_baseline",
+    ];
+    for (const k of strategyKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
+
+  it("includes risk center archived capital pool exclusion keys in both locales", () => {
+    const riskCenterKeys = [
+      "riskCenter.draftsExcluded",
+      "riskCenter.archivedPoolsExcluded",
+      "riskCenter.archivedPoolsExcludedWithCount",
+    ];
+    for (const k of riskCenterKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
   });
 });

@@ -31,6 +31,7 @@ import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
 import { StrategyTripleStateCard } from "@/management/components/detail/StrategyTripleStateCard";
+import { normalizeStrategyOperationalStatus } from "./Lists";
 import { lifecycleOf } from "@/lib/v4/strategyTripleDerive";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
@@ -134,16 +135,28 @@ export const StrategyDetail = () => {
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!s) return <div role="alert" className="p-6">{isError || loadErrors.includes("Strategy") ? "Strategy could not be loaded." : "Strategy not found."}</div>;
 
-  const params: { key: string; value: string; note: string }[] = [];
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
   const noData = t("common.noData");
+  const normalizedOperationalStatus = normalizeStrategyOperationalStatus(s.operationalStatus);
+  const boundPersonaEntries: Array<{ personaId: string; state: string }> =
+    Array.isArray(s.personaStates) && s.personaStates.length > 0
+      ? s.personaStates
+          .filter((item) => item && typeof item.personaId === "string" && item.personaId.trim().length > 0)
+          .map((item) => ({
+            personaId: item.personaId.trim(),
+            state: typeof item.state === "string" ? item.state.trim() : "",
+          }))
+      : (s.personaIds ?? [])
+          .map((pid) => String(pid).trim())
+          .filter(Boolean)
+          .map((personaId) => ({ personaId, state: "" }));
   const joinList = (v: string[] | string | undefined | null): string =>
     (Array.isArray(v) ? v : typeof v === "string" ? [v] : []).map((x) => String(x).trim()).filter(Boolean).join(", ");
   const specScope = s.spec?.market_scope;
   const specMeta = s.spec?.metadata;
   const universeParts = [
     specMeta?.market ? `${specMeta.market}` : "",
-    joinList(specMeta?.traits?.instruments) || joinList(specScope?.universe) || joinList(specScope?.symbols) || joinList(specScope?.markets),
+    joinList(specMeta?.traits?.instruments) || joinList(specScope?.universe) || joinList(specScope?.symbols) || joinList(specScope?.markets) || joinList(s.symbols),
   ].filter(Boolean);
   const universeDisplay = universeParts.join(" · ") || noData;
   const execModeDisplay =
@@ -206,6 +219,88 @@ export const StrategyDetail = () => {
                   <div className="mb-4 space-y-3">
                     <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("lifecycle.title")}</div>
                     <LifecycleStepper machine={strategyMachine} current={machineState} i18nPrefix="lifecycle.strategy" />
+                    <div
+                      data-testid="strategy-overview-operational-status"
+                      className="grid gap-3 rounded-md border border-border/70 bg-muted/15 p-3 md:grid-cols-2"
+                    >
+                      <div className="space-y-1">
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                          {t("strategyDetail.operationalStatusLabel")}
+                        </div>
+                        <div>
+                          {normalizedOperationalStatus ? (
+                            <Badge
+                              variant="outline"
+                              data-testid="strategy-detail-operational-status"
+                              data-operational-status={normalizedOperationalStatus}
+                              className={
+                                normalizedOperationalStatus === "running"
+                                  ? "border-status-success/40 text-status-success"
+                                  : normalizedOperationalStatus === "unknown"
+                                    ? "border-status-warning/40 text-status-warning"
+                                    : normalizedOperationalStatus === "idle"
+                                      ? "border-border text-foreground"
+                                      : "border-muted text-muted-foreground"
+                              }
+                            >
+                              {t(`strategy.operationalStatus.${normalizedOperationalStatus}`)}
+                            </Badge>
+                          ) : (
+                            <span
+                              data-testid="strategy-detail-operational-status"
+                              className="text-mono text-xs text-muted-foreground"
+                            >
+                              {noData}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-1" data-testid="strategy-bound-personas">
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                          {t("strategyDetail.boundPersonasLabel")}
+                        </div>
+                        {boundPersonaEntries.length === 0 ? (
+                          <div className="text-xs text-muted-foreground">
+                            {t("strategy.operationalStatus.unbound")}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {boundPersonaEntries.map((entry) => (
+                              <Link
+                                key={entry.personaId}
+                                to={`/management/personas/${entry.personaId}`}
+                                data-testid={`strategy-bound-persona-${entry.personaId}`}
+                                data-persona-state={entry.state || undefined}
+                                className="inline-flex items-center gap-1.5 rounded border border-border/70 bg-background px-2.5 py-1 text-xs hover:bg-muted/50"
+                              >
+                                <span className="text-mono text-primary underline-offset-2 hover:underline">
+                                  {entry.personaId}
+                                </span>
+                                {entry.state && (
+                                  entry.state === "unknown" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[11px] border-status-warning/40 text-status-warning"
+                                    >
+                                      {t("strategy.operationalStatus.unknown")}
+                                    </Badge>
+                                  ) : entry.state === "missing" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[11px] border-status-warning/40 text-status-warning"
+                                    >
+                                      {t("strategyDetail.personaStateMissing")}
+                                    </Badge>
+                                  ) : (
+                                    <StatusBadge state={entry.state} />
+                                  )
+                                )}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     <StrategyTripleStateCard
                       lifecycleStatus={s.lifecycleStatus as string | undefined}
                       reviewStatus={s.reviewStatus as string | undefined}
@@ -247,7 +342,10 @@ export const StrategyDetail = () => {
                   <LinkedBlock
                     icon={<User className="h-3.5 w-3.5 text-muted-foreground" />}
                     title={t("phase13.strategy.linked.identity")}
-                    items={[{ id: s.owner, label: s.owner, meta: t("table.owner") }, ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` }))]}
+                    items={[
+                      { id: `owner:${s.owner}`, label: s.owner, meta: t("table.owner") },
+                      ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` })),
+                    ]}
                   />
                   <LinkedBlock
                     icon={<Eye className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -288,7 +386,7 @@ export const StrategyDetail = () => {
                     <Field label={t("strategyDetail.benchmark")} value={benchmarkName || noData} />
                   </div>
                 </Section>
-                <StrategySpecTab strategy={s} params={params} />
+                <StrategySpecTab strategy={s} />
               </>
             ),
           },

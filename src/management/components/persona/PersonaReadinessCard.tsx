@@ -14,17 +14,32 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/platform/hooks";
 import {
   derivePersonaReadiness, reasonI18nKey, reasonNextStepI18nKey,
-  type HealthStatus,
+  type HealthStatus, type PersonaManagementShape, type PersonaStageStatus,
 } from "@/management/lib/personaReadiness";
-import type { Persona } from "@/lib/bff-v1";
+import type { Persona, Runtime } from "@/lib/bff-v1";
+import type { PersonaManagementEnvelope } from "@/lib/bff-v1/personas";
 
 interface Props {
   personaId: string;
   /** Pass any of: flat Persona | wrapped { data: {...} } | full mgmt surface. */
-  persona: Persona | { data?: unknown } | null | undefined;
+  persona: Persona | PersonaManagementShape | { data?: unknown } | null | undefined;
+  management?: PersonaManagementEnvelope | null;
+  managementUnavailable?: boolean;
+  runtime?: Runtime | Record<string, unknown> | null;
   personaName?: string;
   className?: string;
 }
+
+const STAGE_STATUS_I18N: Record<PersonaStageStatus, string> = {
+  done: "persona.onboarding.stageStatus.done",
+  not_upgraded: "persona.onboarding.stageStatus.notUpgraded",
+  not_created: "persona.onboarding.stageStatus.notCreated",
+  not_submitted: "persona.onboarding.stageStatus.notSubmitted",
+  not_started: "persona.onboarding.stageStatus.notStarted",
+  paused: "persona.onboarding.stageStatus.paused",
+  retired: "persona.onboarding.stageStatus.retired",
+  unavailable: "persona.onboarding.stageStatus.unavailable",
+};
 
 const HEALTH_CHIP: Record<HealthStatus, { tone: string; label: string }> = {
   healthy:  { tone: "bg-status-success/15 text-status-success border-status-success/40", label: "persona.health.status.healthy" },
@@ -33,10 +48,37 @@ const HEALTH_CHIP: Record<HealthStatus, { tone: string; label: string }> = {
   unknown:  { tone: "bg-muted text-muted-foreground border-border",                       label: "persona.health.status.unknown" },
 };
 
-export function PersonaReadinessCard({ personaId, persona, personaName, className }: Props) {
+export function PersonaReadinessCard({
+  personaId,
+  persona,
+  management,
+  managementUnavailable,
+  runtime,
+  personaName,
+  className,
+}: Props) {
   const t = useT();
   const navigate = useNavigate();
-  const r = derivePersonaReadiness(persona as Parameters<typeof derivePersonaReadiness>[0]);
+  const readinessInput: Parameters<typeof derivePersonaReadiness>[0] =
+    management !== undefined || managementUnavailable !== undefined || runtime !== undefined
+      ? typeof persona === "object" && persona !== null && "data" in persona
+        ? {
+            ...(persona as PersonaManagementShape),
+            data: management?.data ?? (persona as PersonaManagementShape).data,
+            meta: management?.meta ?? (persona as PersonaManagementShape).meta,
+            runtime: runtime ?? (persona as PersonaManagementShape).runtime,
+            managementUnavailable:
+              managementUnavailable ?? (persona as PersonaManagementShape).managementUnavailable,
+          }
+        : {
+            data: management?.data,
+            meta: management?.meta,
+            persona: (persona as Persona | null | undefined) ?? undefined,
+            runtime,
+            managementUnavailable,
+          }
+      : (persona as Parameters<typeof derivePersonaReadiness>[0]);
+  const r = derivePersonaReadiness(readinessInput);
   const chip = HEALTH_CHIP[r.healthStatus];
 
   const wizardHref = `/management/personas/${encodeURIComponent(personaId)}/onboarding`;
@@ -92,8 +134,18 @@ export function PersonaReadinessCard({ personaId, persona, personaName, classNam
         <div className="rounded border border-status-success/30 bg-status-success/5 px-3 py-2 text-sm flex items-center gap-2">
           <Activity className="h-4 w-4 text-status-success" />
           <span>
-            {t("persona.onboarding.banner.liveStatus", { sessions: r.activeSessions ?? 0 })}
+            {t(
+              r.mode === "paper"
+                ? "persona.onboarding.banner.paperStatus"
+                : "persona.onboarding.banner.liveStatus",
+              { sessions: r.activeSessions ?? 0 },
+            )}
           </span>
+          {r.runtimeId && (
+            <span className="text-xs text-muted-foreground font-mono">
+              · {r.runtimeId}
+            </span>
+          )}
           {(typeof r.pnl === "number" || typeof r.drawdown === "number") && (
             <span className="ml-2 text-xs text-muted-foreground">
               {typeof r.pnl === "number" && <>PnL: {(r.pnl * 100).toFixed(1)}% · </>}
@@ -105,15 +157,7 @@ export function PersonaReadinessCard({ personaId, persona, personaName, classNam
         <ol className="space-y-1">
           {r.stages.map((s, i) => {
             const label = t(`persona.onboarding.stages.${s.key}`);
-            const statusText = s.done
-              ? t("persona.onboarding.stageStatus.done")
-              : s.key === "lifecycle"
-                ? t("persona.onboarding.stageStatus.notUpgraded")
-                : s.key === "approval"
-                  ? t("persona.onboarding.stageStatus.notSubmitted")
-                  : s.key === "runtime"
-                    ? t("persona.onboarding.stageStatus.notStarted")
-                    : t("persona.onboarding.stageStatus.notCreated");
+            const statusText = t(STAGE_STATUS_I18N[s.status]);
             const isNext = s.key === r.nextStage;
             const nextStepKey = s.blockedReason ? reasonNextStepI18nKey(s.blockedReason) : undefined;
             return (
