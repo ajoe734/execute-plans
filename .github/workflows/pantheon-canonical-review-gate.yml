@@ -2,15 +2,14 @@ name: Pantheon canonical review gate
 
 # Runs the trusted canonical review verifier from ajoe734/pantheon@dev against
 # this PR's authoritative exact head without duplicating review policy here.
-# "Pantheon canonical review gate" is not a required status check on
-# execute-plans/dev or execute-plans/main, and while
-# review_gate.github_review_bridge_required is false in Pantheon's
-# .orchestrator/config.json, scripts/git/canonical_review_gate_ci.py logs a
-# workflow notice, makes no GitHub API call, publishes no commit status, and
-# exits 0 (task-store exact-head approval is the merge authority). When that
-# policy is true, the verifier publishes the status for this PR's exact head
-# (treating delivery:tooling as the explicit Human/Ops tooling path and
-# requiring the exact-head review-proof tag for product PRs).
+# "Pantheon canonical review gate" is a required status check on
+# execute-plans/dev (bound to the GitHub Actions app, app_id: 15368) and is
+# not a required check on execute-plans/main. While
+# review_gate.github_review_bridge_required is true in Pantheon's
+# .orchestrator/config.json, the shared Pantheon verifier
+# (scripts/git/canonical_review_gate_ci.py) publishes the status for this PR's
+# exact head (treating delivery:tooling as the explicit Human/Ops tooling path
+# and requiring the exact-head review-proof tag for product PRs).
 # pull_request_target is intentional: candidate workflow code is never
 # executed by the wrapper.
 
