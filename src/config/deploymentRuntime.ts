@@ -578,25 +578,6 @@ function readWindowDeploymentConfigCandidate(): unknown {
     return primary;
   }
 
-  const fallbackCandidate = runtimeWindow.__PANTHEON_RUNTIME_CONFIG__;
-  if (
-    fallbackCandidate
-    && typeof fallbackCandidate === "object"
-    && !Array.isArray(fallbackCandidate)
-  ) {
-    const record = fallbackCandidate as Record<string, unknown>;
-    if (
-      "schemaVersion" in record
-      || "environment" in record
-      || "configRef" in record
-      || "bffBaseUrl" in record
-      || "gcpIdentity" in record
-      || "VITE_BFF_BASE_URL" in record
-    ) {
-      return fallbackCandidate;
-    }
-  }
-
   return undefined;
 }
 

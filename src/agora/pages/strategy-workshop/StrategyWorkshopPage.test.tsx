@@ -567,9 +567,11 @@ describe("StrategyWorkshopPage", () => {
     render(<StrategyWorkshopPage workshopId={LIVE_COMPLETENESS_SNAPSHOT.workshop_id} />);
 
     expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("Complete");
+    expect(screen.getByTestId("completeness-overall-grade")).toBeVisible();
     expect(screen.getByText("100%")).toBeDefined();
     expect(screen.queryByText("NaN%")).toBeNull();
-    expect(screen.getByTestId("completeness-grade").textContent).toBe("complete");
+    expect(screen.queryByTestId("completeness-grade")).toBeNull();
+    expect(screen.queryByTestId("workshop-readiness")).toBeNull();
     expect(screen.queryByText("Strategy completeness updated")).toBeNull();
     expect(screen.getByTestId("daily-interactions-empty")).toBeDefined();
   });
@@ -1353,6 +1355,9 @@ describe("StrategyWorkshopPage", () => {
 
     const button = await screen.findByTestId("add-to-trading-room-btn");
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getByTestId("workshop-readiness-summary").textContent).toBe("Readiness: trading_room");
+    expect(screen.getByTestId("readiness-gate-trading_room")).toHaveAttribute("data-readiness-state", "ready");
+    expect(screen.queryByTestId("workshop-readiness")).toBeNull();
     fireEvent.click(button);
 
     expect(onAddToTradingRoom).toHaveBeenCalledTimes(1);

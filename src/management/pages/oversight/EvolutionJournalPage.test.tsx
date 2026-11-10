@@ -52,6 +52,33 @@ describe("EvolutionJournalPage Rendering", () => {
     });
   });
 
+  it("keeps long target and journal identifiers fully rendered with wrap-safe metadata cells", () => {
+    const longId = "hosted-all12-h12-claude-20261027-4923-execution-artifact";
+    const longEntryId = `evolution_decision:evo-sweep-inc-drift-${"87d6930c62ee".repeat(3)}`;
+    mockEvolutionEntries = [
+      {
+        id: longEntryId,
+        title: "Freeze decision",
+        status: "approved",
+        entry_type: "evolution_decision",
+        action_type: "freeze",
+        risk_level: "medium",
+        target: { type: "candidate_artifact", id: longId, version: "1.0.0" },
+        occurred_at: "2026-11-03T01:58:28Z",
+      },
+    ];
+
+    renderJournal();
+
+    // Full text is preserved (no truncation); real layout geometry is measured in a browser
+    // (see docs/deployment/evidence/FE-EVO-JOURNAL-MOBILE-WRAP-20261108/evidence.json).
+    const targetDd = screen.getByText(`candidate_artifact:${longId} (1.0.0)`);
+    expect(targetDd.tagName).toBe("DD");
+    expect(targetDd.className).toContain("[overflow-wrap:anywhere]");
+    expect(targetDd.parentElement?.className).toContain("min-w-0");
+    expect(screen.getByText(longEntryId).className).toContain("[overflow-wrap:anywhere]");
+  });
+
   it("renders canonical formal seed rows with target version, fixture badge, and approval status", () => {
     mockEvolutionEntries = [
       {

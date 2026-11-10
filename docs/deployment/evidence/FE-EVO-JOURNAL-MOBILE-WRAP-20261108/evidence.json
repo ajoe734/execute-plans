@@ -1,0 +1,49 @@
+{
+  "task": "FE-EVO-JOURNAL-MOBILE-WRAP-20261108",
+  "scope": "local candidate proof only; NOT hosted",
+  "fixture": "actual 4-entry authenticated journal DTO (journal-response.json, source 4759795f/9a46cd18); rendered via real EvolutionJournalPage in Chromium (Playwright) with only useV5Live stubbed; no raw dump committed",
+  "change": "src/management/pages/oversight/_core.tsx journal metadata dl cells: min-w-0 on cells, [overflow-wrap:anywhere] on dd and raw journal id; all text and 4-col layout preserved",
+  "measurement": {
+    "before_fix": {
+      "390": {
+        "cards": 4,
+        "metadata_cells_measured": 42,
+        "cell_overlaps": 0,
+        "overflowing_or_outside_card": [
+          "scroll:candidate_artifact:hosted-all12-h12-claude-20261027-4923-execution-artifact (1.0.0)",
+          "scroll:candidate_artifact:hosted-all12-h12-01a11-20261023-9aeb-execution-artifact (1.0.0)",
+          "scroll:candidate_artifact:hosted-all12-h12-01a11-20261023-9aeb-execution-artifact (1.0.0)"
+        ],
+        "horizontal_page_scroll": false
+      },
+      "1440": {
+        "cards": 4,
+        "metadata_cells_measured": 42,
+        "cell_overlaps": 0,
+        "overflowing_or_outside_card": [],
+        "horizontal_page_scroll": false
+      }
+    },
+    "after_fix": {
+      "390": {
+        "cards": 4,
+        "metadata_cells_measured": 42,
+        "cell_overlaps": 0,
+        "overflowing_or_outside_card": [],
+        "horizontal_page_scroll": false
+      },
+      "1440": {
+        "cards": 4,
+        "metadata_cells_measured": 42,
+        "cell_overlaps": 0,
+        "overflowing_or_outside_card": [],
+        "horizontal_page_scroll": false
+      }
+    }
+  },
+  "checks": {
+    "vitest EvolutionJournalPage.test.tsx": "14 passed (13 existing unchanged + 1 new)",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit exit 0"
+  },
+  "hosted_acceptance": "remains with original coordinator after exact-pair delivery"
+}

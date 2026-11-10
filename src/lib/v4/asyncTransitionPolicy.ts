@@ -1,10 +1,9 @@
-// Planner Response §B1 / D05 (2026-05-07) — canonical AsyncTransitionDescriptor + 15-action policy table.
-// SUPERSEDES the v0-mock policy in src/lib/v5/timeoutPolicy.ts and the 12-row table in
-// src/lib/v4/asyncTransitions.ts (which remains for back-compat re-export).
+// Planner Response §B1 / D05 (2026-05-07) — canonical AsyncTransitionDescriptor + 15-action policy table
+// and provisional frontend LoopStage timeout thresholds (`V5_TIMEOUT_POLICY_VERSION = "v0-mock"`).
 //
 // Source of truth: .lovable/feedback/2026-05-07-planner-response/Pantheon_System_Dev_Response_to_34_Spec_Backlog_2026-05-07.md §B1
-//
-// Backend endpoints (pending): /bff/transition-policies, /bff/transitions/{id}, ...
+// Backend loop/stage responses remain authoritative when present; frontend-only provisional
+// thresholds are labeled with `V5_TIMEOUT_POLICY_VERSION` ("v0-mock").
 
 export type FailureReasonCode =
   | "TIMEOUT"
@@ -94,4 +93,46 @@ export function findAsyncTransitionPolicy(actionId: string): AsyncTransitionPoli
   return ASYNC_TRANSITION_POLICIES.find((p) => p.actionId === actionId);
 }
 
+export function transitionTimeoutFor(actionId: string): number | undefined {
+  return findAsyncTransitionPolicy(actionId)?.timeoutMs;
+}
+
 export const ASYNC_TRANSITION_POLICY_SOURCE = "planner-response-2026-05-07" as const;
+
+/** Provisional frontend-only LoopStage timeout policy label until backend supplies per-stage thresholds. */
+export const V5_TIMEOUT_POLICY_VERSION = "v0-mock" as const;
+
+export interface TimeoutPolicy {
+  /** Soft warning after this many ms in `running`. */
+  runningWarnMs: number;
+  /** Escalate after this many ms in `blocked`. */
+  blockedEscalateMs: number;
+  /** Emergency action review window. */
+  emergencyReviewMs: number;
+}
+
+export const DEFAULT_TIMEOUT_POLICY: TimeoutPolicy = {
+  runningWarnMs: 15 * 60 * 1000,   // 15 min
+  blockedEscalateMs: 60 * 60 * 1000, // 60 min
+  emergencyReviewMs: 5 * 60 * 1000,  // 5 min
+};
+
+export type StageTimeoutState = "idle" | "ok" | "warn" | "escalate";
+
+export function stageTimeoutState(
+  stage: { status: string; startedAt?: string; warnAfterMs?: number; timeoutMs?: number },
+  policy: { runningWarnMs: number; blockedEscalateMs: number } = DEFAULT_TIMEOUT_POLICY,
+  now = Date.now(),
+): StageTimeoutState {
+  if (stage.status === "running" && stage.startedAt) {
+    const age = now - new Date(stage.startedAt).getTime();
+    const warnThreshold = stage.warnAfterMs ?? policy.runningWarnMs;
+    return age >= warnThreshold ? "warn" : "ok";
+  }
+  if (stage.status === "blocked" && stage.startedAt) {
+    const age = now - new Date(stage.startedAt).getTime();
+    const escalateThreshold = stage.timeoutMs ?? policy.blockedEscalateMs;
+    return age >= escalateThreshold ? "escalate" : "warn";
+  }
+  return "idle";
+}

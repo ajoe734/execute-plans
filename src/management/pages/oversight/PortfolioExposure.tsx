@@ -31,6 +31,23 @@ const fmtUsd = (n?: number) =>
   n === undefined || !Number.isFinite(n)
     ? "—"
     : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+const fmtHoldingMoney = (n?: number | null, currency?: string | null) => {
+  if (n === undefined || n === null || !Number.isFinite(n)) return "—";
+  const amount = Object.is(n, -0) ? 0 : n;
+  const code = currency?.trim().toUpperCase();
+  if (!code) return fmtNum(amount);
+  const digits = Number.isInteger(amount) ? 0 : 2;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: code,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(amount);
+  } catch {
+    return `${code} ${fmtNum(amount)}`;
+  }
+};
 const fmtNum = (n?: number) =>
   n === undefined || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
 const fmtPct = (n?: number) =>
@@ -245,34 +262,96 @@ export const PortfolioExposurePage = ({ embedded = false }: { embedded?: boolean
           <header className="px-4 py-2 border-b border-border">
             <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.holdingsTitle")}</h2>
           </header>
-          <ManagementTableScroll minScrollWidth={900}>
-            <table className="w-full min-w-[900px] text-sm">
+          <ManagementTableScroll minScrollWidth={1200}>
+            <table className="w-full min-w-[1200px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
                 <tr>
-                  {["Holding", "Market value", "Unrealized PnL", "Source confidence", "Risk"].map((heading) => (
-                    <th key={heading} className="px-3 py-2">{heading}</th>
+                  {[
+                    "Holding",
+                    t("mgmt.portfolio.marketValue", { defaultValue: "Market value" }),
+                    t("mgmt.portfolio.unrealizedPnl", { defaultValue: "Unrealized PnL" }),
+                    t("mgmt.portfolio.instrumentKind", { defaultValue: "Instrument kind" }),
+                    t("mgmt.portfolio.contractMonth", { defaultValue: "Contract month" }),
+                    t("mgmt.portfolio.multiplier", { defaultValue: "Multiplier" }),
+                    t("mgmt.portfolio.marginReserved", { defaultValue: "Margin reserved" }),
+                    t("mgmt.portfolio.reasonCode", { defaultValue: "Reason code" }),
+                    "Source confidence",
+                    "Risk",
+                  ].map((heading) => (
+                    <th key={heading} className="px-3 py-2 whitespace-nowrap">{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {holdingsMonitor.items.map((row) => (
-                  <tr key={row.holdingId} className="border-b border-border/50" data-testid="exposure-holding-row">
-                    <td className="px-3 py-3 font-mono text-foreground">{row.symbol}</td>
-                    <td className="px-3 py-3 font-mono">{fmtUsd(row.marketValue)}</td>
-                    <td className={`px-3 py-3 font-mono ${(row.unrealizedPnl ?? 0) < 0 ? "text-status-failed" : "text-status-success"}`}>
-                      {fmtUsd(row.unrealizedPnl)}
-                    </td>
-                    <td className="px-3 py-3">
-                      <Badge variant="outline">{row.sourceStatus}</Badge>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Badge variant="outline">{row.riskState}</Badge>
-                    </td>
-                  </tr>
-                ))}
+                {holdingsMonitor.items.map((row) => {
+                  const rawInstrumentKind = row.instrumentKind?.trim();
+                  const rawInstrumentId = row.instrumentId?.trim();
+                  const instrumentKindLabel =
+                    rawInstrumentKind === "cash_share"
+                      ? t("mgmt.portfolio.instrumentKindCashShare", { defaultValue: "Cash share" })
+                      : rawInstrumentKind === "stock_future"
+                        ? t("mgmt.portfolio.instrumentKindStockFuture", { defaultValue: "Stock future" })
+                        : rawInstrumentKind || null;
+                  const instrumentMetaText = [rawInstrumentKind, rawInstrumentId]
+                    .filter((part): part is string => Boolean(part))
+                    .join(" · ");
+                  return (
+                    <tr key={row.holdingId} className="border-b border-border/50" data-testid="exposure-holding-row">
+                      <td className="px-3 py-3 font-mono text-foreground whitespace-nowrap">{row.symbol}</td>
+                      <td className="px-3 py-3 font-mono whitespace-nowrap">
+                        {fmtHoldingMoney(row.marketValue, row.currency ?? "USD")}
+                      </td>
+                      <td
+                        className={`px-3 py-3 font-mono whitespace-nowrap ${
+                          (row.unrealizedPnl ?? 0) < 0 ? "text-status-failed" : "text-status-success"
+                        }`}
+                      >
+                        {fmtHoldingMoney(row.unrealizedPnl, row.currency ?? "USD")}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {instrumentKindLabel ? (
+                          <>
+                            <div>{instrumentKindLabel}</div>
+                            {instrumentMetaText && instrumentMetaText !== instrumentKindLabel ? (
+                              <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                                {instrumentMetaText}
+                              </div>
+                            ) : null}
+                          </>
+                        ) : rawInstrumentId ? (
+                          <span className="font-mono">{rawInstrumentId}</span>
+                        ) : (
+                          <span className="font-mono">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 font-mono whitespace-nowrap">
+                        {row.contractMonth?.trim() ? row.contractMonth.trim() : "—"}
+                      </td>
+                      <td className="px-3 py-3 font-mono whitespace-nowrap">
+                        {typeof row.multiplier === "number" && Number.isFinite(row.multiplier)
+                          ? fmtNum(row.multiplier)
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-3 font-mono whitespace-nowrap">
+                        {typeof row.marginReserved === "number" && Number.isFinite(row.marginReserved)
+                          ? fmtHoldingMoney(row.marginReserved, row.currency ?? "USD")
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-3 font-mono whitespace-nowrap">
+                        {row.reasonCode?.trim() ? row.reasonCode.trim() : "—"}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <Badge variant="outline">{row.sourceStatus}</Badge>
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <Badge variant="outline">{row.riskState}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!holdingsLoading && holdingsMonitor.items.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={5}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={10}>
                       No holdings match the focused pool.
                     </td>
                   </tr>

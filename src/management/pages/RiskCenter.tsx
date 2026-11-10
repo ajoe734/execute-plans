@@ -297,7 +297,6 @@ export const RiskCenter = () => {
           <BreachMatrix
             strategiesSlice={strategiesSlice}
             poolsSlice={activePoolsSlice}
-            archivedPoolsNote={archivedPoolsNote}
             runtimesSlice={runtimesSlice}
             toolsSlice={toolsSlice}
           />
@@ -321,7 +320,7 @@ export const RiskCenter = () => {
               rows={data.pools}
               loading={poolsSlice.status === "loading"}
               empty={tableEmptyForSlice(poolsSlice.status)}
-              onRowClick={(r) => navigate(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(r.id)}`)}
+              onRowClick={(r) => navigate(`/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(r.id)}`)}
               columns={[
                 { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
                 { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{safeFixed(r.allocated / 1_000_000, 1)}M {r.currency}</span> },
@@ -471,13 +470,11 @@ export const RiskCenter = () => {
 const BreachMatrix = ({
   strategiesSlice,
   poolsSlice,
-  archivedPoolsNote,
   runtimesSlice,
   toolsSlice,
 }: {
   strategiesSlice: DomainSlice<Strategy>;
   poolsSlice: DomainSlice<CapitalPool>;
-  archivedPoolsNote: string;
   runtimesSlice: DomainSlice<Runtime>;
   toolsSlice: DomainSlice<Tool>;
 }) => {
@@ -491,7 +488,7 @@ const BreachMatrix = ({
     },
     {
       key: "capital",
-      label: `${t("riskCenter.tab.capital")} (${archivedPoolsNote})`,
+      label: `${t("riskCenter.tab.capital")} (${t("riskCenter.archivedPoolsExcluded")})`,
       status: poolsSlice.status,
       counts: bucket(poolsSlice.items.map((p) => p.risk)),
     },

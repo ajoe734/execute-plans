@@ -1,6 +1,7 @@
 // Pack E E3 — /management/loops/execution
 // Combines: execution-kind LoopRuns + Persona Health Matrix.
-// Timeout policy uses v0-mock (Q12) until D05 lands.
+// Backend stage timeout thresholds are authoritative when present; provisional
+// frontend thresholds are labeled with V5_TIMEOUT_POLICY_VERSION ("v0-mock").
 
 import { useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -14,7 +15,8 @@ import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { PersonaHealthMatrix } from "./PersonaHealthMatrix";
 import { LoopRunDrawer } from "./LoopRunDrawer";
-import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION, type LoopRun } from "@/lib/v5";
+import type { LoopRun } from "@/lib/v5";
+import { DEFAULT_TIMEOUT_POLICY, V5_TIMEOUT_POLICY_VERSION } from "@/lib/v4/asyncTransitionPolicy";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonThreshold } from "@/components/ui/skeleton-threshold";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -88,7 +90,7 @@ export const ExecutionLoopPage = () => {
           <StatCard label={t("v5.kpi.loopsFailed")} value={failed} tone={failed > 0 ? "danger" : "default"} />
           <StatCard
             label={t("v5.kpi.timeoutPolicy")}
-            value={V5_TIMEOUT_POLICY_VERSION}
+            value={items.some((r) => r.stages.some((s) => s.timeoutPolicySource === "backend")) ? "backend" : V5_TIMEOUT_POLICY_VERSION}
             hint={`${t("v5.kpi.warnAfter")}: ${DEFAULT_TIMEOUT_POLICY.runningWarnMs / 60000}m · ${t("v5.kpi.escalateAfter")}: ${DEFAULT_TIMEOUT_POLICY.blockedEscalateMs / 60000}m`}
           />
         </div>

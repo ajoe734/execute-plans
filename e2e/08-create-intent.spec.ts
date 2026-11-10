@@ -457,7 +457,7 @@ function corsHeaders(route: Route): Record<string, string> {
   return {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers":
-      "Accept, Authorization, Content-Type, Idempotency-Key, X-Correlation-Id, X-Idempotency-Key, X-Locale, X-Request-Id, X-Tenant-Id, X-Trace-Id",
+      "Accept, Authorization, Content-Type, Idempotency-Key, X-Correlation-Id, X-Locale, X-Request-Id, X-Tenant-Id, X-Trace-Id",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Expose-Headers":

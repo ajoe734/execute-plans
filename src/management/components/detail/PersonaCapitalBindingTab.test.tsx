@@ -1,11 +1,16 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { bffV1, type CapitalPool, type Strategy } from "@/lib/bff-v1";
 import { PersonaCapitalBindingTab } from "./PersonaCapitalBindingTab";
+
+function LocationDisplay() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
+}
 
 describe("PersonaCapitalBindingTab", () => {
   beforeEach(async () => {
@@ -58,8 +63,14 @@ describe("PersonaCapitalBindingTab", () => {
 
     render(
       <I18nextProvider i18n={i18n}>
-        <MemoryRouter>
-          <PersonaCapitalBindingTab personaId="persona-be19a1fac471247f2b2a" />
+        <MemoryRouter initialEntries={["/management/personas/persona-be19a1fac471247f2b2a"]}>
+          <Routes>
+            <Route
+              path="/management/personas/:id"
+              element={<PersonaCapitalBindingTab personaId="persona-be19a1fac471247f2b2a" />}
+            />
+            <Route path="/management/governance-decisions" element={<LocationDisplay />} />
+          </Routes>
         </MemoryRouter>
       </I18nextProvider>,
     );
@@ -75,6 +86,11 @@ describe("PersonaCapitalBindingTab", () => {
     expect("persona_ids" in (strategies[0] as unknown as Record<string, unknown>)).toBe(false);
     expect("personaId" in (strategies[0] as unknown as Record<string, unknown>)).toBe(false);
     expect("capital_pool_id" in (strategies[0] as unknown as Record<string, unknown>)).toBe(false);
+
+    fireEvent.click(screen.getByText("pool-persona-paper-298e138c136c9840b0e4"));
+    expect(await screen.findByTestId("location")).toHaveTextContent(
+      "/management/governance-decisions?tab=capital&capital_id=pool-persona-paper-298e138c136c9840b0e4",
+    );
   });
 
   it("renders Unavailable instead of No results found when capital pools or persona strategies read fails", async () => {

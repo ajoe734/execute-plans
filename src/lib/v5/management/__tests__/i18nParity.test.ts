@@ -80,6 +80,13 @@ describe("Pack PM-i18n parity", () => {
       "mgmt.portfolio.lastClose",
       "mgmt.portfolio.markAsOfFmt",
       "mgmt.portfolio.realizedPnlFmt",
+      "mgmt.portfolio.instrumentKind",
+      "mgmt.portfolio.instrumentKindCashShare",
+      "mgmt.portfolio.instrumentKindStockFuture",
+      "mgmt.portfolio.contractMonth",
+      "mgmt.portfolio.multiplier",
+      "mgmt.portfolio.marginReserved",
+      "mgmt.portfolio.reasonCode",
       "mgmt.portfolio.shortPosition",
       "mgmt.portfolio.markStale",
       "mgmt.portfolio.markStaleWithDateFmt",
@@ -92,6 +99,20 @@ describe("Pack PM-i18n parity", () => {
       expect(enKeys.has(k), `en missing ${k}`).toBe(true);
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
+    expect(en.mgmt.portfolio.instrumentKind).toBe("Instrument kind");
+    expect(zh.mgmt.portfolio.instrumentKind).toBe("商品種類");
+    expect(en.mgmt.portfolio.instrumentKindCashShare).toBe("Cash share");
+    expect(zh.mgmt.portfolio.instrumentKindCashShare).toBe("現股");
+    expect(en.mgmt.portfolio.instrumentKindStockFuture).toBe("Stock future");
+    expect(zh.mgmt.portfolio.instrumentKindStockFuture).toBe("股票期貨");
+    expect(en.mgmt.portfolio.contractMonth).toBe("Contract month");
+    expect(zh.mgmt.portfolio.contractMonth).toBe("契約月");
+    expect(en.mgmt.portfolio.multiplier).toBe("Multiplier");
+    expect(zh.mgmt.portfolio.multiplier).toBe("乘數");
+    expect(en.mgmt.portfolio.marginReserved).toBe("Margin reserved");
+    expect(zh.mgmt.portfolio.marginReserved).toBe("保留保證金");
+    expect(en.mgmt.portfolio.reasonCode).toBe("Reason code");
+    expect(zh.mgmt.portfolio.reasonCode).toBe("決策原因");
   });
 
   it("includes BFF-supported attribution dimension labels and excludes unsupported 422 dimensions in both locales", () => {

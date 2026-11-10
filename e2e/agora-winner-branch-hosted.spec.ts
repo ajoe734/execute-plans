@@ -287,10 +287,12 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
     await test.step("open the live ready workshop and use its Trading Room handoff", async () => {
       await page.goto(`${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(live.workshop.workshop_id)}`);
       await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId("workshop-readiness-summary")).toHaveText("Readiness: trading_room", { timeout: 20_000 });
       if (isMobileProject) {
         await page.getByRole("button", { name: "Next question & readiness" }).click();
       }
-      await expect(page.getByTestId("workshop-readiness")).toHaveText("trading_room", { timeout: 20_000 });
+      await expect(page.getByTestId("readiness-gate-trading_room")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId("readiness-gate-trading_room")).toHaveAttribute("data-readiness-state", "ready");
       const addButton = page.getByTestId("add-to-trading-room-btn");
       await expect(addButton).toBeEnabled({ timeout: 20_000 });
       await screenshot(page, testInfo, "01-live-ready-workshop", evidenceScreenshots);

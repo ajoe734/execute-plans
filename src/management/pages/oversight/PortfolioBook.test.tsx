@@ -336,7 +336,7 @@ describe("PortfolioBookPage monitor", () => {
     const table = scroller?.querySelector("table");
     expect(table).toHaveClass("min-w-[1520px]");
     const headerCells = within(table as HTMLElement).getAllByRole("columnheader");
-    expect(headerCells).toHaveLength(11);
+    expect(headerCells).toHaveLength(16);
     expect(headerCells.map((th) => th.textContent)).toEqual([
       "Holding",
       "Quantity",
@@ -344,6 +344,11 @@ describe("PortfolioBookPage monitor", () => {
       "Last close",
       "Market value",
       "Unrealized PnL",
+      "Instrument kind",
+      "Contract month",
+      "Multiplier",
+      "Margin reserved",
+      "Reason code",
       "Stage / capital scope",
       "Runtime / broker",
       "Source confidence",
@@ -367,11 +372,16 @@ describe("PortfolioBookPage monitor", () => {
     expect(staleCells[4]).not.toHaveTextContent("—");
     expect(staleCells[5]).toHaveTextContent("—");
     expect(within(staleCells[5]).getByLabelText("Source reports no average cost")).toBeInTheDocument();
-    expect(staleCells[8]).toHaveTextContent("stale");
-    expect(staleCells[8]).toHaveTextContent("Stale telemetry");
-    expect(staleCells[8]).not.toHaveTextContent("No reported source issue");
-    expect(staleCells[8].querySelector(".bg-status-success\\/15")).toBeNull();
-    expect(within(staleCells[8]).queryByText("ok")).not.toBeInTheDocument();
+    expect(staleCells[6]).toHaveTextContent("—");
+    expect(staleCells[7]).toHaveTextContent("—");
+    expect(staleCells[8]).toHaveTextContent("—");
+    expect(staleCells[9]).toHaveTextContent("—");
+    expect(staleCells[10]).toHaveTextContent("—");
+    expect(staleCells[13]).toHaveTextContent("stale");
+    expect(staleCells[13]).toHaveTextContent("Stale telemetry");
+    expect(staleCells[13]).not.toHaveTextContent("No reported source issue");
+    expect(staleCells[13].querySelector(".bg-status-success\\/15")).toBeNull();
+    expect(within(staleCells[13]).queryByText("ok")).not.toBeInTheDocument();
 
     // Row 1: real healthy row rt-c98e4223:2317.TWSE
     const healthyCells = within(rows[1]).getAllByRole("cell");
@@ -384,8 +394,13 @@ describe("PortfolioBookPage monitor", () => {
     expect(healthyCells[4]).toHaveTextContent("-480 (幣別未提供)");
     expect(healthyCells[5]).toHaveTextContent("—");
     expect(within(healthyCells[5]).getByLabelText("Source reports no average cost")).toBeInTheDocument();
-    expect(within(healthyCells[8]).getByText("ok")).toHaveClass("text-status-success");
-    expect(healthyCells[8]).toHaveTextContent("No reported source issue");
+    expect(healthyCells[6]).toHaveTextContent("—");
+    expect(healthyCells[7]).toHaveTextContent("—");
+    expect(healthyCells[8]).toHaveTextContent("—");
+    expect(healthyCells[9]).toHaveTextContent("—");
+    expect(healthyCells[10]).toHaveTextContent("—");
+    expect(within(healthyCells[13]).getByText("ok")).toHaveClass("text-status-success");
+    expect(healthyCells[13]).toHaveTextContent("No reported source issue");
 
     // Row 2: unavailable mark and missing quantity
     const unavailCells = within(rows[2]).getAllByRole("cell");
@@ -403,10 +418,10 @@ describe("PortfolioBookPage monitor", () => {
     expect(telStaleCells[3]).toHaveTextContent("NT$190");
     expect(telStaleCells[3]).toHaveTextContent("As of 2026-11-04");
     expect(telStaleCells[4]).toHaveTextContent("NT$190");
-    expect(telStaleCells[8]).toHaveTextContent("stale");
-    expect(telStaleCells[8]).toHaveTextContent("Stale telemetry");
-    expect(telStaleCells[8]).not.toHaveTextContent("No reported source issue");
-    expect(within(telStaleCells[8]).queryByText("ok")).not.toBeInTheDocument();
+    expect(telStaleCells[13]).toHaveTextContent("stale");
+    expect(telStaleCells[13]).toHaveTextContent("Stale telemetry");
+    expect(telStaleCells[13]).not.toHaveTextContent("No reported source issue");
+    expect(within(telStaleCells[13]).queryByText("ok")).not.toBeInTheDocument();
 
     // Verify zh-TW localization of all new user-visible text
     await act(async () => {
@@ -425,6 +440,11 @@ describe("PortfolioBookPage monitor", () => {
     expect(screen.getByRole("columnheader", { name: "數量" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "進場均價" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "最新收盤價" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "商品種類" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "契約月" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "乘數" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "保留保證金" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "決策原因" })).toBeInTheDocument();
     const zhRows = screen.getAllByTestId("portfolio-holding");
     const zhStaleCells = within(zhRows[0]).getAllByRole("cell");
     expect(zhStaleCells[1]).toHaveTextContent("-1");
@@ -433,13 +453,18 @@ describe("PortfolioBookPage monitor", () => {
     expect(zhStaleCells[3]).toHaveTextContent("—");
     expect(zhStaleCells[4]).toHaveTextContent("報價過期（最後報價 2026-10-29）");
     expect(within(zhStaleCells[5]).getByLabelText("來源未提供平均成本")).toBeInTheDocument();
-    expect(zhStaleCells[8]).toHaveTextContent("Telemetry 過期");
-    expect(zhStaleCells[8]).not.toHaveTextContent("無回報來源問題");
+    expect(zhStaleCells[6]).toHaveTextContent("—");
+    expect(zhStaleCells[7]).toHaveTextContent("—");
+    expect(zhStaleCells[8]).toHaveTextContent("—");
+    expect(zhStaleCells[9]).toHaveTextContent("—");
+    expect(zhStaleCells[10]).toHaveTextContent("—");
+    expect(zhStaleCells[13]).toHaveTextContent("Telemetry 過期");
+    expect(zhStaleCells[13]).not.toHaveTextContent("無回報來源問題");
 
     const zhHealthyCells = within(zhRows[1]).getAllByRole("cell");
     expect(zhHealthyCells[3]).toHaveTextContent("240");
     expect(zhHealthyCells[3]).toHaveTextContent("截至 2026-11-04");
-    expect(zhHealthyCells[8]).toHaveTextContent("無回報來源問題");
+    expect(zhHealthyCells[13]).toHaveTextContent("無回報來源問題");
 
     const zhUnavailCells = within(zhRows[2]).getAllByRole("cell");
     expect(zhUnavailCells[4]).toHaveTextContent("無可用報價");
@@ -675,7 +700,12 @@ describe("PortfolioBookPage monitor", () => {
     expect(post0[5]).toHaveTextContent("NT$295 (+2.57%)");
     expect(post0[5]).not.toHaveTextContent("99.99%");
     expect(post0[5]).not.toHaveTextContent("Realized");
-    expect(post0[7]).toHaveTextContent("shioaji_paper");
+    expect(post0[6]).toHaveTextContent("—");
+    expect(post0[7]).toHaveTextContent("—");
+    expect(post0[8]).toHaveTextContent("—");
+    expect(post0[9]).toHaveTextContent("—");
+    expect(post0[10]).toHaveTextContent("—");
+    expect(post0[12]).toHaveTextContent("shioaji_paper");
 
     // 0050.TWSE: avg 101.33 -> NT$101.33; mark 97.15 -> NT$97.15; mv -NT$485.75; uPnL 20.9 -> NT$20.90 (+4.13%)
     const post1 = within(postRows[1]).getAllByRole("cell");
@@ -898,5 +928,218 @@ describe("PortfolioBookPage monitor", () => {
     expect(within(screen.getByTestId("portfolio-book-coverage")).getByText("Holdings").parentElement).toHaveTextContent("14");
     expect(screen.getAllByTestId("portfolio-holding")).toHaveLength(14);
     expect(screen.queryByText(/Source:\s*unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("renders instrument kind, contract month, multiplier, margin reserved, and reason code columns and uses BFF market value and unrealized PnL for futures rows with multiplier 100 without recomputing from quantity times price", async () => {
+    const monitor = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 3,
+          incident_count: 0,
+          source_coverage: {
+            source_row_count: 3,
+            runtime_count: 3,
+            telemetry_runtime_count: 3,
+            stale_row_count: 0,
+            missing_binding_count: 0,
+            degraded_source_count: 0,
+          },
+        },
+        items: [
+          {
+            id: "rt-fut:ssf:QFF:202611",
+            holding_id: "rt-fut:ssf:QFF:202611",
+            runtime_id: "rt-fut",
+            persona_id: "persona-fut",
+            capital_pool_id: "pool-fut",
+            broker_id: "shioaji_paper",
+            symbol: "2330.TWSE",
+            instrument_id: "ssf:QFF:202611",
+            instrument_kind: "stock_future",
+            contract_month: "202611",
+            multiplier: 100,
+            margin_reserved: 92000,
+            reason_code: "short_via_future",
+            side: "long",
+            currency: "TWD",
+            quantity: 2,
+            average_price: 2300,
+            mark_price: 2250,
+            market_value: 450000,
+            unrealized_pnl: -10000,
+            realized_pnl: 0,
+            mark_status: "available",
+            last_mark_at: "2026-11-07T06:00:00Z",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: "ledger-fut",
+            },
+            links: {},
+          },
+          {
+            id: "rt-cash:eq:2330",
+            holding_id: "rt-cash:eq:2330",
+            runtime_id: "rt-cash",
+            persona_id: "persona-cash",
+            capital_pool_id: "pool-cash",
+            broker_id: "shioaji_paper",
+            symbol: "2330.TWSE",
+            instrument_id: "eq:2330",
+            kind: "cash_share",
+            contract_month: null,
+            multiplier: 1,
+            margin_reserved: null,
+            reason_code: "long_cash",
+            side: "long",
+            currency: "TWD",
+            quantity: 5,
+            average_price: 2299,
+            mark_price: 2240,
+            market_value: 11200,
+            unrealized_pnl: -295,
+            realized_pnl: 0,
+            mark_status: "available",
+            last_mark_at: "2026-11-07T06:00:00Z",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: "ledger-cash",
+            },
+            links: {},
+          },
+          {
+            id: "rt-legacy:2317.TWSE",
+            holding_id: "rt-legacy:2317.TWSE",
+            runtime_id: "rt-legacy",
+            persona_id: "persona-legacy",
+            capital_pool_id: "pool-legacy",
+            broker_id: "shioaji_paper",
+            symbol: "2317.TWSE",
+            side: "short",
+            currency: "TWD",
+            quantity: -3,
+            average_price: 240,
+            mark_price: 235,
+            market_value: -705,
+            unrealized_pnl: 15,
+            realized_pnl: 0,
+            mark_status: "available",
+            last_mark_at: "2026-11-07T06:00:00Z",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: "ledger-legacy",
+            },
+            links: {},
+          },
+        ],
+      },
+      meta: {
+        incidents: [],
+        surfaces: { portfolio_book_holdings: { status: "ok" } },
+      },
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      data: monitor,
+      loading: false,
+      refreshing: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    const view = renderPage();
+    const rows = screen.getAllByTestId("portfolio-holding");
+    expect(rows).toHaveLength(3);
+
+    // Row 0: futures row with multiplier 100
+    // BFF market_value is 450,000 (not quantity * mark_price = 4,500)
+    // BFF unrealized_pnl is -10,000 (not quantity * (mark - avg) = -100)
+    const futCells = within(rows[0]).getAllByRole("cell");
+    expect(futCells[0]).toHaveTextContent("2330.TWSE");
+    expect(futCells[1]).toHaveTextContent("2");
+    expect(futCells[2]).toHaveTextContent("NT$2,300");
+    expect(futCells[3]).toHaveTextContent("NT$2,250");
+    expect(futCells[4]).toHaveTextContent("NT$450,000");
+    expect(futCells[4]).not.toHaveTextContent("NT$4,500");
+    expect(futCells[5]).toHaveTextContent("-NT$10,000 (-2.17%)");
+    expect(futCells[5]).not.toHaveTextContent("-NT$100");
+    expect(futCells[6]).toHaveTextContent("Stock future");
+    expect(futCells[6]).toHaveTextContent("stock_future · ssf:QFF:202611");
+    expect(futCells[7]).toHaveTextContent("202611");
+    expect(futCells[8]).toHaveTextContent("100");
+    expect(futCells[9]).toHaveTextContent("NT$92,000");
+    expect(futCells[10]).toHaveTextContent("short_via_future");
+
+    // Row 1: cash share row with instrument metadata
+    const cashCells = within(rows[1]).getAllByRole("cell");
+    expect(cashCells[4]).toHaveTextContent("NT$11,200");
+    expect(cashCells[5]).toHaveTextContent("-NT$295 (-2.57%)");
+    expect(cashCells[6]).toHaveTextContent("Cash share");
+    expect(cashCells[6]).toHaveTextContent("cash_share · eq:2330");
+    expect(cashCells[7]).toHaveTextContent("—");
+    expect(cashCells[8]).toHaveTextContent("1");
+    expect(cashCells[9]).toHaveTextContent("—");
+    expect(cashCells[10]).toHaveTextContent("long_cash");
+
+    // Row 2: pre-BFF cash share row with absent instrument fields
+    const legacyCells = within(rows[2]).getAllByRole("cell");
+    expect(legacyCells[1]).toHaveTextContent("-3");
+    expect(legacyCells[1]).toHaveTextContent("Short position");
+    expect(legacyCells[4]).toHaveTextContent("-NT$705");
+    expect(legacyCells[5]).toHaveTextContent("NT$15 (+2.08%)");
+    expect(legacyCells[6]).toHaveTextContent("—");
+    expect(legacyCells[7]).toHaveTextContent("—");
+    expect(legacyCells[8]).toHaveTextContent("—");
+    expect(legacyCells[9]).toHaveTextContent("—");
+    expect(legacyCells[10]).toHaveTextContent("—");
+
+    // Switch to zh-TW and verify localized labels
+    await act(async () => {
+      await i18n.changeLanguage("zh-TW");
+    });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/portfolio-book"]}>
+          <Routes>
+            <Route path="/management/portfolio-book" element={<PortfolioBookPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    const zhRows = screen.getAllByTestId("portfolio-holding");
+    const zhFutCells = within(zhRows[0]).getAllByRole("cell");
+    expect(zhFutCells[4]).toHaveTextContent("NT$450,000");
+    expect(zhFutCells[6]).toHaveTextContent("股票期貨");
+    expect(zhFutCells[6]).toHaveTextContent("stock_future · ssf:QFF:202611");
+    expect(zhFutCells[7]).toHaveTextContent("202611");
+    expect(zhFutCells[8]).toHaveTextContent("100");
+    expect(zhFutCells[9]).toHaveTextContent("NT$92,000");
+    expect(zhFutCells[10]).toHaveTextContent("short_via_future");
+
+    const zhCashCells = within(zhRows[1]).getAllByRole("cell");
+    expect(zhCashCells[6]).toHaveTextContent("現股");
+    expect(zhCashCells[6]).toHaveTextContent("cash_share · eq:2330");
+
+    await act(async () => {
+      await i18n.changeLanguage("en-US");
+    });
   });
 });

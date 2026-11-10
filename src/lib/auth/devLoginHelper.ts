@@ -5,40 +5,26 @@ import { bffSessionFetch } from "./sessionExpiry";
 let cachedToken: string | null = null;
 let cachedTenantId: string | null = null;
 
-function readRuntimeConfigValue(key: string): string | undefined {
-  if (typeof window === "undefined") return undefined;
-  const runtimeWindow = window as unknown as Record<string, unknown>;
-  const RUNTIME_CONFIG_KEYS = ["__PANTHEON_BFF_RUNTIME__", "__PANTHEON_RUNTIME_CONFIG__"] as const;
-  for (const configKey of RUNTIME_CONFIG_KEYS) {
-    const config = runtimeWindow[configKey];
-    if (!config || typeof config !== "object" || Array.isArray(config)) continue;
-    const value = (config as Record<string, unknown>)[key];
-    if (typeof value === "string") return value;
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
-  }
-  return undefined;
-}
-
 export function getDevLoginCredentials(): { clientId: string | null; clientSecret: string | null } {
   const env = readBffEnv();
-  
+
   const idKeys = [
     "VITE_BFF_DEV_LOGIN_CLIENT_ID",
     "PANTHEON_DEV_BFF_OIDC_CLIENT_ID",
-    "DEV_BFF_OIDC_CLIENT_ID"
+    "DEV_BFF_OIDC_CLIENT_ID",
   ];
-  
+
   const secretKeys = [
     "VITE_BFF_DEV_LOGIN_CLIENT_SECRET",
     "PANTHEON_DEV_BFF_OIDC_CLIENT_SECRET",
-    "DEV_BFF_OIDC_CLIENT_SECRET"
+    "DEV_BFF_OIDC_CLIENT_SECRET",
   ];
 
   let clientId: string | null = null;
   let clientSecret: string | null = null;
 
   for (const key of idKeys) {
-    const val = env[key] ?? readRuntimeConfigValue(key);
+    const val = env[key];
     if (val) {
       clientId = val;
       break;
@@ -46,7 +32,7 @@ export function getDevLoginCredentials(): { clientId: string | null; clientSecre
   }
 
   for (const key of secretKeys) {
-    const val = env[key] ?? readRuntimeConfigValue(key);
+    const val = env[key];
     if (val) {
       clientSecret = val;
       break;

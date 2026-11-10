@@ -325,15 +325,30 @@ export function adaptBffLoopRun(value: unknown, index = 0): LoopRun {
   const stages = liveStages.length > 0
     ? liveStages.map((stage, stageIndex) => {
         const s = asRecord(stage);
+        const rawTimeout = s.timeoutMs ?? s.timeout_ms;
+        const rawWarn = s.warnAfterMs ?? s.warn_after_ms;
+        const timeoutMs =
+          rawTimeout !== undefined && rawTimeout !== null && rawTimeout !== "" && Number.isFinite(Number(rawTimeout))
+            ? Number(rawTimeout)
+            : undefined;
+        const warnAfterMs =
+          rawWarn !== undefined && rawWarn !== null && rawWarn !== "" && Number.isFinite(Number(rawWarn))
+            ? Number(rawWarn)
+            : undefined;
+        const hasBackendThresholds =
+          timeoutMs !== undefined ||
+          warnAfterMs !== undefined ||
+          s.timeoutPolicySource === "backend" ||
+          s.timeout_policy_source === "backend";
         return {
           id: asString(s.id ?? s.stage_id ?? s.stageId, `${id}_stage_${stageIndex + 1}`),
           name: asString(s.name ?? s.kind ?? s.stage ?? s.stage_name ?? s.stageName ?? s.label, `Stage ${stageIndex + 1}`),
           status: adaptStageStatus(s.status),
           startedAt: asString(s.startedAt ?? s.started_at),
           completedAt: asString(s.completedAt ?? s.completed_at),
-          timeoutPolicySource: "backend" as const,
-          timeoutMs: Number.isFinite(Number(s.timeoutMs ?? s.timeout_ms)) ? Number(s.timeoutMs ?? s.timeout_ms) : undefined,
-          warnAfterMs: Number.isFinite(Number(s.warnAfterMs ?? s.warn_after_ms)) ? Number(s.warnAfterMs ?? s.warn_after_ms) : undefined,
+          timeoutPolicySource: hasBackendThresholds ? ("backend" as const) : ("v0-mock" as const),
+          timeoutMs,
+          warnAfterMs,
         };
       })
     : [
@@ -343,7 +358,10 @@ export function adaptBffLoopRun(value: unknown, index = 0): LoopRun {
           status: adaptStageStatus(status, status === "idle" ? "pending" : "running"),
           startedAt,
           completedAt: status === "succeeded" || status === "failed" || status === "cancelled" ? updatedAt : undefined,
-          timeoutPolicySource: "backend" as const,
+          timeoutPolicySource:
+            item.timeoutPolicySource === "backend" || item.timeout_policy_source === "backend"
+              ? ("backend" as const)
+              : ("v0-mock" as const),
         },
       ];
   const approval = asRecord(item.approval);
