@@ -132,9 +132,52 @@ export interface AttributionPeriodState {
   source: "meta" | "legacy_string" | "summary" | "missing";
 }
 
+export interface AttributionInstrumentLearningDecisionRow {
+  decision_id: string;
+  chosen_instrument_id: string | null;
+  best_instrument_id: string | null;
+  direction_hit: boolean | null;
+  instrument_regret: number | null;
+  margin_use: number | null;
+  chosen_pnl: number | null;
+}
+
+export interface AttributionInstrumentLearning {
+  direction_hit_rate: number | null;
+  direction_hit_count: number;
+  direction_graded_count: number;
+  instrument_regret: number | null;
+  instrument_regret_graded_count: number;
+  margin_use: number | null;
+  decision_count: number;
+  decisions: AttributionInstrumentLearningDecisionRow[];
+}
+
+export interface AttributionInstrumentBreakdownRow {
+  instrument_key: string;
+  instrument_id: string | null;
+  symbol: string | null;
+  instrument_kind: string | null;
+  contract_month: string | null;
+  multiplier: number | null;
+  margin_reserved: number | null;
+  holding_count: number | null;
+  market_value: number | null;
+  total_notional: number | null;
+  total_pnl: number | null;
+  unrealized_pnl: number | null;
+  realized_pnl: number | null;
+}
+
+export interface AttributionSummary {
+  instrument_learning?: AttributionInstrumentLearning;
+  instrument_breakdown?: AttributionInstrumentBreakdownRow[];
+}
+
 export interface PerformanceAttributionResult {
   rows: PerformanceAttributionRow[];
   period: AttributionPeriodState;
+  summary?: AttributionSummary;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -284,6 +327,113 @@ function finiteAttrNumber(...values: unknown[]): number {
     if (typeof value === "number" && Number.isFinite(value)) return value;
   }
   return NaN;
+}
+
+function nullableAttrNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function nullableAttrText(...values: unknown[]): string | null {
+  return cleanAttrDataText(...values) ?? null;
+}
+
+function nullableAttrBoolean(...values: unknown[]): boolean | null {
+  for (const value of values) {
+    if (typeof value === "boolean") return value;
+  }
+  return null;
+}
+
+export function normalizeAttributionInstrumentLearningDecision(
+  raw: unknown,
+): AttributionInstrumentLearningDecisionRow {
+  const r = isRecord(raw) ? raw : {};
+  return {
+    decision_id: cleanAttrDataText(r.decision_id, r.decisionId) ?? MISSING_TEXT,
+    chosen_instrument_id: nullableAttrText(r.chosen_instrument_id, r.chosenInstrumentId),
+    best_instrument_id: nullableAttrText(r.best_instrument_id, r.bestInstrumentId),
+    direction_hit: nullableAttrBoolean(r.direction_hit, r.directionHit),
+    instrument_regret: nullableAttrNumber(r.instrument_regret, r.instrumentRegret),
+    margin_use: nullableAttrNumber(r.margin_use, r.marginUse),
+    chosen_pnl: nullableAttrNumber(r.chosen_pnl, r.chosenPnl),
+  };
+}
+
+export function adaptAttributionInstrumentLearning(
+  raw: unknown,
+): AttributionInstrumentLearning | undefined {
+  if (!isRecord(raw)) return undefined;
+  const decisionsRaw = Array.isArray(raw.decisions) ? raw.decisions : [];
+  return {
+    direction_hit_rate: nullableAttrNumber(raw.direction_hit_rate, raw.directionHitRate),
+    direction_hit_count: nullableAttrNumber(raw.direction_hit_count, raw.directionHitCount) ?? 0,
+    direction_graded_count: nullableAttrNumber(raw.direction_graded_count, raw.directionGradedCount) ?? 0,
+    instrument_regret: nullableAttrNumber(raw.instrument_regret, raw.instrumentRegret),
+    instrument_regret_graded_count:
+      nullableAttrNumber(raw.instrument_regret_graded_count, raw.instrumentRegretGradedCount) ?? 0,
+    margin_use: nullableAttrNumber(raw.margin_use, raw.marginUse),
+    decision_count: nullableAttrNumber(raw.decision_count, raw.decisionCount) ?? decisionsRaw.length,
+    decisions: decisionsRaw.map(normalizeAttributionInstrumentLearningDecision),
+  };
+}
+
+export function normalizeAttributionInstrumentBreakdownRow(
+  raw: unknown,
+): AttributionInstrumentBreakdownRow {
+  const r = isRecord(raw) ? raw : {};
+  const instrumentId = nullableAttrText(r.instrument_id, r.instrumentId);
+  const symbol = nullableAttrText(r.symbol);
+  const instrumentKey =
+    cleanAttrDataText(r.instrument_key, r.instrumentKey, instrumentId, symbol) ?? "unassigned";
+  return {
+    instrument_key: instrumentKey,
+    instrument_id: instrumentId,
+    symbol,
+    instrument_kind: nullableAttrText(r.instrument_kind, r.instrumentKind, r.kind),
+    contract_month: nullableAttrText(r.contract_month, r.contractMonth),
+    multiplier: nullableAttrNumber(r.multiplier),
+    margin_reserved: nullableAttrNumber(r.margin_reserved, r.marginReserved),
+    holding_count: nullableAttrNumber(r.holding_count, r.holdingCount),
+    market_value: nullableAttrNumber(r.market_value, r.marketValue),
+    total_notional: nullableAttrNumber(r.total_notional, r.totalNotional),
+    total_pnl: nullableAttrNumber(r.total_pnl, r.totalPnl),
+    unrealized_pnl: nullableAttrNumber(r.unrealized_pnl, r.unrealizedPnl),
+    realized_pnl: nullableAttrNumber(r.realized_pnl, r.realizedPnl),
+  };
+}
+
+export function adaptAttributionInstrumentBreakdown(
+  raw: unknown,
+): AttributionInstrumentBreakdownRow[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map(normalizeAttributionInstrumentBreakdownRow);
+}
+
+export function adaptAttributionSummary(raw: unknown): AttributionSummary | undefined {
+  const root = isRecord(raw) ? raw : {};
+  const data = isRecord(root.data) ? root.data : root;
+  const summary = isRecord(data.summary)
+    ? data.summary
+    : isRecord(root.summary)
+      ? root.summary
+      : undefined;
+  if (!summary) return undefined;
+  const instrument_learning = adaptAttributionInstrumentLearning(
+    summary.instrument_learning ?? summary.instrumentLearning,
+  );
+  const instrument_breakdown = adaptAttributionInstrumentBreakdown(
+    summary.instrument_breakdown ?? summary.instrumentBreakdown,
+  );
+  if (instrument_learning === undefined && instrument_breakdown === undefined) {
+    return undefined;
+  }
+  return {
+    ...(instrument_learning !== undefined ? { instrument_learning } : {}),
+    ...(instrument_breakdown !== undefined ? { instrument_breakdown } : {}),
+  };
 }
 
 function stringAttrArray(value: unknown): string[] {

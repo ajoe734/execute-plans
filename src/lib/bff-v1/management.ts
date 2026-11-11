@@ -57,6 +57,7 @@ import type {
 } from "@/lib/v5/management/performanceAttribution";
 import {
   adaptAttributionPeriodState,
+  adaptAttributionSummary,
   isBffAcceptedAttributionDimension,
   normalizePerformanceAttributionRow,
 } from "@/lib/v5/management/performanceAttribution";
@@ -4367,7 +4368,10 @@ export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttrib
 
 export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
   const rows = adaptPerformanceAttributionRows(raw) ?? [];
-  return { rows, period: adaptAttributionPeriodState(raw) };
+  const summary = adaptAttributionSummary(raw);
+  return summary
+    ? { rows, period: adaptAttributionPeriodState(raw), summary }
+    : { rows, period: adaptAttributionPeriodState(raw) };
 }
 
 
