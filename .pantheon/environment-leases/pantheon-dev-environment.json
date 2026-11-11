@@ -1,0 +1,14 @@
+{
+  "acquiredAt": "2026-11-11T19:46:29Z",
+  "branch": "environment-coordination",
+  "expectedBackendSha": "609b476f33e4dd15233d4219523c6c6a79bea1b1",
+  "expiresAt": "2026-11-11T19:51:29Z",
+  "heartbeatAt": "2026-11-11T19:46:29Z",
+  "leaseId": "660a97a5-d82b-4975-abc2-d25e4d7f0f5a",
+  "mode": "deployment",
+  "owner": "human-ops:STRAT-DATASRC-HOSTED-ACCEPT-20261110:source-posture-repair-20261111-attempt2",
+  "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
+  "repository": "ajoe734/execute-plans",
+  "resource": "pantheon-dev-environment",
+  "schemaVersion": 1
+}
