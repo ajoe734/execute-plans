@@ -124,6 +124,30 @@ echo '192.0.2.1 STREAM secret-canary'
   assert.throws(() => readFileSync(f.config), { code: "ENOENT" }, "diagnostics do not write APT configuration");
 });
 
+test("mirror diagnostics report signature failure and mismatched signed codename independently", (t) => {
+  const f = fixture(t);
+  const bin = join(f.root, "bin");
+  mkdirSync(bin);
+  const commands = {
+    sudo: '#!/bin/bash\nshift 4\nexec "$@"\n',
+    getent: "#!/bin/bash\nexit 2\n",
+    "apt-config": "#!/bin/bash\nexit 0\n",
+    curl: '#!/bin/bash\nwhile [[ "$1" != --output ]]; do shift; done\nprintf "Origin: Ubuntu\\nCodename: %s\\n" "$TEST_CODENAME" > "$2"\n',
+    gpgv: '#!/bin/bash\nexit "$TEST_GPG_EXIT"\n',
+  };
+  for (const [name, content] of Object.entries(commands)) {
+    const path = join(bin, name);
+    writeFileSync(path, content);
+    chmodSync(path, 0o755);
+  }
+  for (const [signature, codename, expected] of [["0", "noble", 1], ["1", "noble", 1], ["0", "jammy", 0]]) {
+    const result = f.run({ PATH: `${bin}:${process.env.PATH}`, TEST_GPG_EXIT: signature, TEST_CODENAME: codename }, ["--diagnose"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(result.stdout.includes(`signature_exit=${signature} codename_ok=${expected} origin_ok=1`));
+    assert.equal(readFileSync(f.path, "utf8"), source);
+  }
+});
+
 test("every active browser install keeps with-deps and hard-failing APT preparation", () => {
   let installs = 0;
   for (const file of ["branch-ci.yml", "pantheon-integration-gate.yml"]) {
