@@ -60,7 +60,8 @@ const ENDPOINTS = [
       role: "paper_owner", allowed_deployment_scope: "paper", budget: 1 } },
   { stage: 3, route: `/api/v1/deployment-plans`,
     method: "POST", body: { binding_id: "bind-dev", artifact_id: "ar-dev",
-      deployment_mode: "paper", capital_pool_id: POOL_ID } },
+      deployment_mode: "paper", capital_pool_id: POOL_ID },
+    guardOnly: "CreateDeployment retired (410 ACTION_RETIRED); route is a mounted auth/retirement guard, not plan creation" },
   { stage: 4, route: `/api/v1/approval-decisions`,
     method: "POST", body: { plan_id: "plan-dev", decision: "approve", memo: "probe" } },
   { stage: 5, route: `/bff/runtimes/${RUNTIME_ID}/actions/StartRuntime`,
@@ -103,7 +104,8 @@ async function probe(ep) {
   try {
     const res = await fetch(url, init);
     const text = await res.text().catch(() => "");
-    return { ...ep, status: res.status, tag: classify(res.status),
+    const tag = ep.guardOnly ? `🛡 RETIRED guard-only (${res.status}; not creation)` : classify(res.status);
+    return { ...ep, status: res.status, tag,
              snippet: text.slice(0, 200).replace(/\s+/g, " ") };
   } catch (err) {
     return { ...ep, status: 0, tag: "⚠️ network", snippet: String(err).slice(0, 120) };
