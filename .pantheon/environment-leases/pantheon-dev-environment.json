@@ -1,15 +1,14 @@
 {
-  "acquiredAt": "2026-11-11T20:43:12Z",
+  "acquiredAt": "2026-11-11T21:09:15Z",
   "branch": "environment-coordination",
   "expectedBackendSha": "609b476f33e4dd15233d4219523c6c6a79bea1b1",
-  "expiresAt": "2026-11-11T21:08:34Z",
-  "heartbeatAt": "2026-11-11T21:03:34Z",
-  "leaseId": "11c3158d-9635-416f-ba14-90af44ebdb4a",
+  "expiresAt": "2026-11-11T21:14:15Z",
+  "heartbeatAt": "2026-11-11T21:09:15Z",
+  "leaseId": "8d4e64cd-e87a-4a4f-a93f-1eabe488e469",
   "mode": "deployment",
-  "owner": "pantheon:ajoe734/pantheon:43093653611:1:rollback",
+  "owner": "human-ops:STRAT-DATASRC-HOSTED-ACCEPT-20261110:paper-reader-repair-20261111-attempt1",
   "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
   "repository": "ajoe734/execute-plans",
   "resource": "pantheon-dev-environment",
-  "runUrl": "https://github.com/ajoe734/pantheon/actions/runs/43093653611",
   "schemaVersion": 1
 }
