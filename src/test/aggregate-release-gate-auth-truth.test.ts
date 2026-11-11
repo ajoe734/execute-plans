@@ -173,37 +173,34 @@ describe("integration-gate stays on the secretless boundary", () => {
 });
 
 // Behavior regressions for the pinned credential target + storage-free bearer.
-describe("pinned BFF bearer helper", () => {
-  const load = () => import("../../scripts/lib/pinned-bff-bearer.mjs");
-  it("accepts maintained dev origins and local candidate preview only", async () => {
-    const { pinnedTargetProblem } = await load();
-    const bff = "https://api.dev.mvl-cap.tw";
-    expect(pinnedTargetProblem({ feBase: "https://app.dev.mvl-cap.tw", bffBase: bff, env: {} })).toBe("");
-    expect(pinnedTargetProblem({ feBase: "http://127.0.0.1:4173", bffBase: bff + "/", env: {} })).toBe("");
-    expect(pinnedTargetProblem({ feBase: "https://evil.example", bffBase: bff, env: {} })).toMatch(/FE origin/);
-    expect(pinnedTargetProblem({ feBase: "http://127.0.0.1:4173", bffBase: "https://evil.example", env: {} })).toMatch(/BFF origin/);
-    expect(pinnedTargetProblem({ feBase: "http://127.0.0.1:4173", bffBase: "http://api.dev.mvl-cap.tw", env: {} })).toMatch(/BFF origin/);
-  });
-  it("refuses to install the bearer on an unpinned target and scopes it to the BFF origin", async () => {
-    const { installPinnedBffBearer } = await load();
-    const routes: Array<{ pattern: string; handler: (r: unknown) => unknown }> = [];
-    const ctx = { route: async (pattern: string, handler: (r: unknown) => unknown) => { routes.push({ pattern, handler }); } };
-    await expect(installPinnedBffBearer(ctx, { token: "t", feBase: "https://evil.example", bffBase: "https://api.dev.mvl-cap.tw", env: {} })).rejects.toThrow(/Refusing/);
-    expect(routes).toHaveLength(0);
-    await installPinnedBffBearer(ctx, { token: "tok", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw", env: {} });
-    expect(routes[0].pattern).toBe("https://api.dev.mvl-cap.tw/**");
-    const cont: unknown[] = [];
-    const mk = (url: string) => ({ request: () => ({ url: () => url, headers: () => ({ accept: "x" }) }), continue: (o?: unknown) => cont.push(o ?? "plain") });
-    routes[0].handler(mk("https://api.dev.mvl-cap.tw/bff/me"));
-    routes[0].handler(mk("https://api.dev.mvl-cap.tw.evil.example/bff/me"));
-    expect(cont[0]).toEqual({ headers: { accept: "x", authorization: "Bearer tok" } });
-    expect(cont[1]).toBe("plain");
-  });
-  it("probe scripts no longer write the bearer into retired browser storage", () => {
-    for (const f of ["scripts/probe-route-load-baseline.mjs", "scripts/accept-management-hosted-production.mjs"]) {
-      const src = readFileSync(resolve(process.cwd(), f), "utf8");
-      expect(src).not.toMatch(/pantheon_operator_token|pantheon\.bff\.bearerToken|[sS]torage\.setItem|target\.setItem/);
+describe("pinned BFF credential target in probe scripts", () => {
+  const scripts = ["scripts/probe-route-load-baseline.mjs", "scripts/accept-management-hosted-production.mjs"];
+  const runScript = (script: string, env: Record<string, string>) => {
+    const dir = mkdtempSync(join(tmpdir(), "pantheon-pin-"));
+    dirs.push(dir);
+    return spawnSync("node", [resolve(process.cwd(), script), "--out-dir", dir], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 30_000,
+      env: { ...process.env, PANTHEON_LOAD_BASELINE_OUT_DIR: dir, BFF_AUTH_TOKEN: "a.b.c", ...env },
+    });
+  };
+  for (const script of scripts) {
+    it(`${script} refuses to use the credential for an arbitrary BFF origin before any request`, () => {
+      const res = runScript(script, { PANTHEON_BFF_BASE_URL: "https://evil.example", PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173" });
+      expect(res.status).not.toBe(0);
+      expect(`${res.stdout}${res.stderr}`).toContain("Refusing to release BFF credential: BFF origin");
+    });
+    it(`${script} refuses an arbitrary FE origin and plain-http BFF`, () => {
+      const fe = runScript(script, { PANTHEON_BFF_BASE_URL: "https://api.dev.mvl-cap.tw", PANTHEON_FE_BASE_URL: "https://evil.example" });
+      expect(`${fe.stdout}${fe.stderr}`).toContain("Refusing to release BFF credential: FE origin");
+      const http = runScript(script, { PANTHEON_BFF_BASE_URL: "http://api.dev.mvl-cap.tw", PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173" });
+      expect(`${http.stdout}${http.stderr}`).toContain("Refusing to release BFF credential: BFF origin");
+    });
+    it(`${script} no longer writes the bearer into retired browser storage`, () => {
+      const src = readFileSync(resolve(process.cwd(), script), "utf8");
+      expect(src).not.toMatch(/pantheon_operator_token|pantheon\.bff\.bearerToken|[sS]torage\.setItem|target\.setItem|addInitScript/);
       expect(src).toContain("installPinnedBffBearer");
-    }
-  });
+    });
+  }
 });

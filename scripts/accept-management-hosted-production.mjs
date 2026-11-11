@@ -36,7 +36,6 @@ import {
   bearerAuthorization,
   normalizeOptionalBearerToken,
 } from "./lib/bearer-token.mjs";
-import { installPinnedBffBearer } from "./lib/pinned-bff-bearer.mjs";
 import { BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS } from "./lib/management-routes.mjs";
 
 // --- argv / env --------------------------------------------------------
@@ -84,6 +83,61 @@ const TENANT_ID = process.env.PANTHEON_TENANT_ID || "pantheon-dev";
 const BEARER_TOKEN = normalizeOptionalBearerToken(
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || ""
 );
+
+// Release-gate credential boundary: a short-lived BFF bearer is released only to
+// the maintained dev BFF origin, and only while the browser target is the
+// maintained dev FE origin or the local exact-candidate preview. The token is
+// attached per-request to that BFF origin; it is never written to browser
+// storage (the retired bearer storage keys
+// are not read by the strict FE and are not recreated here).
+const MAINTAINED_DEV_FE_ORIGIN = "https://app.dev.mvl-cap.tw";
+const MAINTAINED_DEV_BFF_ORIGIN = "https://api.dev.mvl-cap.tw";
+
+function originOf(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    if (url.username || url.password) return "";
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
+function isLoopbackOrigin(origin) {
+  try {
+    const host = new URL(origin).hostname.toLowerCase();
+    return host === "localhost" || host === "[::1]" || /^127(?:\.\d{1,3}){3}$/u.test(host);
+  } catch {
+    return false;
+  }
+}
+
+function pinnedTargetProblem({ feBase, bffBase, env = process.env }) {
+  const bff = originOf(bffBase);
+  const fe = originOf(feBase);
+  const pinnedBff = originOf(env.PANTHEON_AUTH_PIN_BFF_ORIGIN) || MAINTAINED_DEV_BFF_ORIGIN;
+  const pinnedFe = originOf(env.PANTHEON_AUTH_PIN_FE_ORIGIN) || MAINTAINED_DEV_FE_ORIGIN;
+  if (!bff || bff !== pinnedBff || !bff.startsWith("https://")) {
+    return `BFF origin is not the maintained dev origin (${pinnedBff})`;
+  }
+  if (!fe || (fe !== pinnedFe && !isLoopbackOrigin(fe))) {
+    return `FE origin is neither the maintained dev origin (${pinnedFe}) nor the local candidate preview`;
+  }
+  return "";
+}
+
+/** Attach Authorization only to pinned-BFF requests; throws before auth on an unpinned target. */
+async function installPinnedBffBearer(context, { token, feBase, bffBase, env = process.env }) {
+  const problem = pinnedTargetProblem({ feBase, bffBase, env });
+  if (problem) throw new Error(`Refusing to release BFF credential: ${problem}`);
+  const bffOrigin = originOf(bffBase);
+  await context.route(`${bffOrigin}/**`, (route) => {
+    const request = route.request();
+    if (originOf(request.url()) !== bffOrigin) return route.continue();
+    return route.continue({ headers: { ...request.headers(), authorization: `Bearer ${token}` } });
+  });
+}
 
 const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
@@ -528,6 +582,9 @@ async function main() {
       "A short-lived BFF_AUTH_TOKEN is required for hosted production acceptance",
     );
   }
+
+  const pinProblem = pinnedTargetProblem({ feBase: FE_BASE, bffBase: BFF_BASE });
+  if (pinProblem) throw new Error(`Refusing to release BFF credential: ${pinProblem}`);
 
   const chromium = await loadChromium();
   const browser = await chromium.launch({ headless: true });
