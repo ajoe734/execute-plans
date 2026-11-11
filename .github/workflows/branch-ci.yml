@@ -187,7 +187,6 @@ jobs:
 
       - name: Prepare official Ubuntu APT transport
         run: |
-          bash scripts/prepare-ubuntu-ci-apt.sh --diagnose
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh
 
       - name: Install Chromium for browser regression tests

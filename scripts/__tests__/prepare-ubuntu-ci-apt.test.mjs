@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -37,7 +37,7 @@ test("bypasses the failed mirror selector while preserving signed suites and unr
   const f = fixture(t);
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(f.path, "utf8"), source.replace("mirror+file:/etc/apt/apt-mirrors.txt", "https://archive.ubuntu.com/ubuntu/"));
+  assert.equal(readFileSync(f.path, "utf8"), source.replace("mirror+file:/etc/apt/apt-mirrors.txt", "https://mirror.math.princeton.edu/pub/ubuntu/"));
   assert.equal(readFileSync(f.thirdParty, "utf8"), "existing unrelated source\n");
   const config = readFileSync(f.config, "utf8");
   // Read the effective options with APT itself, rather than only matching text.
@@ -50,11 +50,11 @@ test("bypasses the failed mirror selector while preserving signed suites and unr
   assert.equal(f.run().status, 0, "preparation is idempotent");
 });
 
-test("also handles the original Azure URI without changing a direct security stanza", (t) => {
-  const sources = source.replace("mirror+file:/etc/apt/apt-mirrors.txt", "http://azure.archive.ubuntu.com/ubuntu/") + "\nTypes: deb\nURIs: https://security.ubuntu.com/ubuntu/\nSuites: noble-security\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n";
+test("routes Azure, direct archive and security stanzas through the verified official mirror", (t) => {
+  const sources = source.replace("mirror+file:/etc/apt/apt-mirrors.txt", "http://azure.archive.ubuntu.com/ubuntu/") + "\nTypes: deb\nURIs: https://archive.ubuntu.com/ubuntu/\nSuites: noble-updates\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nTypes: deb\nURIs: https://security.ubuntu.com/ubuntu/\nSuites: noble-security\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n";
   const f = fixture(t, sources);
   assert.equal(f.run().status, 0);
-  assert.equal(readFileSync(f.path, "utf8"), sources.replace("http://azure.archive.ubuntu.com/ubuntu/", "https://archive.ubuntu.com/ubuntu/"));
+  assert.equal(readFileSync(f.path, "utf8"), sources.replaceAll(/https?:\/\/(?:azure\.archive|archive|security)\.ubuntu\.com\/ubuntu\//g, "https://mirror.math.princeton.edu/pub/ubuntu/"));
 });
 
 test("refuses unsupported hosts before modifying their sources", (t) => {
@@ -82,72 +82,6 @@ test("missing or unknown source layout and config write failures propagate nonze
   assert.notEqual(unwritable.run().status, 0);
 });
 
-test("diagnostics distinguish identities, bound DNS failures and redact proxy secrets", (t) => {
-  const f = fixture(t);
-  const bin = join(f.root, "bin");
-  mkdirSync(bin);
-  const commands = {
-    curl: "#!/bin/bash\nexit 6\n",
-    sudo: '#!/bin/bash\nexport TEST_IDENTITY="$3"\nshift 4\nexec "$@"\n',
-    getent: `#!/bin/bash
-if [[ "$TEST_IDENTITY" == _apt && "$2" == archive.ubuntu.com ]]; then
-  exec sleep 10
-fi
-if [[ "$TEST_IDENTITY" == _apt && "$2" != github.com ]]; then
-  echo 'secret-canary' >&2
-  exit 2
-fi
-echo '192.0.2.1 STREAM secret-canary'
-`,
-    "apt-config": '#!/bin/bash\necho \'Acquire::https::Proxy "http://user:secret-canary@proxy.invalid/";\'\n',
-  };
-  for (const [name, content] of Object.entries(commands)) {
-    const path = join(bin, name);
-    writeFileSync(path, content);
-    chmodSync(path, 0o755);
-  }
-  const result = f.run({ PATH: `${bin}:${process.env.PATH}`, TEST_IDENTITY: "runner", https_proxy: "http://user:secret-canary@proxy.invalid/" }, ["--diagnose"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /identity=runner host=archive\.ubuntu\.com exit=0 answer_lines=1/);
-  assert.match(result.stdout, /identity=root host=archive\.ubuntu\.com exit=0 answer_lines=1/);
-  assert.match(result.stdout, /identity=_apt host=archive\.ubuntu\.com exit=124 answer_lines=0/);
-  assert.match(result.stdout, /identity=_apt host=security\.ubuntu\.com exit=2 answer_lines=0/);
-  assert.match(result.stdout, /identity=_apt host=github\.com exit=0 answer_lines=1/);
-  for (const identity of ["runner", "root", "_apt"]) {
-    assert.ok(result.stdout.includes(`identity=${identity} env_key=https_proxy present=1`));
-    assert.ok(result.stdout.includes(`identity=${identity} apt_config_key=proxy present=1`));
-  }
-  assert.doesNotMatch(result.stdout + result.stderr, /secret-canary|192\.0\.2\.1|proxy\.invalid|user:|http:\/\//);
-  assert.ok(result.stdout.includes("url=https://mirror.math.princeton.edu/pub/ubuntu/ suite=noble fetch_exit=6"));
-  assert.doesNotMatch(result.stdout, /signature_exit=/);
-  assert.equal(readFileSync(f.path, "utf8"), source, "diagnostics do not rewrite sources");
-  assert.throws(() => readFileSync(f.config), { code: "ENOENT" }, "diagnostics do not write APT configuration");
-});
-
-test("mirror diagnostics report signature failure and mismatched signed codename independently", (t) => {
-  const f = fixture(t);
-  const bin = join(f.root, "bin");
-  mkdirSync(bin);
-  const commands = {
-    sudo: '#!/bin/bash\nshift 4\nexec "$@"\n',
-    getent: "#!/bin/bash\nexit 2\n",
-    "apt-config": "#!/bin/bash\nexit 0\n",
-    curl: '#!/bin/bash\nwhile [[ "$1" != --output ]]; do shift; done\nprintf "Origin: Ubuntu\\nCodename: %s\\n" "$TEST_CODENAME" > "$2"\n',
-    gpgv: '#!/bin/bash\nexit "$TEST_GPG_EXIT"\n',
-  };
-  for (const [name, content] of Object.entries(commands)) {
-    const path = join(bin, name);
-    writeFileSync(path, content);
-    chmodSync(path, 0o755);
-  }
-  for (const [signature, codename, expected] of [["0", "noble", 1], ["1", "noble", 1], ["0", "jammy", 0]]) {
-    const result = f.run({ PATH: `${bin}:${process.env.PATH}`, TEST_GPG_EXIT: signature, TEST_CODENAME: codename }, ["--diagnose"]);
-    assert.equal(result.status, 0, result.stderr);
-    assert.ok(result.stdout.includes(`signature_exit=${signature} codename_ok=${expected} origin_ok=1`));
-    assert.equal(readFileSync(f.path, "utf8"), source);
-  }
-});
-
 test("every active browser install keeps with-deps and hard-failing APT preparation", () => {
   let installs = 0;
   for (const file of ["branch-ci.yml", "pantheon-integration-gate.yml"]) {
@@ -159,7 +93,7 @@ test("every active browser install keeps with-deps and hard-failing APT preparat
         installs++;
         assert.equal(job["runs-on"], "ubuntu-24.04");
         const prep = steps[index - 1];
-        assert.equal(prep.run.trim(), "bash scripts/prepare-ubuntu-ci-apt.sh --diagnose\nsudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh");
+        assert.equal(prep.run.trim(), "sudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh");
         assert.equal(prep["continue-on-error"], undefined);
         assert.equal(prep.if, undefined);
         // No install retries or success-forcing shell branches mask failures.
