@@ -1260,10 +1260,73 @@ jobs:
           PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
+      # Trusted read-only auth: only a parent-dispatched run on trusted dev
+      # workflow code, for the exact current dev head already admitted by the
+      # active release-controller step above. Untrusted PR/push/branch code
+      # never reaches this step. Token goes to masked step output (not
+      # GITHUB_ENV) and is passed only to the read-only probe steps below.
+      - name: Decide trusted read-only auth eligibility
+        id: ro_auth_gate
+        uses: actions/github-script@v7
+        env:
+          RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
+          RELEASE_CONTROLLER_RUN_ID: ${{ inputs.release_controller_run_id }}
+          FRONTEND_SHA: ${{ inputs.fe_sha }}
+          FRONTEND_REF: ${{ inputs.frontend_ref }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const sha = /^[0-9a-f]{40}$/;
+            const frontendSha = String(process.env.FRONTEND_SHA || "").toLowerCase();
+            const eligible = async () => {
+              if (context.eventName !== "workflow_dispatch" || context.ref !== "refs/heads/dev") return "not a dev workflow_dispatch";
+              if (process.env.FRONTEND_REF !== "dev" || !sha.test(frontendSha)) return "frontend_ref is not exact dev";
+              if (!process.env.RELEASE_CANDIDATE_ID || !/^[1-9][0-9]*$/.test(process.env.RELEASE_CONTROLLER_RUN_ID || "")) return "no parent controller run";
+              const { data: devRef } = await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: "heads/dev" });
+              if (String(devRef.object?.sha || "").toLowerCase() !== frontendSha) return "fe_sha is not current dev head";
+              const { data: parent } = await github.rest.actions.getWorkflowRun({ owner: "ajoe734", repo: "pantheon", run_id: Number(process.env.RELEASE_CONTROLLER_RUN_ID) });
+              if (String(parent.path || "").split("@")[0] !== ".github/workflows/nonprod-deploy.yml" ||
+                  parent.status !== "in_progress" || parent.head_branch !== "dev") return "parent controller run is not active";
+              return "";
+            };
+            const reason = await eligible();
+            core.setOutput("eligible", reason ? "false" : "true");
+            if (reason) core.notice(`Read-only auth not provisioned (${reason}); required authenticated probes will fail as missing-auth.`);
+
+      - name: Mint read-only BFF token via existing dev-login
+        id: ro_auth
+        if: steps.ro_auth_gate.outputs.eligible == 'true'
+        continue-on-error: true
+        env:
+          DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEV_LOGIN_CLIENT_SECRET" ]] || { echo "existing dev-login client secret is not available" >&2; exit 1; }
+          base="${PANTHEON_BFF_BASE_URL%/}"
+          body="$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')"
+          response="$(curl --fail-with-body --silent --show-error --location --retry 2 --retry-all-errors \
+            --connect-timeout 5 --max-time 20 -X POST "$base/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' -d "$body")"
+          token="$(node -e '
+            const t=String(JSON.parse(process.argv[1]).access_token||"").trim();
+            if (!t || t.split(".").length !== 3) process.exit(1);
+            process.stdout.write(t);' "$response")"
+          printf '::add-mask::%s\n' "$token"
+          # Real server-side tenant/role verification, not local decoding.
+          me="$(curl --fail-with-body --silent --show-error --max-time 20 -H "Authorization: Bearer $token" "$base/bff/me")"
+          ME_JSON="$me" node -e '
+            const m=JSON.parse(process.env.ME_JSON); const d=m.data||m;
+            const tenant=d.tenant_id||d.tenantId||d.tenant?.id;
+            const roles=d.roles||d.capabilities?.roles||[];
+            if (!tenant || !Array.isArray(roles) || roles.length===0) { console.error("server /bff/me did not confirm tenant and roles"); process.exit(1); }'
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
       - name: Management route-load baseline
         id: route_load
         continue-on-error: true
         env:
+          BFF_AUTH_TOKEN: ${{ steps.ro_auth.outputs.token }}
           PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
         run: |
           set -o pipefail
@@ -1285,6 +1348,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 8
         env:
+          BFF_AUTH_TOKEN: ${{ steps.ro_auth.outputs.token }}
           PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
           PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000"
           PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "6000"
@@ -1311,6 +1375,7 @@ jobs:
         id: e2e
         continue-on-error: true
         env:
+          BFF_AUTH_TOKEN: ${{ steps.ro_auth.outputs.token }}
           PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "0"
           PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ""
           PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ""
