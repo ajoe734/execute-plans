@@ -9,5 +9,27 @@
   "probe": "StartRuntime stage 5 now reported as UNSUPPORTED (not probed, never passed); no new start API invented; no live writes executed",
   "tests_migrated": ["envelope.test.ts uses route-neutral local registerMock fixture /bff/__fixture__/strategy/{id}/{action}; alias assertions removed", "revamp-2026-05-20.test.ts asserts paths.commandsV1() instead of paths.action"],
   "notification_outbound_audit": "Out of scope: product notification features (/bff/notifications, /bff/sse/notifications, listTotalCountPolicy entry, B3-console SSE catalog) are preserved and were NOT audited as retired routes. Audit of the exact retired routes in src/ and scripts/ (non-test): GET /api/v1/deployment-plans, nested deployment/runtime/strategy/tool/skill actions, GET /bff/mcp/servers, GET /bff/mcp/servers/{id}, POST /bff/mcp/tools/{id}/actions/{action} have no outbound callers in src/. Only references: scripts/probe-persona-onboarding-endpoints.mjs POST /api/v1/deployment-plans (guard-only, expects 410 ACTION_RETIRED, never counted as success) and StartRuntime stage (UNSUPPORTED, skipped, no fetch). Live persona AdvanceLifecycle / pool / MCP create+actions operations are distinct and retained.",
-  "validation": {"vitest": "src/lib/bff-v1/__tests__ + revamp test: 46 files / 480 tests passed", "tsc": "tsconfig.app.json clean", "node_check": "probe script syntax ok"}
+  "validation": {"vitest": "src/lib/bff-v1/__tests__ + revamp test: 46 files / 480 tests passed", "tsc": "tsconfig.app.json clean", "node_check": "probe script syntax ok"},
+  "resumed_delivery": {
+    "date_utc": "2026-11-11",
+    "pr": "https://github.com/ajoe734/execute-plans/pull/982",
+    "dependency": "FE-CI-APT-DNS-20261111 is canonically done; PR983 merged to dev at dab26e1f69181b7b6cbbae47ef4cf3d86050278c",
+    "synchronization": "Original PR982 branch merged actual origin/dev dab26e1f69181b7b6cbbae47ef4cf3d86050278c at 46b6e0a190588db48a5487d752c9fb2780e340df; no task replacement or product scope expansion",
+    "historical_ci": {
+      "head": "43f210ddc5c8fc51ddc4326452f47d7064171041",
+      "runs": [43038266783, 43038278339],
+      "result": "FAILURE: real Chromium --with-deps setup failed APT DNS before downstream browser tests ran; retries also failed. These failures remain failures. Dependency CI success does not prove PR982."
+    },
+    "fresh_local_terminal_results": [
+      "timeout 240 npm test -- src/lib/bff-v1/__tests__ src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts: exit 0, 46 files / 480 tests",
+      "timeout 180 npm run typecheck:app: exit 0",
+      "node --check scripts/probe-persona-onboarding-endpoints.mjs: exit 0",
+      "node /tmp/fe-retired-probe-contract.mjs: exit 0; in-memory VM, no network or filesystem mutations; 200/400/401/403/410/422/500 each produce seven stub requests, zero StartRuntime requests; stage 3 always RETIRED guard-only (not creation), stage 5 always UNSUPPORTED; persona AdvanceLifecycle and pool create/ApprovePool retained",
+      "git diff --check: exit 0",
+      "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge: exit 0"
+    ],
+    "caller_audit": "Rechecked src/ and scripts/: zero calls to removed paths builders/aliases. Exact retired nested-action families and /bff/mcp/servers or /bff/mcp/tools/{id}/actions have no non-test outbound callers in src/. The probe retains only POST deployment-plans guard and skipped StartRuntime as already described. Genuine product notification/SSE, persona/pool, MCP create/actions and existing commands route are unchanged.",
+    "fresh_ci_requirement": "This committed manifest precedes the resumed exact-head CI/review. Collect terminal Branch CI push/PR outputs for the enclosing head and bind actual run/job results in the governed handoff before independent approval. Do not substitute prior head or dependency results.",
+    "delivery_boundary": "Source-only cleanup. Supervisor integrates only after independent Codex2 review and required checks. No deployment dispatched or business writes performed; hosted acceptance belongs to the existing COMPAT-RESIDUAL-HOSTED-ACCEPT task and must verify the actual served FE/BFF pair."
+  }
 }
