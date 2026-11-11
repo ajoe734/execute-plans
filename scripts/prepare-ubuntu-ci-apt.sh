@@ -22,6 +22,8 @@ if [[ "${1:-}" == --diagnose ]]; then
   python3 - <<'PY'
 import re
 import subprocess
+import tempfile
+from pathlib import Path
 
 proxy_probe = '''
 import os, re, subprocess
@@ -37,7 +39,7 @@ except subprocess.TimeoutExpired:
 '''
 for identity in ("runner", "root", "_apt"):
     prefix = [] if identity == "runner" else ["sudo", "-n", "-u", identity, "--"]
-    for host in ("azure.archive.ubuntu.com", "archive.ubuntu.com", "security.ubuntu.com", "github.com"):
+    for host in ("azure.archive.ubuntu.com", "archive.ubuntu.com", "security.ubuntu.com", "github.com", "mirrors.us.kernel.org", "mirror.math.princeton.edu"):
         try:
             result = subprocess.run(prefix + ["timeout", "--kill-after=1s", "4s", "getent", "ahostsv4", host], capture_output=True, text=True, timeout=6)
             code, answers = result.returncode, len(result.stdout.splitlines())
@@ -53,6 +55,24 @@ for identity in ("runner", "root", "_apt"):
                 print(f"APT proxy identity={identity} {line}", flush=True)
     except subprocess.TimeoutExpired:
         print(f"APT proxy identity={identity} probe_exit=124", flush=True)
+
+# Listed at https://launchpad.net/ubuntu/+archivemirrors. Probe only;
+# these results do not select a source or replace the required APT install.
+for base in ("https://mirrors.us.kernel.org/ubuntu/", "https://mirror.math.princeton.edu/pub/ubuntu/"):
+    with tempfile.TemporaryDirectory(prefix="ubuntu-inrelease-") as directory:
+        release = Path(directory) / "InRelease"
+        try:
+            fetched = subprocess.run(["curl", "--fail", "--silent", "--show-error", "--proto", "=https", "--connect-timeout", "4", "--max-time", "10", "--output", str(release), base + "dists/noble/InRelease"], capture_output=True, timeout=12)
+            print(f"APT mirror url={base} suite=noble fetch_exit={fetched.returncode}", flush=True)
+            if fetched.returncode:
+                continue
+            verified = subprocess.run(["gpgv", "--keyring", "/usr/share/keyrings/ubuntu-archive-keyring.gpg", str(release)], capture_output=True, timeout=4)
+            metadata = release.read_text()
+            codename = bool(re.search(r"^Codename: noble$", metadata, re.M))
+            origin = bool(re.search(r"^Origin: Ubuntu$", metadata, re.M))
+            print(f"APT mirror url={base} suite=noble signature_exit={verified.returncode} codename_ok={int(codename)} origin_ok={int(origin)}", flush=True)
+        except subprocess.TimeoutExpired:
+            print(f"APT mirror url={base} suite=noble probe_exit=124", flush=True)
 PY
   exit 0
 fi

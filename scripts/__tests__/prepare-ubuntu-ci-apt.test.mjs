@@ -87,6 +87,7 @@ test("diagnostics distinguish identities, bound DNS failures and redact proxy se
   const bin = join(f.root, "bin");
   mkdirSync(bin);
   const commands = {
+    curl: "#!/bin/bash\nexit 6\n",
     sudo: '#!/bin/bash\nexport TEST_IDENTITY="$3"\nshift 4\nexec "$@"\n',
     getent: `#!/bin/bash
 if [[ "$TEST_IDENTITY" == _apt && "$2" == archive.ubuntu.com ]]; then
@@ -117,6 +118,8 @@ echo '192.0.2.1 STREAM secret-canary'
     assert.ok(result.stdout.includes(`identity=${identity} apt_config_key=proxy present=1`));
   }
   assert.doesNotMatch(result.stdout + result.stderr, /secret-canary|192\.0\.2\.1|proxy\.invalid|user:|http:\/\//);
+  assert.ok(result.stdout.includes("url=https://mirror.math.princeton.edu/pub/ubuntu/ suite=noble fetch_exit=6"));
+  assert.doesNotMatch(result.stdout, /signature_exit=/);
   assert.equal(readFileSync(f.path, "utf8"), source, "diagnostics do not rewrite sources");
   assert.throws(() => readFileSync(f.config), { code: "ENOENT" }, "diagnostics do not write APT configuration");
 });
