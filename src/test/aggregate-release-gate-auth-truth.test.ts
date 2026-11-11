@@ -114,3 +114,40 @@ describe("hosted probe truth (failed real probes are never PASS)", () => {
     expect(labelOf(s, /F12 hosted/)?.status).toBe("missing");
   });
 });
+
+describe("success, missing-auth and permitted-skip regressions", () => {
+  const hostedRe = [/route-load/, /load gate/, /acceptance step/, /desktop Playwright/, /F12 hosted/];
+
+  it("genuine required success: every required hosted probe passes, none is advisory, no hosted probe blocks admission", () => {
+    const { summary } = run({ steps: allPass, desktop: f12("expected"), hardGate: "false" });
+    for (const re of hostedRe) expect(labelOf(summary, re)?.status).toBe("pass");
+    const hostedBlockers = summary.gates["8"].filter(
+      (c) => hostedRe.some((re) => re.test(c.label)) && c.status !== "pass",
+    );
+    expect(hostedBlockers).toEqual([]);
+    expect(summary.advisoryFailures.some((a) => hostedRe.some((re) => re.test(a.label)))).toBe(false);
+  });
+
+  it("missing short-lived auth (acceptance step skipped/failed) blocks and exits non-zero, never pass", () => {
+    for (const outcome of ["skipped", "failure", "cancelled"]) {
+      const { summary, status } = run({
+        steps: { ...allPass, mgmt_hosted_accept: outcome },
+        desktop: f12("expected"),
+        hardGate: "false",
+      });
+      expect(labelOf(summary, /acceptance step/)?.status).not.toBe("pass");
+      expect(["fail", "missing"]).toContain(labelOf(summary, /acceptance step/)?.status);
+      expect(status).toBe(1);
+      expect(summary.releaseReadiness).toBe("blocked");
+    }
+  });
+
+  it("unrequested write/Loops/provider proof steps being skipped never affect required hosted probe verdicts", () => {
+    const { summary } = run({
+      steps: { ...allPass, pint_hosted_e2e: "skipped", mgmt_persona_3000: "skipped", mgmt_live_deep: "skipped" },
+      desktop: f12("expected"),
+      hardGate: "false",
+    });
+    for (const re of hostedRe) expect(labelOf(summary, re)?.status).toBe("pass");
+  });
+});
