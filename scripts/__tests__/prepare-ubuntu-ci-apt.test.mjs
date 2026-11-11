@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -25,10 +25,10 @@ function fixture(t, sources = source, os = 'ID=ubuntu\nVERSION_ID="24.04"\n') {
   writeFileSync(join(root, "etc/os-release"), os);
   const thirdParty = join(root, "etc/apt/sources.list.d/microsoft.list");
   writeFileSync(thirdParty, "existing unrelated source\n");
-  const run = (env = {}) => spawnSync("bash", [helper], {
+  const run = (env = {}, args = []) => spawnSync("bash", [helper, ...args], {
     env: { ...process.env, GITHUB_ACTIONS: "true", RUNNER_OS: "Linux", RUNNER_ARCH: "X64", CI_APT_ROOT: root, ...env },
     encoding: "utf8",
-    timeout: 5000,
+    timeout: 15000,
   });
   return { root, path, config, thirdParty, run };
 }
@@ -82,6 +82,45 @@ test("missing or unknown source layout and config write failures propagate nonze
   assert.notEqual(unwritable.run().status, 0);
 });
 
+test("diagnostics distinguish identities, bound DNS failures and redact proxy secrets", (t) => {
+  const f = fixture(t);
+  const bin = join(f.root, "bin");
+  mkdirSync(bin);
+  const commands = {
+    sudo: '#!/bin/bash\nexport TEST_IDENTITY="$3"\nshift 4\nexec "$@"\n',
+    getent: `#!/bin/bash
+if [[ "$TEST_IDENTITY" == _apt && "$2" == archive.ubuntu.com ]]; then
+  exec sleep 10
+fi
+if [[ "$TEST_IDENTITY" == _apt && "$2" != github.com ]]; then
+  echo 'secret-canary' >&2
+  exit 2
+fi
+echo '192.0.2.1 STREAM secret-canary'
+`,
+    "apt-config": '#!/bin/bash\necho \'Acquire::https::Proxy "http://user:secret-canary@proxy.invalid/";\'\n',
+  };
+  for (const [name, content] of Object.entries(commands)) {
+    const path = join(bin, name);
+    writeFileSync(path, content);
+    chmodSync(path, 0o755);
+  }
+  const result = f.run({ PATH: `${bin}:${process.env.PATH}`, TEST_IDENTITY: "runner", https_proxy: "http://user:secret-canary@proxy.invalid/" }, ["--diagnose"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /identity=runner host=archive\.ubuntu\.com exit=0 answer_lines=1/);
+  assert.match(result.stdout, /identity=root host=archive\.ubuntu\.com exit=0 answer_lines=1/);
+  assert.match(result.stdout, /identity=_apt host=archive\.ubuntu\.com exit=124 answer_lines=0/);
+  assert.match(result.stdout, /identity=_apt host=security\.ubuntu\.com exit=2 answer_lines=0/);
+  assert.match(result.stdout, /identity=_apt host=github\.com exit=0 answer_lines=1/);
+  for (const identity of ["runner", "root", "_apt"]) {
+    assert.ok(result.stdout.includes(`identity=${identity} env_key=https_proxy present=1`));
+    assert.ok(result.stdout.includes(`identity=${identity} apt_config_key=proxy present=1`));
+  }
+  assert.doesNotMatch(result.stdout + result.stderr, /secret-canary|192\.0\.2\.1|proxy\.invalid|user:|http:\/\//);
+  assert.equal(readFileSync(f.path, "utf8"), source, "diagnostics do not rewrite sources");
+  assert.throws(() => readFileSync(f.config), { code: "ENOENT" }, "diagnostics do not write APT configuration");
+});
+
 test("every active browser install keeps with-deps and hard-failing APT preparation", () => {
   let installs = 0;
   for (const file of ["branch-ci.yml", "pantheon-integration-gate.yml"]) {
@@ -93,7 +132,7 @@ test("every active browser install keeps with-deps and hard-failing APT preparat
         installs++;
         assert.equal(job["runs-on"], "ubuntu-24.04");
         const prep = steps[index - 1];
-        assert.equal(prep.run, "sudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh");
+        assert.equal(prep.run.trim(), "bash scripts/prepare-ubuntu-ci-apt.sh --diagnose\nsudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh");
         assert.equal(prep["continue-on-error"], undefined);
         assert.equal(prep.if, undefined);
         // No install retries or success-forcing shell branches mask failures.

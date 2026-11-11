@@ -34,14 +34,56 @@
     "invariants": "Original Playwright --with-deps commands, real Chromium regressions, required checks, strict pair gates, package signatures, TLS verification and proxy configuration remain in effect. No product source, historical workflow, backend repository, business write or deployment dispatch changes."
   },
   "local_verification": [
-    { "command": "timeout 180 npm ci", "exit": 0 },
-    { "command": "bash -n scripts/prepare-ubuntu-ci-apt.sh", "exit": 0 },
-    { "command": "node --test scripts/__tests__/prepare-ubuntu-ci-apt.test.mjs", "exit": 0, "result": "5 tests passed; filesystem fixtures only, real apt-config reads the generated bounded/fail-closed settings" },
-    { "command": "timeout 180 npx --no-install vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts", "exit": 0, "result": "3 files, 57 tests passed" },
-    { "command": "git diff --check", "exit": 0 },
-    { "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge", "exit": 0, "at": "implementation anchor" },
-    { "command": "python3 scripts/git/check_generated_files.py <five scoped delivery paths>", "exit": 0 }
+    {
+      "command": "timeout 180 npm ci",
+      "exit": 0
+    },
+    {
+      "command": "bash -n scripts/prepare-ubuntu-ci-apt.sh",
+      "exit": 0
+    },
+    {
+      "command": "node --test scripts/__tests__/prepare-ubuntu-ci-apt.test.mjs",
+      "exit": 0,
+      "result": "6 tests passed, including identity-specific DNS failure/timeout, proxy secret redaction and read-only diagnostics fixtures"
+    },
+    {
+      "command": "timeout 180 npx --no-install vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
+      "exit": 0,
+      "result": "3 files, 57 tests passed"
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    },
+    {
+      "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge",
+      "exit": 0,
+      "at": "implementation anchor"
+    },
+    {
+      "command": "python3 scripts/git/check_generated_files.py <five scoped delivery paths>",
+      "exit": 0
+    }
   ],
-  "verification_limits": "An initial targeted Vitest invocation during unfinished npm ci exited 127 (vitest not found); it was not counted passed. After npm ci terminated successfully, the targeted command was rerun and passed. Local tests do not establish GitHub runner network health. Hosted validation is pending at manifest creation: require terminal package install and real browser test success on the exact delivered PR head, recorded in GitHub checks and canonical review/handoff evidence before approval. No hosted acceptance or dev deployment is claimed here.",
-  "handoff": "After independent Codex2 exact-head review and supervisor merge to dev, pass the actual merge SHA to FE-RETIRED-PROBE-CLEANUP-20261111 so PR982 consumes current dev through normal source synchronization and new-head review/checks. COMPAT-RESIDUAL-HOSTED-ACCEPT retains sole-publisher final exact-pair/authenticated-readback verification."
+  "verification_limits": "An initial targeted Vitest invocation during unfinished npm ci exited 127 (vitest not found); it was not counted passed. After npm ci terminated successfully, the targeted command was rerun and passed. Local tests do not establish GitHub runner network health. Hosted validation is pending at manifest creation: require terminal package install and real browser test success on the exact delivered PR head, recorded in GitHub checks and canonical review/handoff evidence before approval. No hosted acceptance or dev deployment is claimed here. The previous exact6b81edb7 hosted attempt failed and is explicitly recorded above. New diagnostics must be collected to distinguish DNS failure from proxy propagation before further transport edits.",
+  "handoff": "After independent Codex2 exact-head review and supervisor merge to dev, pass the actual merge SHA to FE-RETIRED-PROBE-CLEANUP-20261111 so PR982 consumes current dev through normal source synchronization and new-head review/checks. COMPAT-RESIDUAL-HOSTED-ACCEPT retains sole-publisher final exact-pair/authenticated-readback verification.",
+  "delivery_status": "diagnostic candidate; official HTTPS alone did not repair hosted CI",
+  "hosted_attempts": [
+    {
+      "head_sha": "6b81edb7d5ec0ff00c4d244a7f729120463b0085",
+      "run_id": 43043233879,
+      "job_id": 130606382871,
+      "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43043233879/job/130606382871",
+      "result": "failure",
+      "playwright_exit": 1,
+      "observed": "Preparation printed success at 15:10:11Z. Microsoft HTTPS metadata downloaded. All four official archive.ubuntu.com suites failed DNS; apt-get exit100 and Playwright exit1 at 15:12:54Z. Browser tests did not run. Azure-only mirror selection is not a sufficient root cause."
+    }
+  ],
+  "diagnostics": {
+    "entrypoint": "bash scripts/prepare-ubuntu-ci-apt.sh --diagnose before existing sudo preparation in all three active browser setup sites",
+    "scope": "One bounded getent ahostsv4 probe for each of Azure/archive/security Ubuntu and github.com, as runner/root/_apt. Only exit codes and answer line counts are printed. Each getent is capped at 4s with 1s kill grace and an outer 6s process timeout. Proxy environment keys and effective APT proxy key presence are compared across the same identities; values, raw subprocess errors/config and DNS answers are never logged.",
+    "policy": "Read-only diagnostics. No changes to inherited proxy policy, resolver files, sandbox identities, TLS or package signing. Original installs and real browser tests remain mandatory.",
+    "hosted_result": "pending; diagnostic candidate is not a delivered repair"
+  }
 }
