@@ -132,10 +132,17 @@ async function installPinnedBffBearer(context, { token, feBase, bffBase, env = p
   const problem = pinnedTargetProblem({ feBase, bffBase, env });
   if (problem) throw new Error(`Refusing to release BFF credential: ${problem}`);
   const bffOrigin = originOf(bffBase);
-  await context.route(`${bffOrigin}/**`, (route) => {
+  await context.route(`${bffOrigin}/**`, async (route) => {
     const request = route.request();
     if (originOf(request.url()) !== bffOrigin) return route.continue();
-    return route.continue({ headers: { ...request.headers(), authorization: `Bearer ${token}` } });
+    // route.continue({headers}) would replay the credential across redirects to
+    // unpinned origins; fetch without following redirects and fulfill instead so
+    // any redirect target is re-routed (and stays unauthenticated).
+    const response = await route.fetch({
+      headers: { ...request.headers(), authorization: `Bearer ${token}` },
+      maxRedirects: 0,
+    });
+    return route.fulfill({ response });
   });
 }
 

@@ -202,5 +202,36 @@ describe("pinned BFF credential target in probe scripts", () => {
       expect(src).not.toMatch(/pantheon_operator_token|pantheon\.bff\.bearerToken|[sS]torage\.setItem|target\.setItem|addInitScript/);
       expect(src).toContain("installPinnedBffBearer");
     });
+    it(`${script} does not carry the bearer across a redirect to an unpinned origin`, async () => {
+      const src = readFileSync(resolve(process.cwd(), script), "utf8");
+      const grab = (name: string) => {
+        const m = src.match(new RegExp(`(?:async )?function ${name}\\b[\\s\\S]*?\\n}\\n`));
+        if (!m) throw new Error(`missing ${name}`);
+        return m[0];
+      };
+      const body = ["originOf", "isLoopbackOrigin", "pinnedTargetProblem", "installPinnedBffBearer"].map(grab).join("\n");
+      const consts = src.match(/const MAINTAINED_DEV_\w+ = [^\n]+\n/g)?.join("") ?? "";
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const factory = new Function(`${consts}\n${body}\nreturn installPinnedBffBearer;`);
+      const install = factory() as (ctx: unknown, o: Record<string, string>) => Promise<void>;
+      let handler: (route: unknown) => Promise<unknown>;
+      const ctx = { route: async (_p: string, h: typeof handler) => { handler = h; } };
+      await install(ctx, { token: "tok", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
+      const calls: Array<{ kind: string; arg?: any }> = [];
+      const mkRoute = (url: string) => ({
+        request: () => ({ url: () => url, headers: () => ({ accept: "*/*" }) }),
+        continue: async (a?: unknown) => { calls.push({ kind: "continue", arg: a }); },
+        fetch: async (a: unknown) => { calls.push({ kind: "fetch", arg: a }); return { status: () => 302 }; },
+        fulfill: async (a: unknown) => { calls.push({ kind: "fulfill", arg: a }); },
+      });
+      await handler!(mkRoute("https://api.dev.mvl-cap.tw/api/me"));
+      const fetched = calls.find((c) => c.kind === "fetch");
+      expect(fetched?.arg.maxRedirects).toBe(0);
+      expect(fetched?.arg.headers.authorization).toBe("Bearer tok");
+      expect(calls.some((c) => c.kind === "continue" && c.arg?.headers)).toBe(false);
+      calls.length = 0;
+      await handler!(mkRoute("https://unpinned.example/x"));
+      expect(calls).toEqual([{ kind: "continue", arg: undefined }]);
+    });
   }
 });
