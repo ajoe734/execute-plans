@@ -151,4 +151,3 @@ describe("success, missing-auth and permitted-skip regressions", () => {
     for (const re of hostedRe) expect(labelOf(summary, re)?.status).toBe("pass");
   });
 });
-
