@@ -4,7 +4,6 @@
 
 import { paths } from "../paths";
 import { fail, list, ok, registerMock } from "./registry";
-import type { ActionCommandResponseData } from "../dto";
 
 let bootstrapped = false;
 
@@ -43,44 +42,7 @@ export function bootstrapMockAdapters(): void {
     });
   });
 
-  // POST /bff/strategies/{id}/actions/{action}
-  // Final C.1 demonstration: missing confirm token → 428 APPROVAL_REQUIRED / CONFIRM_TOKEN_REQUIRED
-  registerMock("POST", "/bff/strategies/{id}/actions/{action}", (req) => {
-    const headers = req.headers;
-    const body = (req.body ?? {}) as { confirmToken?: string };
-    const action = req.path.split("/").pop() ?? "unknown";
-    const id = req.path.split("/")[3];
-
-    // High-risk actions require confirm token
-    const HIGH_RISK = new Set(["promote", "suspend", "retire", "rollback"]);
-    if (HIGH_RISK.has(action) && !body.confirmToken) {
-      return fail({
-        code: "CONFIRM_TOKEN_REQUIRED",
-        message: `action '${action}' requires a confirm token`,
-        details: { requires_confirm_token: true },
-        correlationId: headers["X-Request-Id"],
-      });
-    }
-
-    // Two-man approval
-    if (action === "rollback") {
-      return fail({
-        code: "APPROVAL_REQUIRED",
-        message: "rollback requires a second approver",
-        details: { requires_approval: true, requires_two_man: true, approvalId: `appr_${id}_${action}` },
-        correlationId: headers["X-Request-Id"],
-      });
-    }
-
-    const data: ActionCommandResponseData = {
-      actionId: `act_${id}_${action}_${Date.now().toString(36)}`,
-      status: "accepted",
-    };
-    return ok(data, { correlationId: headers["X-Request-Id"], idempotencyKey: headers["Idempotency-Key"] });
-  });
-
-  // GET /bff/me — canonical (Final OpenAPI). Legacy alias `/bff/session/me` resolves
-  // to the same path via paths.sessionMe().
+  // GET /bff/me — canonical (Final OpenAPI).
   registerMock("GET", paths.me(), () =>
     ok({ sub: "mock-user", roles: ["operator"], capabilities: [] }),
   );

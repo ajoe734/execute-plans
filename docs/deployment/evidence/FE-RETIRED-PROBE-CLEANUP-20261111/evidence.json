@@ -1,0 +1,13 @@
+{
+  "task": "FE-RETIRED-PROBE-CLEANUP-20261111",
+  "removed": [
+    "mocks/adapters.ts: POST /bff/strategies/{id}/actions/{action} mock",
+    "paths.ts: strategyAction, personaAction, capitalPoolAction, rebalanceAction, deploymentAction, action (retired in U9; writes use paths.commandsV1())",
+    "paths.ts deprecated aliases: sessionMe, sessionRefresh, sessionLogout, approvalDecision, mcpToolImport (no product callers; me/authRefresh/logout/approvalDecide/mcpServerImportTools remain)"
+  ],
+  "kept": ["persona AdvanceLifecycle / pool actions in probe", "POST /api/v1/deployment-plans probe (live)", "MCP create/actions"],
+  "probe": "StartRuntime stage 5 now reported as UNSUPPORTED (not probed, never passed); no new start API invented; no live writes executed",
+  "tests_migrated": ["envelope.test.ts uses route-neutral local registerMock fixture /bff/__fixture__/strategy/{id}/{action}; alias assertions removed", "revamp-2026-05-20.test.ts asserts paths.commandsV1() instead of paths.action"],
+  "notification_outbound_audit": "src has no outbound fetch to notification paths; only listTotalCountPolicy.ts pathPrefix '/bff/notifications' (policy table entry) is a remaining source reference for BFF-OLD-NOTIFICATION-RETIRE-20261111",
+  "validation": {"vitest": "src/lib/bff-v1/__tests__ + revamp test: 46 files / 480 tests passed", "tsc": "tsconfig.app.json clean", "node_check": "probe script syntax ok"}
+}
