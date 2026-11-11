@@ -17,7 +17,12 @@
     "write proof and finite Loops/provider cases remain not-applicable/skipped; gate-before-switch, manifest admission and rollback untouched",
     "stale-host readback checks (gate 3/4, Gate 8 core evidence) remain advisory pre-switch; required authenticated probes no longer are"
   ],
-  "sourceTests": "vitest 5 files (aggregate-release-gate x4 + agora-retired-probes) 63/63 passed; auth-truth test asserts advisory-mode failures give Gate7 fail, exit 1, readiness blocked; absent F12 blocks",
+  "sourceTests": "vitest auth-truth now covers genuine success, missing-auth (skipped/failure/cancelled) exit 1, and permitted write/Loops/provider skips; see run output in task closeout",
   "notProven": "No real protected-run or hosted proof from this source-only worker; local operator/original publisher own the authenticated gate execution.",
-  "authApplicability": "Inspected: integration gate is credential-free by design; hosted acceptance/F12 consume the existing short-lived BFF_AUTH_TOKEN / OIDC path. If the protected entry does not inject it, the probes now fail honestly (blocking candidate) rather than read as pass; wiring into the existing protected flow is owned by the operator/publisher. No new secrets or write scope."
+  "authApplicability": "Exact evidence: workflow integration-gate (pantheon-integration-gate.yml ~L433-440, L482-484) is credential-free and excluded for proof opt-ins; no BFF_AUTH_TOKEN / PANTHEON_BFF_SMOKE_BEARER_TOKEN is provisioned in it. The only existing /bff/auth/dev-login bootstrap (~L1781-1821) lives in authorized-write-proof and exports Persona/PINT tokens only, under one-time parent-bound child proof claim. Consequence: with the corrected gate, integration-gate authenticated probes (route_load, mgmt_hosted_accept, hosted F12) fail honestly as missing-auth and block candidate publication until native wiring exists. No secret, dispatch input, issuer/grant, credential copy or write enablement was added, and hard checks are not weakened.",
+  "nativeWiringDependency": {
+    "owner": "local operator / original publisher STRAT-DATASRC-HOSTED-ACCEPT-20261110",
+    "needed": "existing authorized protected entry must inject the genuine short-lived read-only BFF_AUTH_TOKEN (server-verified tenant/role) into the integration-gate probe steps, or run these probes in the already-authorized protected job, via the existing native artifact/dependency correction path",
+    "handoff": "corrective handoff recorded; source worker does not provision credentials"
+  }
 }
