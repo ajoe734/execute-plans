@@ -25,6 +25,7 @@
     "backend_boundary": "Read backend task PLAN and provision_worker_sandbox.sh at ff70330d2084e58e77adb82c5d3df4f5976c1e17 for context only. Frontend setup has no backend checkout dependency."
   },
   "repair": {
+    "status": "Failed candidate retained on an unmerged diagnostic branch; not ready for integration or approval. Remove mirror-only candidate code before proposing a repair unless new evidence justifies it.",
     "entrypoints": [
       "branch-ci.yml / Component merge gate / Install Chromium for browser regression tests",
       "pantheon-integration-gate.yml / integration-gate / Install Playwright",
@@ -68,7 +69,7 @@
   ],
   "verification_limits": "An initial targeted Vitest invocation during unfinished npm ci exited 127 (vitest not found); it was not counted passed. After npm ci terminated successfully, the targeted command was rerun and passed. Local tests do not establish GitHub runner network health. Hosted validation is pending at manifest creation: require terminal package install and real browser test success on the exact delivered PR head, recorded in GitHub checks and canonical review/handoff evidence before approval. No hosted acceptance or dev deployment is claimed here. The previous exact6b81edb7 hosted attempt failed and is explicitly recorded above. New diagnostics must be collected to distinguish DNS failure from proxy propagation before further transport edits.",
   "handoff": "After independent Codex2 exact-head review and supervisor merge to dev, pass the actual merge SHA to FE-RETIRED-PROBE-CLEANUP-20261111 so PR982 consumes current dev through normal source synchronization and new-head review/checks. COMPAT-RESIDUAL-HOSTED-ACCEPT retains sole-publisher final exact-pair/authenticated-readback verification.",
-  "delivery_status": "diagnostic candidate; official HTTPS alone did not repair hosted CI",
+  "delivery_status": "externally blocked; hosted diagnostics confirm Ubuntu DNS failure across all three identities; no repair delivered",
   "hosted_attempts": [
     {
       "head_sha": "6b81edb7d5ec0ff00c4d244a7f729120463b0085",
@@ -84,6 +85,23 @@
     "entrypoint": "bash scripts/prepare-ubuntu-ci-apt.sh --diagnose before existing sudo preparation in all three active browser setup sites",
     "scope": "One bounded getent ahostsv4 probe for each of Azure/archive/security Ubuntu and github.com, as runner/root/_apt. Only exit codes and answer line counts are printed. Each getent is capped at 4s with 1s kill grace and an outer 6s process timeout. Proxy environment keys and effective APT proxy key presence are compared across the same identities; values, raw subprocess errors/config and DNS answers are never logged.",
     "policy": "Read-only diagnostics. No changes to inherited proxy policy, resolver files, sandbox identities, TLS or package signing. Original installs and real browser tests remain mandatory.",
-    "hosted_result": "pending; diagnostic candidate is not a delivered repair"
+    "hosted_result": "failure; exact4af0ce253 run43047282085 job130615043050 collected to terminal conclusion",
+    "head_sha": "4af0ce253a505e21239115b2f821de441eb36644",
+    "run_id": 43047282085,
+    "job_id": 130615043050,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43047282085/job/130615043050",
+    "collection_window_utc": "2026-11-11T15:21:49Z/2026-11-11T15:22:21Z",
+    "observations": {
+      "identities": ["runner", "root", "_apt"],
+      "azure.archive.ubuntu.com": { "each_identity_exit": 124, "each_identity_answer_lines": 0 },
+      "archive.ubuntu.com": { "each_identity_exit": 124, "each_identity_answer_lines": 0 },
+      "security.ubuntu.com": { "each_identity_exit": 124, "each_identity_answer_lines": 0 },
+      "github.com": { "each_identity_exit": 0, "each_identity_answer_lines": 3 },
+      "proxy_environment_keys": "http_proxy, https_proxy, HTTP_PROXY, HTTPS_PROXY, all_proxy, ALL_PROXY, no_proxy, NO_PROXY and APT_CONFIG all absent for every identity",
+      "apt_config": "exit0 for every identity; explicit HTTP/HTTPS proxy and proxy auto-detect keys absent for every identity"
+    },
+    "terminal_result": "Trailers/generated-files checks and diagnostic/preparation steps succeeded. APT failed all four archive suites with Temporary failure resolving archive.ubuntu.com; apt-get exit100 and Playwright exit1 at 15:25:03Z. Component merge gate and Smoke acceptance failed; subsequent browser/build gates were skipped and are not counted passed.",
+    "inference": "Ubuntu host resolution fails for the unprivileged runner as well as root/_apt while github.com resolves. Observed environment/config keys do not support a sudo proxy-propagation explanation. This does not establish whether upstream DNS policy, resolver service or another network control causes the selective failures.",
+    "required_external_action": "Human/Ops must diagnose and restore the hosted CI environment's approved DNS/network access to Ubuntu signed package archives, or supply an approved transport/proxy policy supported by actual runner evidence. Do not replace resolver/public DNS, weaken sandbox/TLS/signatures, or add speculative mirrors/retries. Resume this same task after corrective evidence exists, remove unnecessary failed-candidate transport code, rerun exact-head real package/browser gates and obtain Codex2 review before supervisor merge."
   }
 }
