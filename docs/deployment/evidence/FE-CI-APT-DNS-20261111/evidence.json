@@ -1,0 +1,47 @@
+{
+  "task_id": "FE-CI-APT-DNS-20261111",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "scope": "Ubuntu APT transport setup for the three existing frontend Chromium CI installs",
+  "base_sha": "7123ea41b6ed11e0e197d64ec308ae0b7eba0ae2",
+  "implementation_anchor_sha": "802a3d2fa2859a92570db4c29e97c003d601abe0",
+  "original_failure": {
+    "repository": "ajoe734/execute-plans",
+    "pr": 982,
+    "head_sha": "43f210ddc5c8fc51ddc4326452f47d7064171041",
+    "run_id": 43038278339,
+    "job_id": 130587613365,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43038278339/job/130587613365",
+    "step": "Install Chromium for browser regression tests",
+    "command": "npx --no-install playwright install --with-deps chromium",
+    "observed": "Decoded job logs show mirror+file:/etc/apt/apt-mirrors.txt selecting azure.archive.ubuntu.com. Metadata and font package acquisition repeatedly report Temporary failure resolving azure.archive.ubuntu.com, including after fallback labels show archive/security. Playwright exits 1 at 2026-11-11T14:45:02Z before browser tests. This is not evidence of a product regression.",
+    "sanitized_context": "/tmp/pantheon-compat-residual-20261111/ci-apt-failures.json"
+  },
+  "source_inspection": {
+    "runner": "ubuntu-24.04 X64; original image ubuntu24/20261101.360 retained",
+    "mirror_configuration": "https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/scripts/build/configure-apt-sources.sh",
+    "apt_configuration": "https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/scripts/build/configure-apt.sh",
+    "finding": "The exact image's Ubuntu deb822 source uses mirror+file. Its mirror list prioritizes HTTP Azure, then HTTPS archive, then HTTPS security. The image configures 99bad_proxy Pipeline-Depth/No-Cache/BrokenProxy workarounds and bounded acquisition options; no explicit proxy URL is set by these inspected scripts. Runtime-specific proxy values were not available in the original failed job logs and are not asserted. The repair does not override proxies or DNS.",
+    "backend_boundary": "Read backend task PLAN and provision_worker_sandbox.sh at ff70330d2084e58e77adb82c5d3df4f5976c1e17 for context only. Frontend setup has no backend checkout dependency."
+  },
+  "repair": {
+    "entrypoints": [
+      "branch-ci.yml / Component merge gate / Install Chromium for browser regression tests",
+      "pantheon-integration-gate.yml / integration-gate / Install Playwright",
+      "pantheon-integration-gate.yml / authorized-write-proof / Install trusted proof browser"
+    ],
+    "behavior": "Before each original browser install, a hard-failing Ubuntu 24.04 X64-only helper replaces the known mirror selector or original Azure URI with the official HTTPS Ubuntu archive. Existing suites, components, Signed-By and unrelated source files remain intact. Direct security stanzas remain intact. APT acquisition uses one retry and 15-second HTTP/HTTPS timeouts, and partial metadata update errors fail closed through APT::Update::Error-Mode=any.",
+    "invariants": "Original Playwright --with-deps commands, real Chromium regressions, required checks, strict pair gates, package signatures, TLS verification and proxy configuration remain in effect. No product source, historical workflow, backend repository, business write or deployment dispatch changes."
+  },
+  "local_verification": [
+    { "command": "timeout 180 npm ci", "exit": 0 },
+    { "command": "bash -n scripts/prepare-ubuntu-ci-apt.sh", "exit": 0 },
+    { "command": "node --test scripts/__tests__/prepare-ubuntu-ci-apt.test.mjs", "exit": 0, "result": "5 tests passed; filesystem fixtures only, real apt-config reads the generated bounded/fail-closed settings" },
+    { "command": "timeout 180 npx --no-install vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts", "exit": 0, "result": "3 files, 57 tests passed" },
+    { "command": "git diff --check", "exit": 0 },
+    { "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge", "exit": 0, "at": "implementation anchor" },
+    { "command": "python3 scripts/git/check_generated_files.py <five scoped delivery paths>", "exit": 0 }
+  ],
+  "verification_limits": "An initial targeted Vitest invocation during unfinished npm ci exited 127 (vitest not found); it was not counted passed. After npm ci terminated successfully, the targeted command was rerun and passed. Local tests do not establish GitHub runner network health. Hosted validation is pending at manifest creation: require terminal package install and real browser test success on the exact delivered PR head, recorded in GitHub checks and canonical review/handoff evidence before approval. No hosted acceptance or dev deployment is claimed here.",
+  "handoff": "After independent Codex2 exact-head review and supervisor merge to dev, pass the actual merge SHA to FE-RETIRED-PROBE-CLEANUP-20261111 so PR982 consumes current dev through normal source synchronization and new-head review/checks. COMPAT-RESIDUAL-HOSTED-ACCEPT retains sole-publisher final exact-pair/authenticated-readback verification."
+}
