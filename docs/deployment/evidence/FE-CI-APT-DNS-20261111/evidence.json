@@ -1,0 +1,342 @@
+{
+  "task_id": "FE-CI-APT-DNS-20261111",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "scope": "Ubuntu APT transport setup for the three existing frontend Chromium CI installs",
+  "base_sha": "7123ea41b6ed11e0e197d64ec308ae0b7eba0ae2",
+  "original_failure": {
+    "repository": "ajoe734/execute-plans",
+    "pr": 982,
+    "head_sha": "43f210ddc5c8fc51ddc4326452f47d7064171041",
+    "run_id": 43038278339,
+    "job_id": 130587613365,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43038278339/job/130587613365",
+    "step": "Install Chromium for browser regression tests",
+    "command": "npx --no-install playwright install --with-deps chromium",
+    "observed": "Decoded job logs show mirror+file:/etc/apt/apt-mirrors.txt selecting azure.archive.ubuntu.com. Metadata and font package acquisition repeatedly report Temporary failure resolving azure.archive.ubuntu.com, including after fallback labels show archive/security. Playwright exits 1 at 2026-11-11T14:45:02Z before browser tests. This is not evidence of a product regression.",
+    "sanitized_context": "/tmp/pantheon-compat-residual-20261111/ci-apt-failures.json"
+  },
+  "source_inspection": {
+    "runner": "ubuntu-24.04 X64; original image ubuntu24/20261101.360 retained",
+    "mirror_configuration": "https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/scripts/build/configure-apt-sources.sh",
+    "apt_configuration": "https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/scripts/build/configure-apt.sh",
+    "finding": "The exact image's Ubuntu deb822 source uses mirror+file. Its mirror list prioritizes HTTP Azure, then HTTPS archive, then HTTPS security. The image configures 99bad_proxy Pipeline-Depth/No-Cache/BrokenProxy workarounds and bounded acquisition options; no explicit proxy URL is set by these inspected scripts. Runtime-specific proxy values were not available in the original failed job logs and are not asserted. The repair does not override proxies or DNS.",
+    "backend_boundary": "Read backend task PLAN and provision_worker_sandbox.sh at ff70330d2084e58e77adb82c5d3df4f5976c1e17 for context only. Frontend setup has no backend checkout dependency."
+  },
+  "repair": {
+    "status": "Source repair verified by actual exact444bcb33a component CI: signed Ubuntu metadata, nine real dependency packages, original Chromium install and 49 browser fixtures all passed. Enclosing evidence-only head requires its own complete checks before independent review; no merge/deploy yet.",
+    "entrypoints": [
+      "branch-ci.yml / Component merge gate / Install Chromium for browser regression tests",
+      "pantheon-integration-gate.yml / integration-gate / Install Playwright",
+      "pantheon-integration-gate.yml / authorized-write-proof / Install trusted proof browser"
+    ],
+    "behavior": "Before the three existing browser installs, the Ubuntu 24.04 X64-only helper replaces known mirror selectors and Azure/archive/security URIs with the single Launchpad-listed Princeton HTTPS Ubuntu archive. Suites, components, Signed-By and unrelated source files remain intact. APT retains one retry, 15-second acquisition timeouts and Update::Error-Mode=any. Original Playwright --with-deps installs perform the real signed metadata/package verification. One fixed source, no runtime mirror selection/retry framework.",
+    "invariants": "Original Playwright --with-deps commands, real Chromium regressions, required checks, strict pair gates, package signatures, TLS verification and proxy configuration remain in effect. No product source, historical workflow, backend repository, business write or deployment dispatch changes."
+  },
+  "local_verification": [
+    {
+      "command": "timeout 180 npm ci",
+      "exit": 0
+    },
+    {
+      "command": "bash -n scripts/prepare-ubuntu-ci-apt.sh",
+      "exit": 0
+    },
+    {
+      "command": "node --test scripts/__tests__/prepare-ubuntu-ci-apt.test.mjs",
+      "exit": 0,
+      "result": "Final transport tests 5/5 passed: signed source preservation/idempotency, Azure/archive/security rewriting, unsupported host refusal, missing/unknown layout and configuration write failures, unchanged three original hard-failing with-deps sites. Intermediate diagnostics had 7/7 fixture passes before removal."
+    },
+    {
+      "command": "timeout 180 npx --no-install vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
+      "exit": 0,
+      "result": "3 files, 57 tests passed"
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    },
+    {
+      "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge",
+      "exit": 0,
+      "at": "implementation anchor"
+    },
+    {
+      "command": "python3 scripts/git/check_generated_files.py <five scoped delivery paths>",
+      "exit": 0
+    }
+  ],
+  "verification_limits": "Source444bcb33a component job completed successfully; exact identities and exits are recorded below. This evidence-only follow-up changes no workflow/helper/test source bytes. Before handoff, independently require terminal original checks on the exact enclosing PR head and bind that head/manifest via canonical REVIEW_HEAD_SHA. No post-approval bookkeeping commit, dev deployment or hosted exact-pair acceptance claimed. Prior failed/cancelled attempts remain failures/cancellations.",
+  "handoff": "After independent Codex2 exact-head review and supervisor merge to dev, pass the actual merge SHA to FE-RETIRED-PROBE-CLEANUP-20261111 so PR982 consumes current dev through normal source synchronization and new-head review/checks. COMPAT-RESIDUAL-HOSTED-ACCEPT retains sole-publisher final exact-pair/authenticated-readback verification.",
+  "delivery_status": "real source package/browser repair verified; enclosing evidence-head CI, independent review and supervisor integration remain required",
+  "hosted_attempts": [
+    {
+      "head_sha": "6b81edb7d5ec0ff00c4d244a7f729120463b0085",
+      "run_id": 43043233879,
+      "job_id": 130606382871,
+      "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43043233879/job/130606382871",
+      "result": "failure",
+      "playwright_exit": 1,
+      "observed": "Preparation printed success at 15:10:11Z. Microsoft HTTPS metadata downloaded. All four official archive.ubuntu.com suites failed DNS; apt-get exit100 and Playwright exit1 at 15:12:54Z. Browser tests did not run. Azure-only mirror selection is not a sufficient root cause."
+    }
+  ],
+  "diagnostics": {
+    "entrypoint": "bash scripts/prepare-ubuntu-ci-apt.sh --diagnose before existing sudo preparation in all three active browser setup sites",
+    "scope": "One bounded getent ahostsv4 probe for each of Azure/archive/security Ubuntu and github.com, as runner/root/_apt. Only exit codes and answer line counts are printed. Each getent is capped at 4s with 1s kill grace and an outer 6s process timeout. Proxy environment keys and effective APT proxy key presence are compared across the same identities; values, raw subprocess errors/config and DNS answers are never logged.",
+    "policy": "Read-only diagnostics. No changes to inherited proxy policy, resolver files, sandbox identities, TLS or package signing. Original installs and real browser tests remain mandatory.",
+    "hosted_result": "failure; exact4af0ce253 run43047282085 job130615043050 collected to terminal conclusion",
+    "head_sha": "4af0ce253a505e21239115b2f821de441eb36644",
+    "run_id": 43047282085,
+    "job_id": 130615043050,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43047282085/job/130615043050",
+    "collection_window_utc": "2026-11-11T15:21:49Z/2026-11-11T15:22:21Z",
+    "observations": {
+      "identities": [
+        "runner",
+        "root",
+        "_apt"
+      ],
+      "azure.archive.ubuntu.com": {
+        "each_identity_exit": 124,
+        "each_identity_answer_lines": 0
+      },
+      "archive.ubuntu.com": {
+        "each_identity_exit": 124,
+        "each_identity_answer_lines": 0
+      },
+      "security.ubuntu.com": {
+        "each_identity_exit": 124,
+        "each_identity_answer_lines": 0
+      },
+      "github.com": {
+        "each_identity_exit": 0,
+        "each_identity_answer_lines": 3
+      },
+      "proxy_environment_keys": "http_proxy, https_proxy, HTTP_PROXY, HTTPS_PROXY, all_proxy, ALL_PROXY, no_proxy, NO_PROXY and APT_CONFIG all absent for every identity",
+      "apt_config": "exit0 for every identity; explicit HTTP/HTTPS proxy and proxy auto-detect keys absent for every identity"
+    },
+    "terminal_result": "Trailers/generated-files checks and diagnostic/preparation steps succeeded. APT failed all four archive suites with Temporary failure resolving archive.ubuntu.com; apt-get exit100 and Playwright exit1 at 15:25:03Z. Component merge gate and Smoke acceptance failed; subsequent browser/build gates were skipped and are not counted passed.",
+    "inference": "Ubuntu host resolution fails for the unprivileged runner as well as root/_apt while github.com resolves. Observed environment/config keys do not support a sudo proxy-propagation explanation. This does not establish whether upstream DNS policy, resolver service or another network control causes the selective failures.",
+    "prior_external_action": "Human/Ops must diagnose and restore the hosted CI environment's approved DNS/network access to Ubuntu signed package archives, or supply an approved transport/proxy policy supported by actual runner evidence. Do not replace resolver/public DNS, weaken sandbox/TLS/signatures, or add speculative mirrors/retries. Resume this same task after corrective evidence exists, remove unnecessary failed-candidate transport code, rerun exact-head real package/browser gates and obtain Codex2 review before supervisor merge.",
+    "current_action": "Completed runner mirror comparison. Investigation-only DNS/proxy/HTTPS/gpgv probe code and workflow calls removed from final transport helper; no resolver/proxy/sandbox/TLS/signature policy changes."
+  },
+  "official_mirror_investigation": {
+    "anchor_sha": "180ae1a4637377644a13c6b6c3f065ba239f5391",
+    "official_listing": "https://launchpad.net/ubuntu/+archivemirrors",
+    "candidate_urls": [
+      "https://mirrors.us.kernel.org/ubuntu/",
+      "https://mirror.math.princeton.edu/pub/ubuntu/"
+    ],
+    "princeton_registration": "https://launchpad.net/ubuntu/+mirror/mirror.math.princeton.edu-archive",
+    "diagnostics": "Bounded DNS under runner/root/_apt; runner HTTPS noble/InRelease acquisition, existing Ubuntu archive keyring gpgv exit, Origin Ubuntu and Codename noble. Only fixed result fields are logged. No source selection from diagnostic success alone.",
+    "runs": [
+      {
+        "id": 43049668604,
+        "event": "pull_request"
+      },
+      {
+        "id": 43049658097,
+        "event": "push"
+      }
+    ],
+    "status": "Completed actual diagnostic job; Princeton qualifies for source selection, Kernel.org rejected on TLS failure. Archive-only candidate still failed.",
+    "terminal_observations": {
+      "head_sha": "180ae1a4637377644a13c6b6c3f065ba239f5391",
+      "run_id": 43049658097,
+      "job_id": 130628915523,
+      "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43049658097/job/130628915523",
+      "job_conclusion": "failure",
+      "apt_exit": 100,
+      "playwright_exit": 1,
+      "dns": [
+        {
+          "identity": "runner",
+          "host": "azure.archive.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "runner",
+          "host": "archive.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "runner",
+          "host": "security.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "runner",
+          "host": "github.com",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "runner",
+          "host": "mirrors.us.kernel.org",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "runner",
+          "host": "mirror.math.princeton.edu",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "root",
+          "host": "azure.archive.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "root",
+          "host": "archive.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "root",
+          "host": "security.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "root",
+          "host": "github.com",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "root",
+          "host": "mirrors.us.kernel.org",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "root",
+          "host": "mirror.math.princeton.edu",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "_apt",
+          "host": "azure.archive.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "_apt",
+          "host": "archive.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "_apt",
+          "host": "security.ubuntu.com",
+          "exit": 124,
+          "answer_lines": 0
+        },
+        {
+          "identity": "_apt",
+          "host": "github.com",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "_apt",
+          "host": "mirrors.us.kernel.org",
+          "exit": 0,
+          "answer_lines": 3
+        },
+        {
+          "identity": "_apt",
+          "host": "mirror.math.princeton.edu",
+          "exit": 0,
+          "answer_lines": 3
+        }
+      ],
+      "mirrors": [
+        {
+          "url": "https://mirrors.us.kernel.org/ubuntu/",
+          "suite": "noble",
+          "fetch_exit": 60,
+          "selected": false,
+          "reason": "TLS verification failed; no certificate bypass attempted"
+        },
+        {
+          "url": "https://mirror.math.princeton.edu/pub/ubuntu/",
+          "suite": "noble",
+          "fetch_exit": 0,
+          "signature_exit": 0,
+          "codename_ok": true,
+          "origin_ok": true,
+          "selected": true
+        }
+      ],
+      "limits": "Princeton signed noble metadata was reachable in this real runner. The unchanged archive candidate still failed original apt/Playwright; no browser test ran. Require all four signed suites, actual packages and real browser tests on final repair head."
+    }
+  },
+  "initial_failed_candidate_anchor_sha": "802a3d2fa2859a92570db4c29e97c003d601abe0",
+  "final_head_acceptance": {
+    "identity": "The enclosing PR head, bound by canonical REVIEW_HEAD_SHA during handoff after its checks complete.",
+    "required": [
+      "Original Playwright Chromium --with-deps installation exits 0 with signed noble/noble-updates/noble-backports/noble-security metadata and real packages from Princeton HTTPS",
+      "Original component merge gate and Smoke acceptance complete successfully, including real isolated fixture Chromium tests",
+      "Independent Codex2 review of frozen final delivery before supervisor MERGE to dev"
+    ],
+    "status_at_manifest_creation": "Source444bcb33a completed actual package/browser component proof. Enclosing evidence-only head checks pending; must pass before handoff. Its exact identity and terminal CI results are bound by canonical handoff/review and GitHub checks, avoiding a self-referential commit hash in this file."
+  },
+  "source_verification": {
+    "head_sha": "444bcb33a9dfd1cf5096cf572fbed57dd1aa6ba0",
+    "run_id": 43052441922,
+    "job_id": 130634870286,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43052441922/job/130634870286",
+    "terminal_job_conclusion": "success",
+    "terminal_job_exit": 0,
+    "original_playwright_command": "npx --no-install playwright install --with-deps chromium",
+    "playwright_exit": 0,
+    "apt_metadata": "All four InRelease files acquired through Princeton HTTPS and verified by unmodified APT signing/freshness policy. Update::Error-Mode=any active; no insecure/trusted/TLS overrides.",
+    "suites": [
+      "noble",
+      "noble-updates",
+      "noble-backports",
+      "noble-security"
+    ],
+    "actual_downloaded_dependency_packages": [
+      "fonts-ipafont-gothic",
+      "fonts-freefont-ttf",
+      "fonts-tlwg-loma-otf",
+      "fonts-unifont",
+      "fonts-wqy-zenhei",
+      "xfonts-encodings",
+      "xfonts-utils",
+      "xfonts-cyrillic",
+      "xfonts-scalable"
+    ],
+    "unit_integration": {
+      "files_passed": 261,
+      "tests_passed": 2941,
+      "exit": 0
+    },
+    "bff_contract": {
+      "files_passed": 1,
+      "tests_passed": 11,
+      "exit": 0
+    },
+    "deployment_safety": {
+      "tests_passed": 57,
+      "exit": 0
+    },
+    "browser_fixtures": {
+      "command": "npm run e2e:fixture",
+      "tests_passed": 49,
+      "exit": 0
+    },
+    "other_original_steps": "Application/Agora typecheck, build and bundle credential scan all completed success.",
+    "raw_job_log_sha256": "bd69f46f5af6756f77c6da975a4d9396e9334e8565f0f7224d429a14a1bdda02",
+    "publication_note": "This record is committed before review. Enclosing evidence-only head keeps both workflow files, helper and helper tests byte-identical to this proven source head, and must independently complete all original required CI before canonical handoff. Workflow-level Smoke acceptance for this source head is recorded externally; only the completed component job is claimed here."
+  }
+}

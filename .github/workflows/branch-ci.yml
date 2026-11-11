@@ -182,6 +182,13 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Validate Ubuntu APT preparation
+        run: node --test scripts/__tests__/prepare-ubuntu-ci-apt.test.mjs
+
+      - name: Prepare official Ubuntu APT transport
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh
+
       - name: Install Chromium for browser regression tests
         run: npx --no-install playwright install --with-deps chromium
 
