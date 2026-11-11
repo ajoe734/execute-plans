@@ -172,7 +172,7 @@ describe("release Gate 8 hosted management acceptance posture", () => {
     const checks = gate8For("false");
 
     expect(checks[0]).toMatchObject({
-      status: "warn",
+      status: "advisory_fail",
       note: "count:1; advisory on pull_request",
     });
   });

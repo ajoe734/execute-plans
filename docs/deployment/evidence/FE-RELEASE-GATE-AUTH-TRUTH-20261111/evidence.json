@@ -1,0 +1,23 @@
+{
+  "task": "FE-RELEASE-GATE-AUTH-TRUTH-20261111",
+  "rootCause": {
+    "summary": "Workflow job env PANTHEON_HOSTED_FE_HARD_GATE=false (pre-switch hosted evidence advisory, LOOP-PROD-FE-001) turned every hosted fail/missing into a bare 'warn'. route_load, mgmt_load_gate and the hosted desktop e2e step outcomes were never read by the aggregate, and Gate 5 F12 read only the loopback fixture lane (@approval-local), so real hosted failures were invisible and the job concluded success.",
+    "sourceRun": "gate 43108247755 / job 130817129871 (raw history preserved, not rewritten)"
+  },
+  "changes": [
+    "aggregate: hostedStatus downgrade is now 'advisory_fail' (never pass, never bare warn); non-blocking exit semantics unchanged",
+    "aggregate: Gate 8 now reads real step outcomes for route_load, mgmt_load_gate, mgmt_hosted_accept, e2e (skipped = fail)",
+    "aggregate: Gate 8 hosted F12 owner readback read from playwright-desktop-results.json only; fixture results never satisfy it",
+    "aggregate JSON/markdown: releaseReadiness (ready|limited|blocked) + advisoryFailures[]",
+    "workflow: candidate summary records releaseReadiness",
+    "REVIEW FIX: required authenticated probe checks (route_load, mgmt_load_gate, mgmt_hosted_accept, e2e, hosted F12) are strict fail/missing regardless of HOSTED_FE_HARD_GATE; Gate 7 fails and aggregate exits 1, so candidate_upload (needs aggregate success) cannot publish. Only stale-host readback checks remain advisory_fail."
+  ],
+  "unchanged": [
+    "no new auth issuer/token/secret; hosted auth probes still need the existing genuine short-lived token and fail honestly without it",
+    "write proof and finite Loops/provider cases remain not-applicable/skipped; gate-before-switch, manifest admission and rollback untouched",
+    "stale-host readback checks (gate 3/4, Gate 8 core evidence) remain advisory pre-switch; required authenticated probes no longer are"
+  ],
+  "sourceTests": "vitest 5 files (aggregate-release-gate x4 + agora-retired-probes) 63/63 passed; auth-truth test asserts advisory-mode failures give Gate7 fail, exit 1, readiness blocked; absent F12 blocks",
+  "notProven": "No real protected-run or hosted proof from this source-only worker; local operator/original publisher own the authenticated gate execution.",
+  "authApplicability": "Inspected: integration gate is credential-free by design; hosted acceptance/F12 consume the existing short-lived BFF_AUTH_TOKEN / OIDC path. If the protected entry does not inject it, the probes now fail honestly (blocking candidate) rather than read as pass; wiring into the existing protected flow is owned by the operator/publisher. No new secrets or write scope."
+}

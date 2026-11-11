@@ -1570,6 +1570,10 @@ jobs:
             echo "- write-proof digest: \`${PANTHEON_EXPECTED_WRITE_PROOF_DIGEST}\`"
             echo "- artifact: \`pantheon-fe-release-candidate-attempt-${GITHUB_RUN_ATTEMPT}\`"
             echo "- GitHub artifact digest: \`${{ steps.candidate_upload.outputs.artifact-digest }}\`"
+            # Candidate admission is gate-before-switch; hosted probes are advisory
+            # pre-switch. Record the real readiness so a forced-success step is not
+            # read as "all probes passed".
+            node -e 'const f=process.argv[1];try{const j=JSON.parse(require("fs").readFileSync(f,"utf8"));console.log("- release readiness: `"+j.releaseReadiness+"` ("+(j.advisoryFailures||[]).length+" hosted probe failure(s) advisory, not passing)")}catch{console.log("- release readiness: `unknown` (summary unreadable)")}' "$PANTHEON_AUDIT_OUT_DIR/release-gate-summary.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare evidence artifact paths
