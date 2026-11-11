@@ -10,9 +10,8 @@
 //   - /bff/mcp-servers/{id}/import-tools     (new — replaces /bff/mcp-tools/import)
 //   - /bff/actions/{entityType}/{entityId}/{actionId} — canonical action endpoint
 //
-// Legacy nested per-entity action builders (strategyAction, personaAction, etc.)
-// remain only for in-process mock compatibility and are NOT canonical. Live
-// callers MUST use `actionCanonical(entityType, entityId, actionId)`.
+// Nested per-entity action builders were removed (no callers); use
+// `paths.action(entityType, entityId, actionId)`.
 
 const BASE = "/bff";
 
@@ -74,8 +73,6 @@ export const paths = {
     return `${BASE}/strategies${query ? `?${query}` : ""}`;
   },
   strategy: (id: string) => `${BASE}/strategies/${enc(id)}`,
-  /** @deprecated Use `paths.action("strategy", id, action)`. Kept for in-process mocks. */
-  strategyAction: (id: string, action: string) => `${BASE}/strategies/${enc(id)}/actions/${enc(action)}`,
 
   personas: () => `${BASE}/personas`,
   persona: (id: string) => `${BASE}/personas/${enc(id)}`,
@@ -83,23 +80,15 @@ export const paths = {
   personaRoutePolicy: (id: string) => `${BASE}/personas/${enc(id)}/route-policy`,
   personaEvaluations: (id: string) => `${BASE}/personas/${enc(id)}/evaluations`,
   personaMemory: (id: string) => `${BASE}/personas/${enc(id)}/memory`,
-  /** @deprecated Use `paths.action("persona", id, action)`. */
-  personaAction: (id: string, action: string) => `${BASE}/personas/${enc(id)}/actions/${enc(action)}`,
 
   capitalPools: () => `${BASE}/capital-pools`,
   capitalPool: (id: string) => `${BASE}/capital-pools/${enc(id)}`,
-  /** @deprecated Use `paths.action("capitalPool", id, action)`. */
-  capitalPoolAction: (id: string, action: string) => `${BASE}/capital-pools/${enc(id)}/actions/${enc(action)}`,
 
   rebalances: () => `${BASE}/rebalances`,
   rebalance: (id: string) => `${BASE}/rebalances/${enc(id)}`,
-  /** @deprecated Use `paths.action("rebalance", id, action)`. */
-  rebalanceAction: (id: string, action: string) => `${BASE}/rebalances/${enc(id)}/actions/${enc(action)}`,
 
   deployments: () => `${BASE}/deployments`,
   deployment: (id: string) => `${BASE}/deployments/${enc(id)}`,
-  /** @deprecated Use `paths.action("deployment", id, action)`. */
-  deploymentAction: (id: string, action: string) => `${BASE}/deployments/${enc(id)}/actions/${enc(action)}`,
 
   // ---- Evolution ----
   evolutionPrograms: () => `${BASE}/evolution-programs`,

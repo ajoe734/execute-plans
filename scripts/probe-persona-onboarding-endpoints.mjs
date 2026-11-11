@@ -13,7 +13,8 @@
  *   4.  POST /api/v1/bindings                                         (stage 2c)
  *   5.  POST /api/v1/deployment-plans                                 (stage 3)
  *   6.  POST /api/v1/approval-decisions                               (stage 4)
- *   7.  POST /bff/runtimes/{id}/actions/StartRuntime                  (stage 5)
+ *   7.  (stage 5 StartRuntime retired: route only returns deprecated-path 410 and no
+ *        StartRuntime command executor exists; reported as UNSUPPORTED, never probed/passed)
  *   8.  GET  /api/v1/operator/persona-management/{id}                 (F4 read)
  *
  * Output: .lovable/audits/persona-onboarding-endpoint-probe-2026-05-28.md
@@ -63,7 +64,7 @@ const ENDPOINTS = [
   { stage: 4, route: `/api/v1/approval-decisions`,
     method: "POST", body: { plan_id: "plan-dev", decision: "approve", memo: "probe" } },
   { stage: 5, route: `/bff/runtimes/${RUNTIME_ID}/actions/StartRuntime`,
-    method: "POST", body: { confirm_token: "probe" } },
+    method: "POST", unsupported: "StartRuntime retired: no command executor; not probed, not counted as passed" },
   { stage: "F4", route: `/api/v1/operator/persona-management/${PERSONA_ID}`,
     method: "GET" },
 ];
@@ -79,6 +80,9 @@ function classify(status) {
 }
 
 async function probe(ep) {
+  if (ep.unsupported) {
+    return { ...ep, status: "-", tag: "⛔ UNSUPPORTED (not probed)", snippet: ep.unsupported };
+  }
   const url = new URL(ep.route, BFF_BASE_URL).toString();
   const corr = `probe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const init = {

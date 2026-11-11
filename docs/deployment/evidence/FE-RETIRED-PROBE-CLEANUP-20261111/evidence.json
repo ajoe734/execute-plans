@@ -1,0 +1,12 @@
+{
+  "task": "FE-RETIRED-PROBE-CLEANUP-20261111",
+  "removed": [
+    "mocks/adapters.ts: POST /bff/strategies/{id}/actions/{action} mock",
+    "paths.ts: strategyAction, personaAction, capitalPoolAction, rebalanceAction, deploymentAction (no production callers)"
+  ],
+  "kept": ["paths.action canonical builder", "persona AdvanceLifecycle / pool actions in probe", "POST /api/v1/deployment-plans probe (live)", "MCP create/actions"],
+  "probe": "StartRuntime stage 5 now reported as UNSUPPORTED (not probed, never passed); no new start API invented; no live writes executed",
+  "tests_migrated": ["envelope.test.ts uses local registerMock fixture on canonical /bff/actions/strategy/{id}/{action}", "revamp-2026-05-20.test.ts unchanged (paths.action canonical, still passes)"],
+  "notification_outbound_audit": "src has no outbound fetch to notification paths; only listTotalCountPolicy.ts pathPrefix '/bff/notifications' (policy table entry) is a remaining source reference for BFF-OLD-NOTIFICATION-RETIRE-20261111",
+  "validation": {"vitest": "src/lib/bff-v1 + revamp test: 64 files / 720 tests passed", "tsc": "tsconfig.app.json clean", "node_check": "probe script syntax ok"}
+}
