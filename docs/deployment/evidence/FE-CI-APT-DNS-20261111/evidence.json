@@ -24,7 +24,7 @@
     "backend_boundary": "Read backend task PLAN and provision_worker_sandbox.sh at ff70330d2084e58e77adb82c5d3df4f5976c1e17 for context only. Frontend setup has no backend checkout dependency."
   },
   "repair": {
-    "status": "Princeton HTTPS source selected from actual runner DNS/TLS/Ubuntu-keyring signature evidence. Final package/browser CI pending; not yet approved or delivered.",
+    "status": "Source repair verified by actual exact444bcb33a component CI: signed Ubuntu metadata, nine real dependency packages, original Chromium install and 49 browser fixtures all passed. Enclosing evidence-only head requires its own complete checks before independent review; no merge/deploy yet.",
     "entrypoints": [
       "branch-ci.yml / Component merge gate / Install Chromium for browser regression tests",
       "pantheon-integration-gate.yml / integration-gate / Install Playwright",
@@ -66,9 +66,9 @@
       "exit": 0
     }
   ],
-  "verification_limits": "Real diagnostic evidence binds exact180ae1a46 only. Final repair uses proven Princeton HTTPS transport; its complete required CI must finish successfully on the exact enclosing PR head before reviewer handoff. The frozen canonical PR/head/manifest binding and GitHub checks identify that final head; do not add a bookkeeping commit after approval. No hosted deployment/exact-pair acceptance claimed. Initial local sed delimiter test failure was fixed before this anchor; final Node5/5 and existing Vitest57/57 pass.",
+  "verification_limits": "Source444bcb33a component job completed successfully; exact identities and exits are recorded below. This evidence-only follow-up changes no workflow/helper/test source bytes. Before handoff, independently require terminal original checks on the exact enclosing PR head and bind that head/manifest via canonical REVIEW_HEAD_SHA. No post-approval bookkeeping commit, dev deployment or hosted exact-pair acceptance claimed. Prior failed/cancelled attempts remain failures/cancellations.",
   "handoff": "After independent Codex2 exact-head review and supervisor merge to dev, pass the actual merge SHA to FE-RETIRED-PROBE-CLEANUP-20261111 so PR982 consumes current dev through normal source synchronization and new-head review/checks. COMPAT-RESIDUAL-HOSTED-ACCEPT retains sole-publisher final exact-pair/authenticated-readback verification.",
-  "delivery_status": "actual signed mirror selected; awaiting original package/browser gates on final repair head",
+  "delivery_status": "real source package/browser repair verified; enclosing evidence-head CI, independent review and supervisor integration remain required",
   "hosted_attempts": [
     {
       "head_sha": "6b81edb7d5ec0ff00c4d244a7f729120463b0085",
@@ -287,6 +287,56 @@
       "Original component merge gate and Smoke acceptance complete successfully, including real isolated fixture Chromium tests",
       "Independent Codex2 review of frozen final delivery before supervisor MERGE to dev"
     ],
-    "status_at_manifest_creation": "pending; no pass claimed"
+    "status_at_manifest_creation": "Source444bcb33a completed actual package/browser component proof. Enclosing evidence-only head checks pending; must pass before handoff. Its exact identity and terminal CI results are bound by canonical handoff/review and GitHub checks, avoiding a self-referential commit hash in this file."
+  },
+  "source_verification": {
+    "head_sha": "444bcb33a9dfd1cf5096cf572fbed57dd1aa6ba0",
+    "run_id": 43052441922,
+    "job_id": 130634870286,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/43052441922/job/130634870286",
+    "terminal_job_conclusion": "success",
+    "terminal_job_exit": 0,
+    "original_playwright_command": "npx --no-install playwright install --with-deps chromium",
+    "playwright_exit": 0,
+    "apt_metadata": "All four InRelease files acquired through Princeton HTTPS and verified by unmodified APT signing/freshness policy. Update::Error-Mode=any active; no insecure/trusted/TLS overrides.",
+    "suites": [
+      "noble",
+      "noble-updates",
+      "noble-backports",
+      "noble-security"
+    ],
+    "actual_downloaded_dependency_packages": [
+      "fonts-ipafont-gothic",
+      "fonts-freefont-ttf",
+      "fonts-tlwg-loma-otf",
+      "fonts-unifont",
+      "fonts-wqy-zenhei",
+      "xfonts-encodings",
+      "xfonts-utils",
+      "xfonts-cyrillic",
+      "xfonts-scalable"
+    ],
+    "unit_integration": {
+      "files_passed": 261,
+      "tests_passed": 2941,
+      "exit": 0
+    },
+    "bff_contract": {
+      "files_passed": 1,
+      "tests_passed": 11,
+      "exit": 0
+    },
+    "deployment_safety": {
+      "tests_passed": 57,
+      "exit": 0
+    },
+    "browser_fixtures": {
+      "command": "npm run e2e:fixture",
+      "tests_passed": 49,
+      "exit": 0
+    },
+    "other_original_steps": "Application/Agora typecheck, build and bundle credential scan all completed success.",
+    "raw_job_log_sha256": "bd69f46f5af6756f77c6da975a4d9396e9334e8565f0f7224d429a14a1bdda02",
+    "publication_note": "This record is committed before review. Enclosing evidence-only head keeps both workflow files, helper and helper tests byte-identical to this proven source head, and must independently complete all original required CI before canonical handoff. Workflow-level Smoke acceptance for this source head is recorded externally; only the completed component job is claimed here."
   }
 }
