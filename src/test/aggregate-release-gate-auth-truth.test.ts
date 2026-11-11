@@ -162,22 +162,48 @@ const step = (id: string) => {
   return gate.slice(start, gate.indexOf("\n      - name:", start));
 };
 
-describe("integration-gate trusted read-only auth wiring", () => {
-  it("keeps job env credential-free and never exports the token via GITHUB_ENV", () => {
-    const jobEnv = gate.slice(0, gate.indexOf("    steps:"));
-    expect(jobEnv).not.toMatch(/BFF_AUTH_TOKEN|DEV_LOGIN/);
-    expect(step("ro_auth")).not.toContain("GITHUB_ENV");
-    expect(step("ro_auth")).toContain("steps.ro_auth_gate.outputs.eligible == 'true'");
+describe("integration-gate stays on the secretless boundary", () => {
+  it("references no secrets and provisions no probe credential in the ordinary job", () => {
+    expect(gate).not.toContain("secrets.");
+    expect(gate).not.toMatch(/BFF_AUTH_TOKEN|DEV_LOGIN|ro_auth/);
   });
-  it("gates on exact dev + active parent controller and verifies server /bff/me", () => {
-    const g = step("ro_auth_gate");
-    for (const needle of ['refs/heads/dev', 'workflow_dispatch', 'heads/dev', 'nonprod-deploy.yml', 'in_progress']) expect(g).toContain(needle);
-    expect(step("ro_auth")).toContain("/bff/me");
-    expect(step("ro_auth")).toContain("/bff/auth/dev-login");
+  it("write-proof steps stay in the authorized job", () => {
+    expect(step("pint_hosted_e2e")).not.toContain("BFF_AUTH_TOKEN");
   });
-  it("injects the token only into the read-only probe steps, never write-proof steps", () => {
-    for (const id of ["route_load", "mgmt_hosted_accept", "e2e"]) expect(step(id)).toContain("steps.ro_auth.outputs.token");
-    expect((gate.match(/steps\.ro_auth\.outputs\.token/g) ?? []).length).toBe(3);
-    expect(step("pint_hosted_e2e")).not.toContain("ro_auth");
+});
+
+// Behavior regressions for the pinned credential target + storage-free bearer.
+describe("pinned BFF bearer helper", () => {
+  const load = () => import("../../scripts/lib/pinned-bff-bearer.mjs");
+  it("accepts maintained dev origins and local candidate preview only", async () => {
+    const { pinnedTargetProblem } = await load();
+    const bff = "https://api.dev.mvl-cap.tw";
+    expect(pinnedTargetProblem({ feBase: "https://app.dev.mvl-cap.tw", bffBase: bff, env: {} })).toBe("");
+    expect(pinnedTargetProblem({ feBase: "http://127.0.0.1:4173", bffBase: bff + "/", env: {} })).toBe("");
+    expect(pinnedTargetProblem({ feBase: "https://evil.example", bffBase: bff, env: {} })).toMatch(/FE origin/);
+    expect(pinnedTargetProblem({ feBase: "http://127.0.0.1:4173", bffBase: "https://evil.example", env: {} })).toMatch(/BFF origin/);
+    expect(pinnedTargetProblem({ feBase: "http://127.0.0.1:4173", bffBase: "http://api.dev.mvl-cap.tw", env: {} })).toMatch(/BFF origin/);
+  });
+  it("refuses to install the bearer on an unpinned target and scopes it to the BFF origin", async () => {
+    const { installPinnedBffBearer } = await load();
+    const routes: Array<{ pattern: string; handler: (r: unknown) => unknown }> = [];
+    const ctx = { route: async (pattern: string, handler: (r: unknown) => unknown) => { routes.push({ pattern, handler }); } };
+    await expect(installPinnedBffBearer(ctx, { token: "t", feBase: "https://evil.example", bffBase: "https://api.dev.mvl-cap.tw", env: {} })).rejects.toThrow(/Refusing/);
+    expect(routes).toHaveLength(0);
+    await installPinnedBffBearer(ctx, { token: "tok", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw", env: {} });
+    expect(routes[0].pattern).toBe("https://api.dev.mvl-cap.tw/**");
+    const cont: unknown[] = [];
+    const mk = (url: string) => ({ request: () => ({ url: () => url, headers: () => ({ accept: "x" }) }), continue: (o?: unknown) => cont.push(o ?? "plain") });
+    routes[0].handler(mk("https://api.dev.mvl-cap.tw/bff/me"));
+    routes[0].handler(mk("https://api.dev.mvl-cap.tw.evil.example/bff/me"));
+    expect(cont[0]).toEqual({ headers: { accept: "x", authorization: "Bearer tok" } });
+    expect(cont[1]).toBe("plain");
+  });
+  it("probe scripts no longer write the bearer into retired browser storage", () => {
+    for (const f of ["scripts/probe-route-load-baseline.mjs", "scripts/accept-management-hosted-production.mjs"]) {
+      const src = readFileSync(resolve(process.cwd(), f), "utf8");
+      expect(src).not.toMatch(/pantheon_operator_token|pantheon\.bff\.bearerToken|[sS]torage\.setItem|target\.setItem/);
+      expect(src).toContain("installPinnedBffBearer");
+    }
   });
 });

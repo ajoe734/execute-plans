@@ -9,6 +9,7 @@
 // resolves for that page shape. See
 // docs/04/pantheon_management_console_load_gap_2026-07-01/MANAGEMENT_CONSOLE_LOAD_GAP_SPEC.md
 // section 2.6 and 4.5.
+import { installPinnedBffBearer } from "./lib/pinned-bff-bearer.mjs";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -78,33 +79,11 @@ const probeTimestamp = new Date().toISOString();
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 if (BEARER_TOKEN) {
-  const normalizedToken = BEARER_TOKEN.replace(/^Bearer\s+/i, "").trim();
-  const tokenParts = normalizedToken.split(":");
-  const operatorId = tokenParts[0] || "op-route-load";
-  const roles = (tokenParts[1] || "operator")
-    .split(",")
-    .map((role) => role.trim())
-    .filter(Boolean);
-  await context.addInitScript(
-    ({ operatorId: subject, roles: sessionRoles, tenantId, token }) => {
-      const session = JSON.stringify({
-        aud: "pantheon-bff",
-        auth_time: Math.floor(Date.now() / 1000),
-        iss: "pantheon-route-load-probe",
-        roles: sessionRoles,
-        sub: subject,
-        tenant_id: tenantId,
-      });
-      for (const storage of [window.sessionStorage, window.localStorage]) {
-        storage.setItem("pantheon.bff.bearerToken", token);
-        storage.setItem("pantheon_operator_token", token);
-        storage.setItem("pantheon.bff.tenantId", tenantId);
-        storage.setItem("pantheon_tenant_id", tenantId);
-        storage.setItem("pantheon.e2e.devOidcSession", session);
-      }
-    },
-    { operatorId, roles, tenantId: TENANT_ID, token: normalizedToken },
-  );
+  await installPinnedBffBearer(context, {
+    token: BEARER_TOKEN.replace(/^Bearer\s+/i, "").trim(),
+    feBase: FE_BASE,
+    bffBase: BFF_BASE,
+  });
 }
 const page = await context.newPage();
 page.setDefaultTimeout(OVERALL_TIMEOUT_MS);
