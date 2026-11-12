@@ -248,3 +248,26 @@ describe("pinned BFF credential target in probe scripts", () => {
     });
   }
 });
+
+describe("credential redaction and route-load auth truth", () => {
+  const SENTINEL = "SENTINEL-secret-token-abc123";
+  it("scrubs bearer/literal secrets from Playwright JSON and logs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "redact-"));
+    writeFileSync(join(dir, "r.json"), JSON.stringify({ error: { message: `Authorization: Bearer ${SENTINEL}`, stack: `tok=${SENTINEL}` } }));
+    writeFileSync(join(dir, "e2e.log"), `x Bearer ${SENTINEL}\n`);
+    spawnSync("node", ["scripts/lib/pinned-bff-bearer.mjs", dir], { env: { ...process.env, BFF_AUTH_TOKEN: SENTINEL } });
+    for (const f of ["r.json", "e2e.log"]) expect(readFileSync(join(dir, f), "utf8")).not.toContain(SENTINEL);
+    rmSync(dir, { recursive: true, force: true });
+  });
+  it("workflow redacts before the evidence upload", () => {
+    const wf = readFileSync(".github/workflows/pantheon-integration-gate.yml", "utf8");
+    const r = wf.indexOf("pinned-bff-bearer.mjs");
+    expect(r).toBeGreaterThan(0);
+    expect(r).toBeLessThan(wf.indexOf("name: Prepare evidence artifact paths"));
+  });
+  it("route-load probe passes only with token and 2xx primary (static)", () => {
+    const src = readFileSync("scripts/probe-route-load-baseline.mjs", "utf8");
+    expect(src).toMatch(/&& authenticatedPrimaryOk/);
+    expect(src).toMatch(/primaryApiStatus < 300/);
+  });
+});
