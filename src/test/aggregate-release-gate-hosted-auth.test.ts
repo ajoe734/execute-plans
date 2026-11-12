@@ -191,6 +191,7 @@ describe("release Gate 8 hosted management acceptance posture", () => {
 describe("hosted acceptance uses the same tenant for Node and browser reads", () => {
   const source = readFileSync(resolve("scripts/accept-management-hosted-production.mjs"), "utf8");
   const bearerSource = readFileSync(resolve("scripts/lib/bearer-token.mjs"), "utf8");
+  const transportSource = readFileSync(resolve("scripts/lib/pinned-browser-bff-bearer.mjs"), "utf8");
 
   it.each([
     [undefined, undefined],
@@ -203,13 +204,13 @@ describe("hosted acceptance uses the same tenant for Node and browser reads", ()
     // Evaluate the maintained script without its CLI entry point. All I/O is
     // synthetic: no hosted requests, credentials, owner data or business writes.
     const harness = runInNewContext(
-      `${bearerSource.replace(/^export /gm, "")}\n${source
+      `${bearerSource.replace(/^export /gm, "")}\n${transportSource.replace(/^import[^\n]*\n/gm, "").replace(/^export /gm, "")}\n${source
         .replace(/^#![^\n]*\n/, "")
         .replace(/^import[\s\S]*?from "[^"]+";\n/gm, "")
         .replace(/\nmain\(\);\s*$/, "")}\n({ TENANT_ID, installPinnedBffBearer, sessionRbacCheck, resolveLiveIdRoutes });`,
       {
         process: { env: { BFF_AUTH_TOKEN: token, PANTHEON_TENANT_ID: override }, argv: ["node", "offline"] },
-        URL, AbortSignal: { timeout: () => undefined },
+        URL, http: {}, https: {}, AbortSignal: { timeout: () => undefined },
         BASELINE_ROUTES: [{ path: "/management/strategies/fixture-id", entity: "strategy" }],
         ENTITY_LIST_ENDPOINTS: { strategy: "/bff/strategies" },
         fetch: async (url: string, options: { headers: Record<string, string> }) => {
@@ -244,6 +245,7 @@ describe("hosted acceptance uses the same tenant for Node and browser reads", ()
       await handler({
         request: () => ({
           url: () => `https://api.dev.mvl-cap.tw${endpoint}`,
+          method: () => "GET",
           headers: () => ({ "X-Tenant-Id": "stale-frontend-tenant", "x-tenant-id": "another-stale-tenant", accept: "application/json" }),
         }),
         fetch: async (options: { headers: Record<string, string>; maxRedirects: number }) => {

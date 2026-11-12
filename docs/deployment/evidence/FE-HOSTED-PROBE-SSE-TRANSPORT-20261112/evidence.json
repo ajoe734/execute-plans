@@ -1,0 +1,23 @@
+{
+  "task": "FE-HOSTED-PROBE-SSE-TRANSPORT-20261112",
+  "baseHead": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
+  "scope": "source-only local transport regression; NOT hosted product acceptance, no provider/VM/credential/workflow/service action",
+  "rootCause": "Both probes awaited route.fetch (buffers full body) for a never-ending HTTP 200 text/event-stream response: one rejected on context disposal, the other timed out at 30000ms. The sanitized hosted receipt was not read in this worker; the cause is taken from the brief and confirmed from source lines (route.fetch + maxRedirects:0 on all pinned-BFF requests).",
+  "fix": {
+    "sharedTransport": "scripts/lib/pinned-browser-bff-bearer.mjs (dependency-free; replaces the duplicated originOf/isLoopbackOrigin/pinnedTargetProblem/installPinnedBffBearer in both probes)",
+    "finiteReads": "unchanged: route.fetch maxRedirects:0 + fulfill",
+    "sse": "GET + Accept text/event-stream: authenticated header-only node probe (redirect not followed, body never read); 3xx is fulfilled so the browser follows it unauthenticated, otherwise route.continue({headers}) streams natively",
+    "closedTarget": "closed/disposed-target errors end the handler quietly; any other transport error aborts that request (no unhandled rejection, not swallowed silently)"
+  },
+  "findingDuringWork": "route.continue({headers}) alone replays the bearer to a cross-origin redirect in this Chromium (reproduced by the new spec, foreign server saw Authorization) and a second non-BFF route is not invoked for the redirected request. Hence the header probe.",
+  "tests": [
+    { "cmd": "playwright test e2e/hosted-bff-streaming-transport.spec.ts (standalone config, real Chromium + local HTTPS servers)", "result": "4 passed" },
+    { "cmd": "vitest run src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/strict-browser-auth-source-contract.test.ts", "result": "45 passed" },
+    { "cmd": "tsc -p tsconfig.app.json --noEmit; eslint on touched tests/spec; node --check on both probes", "result": "clean" }
+  ],
+  "firstRedRun": "redirect test failed (bearer reached foreign origin) with continue-only SSE, before the header probe was added",
+  "outOfGrantedListAdaptations": [
+    "src/test/aggregate-release-gate-auth-truth.test.ts and src/test/aggregate-release-gate-hosted-auth.test.ts: extracted helper functions from script source; adapted to import/load the shared lib (assertions preserved, method() added to mocks)"
+  ],
+  "notDone": "hosted rerun, release, rollback, all12 completion remain with the original publisher"
+}
