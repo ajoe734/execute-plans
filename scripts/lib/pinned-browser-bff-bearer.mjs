@@ -46,7 +46,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   let closed = false;
   context.on("close", () => { closed = true; });
   const record = (error, page, label) => {
-    if ((closed || page.isClosed()) && /closed|disposed|detached/i.test(String(error))) return;
+    if ((closed || page.isClosed()) && /Target page, context or browser has been closed|Target closed|Session closed/u.test(String(error))) return;
     errors.push(`${label}: ${String(error?.message || error).split(token).join("[REDACTED]")}`);
   };
   const track = (promise) => {
@@ -57,20 +57,29 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     if (pages.has(page)) return pages.get(page);
     const ready = (async () => {
       const session = await context.newCDPSession(page);
-      const network = new Map(), loaders = new Map(), interceptions = new Set();
+      const network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set();
       session.on("Network.requestWillBeSent", (event) => {
         network.set(event.requestId, { frameId: event.frameId, loaderId: event.loaderId });
+        if (event.type === "Document") navigating.set(event.frameId, event.loaderId);
       });
       session.on("Network.loadingFinished", ({ requestId }) => network.delete(requestId));
       session.on("Network.loadingFailed", ({ requestId, canceled }) => {
         const request = network.get(requestId);
-        if (request) { request.failed = true; request.canceled = canceled === true; }
+        if (request) {
+          request.failed = true;
+          request.canceled = canceled === true;
+          request.navigationLoader = navigating.get(request.frameId);
+        }
         network.delete(requestId);
       });
-      session.on("Page.frameNavigated", ({ frame }) => loaders.set(frame.id, frame.loaderId));
+      session.on("Page.frameNavigated", ({ frame }) => {
+        loaders.set(frame.id, frame.loaderId);
+        navigating.delete(frame.id);
+      });
       session.on("Page.frameDetached", ({ frameId }) => {
-        for (const request of interceptions) if (request.frameId === frameId) request.detached = true;
+        for (const request of interceptions) if (request.frameId === frameId && !request.failed) request.detached = true;
         loaders.delete(frameId);
+        navigating.delete(frameId);
       });
       page.on("close", () => {
         // Only interceptions still live at closure get closure evidence. A
@@ -110,11 +119,13 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // the frame's document loader must also have actually changed. An
           // Invalid InterceptionId on a live request remains a protocol failure.
           // Allow already queued lifecycle events to arrive before classifying.
+          const closedAtFailure = request?.closed, detachedAtFailure = request?.detached;
+          const canceledAtFailure = request?.canceled;
           await new Promise((resolve) => setTimeout(resolve, 25));
-          const replaced = request?.loaderId && loaders.get(request.frameId) &&
-            request.loaderId !== loaders.get(request.frameId);
+          const replaced = request?.loaderId && request.navigationLoader &&
+            request.loaderId !== request.navigationLoader && loaders.get(request.frameId) === request.navigationLoader;
           if (/Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error)) &&
-              request && (request.closed || (request.canceled && (replaced || request.detached)))) return;
+              request && (closedAtFailure || (canceledAtFailure && (replaced || detachedAtFailure)))) return;
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
         }).finally(() => interceptions.delete(request)));

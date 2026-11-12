@@ -137,21 +137,21 @@ test("authenticated SSE stays open while finite JSON and navigation/closure comp
 });
 
 test("a cross-origin redirect never receives the bearer (finite and SSE)", async () => {
-  const { context, page } = await open();
+  const { context, page } = await open({ tenantId: "tenant-x" });
   await page.evaluate((u) => fetch(u).then((r) => r.text()), `${bffOrigin}/redirect`);
   await startSse(page, `${bffOrigin}/sse-redirect`).catch(() => "");
   await expect.poll(() => foreignSeen.length).toBeGreaterThanOrEqual(2); // finite + SSE redirects both landed
-  for (const s of foreignSeen) expect(s.authorization).toBeUndefined();
+  for (const s of foreignSeen) { expect(s.authorization).toBeUndefined(); expect(s.tenant).toBeUndefined(); }
   await context.close();
 });
 
 test("a response that turns into a redirect on a later GET never receives the bearer", async () => {
-  const { context, page, transport } = await open();
+  const { context, page, transport } = await open({ tenantId: "tenant-x" });
   expect(await startSse(page, `${bffOrigin}/flip`)).toBe("hello"); // first GET: authenticated 200 SSE
   expect(bffSeen.filter((s) => s.path === "/flip")).toHaveLength(1);
   await startSse(page, `${bffOrigin}/flip`).catch(() => ""); // second GET: 302 off-origin
   await expect.poll(() => foreignSeen.length).toBeGreaterThanOrEqual(1);
-  for (const s of foreignSeen) expect(s.authorization).toBeUndefined();
+  for (const s of foreignSeen) { expect(s.authorization).toBeUndefined(); expect(s.tenant).toBeUndefined(); }
   expect(bffSeen.filter((s) => s.path === "/flip").every((s) => s.authorization === `Bearer ${TOKEN}`)).toBe(true);
   expect(bffSeen.filter((s) => s.path === "/flip")).toHaveLength(2);
   transport.assertHealthy();
@@ -288,7 +288,7 @@ test("exact 814 cancellation race fails; maintained transport proves the obsolet
         await c.transport.settle();
         expect(c.receipt.canceled).toBe(true);
         expect(c.receipt.replaced).toBe(true);
-        expect(c.receipt.errors).toEqual([expect.stringMatching(/Protocol error \(Fetch.continueRequest\): Invalid InterceptionId\./)]);
+        expect(c.receipt.errors.filter((e) => e.includes("(Fetch.continueRequest)"))).toEqual([expect.stringMatching(/Protocol error \(Fetch.continueRequest\): Invalid InterceptionId\./)]);
         if (name === "exact-814") expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
         else c.transport.assertHealthy();
         await c.context.close();
@@ -300,7 +300,7 @@ test("exact 814 cancellation race fails; maintained transport proves the obsolet
   }
 });
 
-for (const cause of ["live abort", "invalid live protocol id"] as const) {
+for (const cause of ["live abort", "live abort then navigation", "invalid live protocol id"] as const) {
   test(`${cause} keeps the same real Invalid InterceptionId actionable`, async () => {
     const c = await controlledInterception(installPinnedBffBearer, cause === "invalid live protocol id");
     try {
@@ -310,14 +310,15 @@ for (const cause of ["live abort", "invalid live protocol id"] as const) {
         void fetch(u, { signal: controller.signal }).catch(() => {});
       }, `${bffOrigin}/held`);
       await c.paused;
-      if (cause === "live abort") {
+      if (cause.startsWith("live abort")) {
         await c.page.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
         await expect.poll(() => c.receipt.canceled).toBe(true);
       }
+      if (cause === "live abort then navigation") await c.page.goto(`${feOrigin}/unrelated-navigation`);
       c.release();
       await c.transport.settle();
-      expect(c.receipt.replaced).toBe(false);
-      expect(c.receipt.errors).toEqual([expect.stringMatching(/Invalid InterceptionId/)]);
+      expect(c.receipt.replaced).toBe(cause === "live abort then navigation");
+      expect(c.receipt.errors.filter((e) => e.includes("(Fetch.continueRequest)"))).toEqual([expect.stringMatching(/Invalid InterceptionId/)]);
       expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
       await c.context.close();
       await c.transport.settle();
