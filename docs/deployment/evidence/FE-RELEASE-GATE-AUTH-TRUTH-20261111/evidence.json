@@ -31,6 +31,25 @@
     "ownerEvidence": "A 200 response with zero genuine owner records remains a failure. Every present record still requires an id, decision_state and positive integer version. Local fixture results do not prove hosted owner acceptance.",
     "localOwnerRegression": "npx playwright test e2e/12-approvals.spec.ts --project=chromium --grep 'F12 lane boundary regressions' --reporter=list: 2/2 passed against the loopback build. Confirms empty owner data fails and hosted selection excludes local fixtures; no hosted requests or business writes were performed."
   },
+  "f12EndpointCompletion": {
+    "sourceHeadBeforeCorrection": "256e82b357365fb3f9acfb9dabd41fd793106b77",
+    "problem": "The hosted test required nonempty records from the pending-only /bff/approvals projection. A legitimately empty pending inbox could not prove the existing all-decisions owner records.",
+    "correction": "Read GET /bff/approvals with authenticated 200 and valid row schema (empty permitted), then separately require authenticated GET /api/v1/approval-decisions with nonempty owner records. Parse the canonical data array as well as existing items envelopes. Preserve id, decision_state and strictly positive integer version assertions for every returned record. Both GETs refuse redirects; no new route, fallback, seeding or business writes.",
+    "diagnosticReference": {
+      "path": "/tmp/pantheon-compat-residual-20261111/approval-owner-readonly-result.json",
+      "recordedAt": "2026-11-12T00:51:23.574759+00:00",
+      "scope": "Prior targeted read-only BFF diagnostic only, NOT hosted pair acceptance and NOT executed by this source continuation.",
+      "pendingRows": 0,
+      "allDecisionRows": 660,
+      "decidedRows": 657,
+      "revokedRows": 3,
+      "rowsMatchingOriginalOwnerPredicate": 660,
+      "sampleDetailVersionMatchesList": 3,
+      "bffCommit": "bee62bc2978618539984aff9db136b064adc14a0"
+    },
+    "offlineRegression": "Loopback-only synthetic response cases exercise the same two-GET helper as the hosted test: pending-empty plus versioned decided/revoked data-array rows, empty owner data, invalid owner versions, 401 from either endpoint, and malformed/nonversioned pending rows. Offline cases cannot count as genuine hosted owner evidence.",
+    "validation": "Pending terminal output collection; fresh exact-head remote CI and assigned Claude review required."
+  },
   "notProven": "No real protected-run or hosted proof from this source-only worker; local operator/original publisher own the authenticated gate execution.",
   "authApplicability": "Trusted exact-dev dispatch receives a short-lived operator token via existing dev-login; untrusted PR/push/branch runs remain credential-free and required authenticated probes fail honestly as missing-auth. paired-release-workflow.test.ts now asserts exactly one secret reference in the ordinary job.",
   "nativeWiringDependency": {

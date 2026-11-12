@@ -12,7 +12,7 @@
  * Runner: Playwright browser test with a local BFF contract harness.
  */
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { execFileSync } from "node:child_process";
@@ -1213,16 +1213,31 @@ test.describe("F12 approval owner readback (real queue page)", { tag: "@approval
   });
 });
 
-function assertOwnerReadback(status: number, body: JsonRecord) {
-  expect(status, "authenticated approval owner must be available").toBe(200);
-  const rows = (body.data as JsonRecord | undefined)?.items ?? body.items;
+function approvalRows(body: JsonRecord) {
+  return Array.isArray(body.data) ? body.data : (body.data as JsonRecord | undefined)?.items ?? body.items;
+}
+
+function assertOwnerReadback(status: number, body: JsonRecord, pendingInbox = false) {
+  expect(status, pendingInbox ? "authenticated pending inbox must be available" : "authenticated approval owner must be available").toBe(200);
+  const rows = approvalRows(body);
   expect(Array.isArray(rows), "owner must return approval records").toBe(true);
-  expect((rows as JsonRecord[]).length, "empty owner data is not approval acceptance").toBeGreaterThan(0);
+  if (!pendingInbox) expect((rows as JsonRecord[]).length, "empty owner data is not approval acceptance").toBeGreaterThan(0);
   for (const row of rows as JsonRecord[]) {
     expect(row.approval_id ?? row.id).toEqual(expect.any(String));
     expect(row.decision_state).toEqual(expect.any(String));
     expect(Number.isInteger(row.version) && Number(row.version) > 0, "owner version is required").toBe(true);
   }
+}
+
+async function readApprovalOwners(request: APIRequestContext, base: string, headers: Record<string, string>) {
+  // The pending projection may be empty after decisions. It still requires
+  // authenticated, valid readback; only the all-decisions owner proves records.
+  const pending = await request.get(`${base.replace(/\/$/, "")}/bff/approvals`, { headers, maxRedirects: 0 });
+  expect(pending.status(), "authenticated pending inbox must be available").toBe(200);
+  assertOwnerReadback(pending.status(), await pending.json(), true);
+  const owner = await request.get(`${base.replace(/\/$/, "")}/api/v1/approval-decisions`, { headers, maxRedirects: 0 });
+  expect(owner.status(), "authenticated approval owner must be available").toBe(200);
+  assertOwnerReadback(owner.status(), await owner.json());
 }
 
 test.describe("F12 lane boundary regressions", { tag: "@approval-local" }, () => {
@@ -1252,8 +1267,51 @@ test.describe("F12 lane boundary regressions", { tag: "@approval-local" }, () =>
     expect(() => assertOwnerReadback(200, {})).toThrow("owner must return approval records");
     expect(() => assertOwnerReadback(200, { items: [] })).toThrow("empty owner data");
     expect(() => assertOwnerReadback(200, { data: { items: [] } })).toThrow("empty owner data");
+    expect(() => assertOwnerReadback(200, { data: [] })).toThrow("empty owner data");
     expect(() => assertOwnerReadback(200, { items: [{ id: "a1", decision_state: "pending", version: 2 }] })).not.toThrow();
     expect(() => assertOwnerReadback(200, { items: [{ id: "legacy", decision_state: "pending" }] })).toThrow("owner version is required");
+  });
+
+  test("empty pending inbox requires separate nonempty versioned all-decisions owner readback", async ({ request }) => {
+    // Synthetic loopback contract cases only; these are never hosted evidence.
+    const rows = [
+      { approval_id: "offline-decided", decision_state: "decided", version: 3 },
+      { id: "offline-revoked", decision_state: "revoked", version: 2 },
+    ];
+    let pendingBody: JsonRecord = { data: { items: [] } };
+    let ownerBody: JsonRecord = { data: rows };
+    let pendingStatus = 200;
+    let ownerStatus = 200;
+    const calls: string[] = [];
+    const server = createServer((req, res) => {
+      calls.push(`${req.method} ${req.url}`);
+      const pending = req.url === "/bff/approvals";
+      res.writeHead(pending ? pendingStatus : ownerStatus, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(pending ? pendingBody : ownerBody));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      await readApprovalOwners(request, base, {});
+      expect(calls).toEqual(["GET /bff/approvals", "GET /api/v1/approval-decisions"]);
+      for (const data of [[], [{ ...rows[0], version: 0 }], [{ ...rows[0], version: "3" }], [{ ...rows[0], version: undefined }]]) {
+        ownerBody = { data };
+        await expect(readApprovalOwners(request, base, {})).rejects.toThrow();
+      }
+      ownerBody = { data: rows };
+      ownerStatus = 401;
+      await expect(readApprovalOwners(request, base, {})).rejects.toThrow("owner must be available");
+      ownerStatus = 200;
+      pendingStatus = 401;
+      await expect(readApprovalOwners(request, base, {})).rejects.toThrow("pending inbox must be available");
+      pendingStatus = 200;
+      pendingBody = {};
+      await expect(readApprovalOwners(request, base, {})).rejects.toThrow("owner must return approval records");
+      pendingBody = { items: [{ ...rows[0], version: 0 }] };
+      await expect(readApprovalOwners(request, base, {})).rejects.toThrow("owner version is required");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+    }
   });
 });
 
@@ -1262,6 +1320,5 @@ test("F12 authenticated approval owner readback", { tag: "@approval-hosted" }, a
   const headers = authHeaders({ env: { ...process.env, PANTHEON_HOSTED_E2E: "1" } });
   const base = process.env.PANTHEON_BROWSER_BFF_BASE_URL || process.env.PANTHEON_BFF_BASE_URL;
   expect(base, "hosted approval readback requires an explicit BFF owner target").toBeTruthy();
-  const response = await request.get(`${base!.replace(/\/$/, "")}/bff/approvals`, { headers });
-  assertOwnerReadback(response.status(), await response.json());
+  await readApprovalOwners(request, base!, headers);
 });
