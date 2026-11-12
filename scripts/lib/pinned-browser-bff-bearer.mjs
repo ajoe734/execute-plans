@@ -118,14 +118,17 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // The network id binds Chromium's cancellation to this interception;
           // the frame's document loader must also have actually changed. An
           // Invalid InterceptionId on a live request remains a protocol failure.
-          // Allow already queued lifecycle events to arrive before classifying.
-          const closedAtFailure = request?.closed, detachedAtFailure = request?.detached;
-          const canceledAtFailure = request?.canceled;
-          await new Promise((resolve) => setTimeout(resolve, 25));
-          const replaced = request?.loaderId && request.navigationLoader &&
-            request.loaderId !== request.navigationLoader && loaders.get(request.frameId) === request.navigationLoader;
-          if (/Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error)) &&
-              request && (closedAtFailure || (canceledAtFailure && (replaced || detachedAtFailure)))) return;
+          // CDP lifecycle events may be queued behind the command rejection, so
+          // re-read the request's ordered facts (never values captured before
+          // waiting) until the proof arrives or a bounded window expires.
+          const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
+          const proven = () => request && (request.closed || (request.canceled && (request.detached ||
+            (request.loaderId && request.navigationLoader && request.loaderId !== request.navigationLoader &&
+              loaders.get(request.frameId) === request.navigationLoader))));
+          if (invalidId && request) {
+            for (let waited = 0; waited < 1000 && !proven(); waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
+            if (proven()) return;
+          }
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
         }).finally(() => interceptions.delete(request)));

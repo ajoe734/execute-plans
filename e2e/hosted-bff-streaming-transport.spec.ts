@@ -224,17 +224,28 @@ test("SSE network failures propagate to the probe transport", async () => {
 const INTERCEPTION_BASE = "814cd3541b3833615c8acd3e5c2bf65511da7736";
 // Delay only dispatch of a real CDP command, never synthesize its result/error.
 // This makes the narrow Chromium navigation race reproducible without sleeps.
-async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false) {
+// lateLifecycle holds, in order, delivery of real Chromium Network/Page events to the
+// helper's listeners once the held request is paused, until 80ms after the real continueRequest rejection, i.e.
+// the queued-event ordering seen on the hosted run. Nothing is synthesized.
+async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false) {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
   let release!: () => void;
   let reached!: () => void;
   const paused = new Promise<void>((resolve) => { reached = resolve; });
   const dispatch = new Promise<void>((resolve) => { release = resolve; });
-  const receipt: { canceled: boolean; replaced: boolean; errors: string[] } = { canceled: false, replaced: false, errors: [] };
+  const receipt: { canceled: boolean; replaced: boolean; errors: string[]; order: string[] } = { canceled: false, replaced: false, errors: [], order: [] };
+  let openGate!: () => void;
+  const gate = new Promise<void>((resolve) => { openGate = resolve; });
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session);
     let held = "", networkId = "", oldLoader = "";
+    if (lateLifecycle) {
+      const on = session.on.bind(session);
+      session.on = ((event: string, listener: (e: never) => void) => on(event as never,
+        /^(Network|Page)\./u.test(event)
+          ? ((e: never) => { if (held) void gate.then(() => listener(e)); else listener(e); }) as never : listener as never)) as typeof session.on;
+    }
     session.on("Network.requestWillBeSent", (e) => {
       if (e.request.url === `${bffOrigin}/held`) oldLoader = e.loaderId;
     });
@@ -258,7 +269,11 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
         if (invalidLiveId) params = { ...params, requestId: "missing-live-interception" };
       }
       try { return await send(method as Parameters<CDPSession["send"]>[0], params); }
-      catch (error) { receipt.errors.push(String(error)); throw error; }
+      catch (error) {
+        receipt.errors.push(String(error));
+        if (method === "Fetch.continueRequest") { receipt.order.push("continueRequest rejected"); setTimeout(openGate, 80); }
+        throw error;
+      }
     }) as CDPSession["send"];
     return session;
   };
@@ -268,6 +283,45 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
   await page.goto(feOrigin);
   return { context, page, transport, paused, release, receipt };
 }
+
+test("queued cancellation lifecycle arriving after Invalid InterceptionId rejection is still proven", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception(installPinnedBffBearer, false, true);
+    try {
+      await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await c.paused;
+      await c.page.goto(`${feOrigin}/live-detail`);
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+      c.transport.assertHealthy();
+      await c.context.close();
+      await c.transport.settle();
+      c.transport.assertHealthy();
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("late lifecycle does not excuse live abort or invalid live protocol id", async () => {
+  for (const cause of ["live abort then navigation", "invalid live protocol id"] as const) {
+    const c = await controlledInterception(installPinnedBffBearer, cause === "invalid live protocol id", true);
+    try {
+      await c.page.evaluate((u) => {
+        const controller = new AbortController();
+        Object.assign(window, { cancelHeld: () => controller.abort() });
+        void fetch(u, { signal: controller.signal }).catch(() => {});
+      }, `${bffOrigin}/held`);
+      await c.paused;
+      if (cause.startsWith("live abort")) {
+        await c.page.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
+        await c.page.goto(`${feOrigin}/unrelated-navigation`);
+      }
+      c.release();
+      await c.transport.settle();
+      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
 
 test("exact 814 cancellation race fails; maintained transport proves the obsolete request", async () => {
   const source = execFileSync("git", ["show", `${INTERCEPTION_BASE}:scripts/lib/pinned-browser-bff-bearer.mjs`], { encoding: "utf8" });

@@ -1,0 +1,14 @@
+{
+  "task": "FE-HOSTED-PROBE-QUEUED-CANCELLATION-20261112",
+  "scope": "local source/real-Chromium reproduction only; NOT hosted acceptance. Hosted Management outcome and aggregate remain FAIL for the exact 82ff run.",
+  "root_cause": "The continueRequest rejection handler captured closed/detached/canceled booleans before its 25ms wait, so lifecycle events (loadingFailed canceled, new Document request, frameNavigated/detach) queued behind the CDP command rejection were never seen; a genuinely cancelled intercepted request was classified as a live Invalid InterceptionId.",
+  "fix": "scripts/lib/pinned-browser-bff-bearer.mjs: for Invalid InterceptionId only, poll (10ms steps, 1000ms bound) the request's current ordered facts (closed, or canceled with detach, or canceled while a different navigation loader was pending at failure time and became the frame's loader). No fixed-wait captured values. All other errors, and unproven cases, are recorded immediately/after the bound, then Fetch.failRequest as before.",
+  "reproduction": {
+    "real_chromium_test": "e2e/hosted-bff-streaming-transport.spec.ts: 'queued cancellation lifecycle arriving after Invalid InterceptionId rejection is still proven' (real CDP; only delivery of real Network/Page events to helper listeners is held until 80ms after the real continueRequest rejection, order preserved)",
+    "old_head_814_82ff_helper": "FAILED (Pinned BFF transport failures: Invalid InterceptionId) before fix",
+    "fixed_head": "passed in 3 consecutive full-spec runs (16/16 x2 plus the run that had one unrelated 814-test flake; 814 test then 4/4 repeats passed)"
+  },
+  "negatives_preserved": ["live abort then navigation (also with late lifecycle)", "invalid live protocol id (also with late lifecycle)", "live abort", "SSE network failure propagation", "native SSE incremental / no route.fetch buffering", "per-hop bearer/tenant stripping on redirects"],
+  "contracts_run": "vitest strict-browser-auth-source-contract, aggregate-release-gate-auth-truth, aggregate-release-gate-hosted-auth: 46 passed",
+  "caveats": "One non-reproducible failure of the pre-existing 'exact 814' test occurred in one of 3 full runs; 4 isolated reruns passed. No hosted/provider/credential use."
+}
