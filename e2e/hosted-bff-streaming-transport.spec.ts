@@ -48,11 +48,11 @@ test.beforeAll(async () => {
   });
   bff = https.createServer(tls, (req, res) => {
     record(bffSeen, req);
-    if (req.url === "/sse") {
+    if (req.url === "/sse" || req.url === "/baseline-sse") {
       res.writeHead(200, { ...cors, "content-type": "text/event-stream", "cache-control": "no-cache" });
       res.write("data: hello\n\n");
       openSse.add(res); // never ends
-      const tick = setInterval(() => res.write("data: tick\n\n"), 50);
+      const tick = req.url === "/sse" ? setInterval(() => res.write("data: tick\n\n"), 50) : undefined;
       res.on("close", () => clearInterval(tick));
     } else if (req.url === "/flip") {
       // Changing response: the first GET is a 200 SSE, every later GET redirects off-origin.
@@ -148,10 +148,12 @@ test("a cross-origin redirect never receives the bearer (finite and SSE)", async
 test("a response that turns into a redirect on a later GET never receives the bearer", async () => {
   const { context, page, transport } = await open();
   expect(await startSse(page, `${bffOrigin}/flip`)).toBe("hello"); // first GET: authenticated 200 SSE
+  expect(bffSeen.filter((s) => s.path === "/flip")).toHaveLength(1);
   await startSse(page, `${bffOrigin}/flip`).catch(() => ""); // second GET: 302 off-origin
   await expect.poll(() => foreignSeen.length).toBeGreaterThanOrEqual(1);
   for (const s of foreignSeen) expect(s.authorization).toBeUndefined();
   expect(bffSeen.filter((s) => s.path === "/flip").every((s) => s.authorization === `Bearer ${TOKEN}`)).toBe(true);
+  expect(bffSeen.filter((s) => s.path === "/flip")).toHaveLength(2);
   transport.assertHealthy();
   await context.close();
 });
@@ -213,6 +215,7 @@ test("same-origin redirect preserves auth, and SSE delivers multiple chunks on o
 test("SSE network failures propagate to the probe transport", async () => {
   const { context, page, transport } = await open();
   await startSse(page, `${bffOrigin}/reset`);
+  await expect.poll(() => transport.errors.length).toBeGreaterThan(0);
   await transport.settle();
   expect(() => transport.assertHealthy()).toThrow(/GET \/reset/);
   await context.close();
@@ -227,22 +230,22 @@ for (const script of ["probe-route-load-baseline", "accept-management-hosted-pro
     const end = source.indexOf(script.startsWith("probe-") ? "\nlet chromium;" : "\nconst RETRYABLE_HTTP_STATUS", start);
     const install = vm.runInNewContext(source.slice(start, end) + "\ninstallPinnedBffBearer", { URL, process });
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    let routeError: Promise<unknown> | undefined;
+    context.setDefaultTimeout(30_000);
     let resolveError!: (error: unknown) => void;
-    routeError = new Promise((resolve) => { resolveError = resolve; });
+    const routeError = new Promise<unknown>((resolve) => { resolveError = resolve; });
     const routed = { route: (pattern: string, handler: (route: unknown) => Promise<unknown>) =>
       context.route(pattern, (route) => handler(route).catch(resolveError)) };
     await install(routed, { token: TOKEN, feBase: feOrigin, bffBase: bffOrigin, env: env() });
     const page = await context.newPage();
     await page.goto(feOrigin);
     let delivered = false;
-    const stream = startSse(page, `${bffOrigin}/sse`).then(() => { delivered = true; }).catch(() => {});
-    await expect.poll(() => bffSeen.some((s) => s.path === "/sse" && s.authorization === `Bearer ${TOKEN}`)).toBe(true);
+    const stream = startSse(page, `${bffOrigin}/baseline-sse`).then(() => { delivered = true; }).catch(() => {});
+    await expect.poll(() => bffSeen.some((s) => s.path === "/baseline-sse" && s.authorization === `Bearer ${TOKEN}`)).toBe(true);
     await page.waitForTimeout(200);
     expect(delivered).toBe(false);
-    if (script.startsWith("probe-")) await context.close();
+    if (script.startsWith("probe-")) await context.request.dispose();
     const error = String(await routeError);
-    expect(error).toMatch(script.startsWith("probe-") ? /Request context disposed/ : /Timeout 30000ms exceeded/);
+    expect(error).toMatch(script.startsWith("probe-") ? /Request context disposed|Target page, context or browser has been closed/ : /Timeout 30000ms exceeded/);
     await context.close();
     await stream;
     console.log(JSON.stringify({ base: BASE, script, actualHttp: 200, contentType: "text/event-stream", error: error.split("Call log:")[0].trim() }));

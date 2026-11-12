@@ -84,3 +84,26 @@ describe("strict browser auth source contract", () => {
     }
   });
 });
+
+
+describe("pinned native transport error propagation", () => {
+  it("records a failed actual CDP continue, fails that request, and redacts the token", async () => {
+    const { EventEmitter } = await import("node:events");
+    // @ts-expect-error dependency-free ESM helper
+    const { installPinnedBffBearer } = await import("../../scripts/lib/pinned-browser-bff-bearer.mjs");
+    const session = new EventEmitter();
+    const calls: string[] = [];
+    Object.assign(session, { send: async (method: string) => {
+      calls.push(method);
+      if (method === "Fetch.continueRequest") throw new Error("socket failure secret-test-token");
+    } });
+    const page = Object.assign(new EventEmitter(), { isClosed: () => false });
+    const context = Object.assign(new EventEmitter(), { pages: () => [page], newCDPSession: async () => session });
+    const transport = await installPinnedBffBearer(context, { token: "secret-test-token", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
+    session.emit("Fetch.requestPaused", { requestId: "one", request: { url: "https://api.dev.mvl-cap.tw/bff/events/stream" } });
+    await transport.settle();
+    expect(() => transport.assertHealthy()).toThrow(/CDP continueRequest.*socket failure \[REDACTED\]/);
+    expect(calls).toEqual(["Fetch.enable", "Fetch.continueRequest", "Fetch.failRequest"]);
+    expect(transport.errors.join()).not.toContain("secret-test-token");
+  });
+});

@@ -51,7 +51,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   };
   const track = (promise) => {
     pending.add(promise);
-    promise.finally(() => pending.delete(promise)); // all tracked promises handle their own rejection
+    promise.then(() => pending.delete(promise), () => pending.delete(promise));
   };
   const attachPage = (page) => {
     if (pages.has(page)) return pages.get(page);
