@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
-import { expect, test, chromium, type Browser } from "@playwright/test";
+import { expect, test, chromium, type Browser, type CDPSession } from "@playwright/test";
 // @ts-expect-error plain ESM script helper
 import { installPinnedBffBearer } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
 
@@ -220,6 +220,111 @@ test("SSE network failures propagate to the probe transport", async () => {
   expect(() => transport.assertHealthy()).toThrow(/GET \/reset/);
   await context.close();
 });
+
+const INTERCEPTION_BASE = "814cd3541b3833615c8acd3e5c2bf65511da7736";
+// Delay only dispatch of a real CDP command, never synthesize its result/error.
+// This makes the narrow Chromium navigation race reproducible without sleeps.
+async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false) {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const create = context.newCDPSession.bind(context);
+  let release!: () => void;
+  let reached!: () => void;
+  const paused = new Promise<void>((resolve) => { reached = resolve; });
+  const dispatch = new Promise<void>((resolve) => { release = resolve; });
+  const receipt: { canceled: boolean; replaced: boolean; errors: string[] } = { canceled: false, replaced: false, errors: [] };
+  context.newCDPSession = async (page) => {
+    const session = await create(page), send = session.send.bind(session);
+    let held = "", networkId = "", oldLoader = "";
+    session.on("Network.requestWillBeSent", (e) => {
+      if (e.request.url === `${bffOrigin}/held`) oldLoader = e.loaderId;
+    });
+    session.on("Network.loadingFailed", (e) => {
+      if (e.requestId === networkId) receipt.canceled = e.canceled === true && e.errorText === "net::ERR_ABORTED";
+    });
+    session.on("Page.frameNavigated", (e) => {
+      if (oldLoader && e.frame.loaderId !== oldLoader) receipt.replaced = true;
+    });
+    session.on("Fetch.requestPaused", (e) => {
+      if (e.request.url === `${bffOrigin}/held`) { held = e.requestId; networkId = e.networkId; }
+    });
+    // Enable observation for the exact predecessor too; this does not change
+    // its continueRequest handling. The maintained helper enables both itself.
+    await send("Network.enable");
+    await send("Page.enable");
+    session.send = (async (method: string, params: { requestId?: string }) => {
+      if (method === "Fetch.continueRequest" && params.requestId === held) {
+        reached();
+        await dispatch;
+        if (invalidLiveId) params = { ...params, requestId: "missing-live-interception" };
+      }
+      try { return await send(method as Parameters<CDPSession["send"]>[0], params); }
+      catch (error) { receipt.errors.push(String(error)); throw error; }
+    }) as CDPSession["send"];
+    return session;
+  };
+  const transport = await install(context, { token: TOKEN, feBase: feOrigin, bffBase: bffOrigin, env: env() });
+  const page = await context.newPage();
+  await transport.attachPage(page);
+  await page.goto(feOrigin);
+  return { context, page, transport, paused, release, receipt };
+}
+
+test("exact 814 cancellation race fails; maintained transport proves the obsolete request", async () => {
+  const source = execFileSync("git", ["show", `${INTERCEPTION_BASE}:scripts/lib/pinned-browser-bff-bearer.mjs`], { encoding: "utf8" });
+  const predecessor = vm.runInNewContext(source.replaceAll("export ", "") + "\ninstallPinnedBffBearer", { URL, process, setTimeout });
+  for (const [name, install] of [["exact-814", predecessor], ["fixed", installPinnedBffBearer]] as const) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const c = await controlledInterception(install);
+      try {
+        for (let nav = 0; nav < 3; nav++) {
+          expect(await startSse(c.page, `${bffOrigin}/sse`)).toBe("hello");
+          expect(await c.page.evaluate(async (u) => (await fetch(u)).json(), `${bffOrigin}/finite`)).toEqual({ ready: true });
+          await c.page.goto(`${feOrigin}/crawl-${nav}`);
+        }
+        await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+        await c.paused;
+        await c.page.goto(`${feOrigin}/live-detail`);
+        c.release();
+        await c.transport.settle();
+        expect(c.receipt.canceled).toBe(true);
+        expect(c.receipt.replaced).toBe(true);
+        expect(c.receipt.errors).toEqual([expect.stringMatching(/Protocol error \(Fetch.continueRequest\): Invalid InterceptionId\./)]);
+        if (name === "exact-814") expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+        else c.transport.assertHealthy();
+        await c.context.close();
+        await c.transport.settle();
+        if (name === "fixed") c.transport.assertHealthy();
+        console.log(JSON.stringify({ base: INTERCEPTION_BASE, implementation: name, attempt, ...c.receipt, expectedHealth: name === "fixed" ? "pass" : "fail" }));
+      } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+    }
+  }
+});
+
+for (const cause of ["live abort", "invalid live protocol id"] as const) {
+  test(`${cause} keeps the same real Invalid InterceptionId actionable`, async () => {
+    const c = await controlledInterception(installPinnedBffBearer, cause === "invalid live protocol id");
+    try {
+      await c.page.evaluate((u) => {
+        const controller = new AbortController();
+        Object.assign(window, { cancelHeld: () => controller.abort() });
+        void fetch(u, { signal: controller.signal }).catch(() => {});
+      }, `${bffOrigin}/held`);
+      await c.paused;
+      if (cause === "live abort") {
+        await c.page.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
+        await expect.poll(() => c.receipt.canceled).toBe(true);
+      }
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.replaced).toBe(false);
+      expect(c.receipt.errors).toEqual([expect.stringMatching(/Invalid InterceptionId/)]);
+      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      await c.context.close();
+      await c.transport.settle();
+      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  });
+}
 
 const BASE = "aa17cd4fc390e2c311ef50cbd5f7d2160faea775";
 for (const script of ["probe-route-load-baseline", "accept-management-hosted-production"]) {

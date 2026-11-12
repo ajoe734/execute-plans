@@ -57,6 +57,27 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     if (pages.has(page)) return pages.get(page);
     const ready = (async () => {
       const session = await context.newCDPSession(page);
+      const network = new Map(), loaders = new Map(), interceptions = new Set();
+      session.on("Network.requestWillBeSent", (event) => {
+        network.set(event.requestId, { frameId: event.frameId, loaderId: event.loaderId });
+      });
+      session.on("Network.loadingFinished", ({ requestId }) => network.delete(requestId));
+      session.on("Network.loadingFailed", ({ requestId, canceled }) => {
+        const request = network.get(requestId);
+        if (request) { request.failed = true; request.canceled = canceled === true; }
+        network.delete(requestId);
+      });
+      session.on("Page.frameNavigated", ({ frame }) => loaders.set(frame.id, frame.loaderId));
+      session.on("Page.frameDetached", ({ frameId }) => {
+        for (const request of interceptions) if (request.frameId === frameId) request.detached = true;
+        loaders.delete(frameId);
+      });
+      page.on("close", () => {
+        // Only interceptions still live at closure get closure evidence. A
+        // request that already failed while live cannot be excused by teardown.
+        for (const request of interceptions) if (!request.failed) request.closed = true;
+        network.clear();
+      });
       const generations = new WeakMap(), requests = new WeakMap();
       page.on("framenavigated", (frame) => generations.set(frame, (generations.get(frame) || 0) + 1));
       page.on("request", (req) => requests.set(req, generations.get(req.frame()) || 0));
@@ -72,6 +93,8 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         }));
       });
       session.on("Fetch.requestPaused", (event) => {
+        const request = network.get(event.networkId);
+        if (request) interceptions.add(request);
         const { url, headers = {} } = event.request;
         const pinned = originOf(url) === bffOrigin;
         const clean = Object.entries(headers).filter(([name, value]) =>
@@ -83,10 +106,21 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         track(session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
+          // The network id binds Chromium's cancellation to this interception;
+          // the frame's document loader must also have actually changed. An
+          // Invalid InterceptionId on a live request remains a protocol failure.
+          // Allow already queued lifecycle events to arrive before classifying.
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          const replaced = request?.loaderId && loaders.get(request.frameId) &&
+            request.loaderId !== loaders.get(request.frameId);
+          if (/Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error)) &&
+              request && (request.closed || (request.canceled && (replaced || request.detached)))) return;
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
-        }));
+        }).finally(() => interceptions.delete(request)));
       });
+      await session.send("Network.enable");
+      await session.send("Page.enable");
       await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
     })();
     pages.set(page, ready);
