@@ -580,6 +580,10 @@ describe("paired Pantheon release workflow", () => {
     expect(readonlyStep).toContain("github.event_name == 'workflow_dispatch'");
     expect(readonlyStep).toContain("github.ref == 'refs/heads/dev'");
     expect(readonlyStep).toContain("inputs.release_candidate_id != ''");
+    // Credential only reaches the exact trusted controller code (fixed at
+    // dispatch), never an older candidate checkout or the moving dev head.
+    expect(readonlyStep).toContain("inputs.fe_sha == github.sha");
+    expect(readonlyStep).toContain('"$(git rev-parse HEAD)" == "$GITHUB_SHA"');
     expect(readonlyStep).toContain("secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET");
     expect(readonlyStep).not.toContain("browser_session");
     expect(readonlyStep).toContain("::add-mask::");
