@@ -48,7 +48,7 @@
       "bffCommit": "bee62bc2978618539984aff9db136b064adc14a0"
     },
     "offlineRegression": "Loopback-only synthetic response cases exercise the same two-GET helper as the hosted test: pending-empty plus versioned decided/revoked data-array rows, empty owner data, invalid owner versions, 401 from either endpoint, and malformed/nonversioned pending rows. Offline cases cannot count as genuine hosted owner evidence.",
-    "validation": "Pending terminal output collection; fresh exact-head remote CI and assigned Claude review required."
+    "validation": "npm run test -- src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/paired-release-workflow.test.ts src/test/e2e-auth-helper-session.test.ts src/test/aggregate-release-gate-hard-gates.test.ts: 93/93 passed, exit 0. npx playwright test e2e/12-approvals.spec.ts --project=chromium --grep 'F12 lane boundary regressions' --reporter=list: 3/3 passed, exit 0 (loopback build, no hosted proof). git diff --check passed. Fresh exact-head remote CI and assigned Claude review remain required before native integration."
   },
   "notProven": "No real protected-run or hosted proof from this source-only worker; local operator/original publisher own the authenticated gate execution.",
   "authApplicability": "Trusted exact-dev dispatch receives a short-lived operator token via existing dev-login; untrusted PR/push/branch runs remain credential-free and required authenticated probes fail honestly as missing-auth. paired-release-workflow.test.ts now asserts exactly one secret reference in the ordinary job.",
