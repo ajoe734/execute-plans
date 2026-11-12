@@ -221,20 +221,58 @@ test("SSE network failures propagate to the probe transport", async () => {
   await context.close();
 });
 
-const INTERCEPTION_BASE = "814cd3541b3833615c8acd3e5c2bf65511da7736";
+const INTERCEPTION_BASE = "82ff528625f3ca4ad7c3e607ee7cfa7d465ea444";
 // Delay only dispatch of a real CDP command, never synthesize its result/error.
 // This makes the narrow Chromium navigation race reproducible without sleeps.
-async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false) {
+// lateLifecycle holds, in order, delivery of real Chromium Network/Page events to the
+// helper's listeners once the held request is paused, until 80ms after the real continueRequest rejection, i.e.
+// a locally imposed queued-event ordering (hosted causation is unproven). Nothing is synthesized.
+async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, delayRejection = false) {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
   let release!: () => void;
   let reached!: () => void;
   const paused = new Promise<void>((resolve) => { reached = resolve; });
   const dispatch = new Promise<void>((resolve) => { release = resolve; });
-  const receipt: { canceled: boolean; replaced: boolean; errors: string[] } = { canceled: false, replaced: false, errors: [] };
+  const receipt: { canceled: boolean; replaced: boolean; errors: string[]; order: string[];
+    lifecycle: Record<string, unknown>[] } = { canceled: false, replaced: false, errors: [], order: [], lifecycle: [] };
+  let openGate!: () => void;
+  let releaseRejection!: () => void;
+  const rejectionGate = new Promise<void>((resolve) => { releaseRejection = resolve; });
+  const gate = new Promise<void>((resolve) => { openGate = resolve; });
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session);
-    let held = "", networkId = "", oldLoader = "";
+    let held = "", networkId = "", oldLoader = "", frameId = "", heldSample = false;
+    const note = (event: string, fields: Record<string, unknown> = {}) =>
+      receipt.lifecycle.push({ sequence: receipt.lifecycle.length, event, ...fields });
+    // Observe real browser events before the optional delivery gate. Keep only
+    // opaque CDP ids, timestamps and booleans; no URLs, headers or bodies.
+    session.on("Network.requestWillBeSent", (e) => {
+      if (e.request.url === `${bffOrigin}/held`) {
+        oldLoader = e.loaderId; frameId = e.frameId;
+        note("Network.requestWillBeSent", { networkId: e.requestId, frameId, loaderId: oldLoader, timestamp: e.timestamp });
+      }
+    });
+    session.on("Network.loadingFailed", (e) => {
+      if (e.requestId === networkId) note("Network.loadingFailed", { networkId, canceled: e.canceled === true, timestamp: e.timestamp });
+    });
+    session.on("Page.frameNavigated", (e) => {
+      if (held && e.frame.id === frameId) note("Page.frameNavigated", { frameId, loaderId: e.frame.loaderId });
+    });
+    session.on("Page.navigatedWithinDocument", (e) => {
+      if (held && e.frameId === frameId) note("Page.navigatedWithinDocument", { frameId });
+    });
+    page.on("close", () => { if (held) note("page.close"); });
+    if (lateLifecycle) {
+      const on = session.on.bind(session);
+      session.on = ((event: string, listener: (e: never) => void) => on(event as never,
+        /^(Network|Page)\./u.test(event)
+          ? ((e: never) => { if (held) void gate.then(() => {
+            if (event === "Network.loadingFailed" && (e as { requestId: string }).requestId === networkId)
+              note("helper receives Network.loadingFailed", { networkId });
+            listener(e);
+          }); else listener(e); }) as never : listener as never)) as typeof session.on;
+    }
     session.on("Network.requestWillBeSent", (e) => {
       if (e.request.url === `${bffOrigin}/held`) oldLoader = e.loaderId;
     });
@@ -245,7 +283,11 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
       if (oldLoader && e.frame.loaderId !== oldLoader) receipt.replaced = true;
     });
     session.on("Fetch.requestPaused", (e) => {
-      if (e.request.url === `${bffOrigin}/held`) { held = e.requestId; networkId = e.networkId; }
+      if (e.request.url === `${bffOrigin}/held`) {
+        held = e.requestId; networkId = e.networkId;
+        heldSample = true;
+        note("Fetch.requestPaused", { interceptionId: held, networkId });
+      }
     });
     // Enable observation for the exact predecessor too; this does not change
     // its continueRequest handling. The maintained helper enables both itself.
@@ -256,9 +298,30 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
         reached();
         await dispatch;
         if (invalidLiveId) params = { ...params, requestId: "missing-live-interception" };
+        note("Fetch.continueRequest dispatched", { interceptionId: params.requestId, networkId, invalidLiveId });
       }
-      try { return await send(method as Parameters<CDPSession["send"]>[0], params); }
-      catch (error) { receipt.errors.push(String(error)); throw error; }
+      // Hold the sample too, so cancellation can occur before both sample and
+      // continuation. This is an imposed local schedule, not a hosted trace.
+      const samplingHeld = method === "Performance.getMetrics" && heldSample;
+      if (samplingHeld) { heldSample = false; reached(); await dispatch; }
+      try {
+        const result = await send(method as Parameters<CDPSession["send"]>[0], params);
+        if (samplingHeld) note("Performance.getMetrics", {
+          timestamp: (result as { metrics: { name: string; value: number }[] }).metrics.find((m) => m.name === "Timestamp")?.value,
+        });
+        return result;
+      }
+      catch (error) {
+        receipt.errors.push(String(error));
+        if (method === "Fetch.continueRequest") {
+          receipt.order.push("continueRequest rejected"); note("Fetch.continueRequest rejected", { invalidInterceptionId: String(error).includes("Invalid InterceptionId") });
+          setTimeout(openGate, 80);
+        }
+        // Only DELIVERY of the real rejection is delayed; the error is never synthesized.
+        if (delayRejection && method === "Fetch.continueRequest") await rejectionGate;
+        if (method === "Fetch.continueRequest") note("continueRequest rejection delivered");
+        throw error;
+      }
     }) as CDPSession["send"];
     return session;
   };
@@ -266,15 +329,113 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
   const page = await context.newPage();
   await transport.attachPage(page);
   await page.goto(feOrigin);
-  return { context, page, transport, paused, release, receipt };
+  return { context, page, transport, paused, release, receipt, releaseRejection };
 }
 
-test("exact 814 cancellation race fails; maintained transport proves the obsolete request", async () => {
+test("queued cancellation lifecycle arriving after Invalid InterceptionId rejection is still proven", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception(installPinnedBffBearer, false, true);
+    try {
+      await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await c.paused;
+      await c.page.goto(`${feOrigin}/live-detail`);
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+      console.log(JSON.stringify({ scenario: "queued-positive", attempt, ...c.receipt, transportErrors: c.transport.errors.length }));
+      c.transport.assertHealthy();
+      await c.context.close();
+      await c.transport.settle();
+      c.transport.assertHealthy();
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("late lifecycle does not excuse live abort or invalid live protocol id", async () => {
+  for (const cause of ["live abort then navigation", "invalid live protocol id"] as const) {
+    const c = await controlledInterception(installPinnedBffBearer, cause === "invalid live protocol id", true);
+    try {
+      await c.page.evaluate((u) => {
+        const controller = new AbortController();
+        Object.assign(window, { cancelHeld: () => controller.abort() });
+        void fetch(u, { signal: controller.signal }).catch(() => {});
+      }, `${bffOrigin}/held`);
+      await c.paused;
+      if (cause.startsWith("live abort")) {
+        await c.page.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
+        await c.page.goto(`${feOrigin}/unrelated-navigation`);
+      }
+      c.release();
+      await c.transport.settle();
+      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("same-document navigation cancelling a held request settles healthy", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception();
+    try {
+      await c.page.evaluate((u) => {
+        const controller = new AbortController();
+        Object.assign(window, { cancelHeld: () => controller.abort() });
+        void fetch(u, { signal: controller.signal }).catch(() => {});
+      }, `${bffOrigin}/held`);
+      await c.paused;
+      await c.page.evaluate(() => {
+        history.pushState({}, "", "/same-document-route");
+        (window as unknown as { cancelHeld: () => void }).cancelHeld();
+      });
+      await expect.poll(() => c.receipt.canceled).toBe(true);
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.replaced).toBe(false);
+      c.transport.assertHealthy();
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("live invalid id then same-request navigation stays actionable when its real rejection is delivered late", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, true, false, true);
+  try {
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    c.release();
+    await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+    expect(c.receipt.canceled).toBe(false);
+    await c.page.goto(`${feOrigin}/navigation-after-rejection`);
+    await expect.poll(() => c.receipt.canceled).toBe(true);
+    c.releaseRejection();
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    console.log(JSON.stringify({ scenario: "live-invalid-delayed-rejection", ...c.receipt, expectedHealth: "fail" }));
+  } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
+});
+
+for (const teardown of ["context close", "unrelated navigation"] as const) {
+  test(`live invalid id is not excused by ${teardown} before settle`, async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const c = await controlledInterception(installPinnedBffBearer, true);
+      try {
+        await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+        await c.paused;
+        c.release();
+        await expect.poll(() => c.receipt.errors.length).toBeGreaterThan(0);
+        if (teardown === "context close") await c.context.close();
+        else await c.page.goto(`${feOrigin}/unrelated-navigation`);
+        await c.transport.settle();
+        expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+    }
+  });
+}
+
+test("exact 82ff queued cancellation fails; maintained transport proves the obsolete request", async () => {
   const source = execFileSync("git", ["show", `${INTERCEPTION_BASE}:scripts/lib/pinned-browser-bff-bearer.mjs`], { encoding: "utf8" });
   const predecessor = vm.runInNewContext(source.replaceAll("export ", "") + "\ninstallPinnedBffBearer", { URL, process, setTimeout });
-  for (const [name, install] of [["exact-814", predecessor], ["fixed", installPinnedBffBearer]] as const) {
+  for (const [name, install] of [["exact-82ff", predecessor], ["fixed", installPinnedBffBearer]] as const) {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const c = await controlledInterception(install);
+      const c = await controlledInterception(install, false, true);
       try {
         for (let nav = 0; nav < 3; nav++) {
           expect(await startSse(c.page, `${bffOrigin}/sse`)).toBe("hello");
@@ -286,10 +447,19 @@ test("exact 814 cancellation race fails; maintained transport proves the obsolet
         await c.page.goto(`${feOrigin}/live-detail`);
         c.release();
         await c.transport.settle();
-        expect(c.receipt.canceled).toBe(true);
+        await expect.poll(() => c.receipt.canceled).toBe(true);
         expect(c.receipt.replaced).toBe(true);
+        const events = c.receipt.lifecycle.map((e) => e.event);
+        expect(events.indexOf("Network.loadingFailed")).toBeLessThan(events.indexOf("Fetch.continueRequest dispatched"));
+        expect(events.indexOf("Fetch.continueRequest rejected")).toBeLessThan(events.indexOf("helper receives Network.loadingFailed"));
+        if (name === "fixed") {
+          const canceledAt = c.receipt.lifecycle.find((e) => e.event === "Network.loadingFailed")?.timestamp as number;
+          const sampledAt = c.receipt.lifecycle.find((e) => e.event === "Performance.getMetrics")?.timestamp as number;
+          expect(canceledAt).toBeLessThanOrEqual(sampledAt);
+          expect(events.indexOf("Performance.getMetrics")).toBeLessThan(events.indexOf("Fetch.continueRequest dispatched"));
+        }
         expect(c.receipt.errors.filter((e) => e.includes("(Fetch.continueRequest)"))).toEqual([expect.stringMatching(/Protocol error \(Fetch.continueRequest\): Invalid InterceptionId\./)]);
-        if (name === "exact-814") expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+        if (name === "exact-82ff") expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
         else c.transport.assertHealthy();
         await c.context.close();
         await c.transport.settle();

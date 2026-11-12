@@ -57,17 +57,21 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     if (pages.has(page)) return pages.get(page);
     const ready = (async () => {
       const session = await context.newCDPSession(page);
-      const network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set();
+      const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set();
       session.on("Network.requestWillBeSent", (event) => {
-        network.set(event.requestId, { frameId: event.frameId, loaderId: event.loaderId });
+        network.set(event.requestId, { frameId: event.frameId, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0 });
         if (event.type === "Document") navigating.set(event.frameId, event.loaderId);
       });
       session.on("Network.loadingFinished", ({ requestId }) => network.delete(requestId));
-      session.on("Network.loadingFailed", ({ requestId, canceled }) => {
+      session.on("Page.navigatedWithinDocument", ({ frameId }) => documentNavigations.set(frameId, (documentNavigations.get(frameId) || 0) + 1));
+      session.on("Network.loadingFailed", ({ requestId, canceled, timestamp }) => {
         const request = network.get(requestId);
         if (request) {
           request.failed = true;
           request.canceled = canceled === true;
+          request.canceledAt = timestamp;
+          // Arrival order: a same-document navigation observed before the cancel.
+          request.sameDocument = (documentNavigations.get(request.frameId) || 0) > request.documentNavigations;
           request.navigationLoader = navigating.get(request.frameId);
         }
         network.delete(requestId);
@@ -112,26 +116,40 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           clean.push(["authorization", bearer]);
           if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
-        track(session.send("Fetch.continueRequest", { requestId: event.requestId,
+        // Await the browser's sample before dispatching continueRequest. Its
+        // Timestamp therefore predates the actual command rejection, regardless
+        // of command scheduling or delayed delivery of the rejection to Node.
+        const before = request ? session.send("Performance.getMetrics").then(
+          ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
+        const continueRequest = (rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
-          // The network id binds Chromium's cancellation to this interception;
-          // the frame's document loader must also have actually changed. An
-          // Invalid InterceptionId on a live request remains a protocol failure.
-          // Allow already queued lifecycle events to arrive before classifying.
-          const closedAtFailure = request?.closed, detachedAtFailure = request?.detached;
-          const canceledAtFailure = request?.canceled;
-          await new Promise((resolve) => setTimeout(resolve, 25));
-          const replaced = request?.loaderId && request.navigationLoader &&
-            request.loaderId !== request.navigationLoader && loaders.get(request.frameId) === request.navigationLoader;
-          if (/Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error)) &&
-              request && (closedAtFailure || (canceledAtFailure && (replaced || detachedAtFailure)))) return;
+          // The network id binds Chromium's cancellation to this interception,
+          // and the cancellation must be caused by a navigation (document
+          // replacement, same-document navigation or frame detach). Lifecycle
+          // events can be queued behind the command rejection, so wait for them,
+          // but only accept a cancellation Chromium timestamped no later than the
+          // pre-command sample: an invalid id on a live request, followed by later
+          // navigation or teardown, stays a protocol failure, whenever the error
+          // is delivered. Closure alone never proves anything afterwards.
+          const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
+          if (invalidId && request) {
+            const proven = () => request.canceled && request.canceledAt <= rejectedAt && (request.detached || request.sameDocument ||
+              (request.loaderId && request.navigationLoader && request.loaderId !== request.navigationLoader &&
+                loaders.get(request.frameId) === request.navigationLoader));
+            if (typeof rejectedAt === "number") {
+              for (let waited = 0; waited < 1000 && !proven(); waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
+              if (proven()) return;
+            }
+          }
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
-        }).finally(() => interceptions.delete(request)));
+        });
+        track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
       });
       await session.send("Network.enable");
       await session.send("Page.enable");
+      await session.send("Performance.enable");
       await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
     })();
     pages.set(page, ready);
