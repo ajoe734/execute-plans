@@ -227,7 +227,7 @@ const INTERCEPTION_BASE = "82ff528625f3ca4ad7c3e607ee7cfa7d465ea444";
 // lateLifecycle holds, in order, delivery of real Chromium Network/Page events to the
 // helper's listeners once the held request is paused, until 80ms after the real continueRequest rejection, i.e.
 // a locally imposed queued-event ordering (hosted causation is unproven). Nothing is synthesized.
-async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, delayRejection = false) {
+async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, delayRejection = false, holdCommit = false) {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
   let release!: () => void;
@@ -240,6 +240,8 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
   let releaseRejection!: () => void;
   const rejectionGate = new Promise<void>((resolve) => { releaseRejection = resolve; });
   const gate = new Promise<void>((resolve) => { openGate = resolve; });
+  let releaseCommit!: () => void;
+  const commitGate = new Promise<void>((resolve) => { releaseCommit = resolve; });
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session);
     let held = "", networkId = "", oldLoader = "", frameId = "", heldSample = false;
@@ -272,6 +274,11 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
               note("helper receives Network.loadingFailed", { networkId });
             listener(e);
           }); else listener(e); }) as never : listener as never)) as typeof session.on;
+    }
+    if (holdCommit) { // defer only DELIVERY (in order) of real Page.frameNavigated to the helper
+      const on = session.on.bind(session);
+      session.on = ((event: string, listener: (e: never) => void) => on(event as never,
+        event === "Page.frameNavigated" ? ((e: never) => { void commitGate.then(() => listener(e)); }) as never : listener as never)) as typeof session.on;
     }
     session.on("Network.requestWillBeSent", (e) => {
       if (e.request.url === `${bffOrigin}/held`) oldLoader = e.loaderId;
@@ -330,7 +337,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
   const page = await context.newPage();
   await transport.attachPage(page);
   await page.goto(feOrigin);
-  return { context, page, transport, paused, release, receipt, releaseRejection };
+  return { context, page, transport, paused, release, receipt, releaseRejection, releaseCommit };
 }
 
 test("queued cancellation lifecycle arriving after Invalid InterceptionId rejection is still proven", async () => {
@@ -610,6 +617,128 @@ test("pause-before-network ordering still reports a live invalid protocol id", a
     await c.transport.settle();
     expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
   } finally { pauseFirst = false; c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
+// The observed crawl lifecycle: Chromium cancels the old document's requests, and the
+// replacing navigation's commit reaches the helper later (here: after any fixed delay,
+// delivered in order and unaltered once released). Hosted ordering is unproven; this is
+// an imposed local schedule of the same causal facts, never a synthesized event.
+async function openHeldCommit(held: string[] = ["Page.frameNavigated"]) {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const create = context.newCDPSession.bind(context);
+  let releaseCommit!: () => void;
+  const commitGate = new Promise<void>((resolve) => { releaseCommit = resolve; });
+  let armed = false; // hold only what follows the initial page load
+  context.newCDPSession = async (page) => {
+    const session = await create(page), on = session.on.bind(session);
+    session.on = ((event: string, listener: (e: never) => void) => on(event as never,
+      held.includes(event) ? ((e: never) => { if (armed) void commitGate.then(() => listener(e)); else listener(e); }) as never : listener as never)) as typeof session.on;
+    return session;
+  };
+  const transport = await installPinnedBffBearer(context, { token: TOKEN, feBase: feOrigin, bffBase: bffOrigin, env: env() });
+  const page = await context.newPage();
+  await transport.attachPage(page);
+  await page.goto(feOrigin);
+  armed = true;
+  return { context, page, transport, releaseCommit };
+}
+const abortableFetch = (page: import("@playwright/test").Page, path: string) => page.evaluate((u) => {
+  const controller = new AbortController();
+  Object.assign(window, { cancelLast: () => controller.abort() });
+  void fetch(u, { signal: controller.signal }).catch(() => {});
+}, `${bffOrigin}${path}`);
+
+test("navigation cancelling an abortable BFF read is excused however late its commit reaches the helper", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await openHeldCommit();
+    try {
+      await abortableFetch(c.page, "/pending");
+      await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(attempt + 1);
+      const failed = c.page.waitForEvent("requestfailed", { predicate: (r) => r.url() === `${bffOrigin}/pending` });
+      await c.page.goto(`${feOrigin}/live-detail`);
+      await failed;
+      await new Promise((r) => setTimeout(r, 200)); // far beyond the former fixed 25ms judgement
+      c.releaseCommit();
+      await c.transport.settle();
+      c.transport.assertHealthy();
+    } finally { c.releaseCommit(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("a live abort is not excused by a later navigation commit; same-URL overlap cannot excuse it", async () => {
+  const c = await openHeldCommit();
+  try {
+    await abortableFetch(c.page, "/pending");                 // X: aborted while live
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/pending`); // Y: same URL, cancelled by navigation
+    await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(2);
+    const live = c.page.waitForEvent("requestfailed", { predicate: (r) => r.url() === `${bffOrigin}/pending` });
+    await c.page.evaluate(() => (window as unknown as { cancelLast: () => void }).cancelLast());
+    await live;
+    await c.page.goto(`${feOrigin}/live-detail`);
+    c.releaseCommit();
+    await c.transport.settle();
+    expect(c.transport.errors.filter((e) => e.includes("ERR_ABORTED"))).toEqual(["GET /pending: net::ERR_ABORTED"]);
+  } finally { c.releaseCommit(); await c.context.close(); await c.transport.settle(); }
+});
+
+test("Invalid InterceptionId for a request cancelled by a navigation is proven however late the commit reaches the helper", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, false, false, false, true);
+  try {
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    await c.page.goto(`${feOrigin}/live-detail`);
+    await expect.poll(() => c.receipt.canceled).toBe(true);
+    c.release();
+    await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+    await new Promise((r) => setTimeout(r, 1200)); // beyond the former fixed 1000ms wait
+    c.releaseCommit();
+    await c.transport.settle();
+    c.transport.assertHealthy();
+  } finally { c.release(); c.releaseCommit(); await c.context.close(); await c.transport.settle(); }
+});
+
+test("a late navigation commit cannot excuse a live invalid protocol id", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, true, false, false, true);
+  try {
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    c.release();
+    await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+    await c.page.goto(`${feOrigin}/live-detail`);
+    await expect.poll(() => c.receipt.canceled).toBe(true);
+    c.releaseCommit();
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { c.release(); c.releaseCommit(); await c.context.close(); await c.transport.settle(); }
+});
+
+test("the helper's own record of a navigation cancellation may trail Playwright's; causality, not arrival, decides", async () => {
+  const held = ["Network.loadingFailed", "Page.frameNavigated"];
+  const c = await openHeldCommit(held);
+  try {
+    await abortableFetch(c.page, "/pending");
+    await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(1);
+    const failed = c.page.waitForEvent("requestfailed", { predicate: (r) => r.url() === `${bffOrigin}/pending` });
+    await c.page.goto(`${feOrigin}/live-detail`);
+    await failed;
+    await new Promise((r) => setTimeout(r, 200));
+    c.releaseCommit();
+    await c.transport.settle();
+    c.transport.assertHealthy();
+  } finally { c.releaseCommit(); await c.context.close(); await c.transport.settle(); }
+  // Same trailing delivery, but the abort was live before the navigation began: still a failure.
+  const live = await openHeldCommit(held);
+  try {
+    await abortableFetch(live.page, "/pending");
+    await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(2);
+    const failed = live.page.waitForEvent("requestfailed", { predicate: (r) => r.url() === `${bffOrigin}/pending` });
+    await live.page.evaluate(() => (window as unknown as { cancelLast: () => void }).cancelLast());
+    await failed;
+    await live.page.goto(`${feOrigin}/live-detail`);
+    live.releaseCommit();
+    await live.transport.settle();
+    expect(() => live.transport.assertHealthy()).toThrow(/GET \/pending: net::ERR_ABORTED/);
+  } finally { live.releaseCommit(); await live.context.close(); await live.transport.settle(); }
 });
 
 const BASE = "aa17cd4fc390e2c311ef50cbd5f7d2160faea775";
