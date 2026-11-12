@@ -1619,7 +1619,7 @@ jobs:
       - name: Redact credentials from evidence before upload
         if: always()
         run: |
-          node scripts/lib/redact-credentials.mjs "$PANTHEON_AUDIT_OUT_DIR" playwright-report test-results
+          node scripts/lib/pinned-bff-bearer.mjs "$PANTHEON_AUDIT_OUT_DIR" playwright-report test-results
 
       - name: Prepare evidence artifact paths
         if: always()

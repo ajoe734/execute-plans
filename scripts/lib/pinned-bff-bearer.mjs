@@ -1,3 +1,4 @@
+// Pinned-BFF bearer credential hygiene: redaction of credential material from evidence.
 // Redacts credential-bearing text (Authorization bearer values, JWT-shaped
 // strings, and literal secret values) from evidence files before upload.
 import fs from "node:fs";
