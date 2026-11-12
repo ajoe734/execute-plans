@@ -66,4 +66,20 @@ describe("strict browser auth source contract", () => {
     expect(app).not.toContain("<Route element={<PlatformShellRoute />}>");
     expect(app).not.toContain("<ProtectedRoute><PersonaDetailRoute /></ProtectedRoute>");
   });
+
+  it("shares one lightweight pinned-bearer browser transport between both hosted probes", () => {
+    const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
+    const lib = read("scripts/lib/pinned-browser-bff-bearer.mjs");
+    expect(lib).not.toMatch(/(?:from|import\()\s*["']@?playwright/);
+    expect(lib).toContain("maxRedirects: 0");
+    expect(lib).toContain("Fetch.requestPaused");
+    expect(lib).not.toContain("route.continue({ headers");
+    expect(lib).not.toMatch(/node:https?/);
+    expect(lib).not.toMatch(/localStorage|sessionStorage|addInitScript/);
+    for (const script of ["scripts/probe-route-load-baseline.mjs", "scripts/accept-management-hosted-production.mjs"]) {
+      const src = read(script);
+      expect(src).toContain('from "./lib/pinned-browser-bff-bearer.mjs"');
+      expect(src).not.toMatch(/function (installPinnedBffBearer|pinnedTargetProblem|originOf)/);
+    }
+  });
 });

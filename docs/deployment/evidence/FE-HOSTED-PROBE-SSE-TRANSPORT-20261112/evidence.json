@@ -1,0 +1,44 @@
+{
+  "task": "FE-HOSTED-PROBE-SSE-TRANSPORT-20261112",
+  "baseHead": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
+  "scope": "source-only local transport regression; NOT hosted product acceptance, no provider/VM/credential/workflow/service action",
+  "rootCause": "Both probes awaited route.fetch (buffers the full body) for a never-ending HTTP 200 text/event-stream response: one rejects on context disposal, the other times out (30000ms in the probe).",
+  "fix": {
+    "sharedTransport": "scripts/lib/pinned-browser-bff-bearer.mjs (dependency-free; replaces the duplicated helpers in both probes; no node http/https)",
+    "finiteReads": "unchanged: route.fetch maxRedirects:0 + fulfill",
+    "sse": "GET + Accept text/event-stream: route.fallback() so the browser streams natively; a per-page CDP Fetch guard (context.newCDPSession) adds the bearer to that pinned-BFF request only and strips Authorization/x-tenant-id from any request to another origin (replayed redirect). Decided per actual request, so a response that changes between GETs cannot bypass it. A page without a guard => SSE aborted, no credential.",
+    "errors": "install returns {errors, assertHealthy}; only closed-target errors with the page/context verifiably closed are ignored; others abort that request and are recorded. Route-load sets the probe error; the acceptance probe throws before continuing."
+  },
+  "findingDuringWork": "Playwright route.continue({headers}) replays headers on redirects and never re-routes the redirected request (coreBundle _alreadyContinuedParams). The prior header-probe + continue design was reviewed REJECT: two separate GETs, the second can redirect (reproduced by reviewer: foreign origin got the bearer).",
+  "tests": [
+    {
+      "cmd": "playwright test e2e/hosted-bff-streaming-transport.spec.ts (temporary root config, real Chromium + local HTTPS)",
+      "result": "6 passed: SSE open + finite JSON + navigation/closure with no unhandled rejection; cross-origin redirect (finite+SSE); first-200-then-302 flip; unrelated failure surfaced/teardown quiet; tenant consistency; fail-closed install"
+    },
+    {
+      "cmd": "mutation: guard adds bearer to every origin",
+      "result": "redirect and flip tests FAIL (leak detected), others pass"
+    },
+    {
+      "cmd": "vitest run strict-browser-auth-source-contract + aggregate-release-gate-auth-truth + aggregate-release-gate-hosted-auth",
+      "result": "3 files, 45 passed"
+    },
+    {
+      "cmd": "npm run typecheck; eslint on spec + contract test; node --check on both probes and shared lib",
+      "result": "clean"
+    }
+  ],
+  "notDone": "No hosted run, receipt reading, release, rollback or all12 completion; these stay with the original publisher. Local transport regression is not hosted product acceptance.",
+  "scopeGrant": "aggregate-release-gate-auth-truth and -hosted-auth tests admitted; adapted to read the shared lib",
+  "receiptProvenance": {
+    "status": "NOT READ",
+    "detail": "The sanitized primary receipt for child43157389135/job130980377601 was not available to this worker; the hosted failure itself is taken from the task brief and is not independently confirmed here. Only the source-level cause is reproduced."
+  },
+  "exactBaseReproduction": {
+    "base": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
+    "method": "local HTTP server returning 200 text/event-stream that never ends; base route logic (route.fetch headers+authorization, maxRedirects:0, then fulfill) in real Chromium via an EventSource",
+    "result": "route.fetch rejected after 3010ms: Timeout 3000ms exceeded (timeout shortened from the probe's 30000ms)",
+    "scope": "local, not the hosted receipt"
+  },
+  "validatedHead": "see PR #987 head after rewrite; commit trailers restored (LLM-Agent/Task-ID/Reviewer), subjects <=72"
+}
