@@ -4,8 +4,8 @@
   "artifacts": {
     "cli": "scripts/accept-persona-strategy-hosted-readonly.mjs",
     "tests": "src/test/persona-strategy-hosted-readonly.test.ts",
-    "cli_sha256": "d0d46ec0c369e4aa3065a13f97bbe16ab1be4b032c37d9769f856592ddfc28fe",
-    "tests_sha256": "a3f51ab8cfc4c812eb18232e16d24b0823757c2ba90223865ea6ad30448e9fdd"
+    "cli_sha256": "1cb49696c7ff70905568a1830f6f11c10e3c6d6ce8eef9b12c6f76d6233ee4bc",
+    "tests_sha256": "c64c447f2d0423e6286e1c708830f6a701c0459d54ebc0234c0ecc0b0d0e48e9"
   },
   "source_references_inspected_fully_not_executed": [
     "/tmp/pantheon-root01a15322-resume-20261111/four-profile-readonly.cjs",

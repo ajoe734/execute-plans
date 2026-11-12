@@ -343,6 +343,20 @@ describe("pure acceptance logic", () => {
       expect(a.row.failed_api_requests).toHaveLength(0);
       expect(a.row.cancelled_api_requests).toHaveLength(1);
     });
+    it("late session errors arriving during logout/close fail the final verdict", () => {
+      for (const key of ["page_errors", "failed_api_requests", "http_api_errors"] as const) {
+        const row: any = { errors: [], page_errors: [], failed_api_requests: [], http_api_errors: [] };
+        row[key].push("reviewer-late-" + key);
+        cli.foldFinalObservations(row, "OPERATOR_B");
+        cli.foldFinalObservations(row, "OPERATOR_B");
+        expect(row.errors).toHaveLength(1);
+        expect(row.errors[0]).toContain(key);
+        expect(row.errors[0]).toContain("reviewer-late-" + key);
+      }
+      const clean: any = { errors: [], page_errors: [], failed_api_requests: [], http_api_errors: [] };
+      cli.foldFinalObservations(clean, "x");
+      expect(clean.errors).toEqual([]);
+    });
     it("never erases an already-witnessed live failure on later navigation or close", () => {
       const b = mk();
       b.emit("request", b.req);

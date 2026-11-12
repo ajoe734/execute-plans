@@ -357,6 +357,17 @@ async function loadChromium() {
   throw new Error("Playwright package not resolvable (install playwright or @playwright/test)");
 }
 
+// Fold every observation that arrived up to session shutdown (incl. during logout/close) into row.errors,
+// so row.pass is derived from the FINAL state, never from a pre-logout snapshot.
+export function foldFinalObservations(row, label) {
+  for (const k of ["page_errors", "failed_api_requests", "http_api_errors"]) {
+    if (Array.isArray(row[k]) && row[k].length > 0) {
+      const reason = `${label} ${k} observed by session shutdown: ${JSON.stringify(row[k]).slice(0, 600)}`;
+      if (!row.errors.includes(reason)) row.errors.push(reason);
+    }
+  }
+}
+
 export function observe(ctx, page, row, API, { onBlockedWrite }) {
   const requestStarts = new WeakMap();
   const state = { loginAcceptedAt: Infinity, observeHttp: true, firstFleetStarted: undefined, firstFleetUrl: undefined };
@@ -596,6 +607,7 @@ export async function run(input, deps = {}) {
         await ctx.close().catch(() => {});
       }
     }
+    foldFinalObservations(row, name);
     row.pass = row.errors.length === 0 && row.fresh_entry_pass === true;
     if (row.errors.length === 0 && row.fresh_entry_pass !== true) row.errors.push(`${name} cold fresh entry exceeded original thresholds`);
   }
@@ -829,6 +841,7 @@ export async function run(input, deps = {}) {
         await ctx.close().catch(() => {});
       }
     }
+    foldFinalObservations(row, "supplementary");
     row.pass = row.errors.length === 0 && out.blocked_writes.length === 0 && row.api_reads.length === 9 && row.retired_reads.length === 4 && row.views.length === 4;
   }
 
@@ -858,6 +871,7 @@ export async function run(input, deps = {}) {
   };
   const perf = S.performance;
   const perfPass = ["fleet_browser_warm", "default_first_page", "per_persona", "hide_retired_without_state", "persona_detail"].every((k) => perf[k]?.pass === true);
+  if (S.session) foldFinalObservations(S.session, "admin batch");
   const sessionOk = (S.session?.errors.length ?? 1) === 0 &&
     (S.session?.page_errors.length ?? 1) === 0 &&
     (S.session?.failed_api_requests.length ?? 1) === 0 &&
