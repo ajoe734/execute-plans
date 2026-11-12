@@ -227,6 +227,7 @@ const milestones = {
   firstRowOrEmptyVisibleMs: null,
 };
 let error = null;
+let primaryApiStatus = null;
 
 try {
   navStartMs = Date.now();
@@ -238,6 +239,7 @@ try {
     )
     .then((res) => {
       milestones.primaryApiCompleteMs = Date.now() - navStartMs;
+      primaryApiStatus = res.status();
       return res;
     })
     .catch(() => null);
@@ -281,7 +283,19 @@ const requestsBeforeFirstRow = milestones.firstRowOrEmptyVisibleMs === null
   : waterfall.filter((entry) => entry.startMs <= milestones.firstRowOrEmptyVisibleMs).length;
 
 const usedNetworkidle = false; // structural guarantee: this probe never calls waitUntil: "networkidle"
+// Required authenticated readiness: timing is always retained, but a missing
+// credential or a non-2xx primary response (401/403/5xx) is never a pass.
+const authenticatedPrimaryOk = Boolean(BEARER_TOKEN)
+  && primaryApiStatus !== null
+  && primaryApiStatus >= 200
+  && primaryApiStatus < 300;
+if (!error && !authenticatedPrimaryOk) {
+  error = !BEARER_TOKEN
+    ? "authenticated route-load requires a bearer token; none supplied"
+    : `primary API ${PRIMARY_API_PATH} returned non-success status ${primaryApiStatus}`;
+}
 const pass = !error
+  && authenticatedPrimaryOk
   && milestones.domContentLoadedMs !== null
   && milestones.headingVisibleMs !== null
   && milestones.primaryApiCompleteMs !== null
@@ -297,6 +311,7 @@ const routeTiming = {
   authTokenShape: tokenShape(BEARER_TOKEN),
   routePath: ROUTE_PATH,
   primaryApiPath: PRIMARY_API_PATH,
+  primaryApiStatus,
   navigationWaitUntil: NAVIGATION_WAIT_UNTIL,
   usedNetworkidle,
   milestones,
