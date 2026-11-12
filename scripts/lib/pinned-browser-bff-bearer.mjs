@@ -121,7 +121,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // of command scheduling or delayed delivery of the rejection to Node.
         const before = request ? session.send("Performance.getMetrics").then(
           ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
-        track(Promise.resolve(before).then((rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
+        const continueRequest = (rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
           // The network id binds Chromium's cancellation to this interception,
@@ -144,7 +144,8 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           }
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
-        })).finally(() => interceptions.delete(request)));
+        });
+        track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
       });
       await session.send("Network.enable");
       await session.send("Page.enable");

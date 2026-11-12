@@ -242,7 +242,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
   const gate = new Promise<void>((resolve) => { openGate = resolve; });
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session);
-    let held = "", networkId = "", oldLoader = "", frameId = "", released = false;
+    let held = "", networkId = "", oldLoader = "", frameId = "", heldSample = false;
     const note = (event: string, fields: Record<string, unknown> = {}) =>
       receipt.lifecycle.push({ sequence: receipt.lifecycle.length, event, ...fields });
     // Observe real browser events before the optional delivery gate. Keep only
@@ -285,6 +285,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
     session.on("Fetch.requestPaused", (e) => {
       if (e.request.url === `${bffOrigin}/held`) {
         held = e.requestId; networkId = e.networkId;
+        heldSample = true;
         note("Fetch.requestPaused", { interceptionId: held, networkId });
       }
     });
@@ -296,16 +297,16 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
       if (method === "Fetch.continueRequest" && params.requestId === held) {
         reached();
         await dispatch;
-        released = true;
         if (invalidLiveId) params = { ...params, requestId: "missing-live-interception" };
         note("Fetch.continueRequest dispatched", { interceptionId: params.requestId, networkId, invalidLiveId });
       }
       // Hold the sample too, so cancellation can occur before both sample and
       // continuation. This is an imposed local schedule, not a hosted trace.
-      if (method === "Performance.getMetrics" && held && !released) { reached(); await dispatch; }
+      const samplingHeld = method === "Performance.getMetrics" && heldSample;
+      if (samplingHeld) { heldSample = false; reached(); await dispatch; }
       try {
         const result = await send(method as Parameters<CDPSession["send"]>[0], params);
-        if (method === "Performance.getMetrics" && held) note("Performance.getMetrics", {
+        if (samplingHeld) note("Performance.getMetrics", {
           timestamp: (result as { metrics: { name: string; value: number }[] }).metrics.find((m) => m.name === "Timestamp")?.value,
         });
         return result;
@@ -341,6 +342,7 @@ test("queued cancellation lifecycle arriving after Invalid InterceptionId reject
       c.release();
       await c.transport.settle();
       expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+      console.log(JSON.stringify({ scenario: "queued-positive", attempt, ...c.receipt, transportErrors: c.transport.errors.length }));
       c.transport.assertHealthy();
       await c.context.close();
       await c.transport.settle();
@@ -406,6 +408,7 @@ test("live invalid id then same-request navigation stays actionable when its rea
     c.releaseRejection();
     await c.transport.settle();
     expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    console.log(JSON.stringify({ scenario: "live-invalid-delayed-rejection", ...c.receipt, expectedHealth: "fail" }));
   } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
 });
 
@@ -446,6 +449,15 @@ test("exact 82ff queued cancellation fails; maintained transport proves the obso
         await c.transport.settle();
         await expect.poll(() => c.receipt.canceled).toBe(true);
         expect(c.receipt.replaced).toBe(true);
+        const events = c.receipt.lifecycle.map((e) => e.event);
+        expect(events.indexOf("Network.loadingFailed")).toBeLessThan(events.indexOf("Fetch.continueRequest dispatched"));
+        expect(events.indexOf("Fetch.continueRequest rejected")).toBeLessThan(events.indexOf("helper receives Network.loadingFailed"));
+        if (name === "fixed") {
+          const canceledAt = c.receipt.lifecycle.find((e) => e.event === "Network.loadingFailed")?.timestamp as number;
+          const sampledAt = c.receipt.lifecycle.find((e) => e.event === "Performance.getMetrics")?.timestamp as number;
+          expect(canceledAt).toBeLessThanOrEqual(sampledAt);
+          expect(events.indexOf("Performance.getMetrics")).toBeLessThan(events.indexOf("Fetch.continueRequest dispatched"));
+        }
         expect(c.receipt.errors.filter((e) => e.includes("(Fetch.continueRequest)"))).toEqual([expect.stringMatching(/Protocol error \(Fetch.continueRequest\): Invalid InterceptionId\./)]);
         if (name === "exact-82ff") expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
         else c.transport.assertHealthy();
