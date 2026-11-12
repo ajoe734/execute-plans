@@ -227,7 +227,7 @@ const INTERCEPTION_BASE = "814cd3541b3833615c8acd3e5c2bf65511da7736";
 // lateLifecycle holds, in order, delivery of real Chromium Network/Page events to the
 // helper's listeners once the held request is paused, until 80ms after the real continueRequest rejection, i.e.
 // the queued-event ordering seen on the hosted run. Nothing is synthesized.
-async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false) {
+async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, holdMetrics = false) {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
   let release!: () => void;
@@ -236,6 +236,8 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
   const dispatch = new Promise<void>((resolve) => { release = resolve; });
   const receipt: { canceled: boolean; replaced: boolean; errors: string[]; order: string[] } = { canceled: false, replaced: false, errors: [], order: [] };
   let openGate!: () => void;
+  let openMetrics!: () => void;
+  const metricsGate = new Promise<void>((resolve) => { openMetrics = resolve; });
   const gate = new Promise<void>((resolve) => { openGate = resolve; });
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session);
@@ -268,6 +270,8 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
         await dispatch;
         if (invalidLiveId) params = { ...params, requestId: "missing-live-interception" };
       }
+      // Only the dispatch of the real clock sample is delayed; its result is real.
+      if (holdMetrics && method === "Performance.getMetrics" && held) await metricsGate;
       try { return await send(method as Parameters<CDPSession["send"]>[0], params); }
       catch (error) {
         receipt.errors.push(String(error));
@@ -281,7 +285,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
   const page = await context.newPage();
   await transport.attachPage(page);
   await page.goto(feOrigin);
-  return { context, page, transport, paused, release, receipt };
+  return { context, page, transport, paused, release, receipt, releaseMetrics: openMetrics };
 }
 
 test("queued cancellation lifecycle arriving after Invalid InterceptionId rejection is still proven", async () => {
@@ -344,6 +348,21 @@ test("same-document navigation cancelling a held request settles healthy", async
       c.transport.assertHealthy();
     } finally { c.release(); await c.context.close(); await c.transport.settle(); }
   }
+});
+
+test("navigation after a live invalid id stays actionable when the clock sample is dispatched late", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, true, false, true);
+  try {
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    c.release();
+    await expect.poll(() => c.receipt.errors.length).toBeGreaterThan(0);
+    await c.page.goto(`${feOrigin}/navigation-after-rejection`);
+    await expect.poll(() => c.receipt.canceled).toBe(true);
+    c.releaseMetrics();
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { c.release(); c.releaseMetrics(); await c.context.close(); await c.transport.settle(); }
 });
 
 for (const teardown of ["context close", "unrelated navigation"] as const) {

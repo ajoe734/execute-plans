@@ -119,6 +119,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         track(session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
+          const rejectedLocally = performance.now();
           // The network id binds Chromium's cancellation to this interception,
           // and the cancellation must be caused by a navigation (document
           // replacement, same-document navigation or frame detach) that was
@@ -129,8 +130,13 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // protocol failure. Closure alone never proves anything afterwards.
           const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
           if (invalidId && request) {
-            const rejectedAt = await session.send("Performance.getMetrics").then(
-              ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined);
+            // The sample is requested at the moment the rejection is observed and
+            // must come back promptly. A sample that arrives late no longer represents the rejection;
+            // treat it as absent so the failure stays actionable.
+            const sample = await session.send("Performance.getMetrics").then(
+              ({ metrics }) => ({ at: performance.now(), value: metrics.find((metric) => metric.name === "Timestamp")?.value }),
+              () => undefined);
+            const rejectedAt = sample && sample.at - rejectedLocally <= 50 ? sample.value : undefined;
             const proven = () => request.canceled && request.canceledAt <= rejectedAt && (request.detached || request.sameDocument ||
               (request.loaderId && request.navigationLoader && request.loaderId !== request.navigationLoader &&
                 loaders.get(request.frameId) === request.navigationLoader));
