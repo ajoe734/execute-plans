@@ -244,6 +244,53 @@ describe("pure acceptance logic", () => {
     expect(cli.evaluateDataSources({ data: { items: [] }, meta: {} }, legacy).failures.join()).toContain("empty");
   });
 
+  it("redacts JSON-escaped secrets (quote/backslash/control) in structured evidence", () => {
+    const secret = 'a"b\\c\nd\te';
+    const redact = cli.makeRedactor([secret]);
+    const text = redact.json({ note: secret, [secret]: [secret], n: 1 }, 2);
+    expect(text).not.toContain(secret);
+    expect(text).not.toContain(JSON.stringify(secret).slice(1, -1));
+    expect(JSON.parse(text).note).not.toBe(secret);
+  });
+
+  describe("aborted request accounting", () => {
+    const mk = () => {
+      const h: Record<string, Array<(x?: unknown) => void>> = {};
+      let closed = false;
+      const page = {
+        on: (ev: string, fn: (x?: unknown) => void) => void (h[ev] ||= []).push(fn),
+        isClosed: () => closed,
+      };
+      const ctx = { route: async () => {} };
+      const row = { page_errors: [], failed_api_requests: [], cancelled_api_requests: [], http_api_errors: [], prelogin_expected_401: [] } as Record<string, unknown[]>;
+      cli.observe(ctx, page, row, "https://api.test", { onBlockedWrite: () => {} });
+      const emit = (ev: string, x?: unknown) => (h[ev] || []).forEach((f) => f(x));
+      const req = { url: () => "https://api.test/bff/reviewer-abort", method: () => "GET", failure: () => ({ errorText: "net::ERR_ABORTED" }), frame: () => ({ isDetached: () => false }) };
+      return { row, emit, req, close: () => { closed = true; } };
+    };
+    it("treats a live abort on a still-present page as a failure", () => {
+      const t = mk();
+      t.emit("request", t.req);
+      t.emit("requestfailed", t.req);
+      expect(t.row.failed_api_requests).toHaveLength(1);
+      expect(t.row.cancelled_api_requests).toHaveLength(0);
+    });
+    it("accepts an abort caused by a real main-frame navigation (either event order)", () => {
+      const a = mk();
+      a.emit("request", a.req);
+      a.emit("framenavigated", { parentFrame: () => null });
+      a.emit("requestfailed", a.req);
+      expect(a.row.failed_api_requests).toHaveLength(0);
+      expect(a.row.cancelled_api_requests).toHaveLength(1);
+      const b = mk();
+      b.emit("request", b.req);
+      b.emit("requestfailed", b.req);
+      b.emit("framenavigated", { parentFrame: () => null });
+      expect(b.row.failed_api_requests).toHaveLength(0);
+      expect(b.row.cancelled_api_requests).toHaveLength(1);
+    });
+  });
+
   it("redacts configured secrets and JWT/bearer shapes", () => {
     const redact = cli.makeRedactor(["topsecret"]);
     const jwt = "eyJhbGciOi.eyJzdWIiOjF9.sig-nature_1";

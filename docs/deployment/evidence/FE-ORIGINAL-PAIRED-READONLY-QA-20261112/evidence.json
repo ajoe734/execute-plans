@@ -47,7 +47,7 @@
   ],
   "local_verification": {
     "command": "npx vitest run src/test/persona-strategy-hosted-readonly.test.ts",
-    "result": "17 passed (10 pure + 7 local loopback fixture/browser)",
+    "result": "23 passed (14 pure/stub incl. live-abort + JSON-escaped secret regressions + 9 local loopback fixture/browser)",
     "tsc_app_errors_in_new_files": 0,
     "eslint": "clean",
     "note": "loopback fixtures are explicitly not hosted proof"
