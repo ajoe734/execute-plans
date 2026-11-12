@@ -82,5 +82,12 @@
       "eslint_changed": 0
     },
     "hosted": "No hosted acceptance, credentials or deploy; hosted cause remains unknown."
+  },
+  "failure_time_closure_addendum": {
+    "finding": "P1 at c0e8bf8b1: ERR_ABORTED judged 25ms later against future closed/page.isClosed or any later frameNavigated, so a live abort confirmed by Network.loadingFailed and requestfailed became healthy after later page.close/navigation.",
+    "fix": "Closure is captured at the failure instant; a trailing frameNavigated excuses only if a replacing document navigation (navigationLoader != request loaderId) was already in flight at failure.",
+    "reproduction": "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium -g 'already observed' --repeat-each=3",
+    "before": "reviewer fixture: errors=[] and assertHealthy passed 3/3 (negative suite exit 1)",
+    "after": "page-close and navigation negatives 6/6 pass; full streaming suite 27/27 pass before negatives appended; strict-browser-auth contract 7/7 pass"
   }
 }

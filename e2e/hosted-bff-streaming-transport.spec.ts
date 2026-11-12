@@ -736,3 +736,33 @@ test("a live frame abort stays actionable when a later own detach follows anothe
     expect(() => c.transport.assertHealthy()).toThrow(/ERR_ABORTED/);
   } finally {await c.context.close(); await c.transport.settle();}
 });
+
+for (const teardown of ["page-close", "navigation"] as const) {
+  test(`live abort already observed before ${teardown} stays actionable`, async () => {
+    const c = await open();
+    const session = await c.context.newCDPSession(c.page);
+    let id = "";
+    const order: string[] = [];
+    let resolveFailure!: () => void;
+    const failed = new Promise<void>((r) => { resolveFailure = r; });
+    session.on("Network.requestWillBeSent", (e) => { if (e.request.url === `${bffOrigin}/pending`) id=e.requestId; });
+    session.on("Network.loadingFailed", (e) => { if(e.requestId===id) {order.push(`failure:${e.errorText}`); resolveFailure();} });
+    c.page.on("close", () => order.push("page-close"));
+    session.on("Page.frameNavigated", () => order.push("frame-navigation"));
+    await session.send("Network.enable"); await session.send("Page.enable");
+    try {
+      await c.page.evaluate((u) => {const ctrl = new AbortController(); Object.assign(window, {cancelReview:()=>ctrl.abort()}); void fetch(u,{signal:ctrl.signal}).then((r)=>r.text()).catch(()=>{});}, `${bffOrigin}/pending`);
+      await expect.poll(() => bffSeen.some((x)=>x.path==="/pending")).toBe(true);
+      const pwFailed = c.page.waitForEvent("requestfailed", {predicate: (r)=>r.url()===`${bffOrigin}/pending`});
+      await c.page.evaluate(() => (window as unknown as {cancelReview:()=>void}).cancelReview());
+      const [req] = await Promise.all([pwFailed, failed]);
+      expect(c.page.isClosed()).toBe(false);
+      expect(req.failure()?.errorText).toBe("net::ERR_ABORTED");
+      order.push("confirmed-live-failure");
+      if (teardown === "page-close") await c.page.close();
+      else await c.page.goto(`${feOrigin}/later-unrelated`);
+      await c.transport.settle();
+      expect(() => c.transport.assertHealthy()).toThrow(/ERR_ABORTED/);
+    } finally {await c.context.close(); await c.transport.settle();}
+  });
+}

@@ -91,11 +91,15 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // frame's teardown can never excuse it (and it can't excuse another's).
           if (errorText === "net::ERR_ABORTED" && request.url && originOf(request.url) === bffOrigin) {
             const { url, frameId, detached, sameDocument } = request, navs = request.frameNavs;
+            // Closure counts only if already true at the failure instant; a later close cannot excuse a live abort.
+            const gone = closed || page.isClosed();
+            // A trailing frameNavigated excuses only a navigation already in flight at failure time.
+            const replacing = request.navigationLoader && request.navigationLoader !== request.loaderId;
             const label = `${request.method || "GET"} ${new URL(url).pathname}`;
             nativeAborted.set(url, (nativeAborted.get(url) || 0) + 1);
             // frameNavigated for a replacing document can trail the cancellation.
             track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
-              if (!(closed || page.isClosed() || detached || sameDocument || (frameNavs.get(frameId) || 0) > navs)) record("net::ERR_ABORTED", page, label);
+              if (!(gone || detached || sameDocument || (replacing && (frameNavs.get(frameId) || 0) > navs))) record("net::ERR_ABORTED", page, label);
             }));
           }
         }
