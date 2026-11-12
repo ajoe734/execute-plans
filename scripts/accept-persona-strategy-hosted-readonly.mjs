@@ -62,6 +62,10 @@ const IDENTITY_HEADERS = ["x-request-id", "x-correlation-id", "x-trace-id", "ser
 
 export const sha256 = (text) => crypto.createHash("sha256").update(text).digest("hex");
 
+const CREDENTIAL_KEY = "(?:access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|token|secret|password|passwd|api[_-]?key|authorization)";
+const CREDENTIAL_KEY_RE = new RegExp(`^${CREDENTIAL_KEY}$`, "i");
+const CREDENTIAL_FIELD_RE = new RegExp(`\\b(${CREDENTIAL_KEY}["']?(?:\\s*[:=]\\s*|%3D)["']?)(?!\\[REDACTED)[^\\s"'&,;}\\]]+`, "gi");
+
 export function makeRedactor(secrets) {
   const base = secrets.filter((s) => typeof s === "string" && s.length > 0);
   // Also cover the JSON-escaped representation (quote/backslash/control chars).
@@ -71,12 +75,14 @@ export function makeRedactor(secrets) {
     for (const secret of list) text = text.split(secret).join("[REDACTED]");
     return text
       .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[JWT REDACTED]")
-      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [REDACTED]");
+      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [REDACTED]")
+      // Opaque credential fields in free text / query strings / JSON-ish text (key=value, key: value, "key":"value").
+      .replace(CREDENTIAL_FIELD_RE, (_m, key, sep) => `${key}${sep}[REDACTED]`);
   };
   const deep = (v) => {
     if (typeof v === "string") return redact(v);
     if (Array.isArray(v)) return v.map(deep);
-    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [redact(k), deep(x)]));
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [redact(k), CREDENTIAL_KEY_RE.test(k) && x !== null && typeof x !== "object" ? "[REDACTED]" : deep(x)]));
     return v;
   };
   // Sanitize structured string values BEFORE serialization, then the text again as a backstop.
@@ -348,6 +354,7 @@ export function observe(ctx, page, row, API, { onBlockedWrite }) {
     requestStarts.set(r, Date.now());
     if (new URL(r.url()).pathname === FLEET_PATH && r.method() === "GET" && state.firstFleetStarted === undefined) {
       state.firstFleetStarted = Date.now();
+      state.firstFleetStartedAt = new Date(state.firstFleetStarted).toISOString();
       state.firstFleetUrl = r.url();
     }
   });
@@ -496,6 +503,13 @@ export async function run(input, deps = {}) {
           await response.finished();
           row.fresh_entry_api_status = response.status();
           row.fresh_entry_api_ms = Date.now() - obs.state.firstFleetStarted;
+          // Captured after timing has stopped; does not alter the measurement.
+          const hdrs = response.headers();
+          row.fresh_entry_measurement = {
+            started_utc: obs.state.firstFleetStartedAt,
+            api_finished_utc: new Date().toISOString(),
+            request_identity: Object.fromEntries(IDENTITY_HEADERS.map((h) => [h, hdrs[h] ?? null])),
+          };
           row.fresh_entry_query = response.url();
           return response;
         });
@@ -506,6 +520,7 @@ export async function run(input, deps = {}) {
       assert.equal((await firstFleet).status(), 200, `${name} fresh-entry Fleet read`);
       await page.getByTestId("persona-fleet-table-scroll").locator("tbody tr").first().waitFor({ state: "visible", timeout: THRESHOLDS.navigation_timeout_ms });
       row.fresh_entry_usable_ms = Date.now() - obs.state.firstFleetStarted;
+      if (row.fresh_entry_measurement) row.fresh_entry_measurement.usable_finished_utc = new Date().toISOString();
       row.fresh_entry_visible_rows = await page.getByTestId("persona-fleet-table-scroll").locator("tbody tr").count();
       row.fresh_entry_pass = evaluateFreshEntry(row.fresh_entry_api_ms, row.fresh_entry_usable_ms);
       row.fresh_entry_definition = "New browser context and real GUI login; first actual Fleet request start to full API completion and visible first row, excluding login; no service restart or prewarm";
