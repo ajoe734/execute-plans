@@ -253,6 +253,17 @@ describe("pure acceptance logic", () => {
     expect(JSON.parse(text).note).not.toBe(secret);
   });
 
+  it("redacts opaque token fields in error text, URLs and structured keys", () => {
+    const redact = cli.makeRedactor([]);
+    const msg = "boom access_token=review-fixture-opaque-access refresh_token=review-fixture-opaque-refresh";
+    const url = "https://x.example/cb?id_token=opaque-idtok&client_secret=opaque-cs&keep=1";
+    const json = '{"access_token":"opaque-json-a","refresh_token": "opaque-json-r"}';
+    const text = redact.json({ msg, url, json, access_token: "opaque-struct", nested: { refresh_token: "opaque-nested", ok: "fine" } }, 2);
+    for (const leaked of ["review-fixture-opaque", "opaque-idtok", "opaque-cs", "opaque-json", "opaque-struct", "opaque-nested"]) expect(text).not.toContain(leaked);
+    expect(text).toContain("keep=1");
+    expect(text).toContain("fine");
+  });
+
   describe("aborted request accounting", () => {
     const mk = () => {
       const h: Record<string, Array<(x?: unknown) => void>> = {};
@@ -390,6 +401,11 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
       expect(out.profiles[n].api_logout_status).toBe(200);
       expect(out.profiles[n].after_logout_me_status).toBe(401);
       expect(out.profiles[n].fresh_entry_pass).toBe(true);
+      const m = out.profiles[n].fresh_entry_measurement;
+      expect(Date.parse(m.started_utc)).not.toBeNaN();
+      expect(Date.parse(m.api_finished_utc)).not.toBeNaN();
+      expect(Date.parse(m.usable_finished_utc)).not.toBeNaN();
+      expect(m.request_identity["x-request-id"]).toMatch(/^req-/);
     }
     expect(out.strategy.performance.fleet_browser_warm.samples).toHaveLength(20);
     expect(Object.keys(out.strategy.captures)).toHaveLength(13);
