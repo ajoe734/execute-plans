@@ -544,6 +544,7 @@ async function main() {
   const transport = await installPinnedBffBearer(context, { token: BEARER_TOKEN, feBase: FE_BASE, bffBase: BFF_BASE, tenantId: TENANT_ID });
 
   const page = await context.newPage();
+  await transport.attachPage(page);
   page.setDefaultTimeout(ROUTE_TIMEOUT_MS);
   page.setDefaultNavigationTimeout(ROUTE_TIMEOUT_MS);
 
@@ -581,9 +582,9 @@ async function main() {
     liveIdResults.push(result);
   }
 
-  const transportFailure = transport.errors.length;
   await browser.close();
-  if (transportFailure) transport.assertHealthy(); // not teardown: fail the gate, do not skip
+  await transport.settle();
+  transport.assertHealthy();
 
   console.log("[accept-management-hosted-production] running session/RBAC check ...");
   const sessionRbac = await sessionRbacCheck();

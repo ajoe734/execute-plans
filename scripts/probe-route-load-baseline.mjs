@@ -101,6 +101,7 @@ if (BEARER_TOKEN) {
   });
 }
 const page = await context.newPage();
+await transport?.attachPage(page);
 page.setDefaultTimeout(OVERALL_TIMEOUT_MS);
 page.setDefaultNavigationTimeout(OVERALL_TIMEOUT_MS);
 
@@ -222,9 +223,9 @@ try {
 } catch (err) {
   error = String(err).replace(/\s+/g, " ").slice(0, 400);
 } finally {
-  // Actionable pinned-transport failures (not page/context teardown) fail the probe.
-  if (!error && transport?.errors.length) error = `Pinned BFF transport failures: ${transport.errors.slice(0, 3).join("; ")}`.slice(0, 400);
   await browser.close();
+  await transport?.settle();
+  if (!error && transport?.errors.length) error = `Pinned BFF transport failures: ${transport.errors.slice(0, 3).join("; ")}`.slice(0, 400);
 }
 
 const requestsBeforeFirstRow = milestones.firstRowOrEmptyVisibleMs === null

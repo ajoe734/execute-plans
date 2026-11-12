@@ -222,24 +222,18 @@ describe("pinned BFF credential target in probe scripts", () => {
       const { installPinnedBffBearer: install } = (await import("../../scripts/lib/pinned-browser-bff-bearer.mjs")) as {
         installPinnedBffBearer: (ctx: unknown, o: Record<string, string>) => Promise<void>;
       };
-      let handler: (route: unknown) => Promise<unknown>;
-      const ctx = { route: async (_p: string, h: typeof handler) => { handler = h; } };
+      let handler!: (event: unknown) => void;
+      const calls: Array<{ requestId: string; headers: Array<{ name: string; value: string }> }> = [];
+      const page = { on: () => {}, isClosed: () => false };
+      const ctx = { on: () => {}, pages: () => [page], newCDPSession: async () => ({
+        on: (_name: string, h: typeof handler) => { handler = h; },
+        send: async (name: string, arg: any) => { if (name === "Fetch.continueRequest") calls.push(arg); },
+      }) };
       await install(ctx, { token: "tok", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
-      const calls: Array<{ kind: string; arg?: any }> = [];
-      const mkRoute = (url: string) => ({
-        request: () => ({ url: () => url, method: () => "GET", headers: () => ({ accept: "*/*" }) }),
-        continue: async (a?: unknown) => { calls.push({ kind: "continue", arg: a }); },
-        fetch: async (a: unknown) => { calls.push({ kind: "fetch", arg: a }); return { status: () => 302 }; },
-        fulfill: async (a: unknown) => { calls.push({ kind: "fulfill", arg: a }); },
-      });
-      await handler!(mkRoute("https://api.dev.mvl-cap.tw/api/me"));
-      const fetched = calls.find((c) => c.kind === "fetch");
-      expect(fetched?.arg.maxRedirects).toBe(0);
-      expect(fetched?.arg.headers.authorization).toBe("Bearer tok");
-      expect(calls.some((c) => c.kind === "continue" && c.arg?.headers)).toBe(false);
-      calls.length = 0;
-      await handler!(mkRoute("https://unpinned.example/x"));
-      expect(calls).toEqual([{ kind: "continue", arg: undefined }]);
+      handler({ requestId: "pinned", request: { url: "https://api.dev.mvl-cap.tw/api/me", headers: { accept: "*/*" } } });
+      handler({ requestId: "foreign", request: { url: "https://unpinned.example/x", headers: { authorization: "Bearer tok" } } });
+      expect(calls[0].headers).toContainEqual({ name: "authorization", value: "Bearer tok" });
+      expect(calls[1].headers).not.toContainEqual({ name: "authorization", value: "Bearer tok" });
     });
   }
 });

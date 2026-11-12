@@ -71,7 +71,8 @@ describe("strict browser auth source contract", () => {
     const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
     const lib = read("scripts/lib/pinned-browser-bff-bearer.mjs");
     expect(lib).not.toMatch(/(?:from|import\()\s*["']@?playwright/);
-    expect(lib).toContain("maxRedirects: 0");
+    expect(lib).not.toContain("route.fetch");
+    expect(lib).toContain("Fetch.continueRequest");
     expect(lib).toContain("Fetch.requestPaused");
     expect(lib).not.toContain("route.continue({ headers");
     expect(lib).not.toMatch(/node:https?/);

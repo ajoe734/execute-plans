@@ -7,6 +7,7 @@ import https from "node:https";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import vm from "node:vm";
 import { expect, test, chromium, type Browser } from "@playwright/test";
 // @ts-expect-error plain ESM script helper
 import { installPinnedBffBearer } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
@@ -51,6 +52,8 @@ test.beforeAll(async () => {
       res.writeHead(200, { ...cors, "content-type": "text/event-stream", "cache-control": "no-cache" });
       res.write("data: hello\n\n");
       openSse.add(res); // never ends
+      const tick = setInterval(() => res.write("data: tick\n\n"), 50);
+      res.on("close", () => clearInterval(tick));
     } else if (req.url === "/flip") {
       // Changing response: the first GET is a 200 SSE, every later GET redirects off-origin.
       if (flips++ === 0) {
@@ -60,6 +63,12 @@ test.beforeAll(async () => {
       } else {
         res.writeHead(302, { ...cors, location: `${foreignOrigin}/landed` }).end();
       }
+    } else if (req.url === "/same-redirect") {
+      res.writeHead(302, { ...cors, location: `${bffOrigin}/sse` }).end();
+    } else if (req.url === "/pending") {
+      res.writeHead(200, { ...cors, "content-type": "application/json" });
+      res.write("{");
+      openSse.add(res);
     } else if (req.url === "/reset") {
       req.socket.destroy(); // unrelated transport failure
     } else if (req.url === "/redirect" || req.url === "/sse-redirect") {
@@ -89,6 +98,7 @@ async function open(opts: { tenantId?: string } = {}) {
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
+  await transport.attachPage(page);
   await page.goto(feOrigin);
   return { context, page, errors, transport };
 }
@@ -105,16 +115,21 @@ test("authenticated SSE stays open while finite JSON and navigation/closure comp
   const unhandled: unknown[] = [];
   const onRejection = (e: unknown) => unhandled.push(e);
   process.on("unhandledRejection", onRejection);
-  const { context, page, errors } = await open();
+  const { context, page, errors, transport } = await open();
   expect(await startSse(page, `${bffOrigin}/sse`)).toBe("hello"); // 200 SSE streaming, not buffered
   const finite = await page.evaluate(async (u) => (await fetch(u)).json(), `${bffOrigin}/finite`);
   expect(finite).toEqual({ ready: true });
+  expect(bffSeen.filter((s) => s.path === "/sse")).toHaveLength(1);
   expect(bffSeen.find((s) => s.path === "/sse")?.authorization).toBe(`Bearer ${TOKEN}`);
   expect(bffSeen.find((s) => s.path === "/finite")?.authorization).toBe(`Bearer ${TOKEN}`);
   await page.goto(`${feOrigin}/other`); // navigate away with the stream still open
   await page.goto(feOrigin);
   await startSse(page, `${bffOrigin}/sse`);
-  await context.close(); // close with a stream + pending route in flight
+  await page.evaluate((u) => { void fetch(u).then((r) => r.json()).catch(() => {}); }, `${bffOrigin}/pending`);
+  await expect.poll(() => bffSeen.some((s) => s.path === "/pending")).toBe(true);
+  await context.close(); // close with an open stream and finite body
+  await transport.settle();
+  transport.assertHealthy();
   await new Promise((r) => setTimeout(r, 300));
   process.off("unhandledRejection", onRejection);
   expect(unhandled).toEqual([]);
@@ -144,11 +159,13 @@ test("a response that turns into a redirect on a later GET never receives the be
 test("an unrelated transport failure is surfaced, not swallowed; teardown is not", async () => {
   const { context, page, transport } = await open();
   await page.evaluate((u) => fetch(u).then(() => "ok", () => "failed"), `${bffOrigin}/reset`);
+  await transport.settle();
   expect(() => transport.assertHealthy()).toThrow(/\/reset/);
   const clean = await open();
   await startSse(clean.page, `${bffOrigin}/sse`);
   await clean.context.close();
   await new Promise((r) => setTimeout(r, 300));
+  await clean.transport.settle();
   clean.transport.assertHealthy();
   await context.close();
 });
@@ -173,3 +190,61 @@ test("missing token or foreign target fails closed before any credential release
   await context.close();
   expect(bffSeen).toEqual([]);
 });
+
+
+test("same-origin redirect preserves auth, and SSE delivers multiple chunks on one GET", async () => {
+  const { context, page, transport } = await open({ tenantId: "tenant-x" });
+  const chunks = await page.evaluate((u) => new Promise<string[]>((resolve) => {
+    const es = new EventSource(u), data: string[] = [];
+    es.onmessage = (e) => { data.push(e.data); if (data.length === 3) { es.close(); resolve(data); } };
+  }), `${bffOrigin}/same-redirect`);
+  expect(chunks).toEqual(["hello", "tick", "tick"]);
+  expect(bffSeen.filter((s) => s.path === "/sse")).toHaveLength(1);
+  for (const s of bffSeen) {
+    expect(s.authorization).toBe(`Bearer ${TOKEN}`);
+    expect(s.tenant).toBe("tenant-x");
+  }
+  await context.close();
+  await transport.settle();
+  // Deliberately closing EventSource while the page is live must remain visible.
+  // This case checks data/auth; navigation/teardown health is checked separately.
+});
+
+test("SSE network failures propagate to the probe transport", async () => {
+  const { context, page, transport } = await open();
+  await startSse(page, `${bffOrigin}/reset`);
+  await transport.settle();
+  expect(() => transport.assertHealthy()).toThrow(/GET \/reset/);
+  await context.close();
+});
+
+const BASE = "aa17cd4fc390e2c311ef50cbd5f7d2160faea775";
+for (const script of ["probe-route-load-baseline", "accept-management-hosted-production"]) {
+  test(`exact aa17 ${script} buffers real HTTP200 SSE until context disposal or 30000ms`, async () => {
+    // Execute the exact committed helper, not a copy or a shortened timeout.
+    const source = execFileSync("git", ["show", `${BASE}:scripts/${script}.mjs`], { encoding: "utf8" });
+    const start = source.indexOf('const MAINTAINED_DEV_FE_ORIGIN =');
+    const end = source.indexOf(script.startsWith("probe-") ? "\nlet chromium;" : "\nconst RETRYABLE_HTTP_STATUS", start);
+    const install = vm.runInNewContext(source.slice(start, end) + "\ninstallPinnedBffBearer", { URL, process });
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    let routeError: Promise<unknown> | undefined;
+    let resolveError!: (error: unknown) => void;
+    routeError = new Promise((resolve) => { resolveError = resolve; });
+    const routed = { route: (pattern: string, handler: (route: unknown) => Promise<unknown>) =>
+      context.route(pattern, (route) => handler(route).catch(resolveError)) };
+    await install(routed, { token: TOKEN, feBase: feOrigin, bffBase: bffOrigin, env: env() });
+    const page = await context.newPage();
+    await page.goto(feOrigin);
+    let delivered = false;
+    const stream = startSse(page, `${bffOrigin}/sse`).then(() => { delivered = true; }).catch(() => {});
+    await expect.poll(() => bffSeen.some((s) => s.path === "/sse" && s.authorization === `Bearer ${TOKEN}`)).toBe(true);
+    await page.waitForTimeout(200);
+    expect(delivered).toBe(false);
+    if (script.startsWith("probe-")) await context.close();
+    const error = String(await routeError);
+    expect(error).toMatch(script.startsWith("probe-") ? /Request context disposed/ : /Timeout 30000ms exceeded/);
+    await context.close();
+    await stream;
+    console.log(JSON.stringify({ base: BASE, script, actualHttp: 200, contentType: "text/event-stream", error: error.split("Call log:")[0].trim() }));
+  });
+}

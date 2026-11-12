@@ -1,19 +1,5 @@
-// Shared browser transport for the hosted probes: releases a short-lived BFF
-// bearer only to the pinned maintained HTTPS BFF origin, per request, never to
-// browser storage. Dependency-free (takes a Playwright context; imports nothing).
-//
-// Finite reads use route.fetch({maxRedirects:0}) + fulfill so a redirect target is
-// re-routed and stays unauthenticated. route.fetch buffers the whole body, so a
-// never-ending SSE response (Accept: text/event-stream) must be streamed by the
-// browser itself. Playwright's route.continue({headers}) replays those headers on
-// every redirect and never re-routes the redirected request, so it can not be used
-// for credentials. Instead each page gets a CDP Fetch guard that (a) adds the
-// bearer to the single pinned-BFF SSE request and (b) strips it from ANY request
-// to another origin, including a redirect that only appears on a later GET. The
-// guard decides per actual request, so a changing response can not bypass it; a
-// page without a guard never gets a bearer on SSE (the request is aborted).
-// Covered by e2e/hosted-bff-streaming-transport.spec.ts.
-
+// One native Chromium transport for both hosted probes; credentials are scoped
+// to each actual request by CDP (header overrides do not cross redirect hops).
 export const MAINTAINED_DEV_FE_ORIGIN = "https://app.dev.mvl-cap.tw";
 export const MAINTAINED_DEV_BFF_ORIGIN = "https://api.dev.mvl-cap.tw";
 
@@ -51,108 +37,68 @@ export function pinnedTargetProblem({ feBase, bffBase, env = process.env }) {
   return "";
 }
 
-const isEventStream = (headers) =>
-  Object.entries(headers).some(([k, v]) => k.toLowerCase() === "accept" && /text\/event-stream/i.test(String(v)));
-// Page/context closed while a read was in flight: nothing left to fulfill.
-const isClosedTarget = (error) =>
-  /Target (page, context or browser )?has been closed|context or browser has been closed|has been disposed|Browser has been closed/i.test(
-    String(error?.message || error),
-  );
-const toHeaderArray = (headers) => Object.entries(headers).map(([name, value]) => ({ name, value: String(value) }));
-
-/**
- * Attach Authorization only to pinned-BFF requests; throws before auth on an unpinned target.
- * Returns { errors, assertHealthy }: actionable transport failures (anything that is not a
- * verified page/context teardown) are recorded so the probe runner can fail on them.
- */
+/** Install before creating/navigating probe pages; await attachPage before any protected request. */
 export async function installPinnedBffBearer(context, { token, feBase, bffBase, tenantId = "", env = process.env }) {
   const problem = pinnedTargetProblem({ feBase, bffBase, env });
-  if (problem) throw new Error(`Refusing to release BFF credential: ${problem}`);
-  if (!token) throw new Error("Refusing to release BFF credential: no token supplied");
-  const bffOrigin = originOf(bffBase);
-  const bearer = `Bearer ${token}`;
-  const errors = [];
-  let contextClosed = false;
-  if (typeof context.on === "function") context.on("close", () => { contextClosed = true; });
-  const pageOf = (request) => {
-    try { return request.frame().page(); } catch { return null; }
+  if (problem || !token) throw new Error(`Refusing to release BFF credential: ${problem || "no token supplied"}`);
+  const bffOrigin = originOf(bffBase), bearer = `Bearer ${token}`;
+  const errors = [], pages = new WeakMap(), pending = new Set();
+  let closed = false;
+  context.on("close", () => { closed = true; });
+  const record = (error, page, label) => {
+    if ((closed || page.isClosed()) && /closed|disposed|detached/i.test(String(error))) return;
+    errors.push(`${label}: ${String(error?.message || error).split(token).join("[REDACTED]")}`);
   };
-  // Teardown is only ignored when the page/context really is gone.
-  const isTeardown = (error, page) => isClosedTarget(error) && (contextClosed || !page || page.isClosed());
-  const record = (error, page, what) => {
-    if (isTeardown(error, page)) return;
-    errors.push(`${what}: ${String(error?.message || error)}`);
+  const track = (promise) => {
+    pending.add(promise);
+    promise.finally(() => pending.delete(promise)); // all tracked promises handle their own rejection
   };
-
-  const authorize = (headers) => {
-    const out = Object.fromEntries(Object.entries(headers).filter(([n]) => n.toLowerCase() !== "x-tenant-id"));
-    if (tenantId) out["x-tenant-id"] = tenantId;
-    return { ...out, authorization: bearer };
-  };
-
-  // Per-page CDP guard (SSE credential release + redirect stripping).
-  const guards = new WeakMap();
-  const guardPage = (page) => {
-    if (guards.has(page)) return guards.get(page);
+  const attachPage = (page) => {
+    if (pages.has(page)) return pages.get(page);
     const ready = (async () => {
       const session = await context.newCDPSession(page);
+      const generations = new WeakMap(), requests = new WeakMap();
+      page.on("framenavigated", (frame) => generations.set(frame, (generations.get(frame) || 0) + 1));
+      page.on("request", (req) => requests.set(req, generations.get(req.frame()) || 0));
+      page.on("requestfailed", (req) => {
+        if (originOf(req.url()) !== bffOrigin) return;
+        // Chromium cancels open SSE on navigation. Verify the frame changed or
+        // the page/context closed; an arbitrary live transport failure must fail.
+        track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
+          const failure = req.failure()?.errorText || "request failed";
+          if (failure === "net::ERR_ABORTED" && (closed || page.isClosed() ||
+              requests.get(req) !== (generations.get(req.frame()) || 0))) return;
+          record(failure, page, `${req.method()} ${new URL(req.url()).pathname}`);
+        }));
+      });
       session.on("Fetch.requestPaused", (event) => {
-        const { url, method, headers = {} } = event.request;
-        const requestId = event.requestId;
-        let override;
-        if (originOf(url) !== bffOrigin) {
-          // Replayed on a redirect to another origin: never let the bearer leave the pinned origin.
-          if (Object.entries(headers).some(([n, v]) => n.toLowerCase() === "authorization" && v === bearer)) {
-            override = toHeaderArray(Object.fromEntries(Object.entries(headers).filter(([n]) => !["authorization", "x-tenant-id"].includes(n.toLowerCase()))));
-          }
-        } else if (method === "GET" && isEventStream(headers)) {
-          override = toHeaderArray(authorize(headers));
+        const { url, headers = {} } = event.request;
+        const pinned = originOf(url) === bffOrigin;
+        const clean = Object.entries(headers).filter(([name, value]) =>
+          !(["authorization", "x-tenant-id"].includes(name.toLowerCase()) && (pinned || value === bearer || name.toLowerCase() === "x-tenant-id")));
+        if (pinned) {
+          clean.push(["authorization", bearer]);
+          if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
-        session.send("Fetch.continueRequest", override ? { requestId, headers: override } : { requestId })
-          .catch((error) => record(error, page, "SSE guard continue"));
+        track(session.send("Fetch.continueRequest", { requestId: event.requestId,
+          headers: clean.map(([name, value]) => ({ name, value: String(value) }))
+        }).catch(async (error) => {
+          record(error, page, "CDP continueRequest");
+          await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
+        }));
       });
       await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
     })();
-    guards.set(page, ready);
-    ready.catch((error) => record(error, page, "SSE guard attach"));
+    pages.set(page, ready);
+    // EventEmitter does not consume async rejections. Explicit callers still
+    // receive the original rejection; auto-attached pages retain it as a failure.
+    track(ready.catch((error) => record(error, page, "CDP attach")));
     return ready;
   };
-  if (typeof context.newCDPSession === "function") {
-    for (const page of context.pages()) guardPage(page);
-    context.on("page", (page) => { guardPage(page); });
-  }
-
-  await context.route(`${bffOrigin}/**`, async (route) => {
-    const request = route.request();
-    if (originOf(request.url()) !== bffOrigin) return route.continue();
-    // Discard any frontend tenant header so every BFF read follows the
-    // authenticated default, or the same explicit override.
-    const headers = Object.fromEntries(
-      Object.entries(request.headers()).filter(([name]) => name.toLowerCase() !== "x-tenant-id"),
-    );
-    if (tenantId) headers["x-tenant-id"] = tenantId;
-    const page = pageOf(request);
-    try {
-      if (isEventStream(headers) && request.method() === "GET") {
-        // Streamed natively by the browser; the page's CDP guard adds the bearer
-        // (and strips it from any redirect). No guard => no credential => fail closed.
-        const guard = page && guards.get(page);
-        if (!guard) throw new Error("no SSE credential guard attached to this page; refusing to stream unauthenticated-or-replayed credentials");
-        await guard;
-        return await route.fallback();
-      }
-      const response = await route.fetch({ headers: { ...headers, authorization: bearer }, maxRedirects: 0 });
-      return await route.fulfill({ response });
-    } catch (error) {
-      record(error, page, `${request.method()} ${new URL(request.url()).pathname}`);
-      if (!isTeardown(error, page)) await route.abort().catch(() => {});
-      return undefined;
-    }
-  });
-  return {
-    errors,
-    assertHealthy() {
-      if (errors.length) throw new Error(`Pinned BFF transport failures: ${errors.slice(0, 5).join("; ")}`);
-    },
+  context.on("page", (page) => { attachPage(page); });
+  await Promise.all(context.pages().map(attachPage));
+  return { errors, attachPage,
+    async settle() { while (pending.size) await Promise.all([...pending]); },
+    assertHealthy() { if (errors.length) throw new Error(`Pinned BFF transport failures: ${errors.slice(0, 5).join("; ")}`); },
   };
 }
