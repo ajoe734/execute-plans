@@ -1,0 +1,98 @@
+{
+  "task_id": "INTEGRATION-UNBLOCK-FE-RELEASE-GATE-AUTH-TRUTH-20261111-CI-RED-D17C59660138",
+  "owner": "Codex",
+  "reviewer": "Claude",
+  "delivery_repository": "ajoe734/execute-plans",
+  "outcome": "blocked_repository_binding",
+  "acceptance": {
+    "root_cause_documented": true,
+    "integration_fix_delivered": false,
+    "source_pr_unblocked_or_superseded": false
+  },
+  "source": {
+    "task_id": "FE-RELEASE-GATE-AUTH-TRUTH-20261111",
+    "pr": "https://github.com/ajoe734/execute-plans/pull/985",
+    "head_sha": "256e82b357365fb3f9acfb9dabd41fd793106b77",
+    "observed_on_utc_date": "2026-11-12",
+    "state": "OPEN",
+    "merge_state": "BLOCKED"
+  },
+  "root_cause": {
+    "summary": "The integrator reports ci-red for the optional cancelled publisher CheckRun even though the required canonical review StatusContext for the exact source head is successful.",
+    "publisher": {
+      "typename": "CheckRun",
+      "name": "Publish canonical review status",
+      "workflow_name": "Pantheon canonical review gate",
+      "is_required": false,
+      "conclusion": "CANCELLED",
+      "run": "https://github.com/ajoe734/execute-plans/actions/runs/43130165955",
+      "job": "https://github.com/ajoe734/execute-plans/actions/runs/43130165955/job/130892061541"
+    },
+    "authoritative_status": {
+      "typename": "StatusContext",
+      "context": "Pantheon canonical review gate",
+      "is_required": true,
+      "state": "SUCCESS",
+      "target_url": "https://github.com/ajoe734/execute-plans/actions/runs/43130477501",
+      "note": "The successful workflow_dispatch run executes on the dev controller commit and explicitly resolves and validates the source PR head before publishing its status. Its successful job is absent from the source head CheckRun rollup; its successful StatusContext is present."
+    },
+    "code_path": [
+      "ajoe734/pantheon:scripts/git/auto_integrator.py: FAILURE_VALUES includes CANCELLED",
+      "latest_check_runs groups by typename, workflowName and check name; a differently named StatusContext cannot supersede the publisher CheckRun",
+      "is_ignorable_diagnostic requires explicit optionality and a known diagnostic workflow; IGNORABLE_DIAGNOSTIC_WORKFLOWS currently contains only Canonical Review Attestation Audit",
+      "summarize_status_rollup therefore retains the cancelled publisher as a failure even with isRequired=false",
+      "the other_failing branch opens ci-red before the later canonical-review-green handling"
+    ],
+    "additional_pending_checks": ["Component merge gate"],
+    "pending_checks_note": "The captured snapshot also has required Component merge gate jobs in progress. A correct publisher classification alone does not establish merge readiness."
+  },
+  "verification": [
+    {
+      "command": "gh pr view 985 --repo ajoe734/execute-plans --json headRefOid,statusCheckRollup",
+      "exit_code": 0,
+      "result": "Exact source head confirmed; cancelled publisher, successful canonical status and pending Component merge gate present."
+    },
+    {
+      "command": "gh api repos/ajoe734/execute-plans/branches/dev/protection/required_status_checks",
+      "exit_code": 0,
+      "result": "strict=true; required contexts are Commit trailers, Generated files guard, Component merge gate, Pantheon canonical review gate; all app_id=15368. Publisher job is not a required context."
+    },
+    {
+      "command": "gh api graphql -F owner=ajoe734 -F repo=execute-plans -F number=985 -f 'query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name isRequired(pullRequestNumber:$number)} ... on StatusContext{context isRequired(pullRequestNumber:$number)}}}}}}}'",
+      "exit_code": 0,
+      "result": "GitHub confirms isRequired=false for Publish canonical review status, true for the canonical StatusContext and the three substantive required checks."
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3: import auto_integrator from PANTHEON_COMMAND_ROOT/scripts/git; enrich captured PR rollup with GraphQL isRequired values; invoke integration_status_rollup(rollup, review_bridge_is_required=True) and is_canonical_review_gate_green(rollup)",
+      "runtime_sha": "811b714a6f17d94b090970fbb86f4413863a2afc",
+      "exit_code": 0,
+      "result": "CheckSummary(state='red', total=8, failing=('Publish canonical review status',), pending=('Component merge gate',), ignored_diagnostic=()); canonical_review_green=True. Assertions confirm this exact contradiction and publisher isRequired=false. This verifies reproduction, not a fix."
+    },
+    {
+      "command": "git ls-files scripts/git; test ! -e scripts/git/auto_integrator.py",
+      "exit_code": 0,
+      "result": "execute-plans does not contain the integrator implementation. The implementation was read only from the provisioned Pantheon command runtime."
+    }
+  ],
+  "required_correction": {
+    "actor": "Human/Ops",
+    "repository": "ajoe734/pantheon",
+    "implementation_file": "scripts/git/auto_integrator.py",
+    "reason": "Task delivery is leased to execute_plans, but the declared implementation artifact belongs to Pantheon. The task brief forbids another checkout or supervisor configuration edits and requires a blocker for out-of-contract implementation. Creating an unused frontend copy would not repair the running integrator.",
+    "next": "Correct the governed delivery repository and artifact contract, or issue a properly scoped Pantheon repair task. Independently review and integrate that repair, promote through the governed runtime path, then let the canonical integrator re-evaluate source PR #985.",
+    "safety_constraints": [
+      "Preserve fail-closed behavior for missing, failed or pending required canonical review status.",
+      "Do not ignore all optional checks; substantive optional CI failures must retain their policy.",
+      "Prove any publisher exclusion through trusted workflow identity and explicit optionality, with appropriate regression coverage in the Pantheon task scope.",
+      "Do not mutate the installed command runtime or source task branch, bypass checks, arm auto-merge, or manually merge the source PR."
+    ]
+  },
+  "delivery_limits": {
+    "scope": "Investigation evidence only, delivered from this repair task branch.",
+    "product_changes": false,
+    "runtime_changes": false,
+    "deployment_performed": false,
+    "hosted_acceptance_claimed": false,
+    "source_pr_modified": false
+  }
+}
