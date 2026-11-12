@@ -4,7 +4,7 @@
   "reviewer": "Claude",
   "base_head": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
   "scope": "Source-only repair and isolated real-browser transport tests. No hosted acceptance, login, provider, VM, workflow dispatch, runtime change, write, release or rollback.",
-  "validation_head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+  "validation_head": "da2e8f0de87796fde6adfcc8e3d0ce8a48f2f807",
   "delivery_binding": "This manifest-only final commit preserves the source/test blobs below. The final delivery head must be frozen by governed handoff only after authorized publication; independent review/CI/native integration remain required.",
   "validated_blobs": {
     "e2e/hosted-bff-streaming-transport.spec.ts": "4fe21cc624afcce546ae1ae758480ffc9028db21",
@@ -16,7 +16,7 @@
     "src/test/strict-browser-auth-source-contract.test.ts": "f7bb35f3394f50e1da737259ce2e7879bb10f4c0"
   },
   "primary_receipt": {
-    "status": "READ by this worker before implementation",
+    "status": "READ before implementation by the prior task worker; READ again and SHA256 verified during the recovery continuation",
     "path": "/tmp/pantheon-compat-residual-20261111/root431537-primary-sse-failure-receipt.json",
     "sha256": "638b64e198bc213198728dd5b619c0870b4393eee5b023e2d634571ff4e39389",
     "github_job": "https://github.com/ajoe734/execute-plans/actions/runs/43157389135/job/130980377601",
@@ -137,7 +137,24 @@
     "dry_run_command": "git push --dry-run origin HEAD:refs/heads/task/FE-HOSTED-PROBE-SSE-TRANSPORT-20261112",
     "dry_run_exit": 1,
     "dry_run_result": "non-fast-forward rejected; no remote update",
-    "hold": "Explicit authorization for a narrowly leased history-repair push is required by task-closeout-finalization.md. No force push attempted. Remote required CI remains failed on old 682c69a5; new-head CI, Claude review, native integration and owner done are pending.",
+    "authorization": "Canonical task next read on 2026-11-12 explicitly permits one own-branch history-repair push with --force-with-lease=refs/heads/task/FE-HOSTED-PROBE-SSE-TRANSPORT-20261112:682c69a559b7ff3b1e406ab556fdc5eb8e0f85c7 after whole-range validation and an immediate remote read. This manifest is committed before publication and exact-head handoff. If the remote changed, stop without loosening the lease.",
+    "rejected_head": "Original remote 682c69a559b7ff3b1e406ab556fdc5eb8e0f85c7 remains rejected: changing-response redirect leaked bearer, unrelated failures were swallowed, receipt/base reproduction absent, invalid commit metadata failed CI. Initial source author Claude/reviewer Codex; corrected delivery owner Codex/reviewer Claude. This record does not convert old rejection or CI to approval.",
+    "pending": "Actual publication receipt and final full head belong in the governed handoff. Required CI must run on that new head; genuine assigned Claude review and native integration precede done. No gate bypass or protected-branch update.",
     "hosted_status": "NOT RUN; no claim of deployment update, new hosted acceptance or all12 completion. Sole original publisher owns those later proofs."
+  },
+  "recovery_validation": {
+    "head": "da2e8f0de87796fde6adfcc8e3d0ce8a48f2f807",
+    "source_identity": "All seven source/test blobs above verified identical to HEAD. Final continuation commit changes this manifest only. origin/dev is exact aa17 base and is an ancestor of HEAD.",
+    "commands": [
+      { "command": "timeout 100s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=list --output=/tmp/fe-sse-resume-browser-results", "exit": 0, "result": "10/10 in 35.2s; 8 corrected browser cases and 2 exact-base failures, including the full 30000ms timeout" },
+      { "command": "timeout 90s npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-hard-gates.test.ts --maxWorkers=2", "exit": 0, "result": "68/68 across 4 files" },
+      { "command": "timeout 180s npm run typecheck", "exit": 0 },
+      { "command": "timeout 60s npx eslint e2e/hosted-bff-streaming-transport.spec.ts src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts", "exit": 0 },
+      { "command": "node --check scripts/lib/pinned-browser-bff-bearer.mjs && node --check scripts/probe-route-load-baseline.mjs && node --check scripts/accept-management-hosted-production.mjs && git diff --check", "exit": 0 },
+      { "command": "timeout 150s env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build -- --outDir /tmp/fe-sse-resume-strict-dist", "exit": 0, "result": "Built in 1m27s; existing chunk-size warning" },
+      { "command": "timeout 45s node scripts/release-candidate.mjs digest --dist-dir /tmp/fe-sse-resume-strict-dist", "exit": 0, "digest": "24541542d199292bb44528b086399b4a0801fbd7d9fe0944bf03fd5363ab7955" },
+      { "command": "python3 scripts/git/check_commit_trailers.py --range aa17cd4fc390e2c311ef50cbd5f7d2160faea775..HEAD --skip-merge", "exit": 0, "result": "All 5 task commits checked before this final manifest commit; repeat for final range before publication" },
+      { "command": "python3 \"$PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py\" --base aa17cd4fc390e2c311ef50cbd5f7d2160faea775 --head HEAD", "exit": 0, "result": "Production +115/-118, net -3 within zero budget" }
+    ]
   }
 }
