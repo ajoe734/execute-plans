@@ -1274,7 +1274,8 @@ jobs:
             github.ref == 'refs/heads/dev' &&
             inputs.frontend_ref == 'dev' &&
             inputs.release_candidate_id != '' &&
-            inputs.release_controller_run_id != ''
+            inputs.release_controller_run_id != '' &&
+            inputs.fe_sha == github.sha
           }}
         continue-on-error: true
         env:
@@ -1282,6 +1283,13 @@ jobs:
           DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
         run: |
           set -euo pipefail
+          # Execution-code provenance: the checkout that holds the probe scripts
+          # must be the exact trusted dev controller commit fixed at dispatch
+          # (github.sha), never a historical candidate or the moving dev head.
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || {
+            echo "::error::candidate checkout is not the trusted controller code; credential withheld" >&2
+            exit 1
+          }
           [[ "$PANTHEON_BFF_BASE_URL" == "https://api.dev.mvl-cap.tw" && -n "$DEV_LOGIN_CLIENT_SECRET" ]] || {
             echo "::error::read-only probe credential unavailable; authenticated probes will fail as missing auth" >&2
             exit 1
