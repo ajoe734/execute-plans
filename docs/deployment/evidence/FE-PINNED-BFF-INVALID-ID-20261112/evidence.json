@@ -70,5 +70,17 @@
       "full_spec": "25 passed; 1 failed: pre-existing 'exact aa17 accept-management-hosted-production' timing test, which loads historical aa17 source via git and does not exercise the modified helper"
     },
     "command": "npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --grep 'same-URL frame detach' --repeat-each=3"
+  },
+  "exact_request_causal_addendum": {
+    "review_finding": "P1 on 28b18566: helper still consumed a URL-keyed detach credit using req.frame().isDetached() after the 25ms delay; live iframe A aborted before any detach, then B's genuine teardown credit plus A's later own removal excused A (2/3 runs false-green).",
+    "fix": "Detach credits and URL/frame matching removed. A BFF ERR_ABORTED is judged in Network.loadingFailed on that exact network id's own record: underDetach captured at the failure instant, same-document flag, per-frame navigation count since request start (Page.frameNavigated), or page/context closure. Playwright requestfailed only handles non-ABORTED failures, and ERR_ABORTED beyond the native per-URL count (no CDP record) falls back to closure/frame generation only. No new framework, timeout or SLA.",
+    "new_test": "a live frame abort stays actionable when a later own detach follows another frame's genuine teardown (real Chromium, two iframes, x5)",
+    "exit_codes": {
+      "full_browser_spec_27": 0,
+      "new_negative_repeat5": 0,
+      "strict_auth_contract_7": 0,
+      "eslint_changed": 0
+    },
+    "hosted": "No hosted acceptance, credentials or deploy; hosted cause remains unknown."
   }
 }

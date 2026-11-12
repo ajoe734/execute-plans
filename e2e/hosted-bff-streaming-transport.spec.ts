@@ -670,3 +670,69 @@ test("same-URL frame detach credit cannot excuse a live abort in another frame",
     } finally { await c.context.close(); await c.transport.settle(); }
   }
 });
+
+test("a live frame abort stays actionable when a later own detach follows another frame's genuine teardown", async () => {
+  const c = await open();
+  const lifecycle: Record<string, unknown>[] = [];
+  const note = (event: string, fields: Record<string, unknown> = {}) => lifecycle.push({event, at: Date.now(), ...fields});
+  try {
+    await c.page.evaluate((u) => {
+      for (const id of ["A", "B"]) {
+        const f = document.createElement("iframe"); f.id = id; f.name = id; f.src = u; document.body.append(f);
+      }
+    }, `${feOrigin}/frame`);
+    await expect.poll(() => c.page.frames().length).toBe(3);
+    await expect.poll(() => Boolean(c.page.frame({name: "A"}) && c.page.frame({name: "B"}))).toBe(true);
+    const a = c.page.frame({name: "A"})!, b = c.page.frame({name: "B"})!;
+    await Promise.all([a.waitForLoadState(), b.waitForLoadState()]);
+    const session = await c.context.newCDPSession(c.page);
+    const ids = new Map<string, {frameId: string}>();
+    session.on("Network.requestWillBeSent", (e) => {
+      if (e.request.url === `${bffOrigin}/pending`) {
+        ids.set(e.requestId, {frameId: e.frameId});
+        note("Network.requestWillBeSent", {networkId: e.requestId, frameId: e.frameId});
+      }
+    });
+    let liveFailed!: () => void;
+    const networkFailed = new Promise<void>((r) => {liveFailed = r;});
+    session.on("Network.loadingFailed", (e) => {
+      if (ids.has(e.requestId)) {
+        note("Network.loadingFailed", {networkId:e.requestId, frameId:ids.get(e.requestId)!.frameId, canceled:e.canceled, error:e.errorText, timestamp:e.timestamp});
+        liveFailed();
+      }
+    });
+    for (const event of ["Page.frameSubtreeWillBeDetached", "Page.frameDetached", "Page.navigatedWithinDocument"] as const)
+      session.on(event, (e) => note(event, {frameId:e.frameId}));
+    await session.send("Network.enable"); await session.send("Page.enable");
+    await a.evaluate((u) => {
+      const controller = new AbortController();
+      Object.assign(window, {cancelA: () => controller.abort()});
+      void fetch(u, {signal:controller.signal}).catch(() => {});
+    }, `${bffOrigin}/pending`);
+    await b.evaluate((u) => {void fetch(u).catch(() => {});}, `${bffOrigin}/pending`);
+    await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(2);
+    const failures: Record<string, unknown>[] = [];
+    c.page.on("requestfailed", (req) => {
+      if (req.url() === `${bffOrigin}/pending`) {
+        const entry = {frame:req.frame() === a ? "A" : "B", detachedAtFailure:req.frame().isDetached(), failure:req.failure()?.errorText};
+        failures.push(entry); note("requestfailed", entry);
+      }
+    });
+    const failed = c.page.waitForEvent("requestfailed", {predicate: (req) => req.frame() === a && req.url() === `${bffOrigin}/pending`});
+    await a.evaluate(() => (window as unknown as {cancelA: () => void}).cancelA());
+    const [req] = await Promise.all([failed, networkFailed]);
+    expect(req.failure()?.errorText).toBe("net::ERR_ABORTED");
+    expect(req.frame().isDetached()).toBe(false);
+    note("A confirmed live after failure");
+    await c.page.evaluate(() => {
+      const f = document.getElementById("B") as HTMLIFrameElement;
+      f.contentWindow!.history.pushState({}, "", "/changed"); f.remove();
+      document.getElementById("A")!.remove();
+    });
+    await expect.poll(() => failures.length).toBe(2);
+    await c.transport.settle();
+    // A failed while still live, before any detach. B has an independent,
+    // genuine navigation/detach cancellation and cannot excuse A's failure.
+    expect(() => c.transport.assertHealthy()).toThrow(/ERR_ABORTED/);
+  } finally {await c.context.close(); await c.transport.settle();}
+});
