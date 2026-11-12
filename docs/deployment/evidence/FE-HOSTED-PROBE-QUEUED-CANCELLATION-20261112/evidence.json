@@ -1,52 +1,299 @@
 {
   "task": "FE-HOSTED-PROBE-QUEUED-CANCELLATION-20261112",
-  "scope": "local source/real-Chromium reproduction only; NOT hosted acceptance. Hosted Management outcome and aggregate remain FAIL for the exact 82ff run.",
-  "root_cause": "The continueRequest rejection handler captured closed/detached/canceled booleans before its 25ms wait, so lifecycle events (loadingFailed canceled, new Document request, frameNavigated/detach) queued behind the CDP command rejection were never seen; a genuinely cancelled intercepted request was classified as a live Invalid InterceptionId.",
-  "fix": "scripts/lib/pinned-browser-bff-bearer.mjs: for Invalid InterceptionId only, send Performance.getMetrics in the same tick immediately before Fetch.continueRequest. CDP processes commands in order, so its Chromium Timestamp is a lower bound of the actual command rejection that does not depend on when the rejection is delivered to the process. Then poll (10ms, 1000ms bound) for ordered facts: Network.loadingFailed canceled with Chromium timestamp <= that sample, correlated by network id to the intercepted request and caused by document replacement, Page.navigatedWithinDocument or frame detach. Missing sample = failure. Closure alone is never proof; cancellation/navigation/teardown after the rejection (however late it is delivered) cannot excuse a live invalid id.",
-  "reproduction": {
-    "real_chromium_tests": [
-      "same-document navigation cancelling a held request settles healthy",
-      "queued cancellation lifecycle arriving after Invalid InterceptionId rejection is still proven",
-      "live invalid id then same-request navigation stays actionable when its real rejection is delivered late",
-      "live invalid id is not excused by context close before settle",
-      "live invalid id is not excused by unrelated navigation before settle"
-    ],
-    "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium",
-    "prior_head_0b0133b5": "the 3 new tests FAIL (same-document: Invalid InterceptionId reported; close/navigation-before-settle: healthy returned wrongly)",
-    "fixed_head": "full spec 20 tests x3 repeats = 60/60 passed (exit 0)",
-    "ordering_note": "Orderings are local imposed schedules with real Chromium events (nothing synthesized); hosted causation remains unproven. Hosted Management/aggregate remain FAIL; this is not hosted acceptance.",
-    "prior_head_184c08abb": "the delayed-real-rejection negative FAILS (healthy returned wrongly, errors=0); sample was taken after catch entry",
-    "exact_82ff_helper": "queued-lifecycle, same-document positive and delayed-rejection test FAIL (3 failed) with the unchanged 82ff helper: Invalid InterceptionId reported for a cancelled request",
-    "commands": [
-      "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --repeat-each=3",
-      "npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts"
-    ],
-    "lifecycle_sequence": {
-      "queued_positive": [
-        "request paused (held, networkId bound)",
-        "document navigation cancels request: Network.loadingFailed canceled, ERR_ABORTED, ts T_c",
-        "Page.frameNavigated with new loaderId",
-        "ordered pre-command sample ts T_s >= T_c",
-        "Fetch.continueRequest rejected Invalid InterceptionId",
-        "helper: T_c <= T_s and navigation proven => healthy"
-      ],
-      "live_invalid_then_navigation_negative": [
-        "request paused",
-        "ordered pre-command sample ts T_s",
-        "Fetch.continueRequest rejected Invalid InterceptionId while request live",
-        "navigation cancels same request: ts T_c > T_s",
-        "original rejection delivered late to helper",
-        "helper: T_c > T_s => transport failure retained"
-      ]
+  "scope": "Local source and real-Chromium reproduction only. No hosted, VM, deploy, provider, credential or business-write activity.",
+  "hosted_acceptance": {
+    "management": "FAIL",
+    "aggregate": "FAIL",
+    "cause_proven": false,
+    "frozen_frontend": "82ff528625f3ca4ad7c3e607ee7cfa7d465ea444",
+    "root_run": 43179340547,
+    "child_run": 43182259869,
+    "artifact": 13927514350,
+    "artifact_sha256": "0e27f52768c7dc4efc6fb0a09a786713fd81e379c50e45cab7d40279e15fba3d",
+    "publisher": "Original STRAT-DATASRC-HOSTED-ACCEPT-20261110 COMPAT owner only"
+  },
+  "local_root_cause": "In the exact82ff helper, cancellation/detach/closure booleans are captured before its 25ms await. Real same-request cancellation events delivered behind a real continueRequest rejection do not update those snapshots. The maintained controlled Chromium fixture demonstrates that case; these imposed delivery schedules do not prove hosted causation.",
+  "fix": "Await Performance.getMetrics response before dispatching Fetch.continueRequest. The browser Timestamp predates command dispatch and therefore actual rejection, independently of command scheduling or delayed error delivery. Only the same network-id request canceled at or before this sample, with ordered document replacement, same-document navigation or detach evidence, can excuse Invalid InterceptionId. Missing proof remains a failure. Closure or later navigation cannot launder a live invalid id. A missing network binding retains immediate continuation and fails closed on an invalid id. Pending handlers still settle.",
+  "validation_source": {
+    "commit": "0123470df16911e5c04042c04be0a603bee2b0d8",
+    "base": "82ff528625f3ca4ad7c3e607ee7cfa7d465ea444",
+    "base_helper_sha256": "e09dde78071b52749698b1f4a243fe2f650c4d6fccf1c5ebab73a6e96540317b",
+    "helper_sha256": "e878b24e2908ce00c01afcab95277384fa797c706dc51cff0af1f63b26b80d80",
+    "spec_sha256": "16ff52dbba667adf4678305324ce93bf3417159e005390208d6c2af32929bc23"
+  },
+  "maintained_fixture": {
+    "path": "e2e/hosted-bff-streaming-transport.spec.ts",
+    "comparator": "exact 82ff queued cancellation fails; maintained transport proves the obsolete request",
+    "schedule": "Real CDP command/sample dispatch is held until navigation cancels the held request. Real Network/Page listener deliveries are held until 80ms after the real command rejection. No browser event, protocol result or rejection is synthesized. Three short SSE/JSON crawl routes precede the held request; this is not the hosted 95-route crawl.",
+    "results": "Exact82ff fails transport health and fixed passes, each 3 internal attempts x 3 suite repeats. Separate same-document positive and delayed real-rejection negative pass at the fixed source.",
+    "trace_policy": "Representative actual per-request event sequences below contain opaque CDP IDs, browser timestamps and booleans only; no URL, auth/tenant header, token or response body. Repeated listener-delivery entries reflect the two listeners, not two browser failures.",
+    "traces": {
+      "exact82ff_queued": {
+        "implementation": "exact-82ff",
+        "attempt": 0,
+        "canceled": true,
+        "replaced": true,
+        "lifecycle": [
+          {
+            "sequence": 0,
+            "event": "Network.requestWillBeSent",
+            "networkId": "3978.11",
+            "frameId": "9D6672F18A42C4B9EA7271992CE38B0B",
+            "loaderId": "304961477430BF03C631BA9E59538B54",
+            "timestamp": 121091.217884
+          },
+          {
+            "sequence": 1,
+            "event": "Fetch.requestPaused",
+            "interceptionId": "interception-job-78.0",
+            "networkId": "3978.11"
+          },
+          {
+            "sequence": 2,
+            "event": "Network.loadingFailed",
+            "networkId": "3978.11",
+            "canceled": true,
+            "timestamp": 121091.236035
+          },
+          {
+            "sequence": 3,
+            "event": "Page.frameNavigated",
+            "frameId": "9D6672F18A42C4B9EA7271992CE38B0B",
+            "loaderId": "2A168684BB8A80E75B564A932095D791"
+          },
+          {
+            "sequence": 4,
+            "event": "Fetch.continueRequest dispatched",
+            "interceptionId": "interception-job-78.0",
+            "networkId": "3978.11",
+            "invalidLiveId": false
+          },
+          {
+            "sequence": 5,
+            "event": "Fetch.continueRequest rejected",
+            "invalidInterceptionId": true
+          },
+          {
+            "sequence": 6,
+            "event": "continueRequest rejection delivered"
+          },
+          {
+            "sequence": 7,
+            "event": "helper receives Network.loadingFailed",
+            "networkId": "3978.11"
+          },
+          {
+            "sequence": 8,
+            "event": "helper receives Network.loadingFailed",
+            "networkId": "3978.11"
+          },
+          {
+            "sequence": 9,
+            "event": "page.close"
+          }
+        ],
+        "expectedHealth": "fail"
+      },
+      "fixed_queued": {
+        "implementation": "fixed",
+        "attempt": 0,
+        "canceled": true,
+        "replaced": true,
+        "lifecycle": [
+          {
+            "sequence": 0,
+            "event": "Network.requestWillBeSent",
+            "networkId": "4005.11",
+            "frameId": "A5B283ECD8BE19DC855F2C491C2773A3",
+            "loaderId": "972AAF750C00E73F4416FCE956CE21DB",
+            "timestamp": 121092.796811
+          },
+          {
+            "sequence": 1,
+            "event": "Fetch.requestPaused",
+            "interceptionId": "interception-job-114.0",
+            "networkId": "4005.11"
+          },
+          {
+            "sequence": 2,
+            "event": "Network.loadingFailed",
+            "networkId": "4005.11",
+            "canceled": true,
+            "timestamp": 121092.814782
+          },
+          {
+            "sequence": 3,
+            "event": "Page.frameNavigated",
+            "frameId": "A5B283ECD8BE19DC855F2C491C2773A3",
+            "loaderId": "74D3AC9AD69A0F11F8327D973150AFBA"
+          },
+          {
+            "sequence": 4,
+            "event": "Performance.getMetrics",
+            "timestamp": 121092.825153
+          },
+          {
+            "sequence": 5,
+            "event": "Fetch.continueRequest dispatched",
+            "interceptionId": "interception-job-114.0",
+            "networkId": "4005.11",
+            "invalidLiveId": false
+          },
+          {
+            "sequence": 6,
+            "event": "Fetch.continueRequest rejected",
+            "invalidInterceptionId": true
+          },
+          {
+            "sequence": 7,
+            "event": "continueRequest rejection delivered"
+          },
+          {
+            "sequence": 8,
+            "event": "helper receives Network.loadingFailed",
+            "networkId": "4005.11"
+          },
+          {
+            "sequence": 9,
+            "event": "helper receives Network.loadingFailed",
+            "networkId": "4005.11"
+          },
+          {
+            "sequence": 10,
+            "event": "page.close"
+          }
+        ],
+        "expectedHealth": "pass"
+      },
+      "fixed_delayed_live_rejection": {
+        "scenario": "live-invalid-delayed-rejection",
+        "canceled": true,
+        "replaced": true,
+        "lifecycle": [
+          {
+            "sequence": 0,
+            "event": "Network.requestWillBeSent",
+            "networkId": "3913.2",
+            "frameId": "B4CB238A435235069427481462BDFBD0",
+            "loaderId": "634A5871CFECF77CF62BEC3F29C0470F",
+            "timestamp": 121082.586289
+          },
+          {
+            "sequence": 1,
+            "event": "Fetch.requestPaused",
+            "interceptionId": "interception-job-51.0",
+            "networkId": "3913.2"
+          },
+          {
+            "sequence": 2,
+            "event": "Performance.getMetrics",
+            "timestamp": 121082.594095
+          },
+          {
+            "sequence": 3,
+            "event": "Fetch.continueRequest dispatched",
+            "interceptionId": "missing-live-interception",
+            "networkId": "3913.2",
+            "invalidLiveId": true
+          },
+          {
+            "sequence": 4,
+            "event": "Fetch.continueRequest rejected",
+            "invalidInterceptionId": true
+          },
+          {
+            "sequence": 5,
+            "event": "Network.loadingFailed",
+            "networkId": "3913.2",
+            "canceled": true,
+            "timestamp": 121082.712829
+          },
+          {
+            "sequence": 6,
+            "event": "Page.frameNavigated",
+            "frameId": "B4CB238A435235069427481462BDFBD0",
+            "loaderId": "53180A21B8AD8842605DA3E020BFA426"
+          },
+          {
+            "sequence": 7,
+            "event": "continueRequest rejection delivered"
+          }
+        ],
+        "expectedHealth": "fail"
+      }
     }
   },
-  "negatives_preserved": [
-    "live abort then navigation (also with late lifecycle)",
-    "invalid live protocol id (also with late lifecycle)",
-    "live abort",
-    "SSE network failure propagation",
-    "native SSE incremental / no route.fetch buffering",
-    "per-hop bearer/tenant stripping on redirects"
+  "terminal_validation": [
+    {
+      "command": "timeout 90s npx playwright test --config=/tmp/codex-queued-review-184c08/playwright.config.ts exact82ff.spec.ts --grep \"queued cancellation lifecycle|same-document navigation cancelling\"",
+      "exit_status": 1,
+      "result": "Before patch: exact82ff positive regressions fail 2/2 as expected; actual Invalid InterceptionId preserved.",
+      "local_log": "/tmp/queued-cancellation-exact82ff-before.log",
+      "log_sha256": "7aa0d176a5e40eda051a8d69eb3bd67b0c5a85b98cfac0d1afb6a9cf67e3abc6"
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 timeout 300s npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --repeat-each=3 --reporter=line --output=/tmp/queued-cancellation-full-v2",
+      "exit_status": 0,
+      "result": "60/60 passed (20 tests x 3 repeats), no retries; native SSE/heartbeat, redirects, bearer/tenant stripping, network failures, teardown, live abort and invalid-id ordering negatives included.",
+      "local_log": "/tmp/queued-cancellation-full-v2.log",
+      "log_sha256": "6191a51e85d06ea1f7d09f43921f893cb680ae014586d922a8f785a60c0b5989"
+    },
+    {
+      "command": "timeout 120s npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "exit_status": 0,
+      "result": "46/46 passed across 3 files.",
+      "local_log": "/tmp/queued-cancellation-contracts-v2.log",
+      "log_sha256": "4dd2277187270266a61520dc76f4b84728cea0a39175712d5768b06d83b086c4"
+    },
+    {
+      "command": "timeout 90s npx playwright test --config=/tmp/codex-queued-review-184c08/playwright.config.ts maintained-old184.spec.ts --grep \"real rejection is delivered late\" --repeat-each=3",
+      "exit_status": 1,
+      "result": "Old184c08 fails the maintained delayed-real-rejection negative 3/3 as expected (incorrect healthy result). Temporary fixture is the maintained spec with only its helper import replaced by git show of exact184c08, evaluated in vm with URL/process/setTimeout/performance.",
+      "local_log": "/tmp/queued-cancellation-old184-maintained.log",
+      "log_sha256": "676c271ab7d3a881942b6e6cbf60e82e5245c6b604a533572784a6c2c3f0d717"
+    },
+    {
+      "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD",
+      "exit_status": 1,
+      "result": "Existing pushed commits 38e96f6/1def887/184c08 lack trailers and exceed subject limit; 4b17c18 subject is 73 chars. New Codex anchor commits individually pass.",
+      "local_log": "/tmp/queued-cancellation-trailers.log",
+      "log_sha256": "c04054d98ae1c4746999a7c08ddaf924367e9009039e7fe615528fb865899007"
+    }
   ],
-  "contracts_run": "vitest strict-browser-auth-source-contract, aggregate-release-gate-auth-truth, aggregate-release-gate-hosted-auth: 46/46 pass"
+  "development_batches": [
+    {
+      "exit_status": 1,
+      "result": "First focused batch 4 passed / 1 failed: comparator read its gated receipt before delivery. Corrected fixture receipt wait."
+    },
+    {
+      "exit_status": 1,
+      "result": "Initial focused repeat 14 passed / 1 failed; replaced broad metrics delay with held-request-only delay, then focused repeat passed 18/18."
+    },
+    {
+      "exit_status": 130,
+      "result": "Initial full batch deliberately interrupted after fixture caused unrelated-navigation deadlock; 16 passed / 1 failed / 43 not run. Never counted as passed."
+    },
+    {
+      "exit_status": 1,
+      "result": "Initial contracts 40 passed / 6 failed due unconditional asynchronous dispatch without network binding; preserved immediate unbound continuation, then 46/46 passed."
+    }
+  ],
+  "boundaries_preserved": [
+    "Exact origin/auth release guard",
+    "Per-hop bearer and tenant stripping including changing-origin redirects",
+    "Native incremental SSE without route.fetch buffering",
+    "Actionable live InvalidInterceptionId, abort, network failure and late-navigation negatives",
+    "No release thresholds, gates, skips, SLA or readiness outcomes changed"
+  ],
+  "delivery_hold": {
+    "state": "Independent fresh-head review and integration pending",
+    "pr": 989,
+    "base": "dev",
+    "reviewer": "Claude",
+    "auto_merge": false,
+    "ci": "Required Commit trailers fails on pre-existing pushed history; source-only validation is not green repository CI.",
+    "required_actor": "Human/Ops",
+    "required_action": "Authorize governed metadata-only repair/replacement of the already-pushed task history; no force-push or pushed-commit amendment performed by this worker. Obtain green required checks, then bind fresh exact-head review.",
+    "rule_source": ".orchestrator/skills/task-closeout-finalization.md (coordination root): do not force-push to recover unless explicitly authorized."
+  }
 }
