@@ -1217,9 +1217,7 @@ function assertOwnerReadback(status: number, body: JsonRecord) {
   expect(status, "authenticated approval owner must be available").toBe(200);
   const rows = (body.data as JsonRecord | undefined)?.items ?? body.items;
   expect(Array.isArray(rows), "owner must return approval records").toBe(true);
-  // A genuinely authenticated read-only 200 with an empty list is a legitimate
-  // owner answer (no business data is seeded by the gate). Auth failures,
-  // non-200 and malformed envelopes still fail; every present row is validated.
+  expect((rows as JsonRecord[]).length, "empty owner data is not approval acceptance").toBeGreaterThan(0);
   for (const row of rows as JsonRecord[]) {
     expect(row.approval_id ?? row.id).toEqual(expect.any(String));
     expect(row.decision_state).toEqual(expect.any(String));
@@ -1252,7 +1250,8 @@ test.describe("F12 lane boundary regressions", { tag: "@approval-local" }, () =>
     expect(() => assertOwnerReadback(503, {})).toThrow("owner must be available");
     expect(() => assertOwnerReadback(401, { items: [] })).toThrow("owner must be available");
     expect(() => assertOwnerReadback(200, {})).toThrow("owner must return approval records");
-    expect(() => assertOwnerReadback(200, { data: { items: [] } })).not.toThrow();
+    expect(() => assertOwnerReadback(200, { items: [] })).toThrow("empty owner data");
+    expect(() => assertOwnerReadback(200, { data: { items: [] } })).toThrow("empty owner data");
     expect(() => assertOwnerReadback(200, { items: [{ id: "a1", decision_state: "pending", version: 2 }] })).not.toThrow();
     expect(() => assertOwnerReadback(200, { items: [{ id: "legacy", decision_state: "pending" }] })).toThrow("owner version is required");
   });
