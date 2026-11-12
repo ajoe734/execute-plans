@@ -1142,4 +1142,179 @@ describe("PortfolioBookPage monitor", () => {
       await i18n.changeLanguage("en-US");
     });
   });
+
+  it("renders entry price 97.10 and mark-unavailable explanation on unrealized PnL for the real 2026-11-10 0050 stock future row and uses no-average-cost only when average_price is null", async () => {
+    const monitor = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 3,
+          incident_count: 0,
+          source_coverage: {
+            source_row_count: 3,
+            runtime_count: 2,
+            telemetry_runtime_count: 2,
+            stale_row_count: 1,
+            missing_binding_count: 0,
+            degraded_source_count: 0,
+          },
+        },
+        items: [
+          {
+            id: "rt-srf:ssf:SRF:202611",
+            holding_id: "rt-srf:ssf:SRF:202611",
+            runtime_id: "rt-srf",
+            symbol: "0050.TWSE",
+            instrument_id: "ssf:SRF:202611",
+            instrument_kind: "stock_future",
+            contract_month: "202611",
+            multiplier: 1000,
+            margin_reserved: 17400,
+            side: "long",
+            quantity: 2,
+            average_price: 97.1,
+            mark_price: null,
+            market_value: null,
+            unrealized_pnl: null,
+            realized_pnl: 0,
+            currency: "TWD",
+            mark_status: "unavailable",
+            last_mark_at: null,
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: "ledger-srf",
+            },
+            links: {},
+          },
+          {
+            id: "rt-stale-with-cost:2330.TWSE",
+            holding_id: "rt-stale-with-cost:2330.TWSE",
+            runtime_id: "rt-srf",
+            symbol: "2330.TWSE",
+            side: "long",
+            quantity: 1,
+            average_price: 1020.5,
+            mark_price: null,
+            market_value: null,
+            unrealized_pnl: null,
+            realized_pnl: 0,
+            currency: "TWD",
+            mark_status: "stale",
+            last_mark_at: "2026-11-08T00:00:00Z",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: true,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: "ledger-srf",
+            },
+            links: {},
+          },
+          {
+            id: "rt-no-cost:2317.TWSE",
+            holding_id: "rt-no-cost:2317.TWSE",
+            runtime_id: "rt-no-cost",
+            symbol: "2317.TWSE",
+            side: "short",
+            quantity: -1,
+            average_price: null,
+            mark_price: null,
+            market_value: null,
+            unrealized_pnl: null,
+            realized_pnl: null,
+            currency: "TWD",
+            mark_status: "unavailable",
+            last_mark_at: null,
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: {
+              stage: "paper",
+              scope_kind: "paper_ledger",
+              scope_id: null,
+            },
+            links: {},
+          },
+        ],
+      },
+      meta: {
+        incidents: [],
+        surfaces: { portfolio_book_holdings: { status: "partial" } },
+      },
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      data: monitor,
+      loading: false,
+      refreshing: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    await act(async () => {
+      await i18n.changeLanguage("en-US");
+    });
+    const view = renderPage();
+
+    const rows = screen.getAllByTestId("portfolio-holding");
+    expect(rows).toHaveLength(3);
+
+    // Row 0: real 2026-11-10 stock future row (average_price 97.1, mark_status unavailable, unrealized_pnl null)
+    const srfCells = within(rows[0]).getAllByRole("cell");
+    expect(srfCells[2]).toHaveTextContent("NT$97.10");
+    expect(within(srfCells[2]).queryByLabelText("Source reports no average cost")).not.toBeInTheDocument();
+    expect(srfCells[4]).toHaveTextContent("No price available");
+    expect(srfCells[5]).toHaveTextContent("—");
+    expect(within(srfCells[5]).getByLabelText("No price available")).toBeInTheDocument();
+    expect(within(srfCells[5]).queryByLabelText("Source reports no average cost")).not.toBeInTheDocument();
+
+    // Row 1: average_price present (1020.5), mark_status stale, unrealized_pnl null
+    const staleCostCells = within(rows[1]).getAllByRole("cell");
+    expect(staleCostCells[2]).toHaveTextContent("NT$1,020.50");
+    expect(within(staleCostCells[5]).getByLabelText("No price available")).toBeInTheDocument();
+    expect(within(staleCostCells[5]).queryByLabelText("Source reports no average cost")).not.toBeInTheDocument();
+
+    // Row 2: average_price is null -> both Avg entry and Unrealized PnL explain no average cost
+    const noCostCells = within(rows[2]).getAllByRole("cell");
+    expect(within(noCostCells[2]).getByLabelText("Source reports no average cost")).toBeInTheDocument();
+    expect(within(noCostCells[5]).getByLabelText("Source reports no average cost")).toBeInTheDocument();
+
+    await act(async () => {
+      await i18n.changeLanguage("zh-TW");
+    });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/portfolio-book"]}>
+          <Routes>
+            <Route path="/management/portfolio-book" element={<PortfolioBookPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    const zhRows = screen.getAllByTestId("portfolio-holding");
+    const zhSrfCells = within(zhRows[0]).getAllByRole("cell");
+    expect(zhSrfCells[2]).toHaveTextContent("NT$97.10");
+    expect(within(zhSrfCells[2]).queryByLabelText("來源未提供平均成本")).not.toBeInTheDocument();
+    expect(within(zhSrfCells[5]).getByLabelText("無可用報價")).toBeInTheDocument();
+    expect(within(zhSrfCells[5]).queryByLabelText("來源未提供平均成本")).not.toBeInTheDocument();
+
+    const zhNoCostCells = within(zhRows[2]).getAllByRole("cell");
+    expect(within(zhNoCostCells[2]).getByLabelText("來源未提供平均成本")).toBeInTheDocument();
+    expect(within(zhNoCostCells[5]).getByLabelText("來源未提供平均成本")).toBeInTheDocument();
+
+    await act(async () => {
+      await i18n.changeLanguage("en-US");
+    });
+  });
 });

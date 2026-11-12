@@ -182,6 +182,13 @@ export function normalizeAlphaFactoryCard(
     card.strategy_state = cleanString(record.strategy_state ?? record.strategyState);
   }
 
+  // Re-normalizing an already normalized card keeps its nested `discovery` block.
+  const discovery: Record<string, unknown> = { ...(asRecord(record.discovery) ?? {}) };
+  for (const key of ["metrics", "lineage", "attribution", "hypothesis_card"] as const) {
+    if (record[key] !== undefined && record[key] !== null) discovery[key] = record[key];
+  }
+  if (Object.keys(discovery).length > 0) card.discovery = discovery;
+
   if (hasSharpe) {
     card.sharpe = sharpe;
   }
@@ -649,6 +656,7 @@ export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryEnvelop
       scaffolded,
       replicated,
       items: combinedItems,
+      ...(Array.isArray(data.templates) ? { templates: data.templates } : {}),
     },
     items: combinedItems,
     page_info: {

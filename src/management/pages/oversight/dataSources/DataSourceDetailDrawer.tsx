@@ -30,6 +30,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { SourceHealthPanel, AttributionNote } from "@/management/components/discovery/DiscoveryPanels";
+import { normalizeDiscovery } from "@/lib/bff-v1/discovery";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import {
   managementDataSourceReads,
@@ -260,6 +262,8 @@ export function DataSourceDetailDrawer({
 
               {/* Tab 1: Overview & Policy */}
               <TabsContent value="overview" className="space-y-4 mt-4">
+                <SourceHealthPanel health={currentSource.lineage_summary?.health} testId="data-source-discovery-health" />
+                <AttributionNote view={normalizeDiscovery({ attribution: currentSource.lineage_summary?.attribution })} testId="data-source-discovery-attribution" />
                 <Card className="p-4 space-y-3">
                   <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                     <Shield className="h-4 w-4 text-primary" />
