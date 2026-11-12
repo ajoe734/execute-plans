@@ -4,8 +4,8 @@
   "artifacts": {
     "cli": "scripts/accept-persona-strategy-hosted-readonly.mjs",
     "tests": "src/test/persona-strategy-hosted-readonly.test.ts",
-    "cli_sha256": "32b661c5a68fe5e8a6b50cdcfca49e875577709c256e53c060844c3e4c23cfb6",
-    "tests_sha256": "93bb6b7dfe1efbc5234df665da79f21f91366d01bfcf37b662e89e16cd9377ad"
+    "cli_sha256": "8d49fbffe8627bad79aa2eae3991232aff6c0cb06ea85ee8b6b4e1c305768281",
+    "tests_sha256": "06dee63d53609d2ee4e2957caf1cfa4e8cefeb5f9722c87015b11d9cb9d94b2a"
   },
   "source_references_inspected_fully_not_executed": [
     "/tmp/pantheon-root01a15322-resume-20261111/four-profile-readonly.cjs",
@@ -47,7 +47,7 @@
   ],
   "local_verification": {
     "command": "npx vitest run src/test/persona-strategy-hosted-readonly.test.ts",
-    "result": "23 passed (14 pure/stub incl. live-abort + JSON-escaped secret regressions + 9 local loopback fixture/browser)",
+    "result": "28 passed (14 pure/stub incl. live-abort + same-document navigation + JSON-escaped secret regressions, 4 real-Chromium abort-accounting cases, 9 local loopback fixture/browser)",
     "tsc_app_errors_in_new_files": 0,
     "eslint": "clean",
     "note": "loopback fixtures are explicitly not hosted proof"
