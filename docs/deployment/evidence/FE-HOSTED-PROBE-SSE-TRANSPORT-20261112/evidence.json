@@ -13,11 +13,11 @@
   "tests": [
     {
       "cmd": "playwright test e2e/hosted-bff-streaming-transport.spec.ts (standalone config, real Chromium + local HTTPS servers)",
-      "result": "4 passed"
+      "result": "4 passed (rerun after grant)"
     },
     {
-      "cmd": "vitest run aggregate-release-gate-auth-truth + aggregate-release-gate-hosted-auth",
-      "result": "6 FAIL (not adapted): these ungranted tests regex-extract originOf/pinnedTargetProblem/installPinnedBffBearer from the probe script sources, which the required single shared lib removes. Verified green (45 passed) with adaptations; adaptations reverted to honor the artifact contract. Needs scope grant for those two test files."
+      "cmd": "vitest run aggregate-release-gate-auth-truth + aggregate-release-gate-hosted-auth + strict-browser-auth-source-contract",
+      "result": "3 files, 45 passed (the two aggregate tests adapted to the shared lib after scope grant)"
     },
     {
       "cmd": "tsc -p tsconfig.app.json --noEmit; eslint on touched tests/spec; node --check on both probes",
@@ -26,5 +26,5 @@
   ],
   "firstRedRun": "redirect test failed (bearer reached foreign origin) with continue-only SSE, before the header probe was added",
   "notDone": "hosted rerun, release, rollback, all12 completion remain with the original publisher",
-  "blocker": "Artifact contract excludes src/test/aggregate-release-gate-auth-truth.test.ts and aggregate-release-gate-hosted-auth.test.ts, which must be updated for the shared-lib factoring."
+  "scopeGrant": "aggregate-release-gate-auth-truth and -hosted-auth tests admitted; adapted to read the shared lib"
 }
