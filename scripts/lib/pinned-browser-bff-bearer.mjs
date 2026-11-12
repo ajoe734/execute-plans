@@ -57,14 +57,23 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     if (pages.has(page)) return pages.get(page);
     const ready = (async () => {
       const session = await context.newCDPSession(page);
-      const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set();
+      const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set(), parents = new Map(), detaching = new Set();
+      // Per-URL tally of aborts judged natively (one per CDP request record) vs seen by Playwright.
+      const nativeAborted = new Map(), pwAborted = new Map(), frameNavs = new Map();
+      const underDetach = (frameId) => { for (let id = frameId, hops = 0; id && hops < 64; id = parents.get(id), hops++) if (detaching.has(id)) return true; return false; };
       session.on("Network.requestWillBeSent", (event) => {
-        network.set(event.requestId, { frameId: event.frameId, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0 });
+        const bound = { frameId: event.frameId, url: event.request?.url, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0, frameNavs: frameNavs.get(event.frameId) || 0, method: event.request?.method };
+        const early = network.get(event.requestId);
+        // Chromium may deliver Fetch.requestPaused before Network.requestWillBeSent
+        // for the same network id. Bind the later event to the already-paused
+        // interception (same object) instead of replacing it, so its lifecycle
+        // proof is not lost. A redirect hop (already bound) still starts fresh.
+        if (early?.unbound) { Object.assign(early, bound); delete early.unbound; } else network.set(event.requestId, bound);
         if (event.type === "Document") navigating.set(event.frameId, event.loaderId);
       });
       session.on("Network.loadingFinished", ({ requestId }) => network.delete(requestId));
       session.on("Page.navigatedWithinDocument", ({ frameId }) => documentNavigations.set(frameId, (documentNavigations.get(frameId) || 0) + 1));
-      session.on("Network.loadingFailed", ({ requestId, canceled, timestamp }) => {
+      session.on("Network.loadingFailed", ({ requestId, canceled, timestamp, errorText }) => {
         const request = network.get(requestId);
         if (request) {
           request.failed = true;
@@ -73,15 +82,39 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // Arrival order: a same-document navigation observed before the cancel.
           request.sameDocument = (documentNavigations.get(request.frameId) || 0) > request.documentNavigations;
           request.navigationLoader = navigating.get(request.frameId);
+          // Causal, not arrival-order: Chromium announces the teardown
+          // (frameSubtreeWillBeDetached) before it cancels the frame's requests.
+          // A cancellation delivered before that announcement was live and stays one.
+          request.detached = underDetach(request.frameId);
+          // Judge a BFF abort here, on THIS request's own record: the detach fact was
+          // captured at the failure instant for this exact network id, so another
+          // frame's teardown can never excuse it (and it can't excuse another's).
+          if (errorText === "net::ERR_ABORTED" && request.url && originOf(request.url) === bffOrigin) {
+            const { url, frameId, detached, sameDocument } = request, navs = request.frameNavs;
+            // Closure counts only if already true at the failure instant; a later close cannot excuse a live abort.
+            const gone = closed || page.isClosed();
+            // A trailing frameNavigated excuses only a navigation already in flight at failure time.
+            const replacing = request.navigationLoader && request.navigationLoader !== request.loaderId;
+            const label = `${request.method || "GET"} ${new URL(url).pathname}`;
+            nativeAborted.set(url, (nativeAborted.get(url) || 0) + 1);
+            // frameNavigated for a replacing document can trail the cancellation.
+            track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
+              if (!(gone || detached || sameDocument || (replacing && (frameNavs.get(frameId) || 0) > navs))) record("net::ERR_ABORTED", page, label);
+            }));
+          }
         }
         network.delete(requestId);
       });
       session.on("Page.frameNavigated", ({ frame }) => {
+        frameNavs.set(frame.id, (frameNavs.get(frame.id) || 0) + 1);
         loaders.set(frame.id, frame.loaderId);
         navigating.delete(frame.id);
       });
+      session.on("Page.frameAttached", ({ frameId, parentFrameId }) => parents.set(frameId, parentFrameId));
+      session.on("Page.frameSubtreeWillBeDetached", ({ frameId }) => detaching.add(frameId));
       session.on("Page.frameDetached", ({ frameId }) => {
-        for (const request of interceptions) if (request.frameId === frameId && !request.failed) request.detached = true;
+        detaching.delete(frameId);
+        parents.delete(frameId);
         loaders.delete(frameId);
         navigating.delete(frameId);
       });
@@ -96,17 +129,25 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       page.on("request", (req) => requests.set(req, generations.get(req.frame()) || 0));
       page.on("requestfailed", (req) => {
         if (originOf(req.url()) !== bffOrigin) return;
-        // Chromium cancels open SSE on navigation. Verify the frame changed or
-        // the page/context closed; an arbitrary live transport failure must fail.
+        // Chromium cancels open SSE on navigation. Verify the frame changed, the
+        // frame teardown preceded the cancellation, or the page/context closed; an arbitrary live transport failure must fail.
         track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
           const failure = req.failure()?.errorText || "request failed";
-          if (failure === "net::ERR_ABORTED" && (closed || page.isClosed() ||
-              requests.get(req) !== (generations.get(req.frame()) || 0))) return;
+          if (failure === "net::ERR_ABORTED") {
+            // Aborts with a CDP record were judged per-request in loadingFailed. Only an
+            // abort Playwright saw beyond those has no native evidence: fall back to
+            // closure or a frame generation change; never a detach credit.
+            const seen = (pwAborted.get(req.url()) || 0) + 1;
+            pwAborted.set(req.url(), seen);
+            if (seen <= (nativeAborted.get(req.url()) || 0)) return;
+            if (closed || page.isClosed() || requests.get(req) !== (generations.get(req.frame()) || 0)) return;
+          }
           record(failure, page, `${req.method()} ${new URL(req.url()).pathname}`);
         }));
       });
       session.on("Fetch.requestPaused", (event) => {
-        const request = network.get(event.networkId);
+        let request = network.get(event.networkId);
+        if (!request && event.networkId) { request = { unbound: true }; network.set(event.networkId, request); }
         if (request) interceptions.add(request);
         const { url, headers = {} } = event.request;
         const pinned = originOf(url) === bffOrigin;

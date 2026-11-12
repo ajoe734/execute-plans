@@ -295,6 +295,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
     await send("Page.enable");
     session.send = (async (method: string, params: { requestId?: string }) => {
       if (method === "Fetch.continueRequest" && params.requestId === held) {
+        heldSample = false;
         reached();
         await dispatch;
         if (invalidLiveId) params = { ...params, requestId: "missing-live-interception" };
@@ -430,6 +431,69 @@ for (const teardown of ["context close", "unrelated navigation"] as const) {
   });
 }
 
+async function frameFetch(c: Awaited<ReturnType<typeof controlledInterception>>, abortable: boolean) {
+  await c.page.evaluate((u) => { const f = document.createElement("iframe"); f.src = u; document.body.append(f); }, `${feOrigin}/frame`);
+  await expect.poll(() => c.page.frames().length).toBe(2);
+  const frame = c.page.frames()[1];
+  await frame.waitForLoadState();
+  await frame.evaluate(({ u, abortable }) => {
+    const controller = new AbortController();
+    Object.assign(window, { cancelHeld: () => controller.abort() });
+    void fetch(u, abortable ? { signal: controller.signal } : undefined).catch(() => {});
+  }, { u: `${bffOrigin}/held`, abortable });
+  await c.paused;
+  return frame;
+}
+
+test("iframe removal cancelling a held interception settles healthy", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception();
+    try {
+      await frameFetch(c, false);
+      await c.page.evaluate(() => document.querySelector("iframe")!.remove());
+      await expect.poll(() => c.receipt.canceled).toBe(true);
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+      c.transport.assertHealthy();
+      console.log(JSON.stringify({ scenario: "frame-detach-positive", attempt, ...c.receipt }));
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("live abort then later iframe removal stays actionable", async () => {
+  const c = await controlledInterception();
+  try {
+    const frame = await frameFetch(c, true);
+    await frame.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
+    await expect.poll(() => c.receipt.canceled).toBe(true);
+    c.release();
+    await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+    await c.page.evaluate(() => document.querySelector("iframe")!.remove());
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
+test("observed live abort then immediate iframe removal before sample stays actionable", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception();
+    try {
+      const frame = await frameFetch(c, true);
+      const failed = c.page.waitForEvent("requestfailed", { predicate: (req) => req.url() === `${bffOrigin}/held` });
+      await frame.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
+      const req = await failed;
+      await expect.poll(() => c.receipt.canceled).toBe(true);
+      expect(req.frame().isDetached()).toBe(false);
+      await c.page.evaluate(() => document.querySelector("iframe")!.remove());
+      c.release();
+      await c.transport.settle();
+      expect(c.transport.errors.some((e) => e.includes("ERR_ABORTED"))).toBe(true);
+      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
 test("exact 82ff queued cancellation fails; maintained transport proves the obsolete request", async () => {
   const source = execFileSync("git", ["show", `${INTERCEPTION_BASE}:scripts/lib/pinned-browser-bff-bearer.mjs`], { encoding: "utf8" });
   const predecessor = vm.runInNewContext(source.replaceAll("export ", "") + "\ninstallPinnedBffBearer", { URL, process, setTimeout });
@@ -497,6 +561,57 @@ for (const cause of ["live abort", "live abort then navigation", "invalid live p
   });
 }
 
+// Chromium can deliver Fetch.requestPaused before Network.requestWillBeSent for
+// the same network id. This only defers delivery (in order) of real Network/Page
+// events to the helper's listeners until the helper has seen the held request's
+// pause; no event or protocol result is synthesized.
+let pauseFirst = false;
+const pauseBeforeNetwork = ((context: import("@playwright/test").BrowserContext, opts: unknown) => {
+  const create = context.newCDPSession.bind(context);
+  context.newCDPSession = async (page) => {
+    const session = await create(page), on = session.on.bind(session);
+    const queue: (() => void)[] = [];
+    let released = false;
+    session.on = ((event: string, listener: (e: never) => void) => on(event as never, ((e: { request?: { url: string } }) => {
+      if (event === "Fetch.requestPaused") {
+        listener(e as never);
+        if (pauseFirst && !released && e.request?.url === `${bffOrigin}/held`) { released = true; queue.splice(0).forEach((f) => f()); }
+      } else if (pauseFirst && !released && /^(Network|Page)\./u.test(event)) queue.push(() => listener(e as never));
+      else listener(e as never);
+    }) as never)) as typeof session.on;
+    return session;
+  };
+  return installPinnedBffBearer(context, opts as Parameters<typeof installPinnedBffBearer>[1]);
+}) as typeof installPinnedBffBearer;
+
+test("a cancellation proven for a request whose pause preceded its Network.requestWillBeSent settles healthy", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception(pauseBeforeNetwork);
+    try {
+      pauseFirst = true;
+      await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await c.paused;
+      await c.page.goto(`${feOrigin}/live-detail`);
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+      c.transport.assertHealthy();
+    } finally { pauseFirst = false; c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("pause-before-network ordering still reports a live invalid protocol id", async () => {
+  const c = await controlledInterception(pauseBeforeNetwork, true);
+  try {
+    pauseFirst = true;
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    c.release();
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { pauseFirst = false; c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
 const BASE = "aa17cd4fc390e2c311ef50cbd5f7d2160faea775";
 for (const script of ["probe-route-load-baseline", "accept-management-hosted-production"]) {
   test(`exact aa17 ${script} buffers real HTTP200 SSE until context disposal or 30000ms`, async () => {
@@ -525,5 +640,129 @@ for (const script of ["probe-route-load-baseline", "accept-management-hosted-pro
     await context.close();
     await stream;
     console.log(JSON.stringify({ base: BASE, script, actualHttp: 200, contentType: "text/event-stream", error: error.split("Call log:")[0].trim() }));
+  });
+}
+
+test("same-URL frame detach credit cannot excuse a live abort in another frame", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await open();
+    try {
+      await c.page.evaluate((u) => { const f = document.createElement("iframe"); f.src = u; document.body.append(f); }, `${feOrigin}/frame`);
+      await expect.poll(() => c.page.frames().length).toBe(2);
+      await c.page.frames()[1].waitForLoadState();
+      const pendingUrl = `${bffOrigin}/pending`;
+      await c.page.evaluate((u) => {
+        const controller = new AbortController();
+        Object.assign(window, { cancelMain: () => controller.abort() });
+        void fetch(u, { signal: controller.signal }).catch(() => {});
+      }, pendingUrl);
+      await c.page.frames()[1].evaluate((u) => { void fetch(u).catch(() => {}); }, pendingUrl);
+      await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(attempt * 2 + 2);
+      let failures = 0;
+      c.page.on("requestfailed", (req) => { if (req.url() === pendingUrl) failures++; });
+      const mainFailed = c.page.waitForEvent("requestfailed", { predicate: (req) => req.frame() === c.page.mainFrame() && req.url() === pendingUrl });
+      await c.page.evaluate(() => (window as unknown as { cancelMain: () => void }).cancelMain());
+      await mainFailed;
+      await c.page.evaluate(() => { const f = document.querySelector("iframe")!; f.contentWindow!.history.pushState({}, "", "/changed"); f.remove(); });
+      await expect.poll(() => failures).toBe(2);
+      await c.transport.settle();
+      expect(() => c.transport.assertHealthy()).toThrow(/ERR_ABORTED/);
+    } finally { await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("a live frame abort stays actionable when a later own detach follows another frame's genuine teardown", async () => {
+  const c = await open();
+  const lifecycle: Record<string, unknown>[] = [];
+  const note = (event: string, fields: Record<string, unknown> = {}) => lifecycle.push({event, at: Date.now(), ...fields});
+  try {
+    await c.page.evaluate((u) => {
+      for (const id of ["A", "B"]) {
+        const f = document.createElement("iframe"); f.id = id; f.name = id; f.src = u; document.body.append(f);
+      }
+    }, `${feOrigin}/frame`);
+    await expect.poll(() => c.page.frames().length).toBe(3);
+    await expect.poll(() => Boolean(c.page.frame({name: "A"}) && c.page.frame({name: "B"}))).toBe(true);
+    const a = c.page.frame({name: "A"})!, b = c.page.frame({name: "B"})!;
+    await Promise.all([a.waitForLoadState(), b.waitForLoadState()]);
+    const session = await c.context.newCDPSession(c.page);
+    const ids = new Map<string, {frameId: string}>();
+    session.on("Network.requestWillBeSent", (e) => {
+      if (e.request.url === `${bffOrigin}/pending`) {
+        ids.set(e.requestId, {frameId: e.frameId});
+        note("Network.requestWillBeSent", {networkId: e.requestId, frameId: e.frameId});
+      }
+    });
+    let liveFailed!: () => void;
+    const networkFailed = new Promise<void>((r) => {liveFailed = r;});
+    session.on("Network.loadingFailed", (e) => {
+      if (ids.has(e.requestId)) {
+        note("Network.loadingFailed", {networkId:e.requestId, frameId:ids.get(e.requestId)!.frameId, canceled:e.canceled, error:e.errorText, timestamp:e.timestamp});
+        liveFailed();
+      }
+    });
+    for (const event of ["Page.frameSubtreeWillBeDetached", "Page.frameDetached", "Page.navigatedWithinDocument"] as const)
+      session.on(event, (e) => note(event, {frameId:e.frameId}));
+    await session.send("Network.enable"); await session.send("Page.enable");
+    await a.evaluate((u) => {
+      const controller = new AbortController();
+      Object.assign(window, {cancelA: () => controller.abort()});
+      void fetch(u, {signal:controller.signal}).catch(() => {});
+    }, `${bffOrigin}/pending`);
+    await b.evaluate((u) => {void fetch(u).catch(() => {});}, `${bffOrigin}/pending`);
+    await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(2);
+    const failures: Record<string, unknown>[] = [];
+    c.page.on("requestfailed", (req) => {
+      if (req.url() === `${bffOrigin}/pending`) {
+        const entry = {frame:req.frame() === a ? "A" : "B", detachedAtFailure:req.frame().isDetached(), failure:req.failure()?.errorText};
+        failures.push(entry); note("requestfailed", entry);
+      }
+    });
+    const failed = c.page.waitForEvent("requestfailed", {predicate: (req) => req.frame() === a && req.url() === `${bffOrigin}/pending`});
+    await a.evaluate(() => (window as unknown as {cancelA: () => void}).cancelA());
+    const [req] = await Promise.all([failed, networkFailed]);
+    expect(req.failure()?.errorText).toBe("net::ERR_ABORTED");
+    expect(req.frame().isDetached()).toBe(false);
+    note("A confirmed live after failure");
+    await c.page.evaluate(() => {
+      const f = document.getElementById("B") as HTMLIFrameElement;
+      f.contentWindow!.history.pushState({}, "", "/changed"); f.remove();
+      document.getElementById("A")!.remove();
+    });
+    await expect.poll(() => failures.length).toBe(2);
+    await c.transport.settle();
+    // A failed while still live, before any detach. B has an independent,
+    // genuine navigation/detach cancellation and cannot excuse A's failure.
+    expect(() => c.transport.assertHealthy()).toThrow(/ERR_ABORTED/);
+  } finally {await c.context.close(); await c.transport.settle();}
+});
+
+for (const teardown of ["page-close", "navigation"] as const) {
+  test(`live abort already observed before ${teardown} stays actionable`, async () => {
+    const c = await open();
+    const session = await c.context.newCDPSession(c.page);
+    let id = "";
+    const order: string[] = [];
+    let resolveFailure!: () => void;
+    const failed = new Promise<void>((r) => { resolveFailure = r; });
+    session.on("Network.requestWillBeSent", (e) => { if (e.request.url === `${bffOrigin}/pending`) id=e.requestId; });
+    session.on("Network.loadingFailed", (e) => { if(e.requestId===id) {order.push(`failure:${e.errorText}`); resolveFailure();} });
+    c.page.on("close", () => order.push("page-close"));
+    session.on("Page.frameNavigated", () => order.push("frame-navigation"));
+    await session.send("Network.enable"); await session.send("Page.enable");
+    try {
+      await c.page.evaluate((u) => {const ctrl = new AbortController(); Object.assign(window, {cancelReview:()=>ctrl.abort()}); void fetch(u,{signal:ctrl.signal}).then((r)=>r.text()).catch(()=>{});}, `${bffOrigin}/pending`);
+      await expect.poll(() => bffSeen.some((x)=>x.path==="/pending")).toBe(true);
+      const pwFailed = c.page.waitForEvent("requestfailed", {predicate: (r)=>r.url()===`${bffOrigin}/pending`});
+      await c.page.evaluate(() => (window as unknown as {cancelReview:()=>void}).cancelReview());
+      const [req] = await Promise.all([pwFailed, failed]);
+      expect(c.page.isClosed()).toBe(false);
+      expect(req.failure()?.errorText).toBe("net::ERR_ABORTED");
+      order.push("confirmed-live-failure");
+      if (teardown === "page-close") await c.page.close();
+      else await c.page.goto(`${feOrigin}/later-unrelated`);
+      await c.transport.settle();
+      expect(() => c.transport.assertHealthy()).toThrow(/ERR_ABORTED/);
+    } finally {await c.context.close(); await c.transport.settle();}
   });
 }
