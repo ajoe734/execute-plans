@@ -265,8 +265,9 @@ describe("pure acceptance logic", () => {
       const row = { page_errors: [], failed_api_requests: [], cancelled_api_requests: [], http_api_errors: [], prelogin_expected_401: [] } as Record<string, unknown[]>;
       cli.observe(ctx, page, row, "https://api.test", { onBlockedWrite: () => {} });
       const emit = (ev: string, x?: unknown) => (h[ev] || []).forEach((f) => f(x));
-      const req = { url: () => "https://api.test/bff/reviewer-abort", method: () => "GET", failure: () => ({ errorText: "net::ERR_ABORTED" }), frame: () => ({ isDetached: () => false }) };
-      return { row, emit, req, close: () => { closed = true; } };
+      const req = { url: () => "https://api.test/bff/reviewer-abort", method: () => "GET", failure: () => ({ errorText: "net::ERR_ABORTED" }), frame: () => ({ isDetached: () => false, parentFrame: () => null }), isNavigationRequest: () => false };
+      const navReq = { url: () => "https://web.test/next", method: () => "GET", frame: () => ({ parentFrame: () => null }), isNavigationRequest: () => true };
+      return { row, emit, req, navReq, close: () => { closed = true; } };
     };
     it("treats a live abort on a still-present page as a failure", () => {
       const t = mk();
@@ -275,20 +276,62 @@ describe("pure acceptance logic", () => {
       expect(t.row.failed_api_requests).toHaveLength(1);
       expect(t.row.cancelled_api_requests).toHaveLength(0);
     });
+    it("ignores same-document framenavigated events as cancellation evidence", () => {
+      const t = mk();
+      t.emit("request", t.req);
+      t.emit("framenavigated", { parentFrame: () => null });
+      t.emit("requestfailed", t.req);
+      expect(t.row.failed_api_requests).toHaveLength(1);
+      expect(t.row.cancelled_api_requests).toHaveLength(0);
+    });
     it("accepts an abort caused by a real main-frame navigation (either event order)", () => {
       const a = mk();
       a.emit("request", a.req);
-      a.emit("framenavigated", { parentFrame: () => null });
+      a.emit("request", a.navReq);
       a.emit("requestfailed", a.req);
       expect(a.row.failed_api_requests).toHaveLength(0);
       expect(a.row.cancelled_api_requests).toHaveLength(1);
       const b = mk();
       b.emit("request", b.req);
       b.emit("requestfailed", b.req);
-      b.emit("framenavigated", { parentFrame: () => null });
+      b.emit("request", b.navReq);
       expect(b.row.failed_api_requests).toHaveLength(0);
       expect(b.row.cancelled_api_requests).toHaveLength(1);
     });
+  });
+
+  describe("real Chromium abort accounting", () => {
+    const scenarios: Array<[string, string, number, number]> = [
+      ["same-document pushState before live abort", "history.pushState({}, '', '/pushed'); await new Promise((r) => setTimeout(r, 400)); c.abort();", 1, 0],
+      ["live abort without navigation", "await new Promise((r) => setTimeout(r, 400)); c.abort();", 1, 0],
+      ["same-document pushState after live abort", "c.abort(); await new Promise((r) => setTimeout(r, 100)); history.pushState({}, '', '/pushed');", 1, 0],
+      ["real document navigation cancels", "location.href = '/next';", 0, 1],
+    ];
+    for (const [name, script, failed, cancelled] of scenarios) {
+      it(name, async () => {
+        const server = http.createServer((req, res) => {
+          if (req.url?.startsWith("/bff/slow")) return void setTimeout(() => { try { res.end("{}"); } catch { /* closed */ } }, 3000);
+          res.setHeader("content-type", "text/html");
+          res.end(req.url === "/next" ? "<p>next</p>" : `<script>const c = new AbortController(); fetch('/bff/slow', {signal: c.signal}).catch(() => {}); (async () => { await new Promise((r) => setTimeout(r, 150)); ${script} })();</script>`);
+        });
+        await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+        const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+        const browser = await chromium.launch();
+        try {
+          const ctx = await browser.newContext();
+          const page = await ctx.newPage();
+          const row = { page_errors: [], failed_api_requests: [], cancelled_api_requests: [], http_api_errors: [], prelogin_expected_401: [] } as Record<string, unknown[]>;
+          cli.observe(ctx, page, row, origin, { onBlockedWrite: () => {} });
+          await page.goto(origin + "/");
+          await page.waitForTimeout(1200);
+          expect(row.failed_api_requests).toHaveLength(failed);
+          expect(row.cancelled_api_requests).toHaveLength(cancelled);
+        } finally {
+          await browser.close();
+          server.close();
+        }
+      }, 30000);
+    }
   });
 
   it("redacts configured secrets and JWT/bearer shapes", () => {

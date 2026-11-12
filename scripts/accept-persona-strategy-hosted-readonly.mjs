@@ -386,11 +386,13 @@ export function observe(ctx, page, row, API, { onBlockedWrite }) {
       row.cancelled_api_requests.push({ ...e, evidence: "navigation_or_close" });
     }
   };
-  page.on("request", (r) => navAtStart.set(r, navCount));
-  page.on("framenavigated", (f) => {
-    if (f.parentFrame && f.parentFrame()) return;
-    navCount++;
-    settle();
+  page.on("request", (r) => {
+    // Only a real cross-document main-frame navigation request counts. framenavigated also fires for
+    // same-document history.pushState/hash changes, which do NOT cancel in-flight fetches.
+    let docNav = false;
+    try { docNav = r.isNavigationRequest() && !r.frame().parentFrame(); } catch { /* frame gone */ }
+    if (docNav) { navCount++; settle(); }
+    navAtStart.set(r, docNav ? navCount - 1 : navCount);
   });
   page.on("close", () => { navCount++; settle(); });
   page.on("requestfailed", (r) => {
