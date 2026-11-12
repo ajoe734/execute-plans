@@ -1,0 +1,14 @@
+{
+  "acquiredAt": "2026-11-12T08:55:41Z",
+  "branch": "environment-coordination",
+  "expiresAt": "2026-11-12T09:00:41Z",
+  "heartbeatAt": "2026-11-12T08:55:41Z",
+  "leaseId": "68b85f3d-54c1-429c-9549-47e9050b94cb",
+  "mode": "deployment",
+  "owner": "HumanOps:INTRADAY-KBAR-CONNECTOR-20261111:20261112T085540Z",
+  "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
+  "repository": "ajoe734/execute-plans",
+  "resource": "pantheon-dev-environment",
+  "runUrl": "https://github.com/ajoe734/pantheon/pull/7195",
+  "schemaVersion": 1
+}
