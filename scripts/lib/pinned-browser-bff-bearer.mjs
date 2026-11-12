@@ -89,7 +89,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       });
       const underDetach = (frameId) => { for (let id = frameId, hops = 0; id && hops < 64; id = parents.get(id), hops++) if (detaching.has(id)) return true; return false; };
       session.on("Network.requestWillBeSent", (event) => {
-        const bound = { frameId: event.frameId, url: event.request?.url, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0, frameNavs: frameNavs.get(event.frameId) || 0, method: event.request?.method };
+        const bound = { frameId: event.frameId, url: event.request?.url, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0, frameNavs: frameNavs.get(event.frameId) || 0, method: event.request?.method, type: event.type };
         const early = network.get(event.requestId);
         // Chromium may deliver Fetch.requestPaused before Network.requestWillBeSent
         // for the same network id. Bind the later event to the already-paused
@@ -102,6 +102,9 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       session.on("Page.navigatedWithinDocument", ({ frameId }) => documentNavigations.set(frameId, (documentNavigations.get(frameId) || 0) + 1));
       session.on("Network.loadingFailed", ({ requestId, canceled, timestamp, errorText }) => {
         const request = network.get(requestId);
+        // A Document navigation that failed (e.g. HTTP 204 / download) never replaces
+        // its frame's document: it stops being "in flight" at its own failure time.
+        if (request?.type === "Document") for (const nav of navigating.get(request.frameId) || []) if (nav.loaderId === request.loaderId) nav.failedAt = timestamp;
         if (request) {
           request.failed = true;
           request.canceled = canceled === true;
@@ -110,7 +113,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           request.sameDocument = (documentNavigations.get(request.frameId) || 0) > request.documentNavigations;
           // Causal, not arrival-order: only a navigation Chromium had already started
           // by the cancellation's own timestamp was replacing this document.
-          request.navigationLoader = (navigating.get(request.frameId) || []).filter((nav) => nav.at <= timestamp).pop()?.loaderId;
+          request.navigationLoader = (navigating.get(request.frameId) || []).filter((nav) => nav.at <= timestamp && !(nav.failedAt < timestamp)).pop()?.loaderId;
           // Causal, not arrival-order: Chromium announces the teardown
           // (frameSubtreeWillBeDetached) before it cancels the frame's requests.
           // A cancellation delivered before that announcement was live and stays one.

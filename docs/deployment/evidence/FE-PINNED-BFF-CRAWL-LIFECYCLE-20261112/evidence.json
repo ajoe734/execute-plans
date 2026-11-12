@@ -55,5 +55,23 @@
     "unloaded": "new helper: 2307-2327 canceled reads, 41 replacing navigations, 0 Invalid InterceptionId, all causally explained, healthy. af2b helper: also passes unloaded (2304 canceled reads)",
     "underCpuContention": "12 busy loops on 12 cores: af2b helper FAILS with 'Pinned BFF transport failures: GET /ready: net::ERR_ABORTED' x5+ (false failures: every cancel traced to a started replacing navigation); new helper passes (2031-2076 canceled reads, 0 errors)",
     "invalidIdsObserved": "0 unforced Invalid InterceptionId in any local crawl run. The mechanism (cancel of the paused request's network id by the replacing navigation before continueRequest, with the commit delivered later) is shown only with the imposed-schedule tests; it is NOT proven to be the hosted ordering."
+  },
+  "reviewRound2": {
+    "p1StaleNavigation": {
+      "finding": "Codex: a Document navigation that failed (HTTP 204, ERR_ABORTED, no commit) stayed in the in-flight list; any later frame commit then made committed(request) true for a live abort that followed it, so a live abort passed as 'cancelled by navigation'.",
+      "fix": "Network record carries its type; a failed Document request stamps failedAt on its in-flight entry; the replacing-navigation lookup ignores entries that failed strictly before the cancellation's Chromium timestamp. Causal by timestamp, no timers.",
+      "realBrowserTrace": "Reviewer reproducer (204 /stall, live BFF read aborted while page live, 150ms, unrelated goto): trace = Document /stall request -> loadingFailed ERR_ABORTED canceled -> Fetch /pending request -> loadingFailed ERR_ABORTED -> Document /unrelated -> commit. Only opaque ids/method/path. Old head: errors=[] (false green); fixed helper: errors=['GET /pending: net::ERR_ABORTED'] (reproducer reports failure detected).",
+      "tests": [
+        "failed (HTTP 204) navigation does not excuse a live abort before a later unrelated navigation: FAILS on 6e680817 helper, passes now",
+        "failed navigation does not excuse a live invalid id before a later unrelated navigation: passes on both heads (invalid-id path was already actionable; retained as guard)",
+        "read cancelled by a real navigation still settles healthy after an earlier failed navigation (positive control)"
+      ],
+      "commands": [
+        "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium => 38 passed",
+        "npx vitest run src/test/strict-browser-auth-source-contract.test.ts => 7 passed",
+        "node --check => ok"
+      ]
+    },
+    "p2CausalLimit": "The hosted Invalid InterceptionId interleaving still cannot be identified from the first-five-error hosted trace. What is demonstrated: (a) unforced local crawl under load reproduces the sibling false ERR_ABORTED on the af2b helper (cancels judged before the replacing commit arrives) and the repair removes it; (b) Invalid InterceptionId is the same cancel-before-continue mechanism, shown only under imposed schedules. Neither is claimed as the hosted ordering; no hosted acceptance is claimed."
   }
 }

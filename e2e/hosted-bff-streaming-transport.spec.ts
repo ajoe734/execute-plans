@@ -77,7 +77,11 @@ test.beforeAll(async () => {
       res.writeHead(200, { ...cors, "content-type": "application/json" }).end(JSON.stringify({ ready: true }));
     }
   });
-  fe = http.createServer((_req, res) => res.writeHead(200, { "content-type": "text/html" }).end("<html><body>fe</body></html>"));
+  fe = http.createServer((req, res) => {
+    // /stall: HTTP 204 is a real Document navigation that fails (ERR_ABORTED) and never commits.
+    if (req.url === "/stall") return void res.writeHead(204).end();
+    res.writeHead(200, { "content-type": "text/html" }).end("<html><body>fe</body></html>");
+  });
   bffOrigin = `https://127.0.0.1:${await listen(bff)}`;
   foreignOrigin = `https://127.0.0.1:${await listen(foreign)}`;
   feOrigin = `http://127.0.0.1:${await listen(fe)}`;
@@ -963,3 +967,50 @@ for (const teardown of ["page-close", "navigation"] as const) {
     } finally {await c.context.close(); await c.transport.settle();}
   });
 }
+
+// A Document navigation that failed without committing is not "replacing" the live page:
+// it must not later excuse a live abort / invalid id just because some other navigation commits.
+const failedNavigation = (page: import("@playwright/test").Page) =>
+  page.goto(`${feOrigin}/stall`, { timeout: 5000 }).then(() => "committed", (e) => String(e).split("\n")[0]);
+
+test("a failed (HTTP 204) navigation does not excuse a live abort before a later unrelated navigation", async () => {
+  const c = await open();
+  try {
+    expect(await failedNavigation(c.page)).toMatch(/ERR_ABORTED/);
+    await abortableFetch(c.page, "/pending");
+    await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(1);
+    const live = c.page.waitForEvent("requestfailed", { predicate: (r) => r.url() === `${bffOrigin}/pending` });
+    await c.page.evaluate(() => (window as unknown as { cancelLast: () => void }).cancelLast());
+    await live;
+    await new Promise((r) => setTimeout(r, 150));
+    await c.page.goto(`${feOrigin}/unrelated`);
+    await c.transport.settle();
+    expect(c.transport.errors).toEqual(["GET /pending: net::ERR_ABORTED"]);
+  } finally { await c.context.close(); await c.transport.settle(); }
+});
+
+test("a failed navigation does not excuse a live invalid id before a later unrelated navigation", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, true);
+  try {
+    expect(await failedNavigation(c.page)).toMatch(/ERR_ABORTED/);
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    c.release();
+    await expect.poll(() => c.receipt.errors.length).toBeGreaterThan(0);
+    await c.page.goto(`${feOrigin}/unrelated-navigation`);
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
+test("a read cancelled by a real navigation still settles healthy after an earlier failed navigation", async () => {
+  const c = await open();
+  try {
+    expect(await failedNavigation(c.page)).toMatch(/ERR_ABORTED/);
+    await abortableFetch(c.page, "/pending");
+    await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(1);
+    await c.page.goto(`${feOrigin}/live-detail`);
+    await c.transport.settle();
+    c.transport.assertHealthy();
+  } finally { await c.context.close(); await c.transport.settle(); }
+});
