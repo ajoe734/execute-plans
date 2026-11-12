@@ -567,7 +567,24 @@ describe("paired Pantheon release workflow", () => {
     expect(ordinary).toContain(
       'PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "false"',
     );
-    expect(ordinary).not.toContain("secrets.");
+    // Ordinary integration stays credential-free except for the one trusted
+    // exact-dev read-only probe credential step (operator dev-login, GET probes).
+    const ordinarySecretRefs = ordinary.match(/secrets\.[A-Z0-9_]+/gu) ?? [];
+    expect(ordinarySecretRefs).toEqual([
+      "secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET",
+    ]);
+    const readonlyStep = ordinary.slice(
+      ordinary.indexOf("id: readonly_auth"),
+      ordinary.indexOf("- name: Management route-load baseline"),
+    );
+    expect(readonlyStep).toContain("github.event_name == 'workflow_dispatch'");
+    expect(readonlyStep).toContain("github.ref == 'refs/heads/dev'");
+    expect(readonlyStep).toContain("inputs.release_candidate_id != ''");
+    expect(readonlyStep).toContain("secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET");
+    expect(readonlyStep).not.toContain("browser_session");
+    expect(readonlyStep).toContain("::add-mask::");
+    expect(ordinary).toContain("PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1");
+    expect(ordinary).not.toContain("--reporter=list,html");
     expect(authorized).toContain("needs: proof-authorization");
     expect(authorized).toContain(
       "needs.proof-authorization.result == 'success'",

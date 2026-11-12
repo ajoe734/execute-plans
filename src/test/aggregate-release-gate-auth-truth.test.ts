@@ -162,10 +162,23 @@ const step = (id: string) => {
   return gate.slice(start, gate.indexOf("\n      - name:", start));
 };
 
-describe("integration-gate stays on the secretless boundary", () => {
-  it("references no secrets and provisions no probe credential in the ordinary job", () => {
-    expect(gate).not.toContain("secrets.");
-    expect(gate).not.toMatch(/BFF_AUTH_TOKEN|DEV_LOGIN|ro_auth/);
+describe("integration-gate credential boundary", () => {
+  it("only the trusted exact-dev readonly step may reference a secret", () => {
+    expect(gate.match(/secrets\.[A-Z0-9_]+/gu)).toEqual([
+      "secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET",
+    ]);
+    const mint = step("readonly_auth");
+    expect(mint).toContain("github.ref == 'refs/heads/dev'");
+    expect(mint).toContain("github.event_name == 'workflow_dispatch'");
+    expect(mint).toContain("continue-on-error: true");
+    expect(mint).toContain("::add-mask::");
+    expect(mint).not.toContain("browser_session");
+  });
+  it("authenticated e2e disables trace/HTML artifacts", () => {
+    const e2e = step("e2e");
+    expect(e2e).toContain("PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1");
+    expect(e2e).toContain("--reporter=list,json");
+    expect(e2e).not.toContain("html");
   });
   it("write-proof steps stay in the authorized job", () => {
     expect(step("pint_hosted_e2e")).not.toContain("BFF_AUTH_TOKEN");

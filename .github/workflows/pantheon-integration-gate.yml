@@ -1260,6 +1260,45 @@ jobs:
           PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
+      # Trusted read-only auth: only an exact dev-ref controller dispatch (never
+      # PR/push/branch dispatch) receives a short-lived operator token minted by
+      # the existing /bff/auth/dev-login. The token is masked, used only for GET
+      # probes, attached per-request to the pinned dev BFF by the probe scripts,
+      # and traces/HTML reports are disabled for the authenticated e2e run.
+      # Without it the required authenticated probes fail honestly (missing auth).
+      - name: Mint short-lived read-only probe credential (exact dev dispatch only)
+        id: readonly_auth
+        if: >-
+          ${{
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/dev' &&
+            inputs.frontend_ref == 'dev' &&
+            inputs.release_candidate_id != '' &&
+            inputs.release_controller_run_id != ''
+          }}
+        continue-on-error: true
+        env:
+          DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          [[ "$PANTHEON_BFF_BASE_URL" == "https://api.dev.mvl-cap.tw" && -n "$DEV_LOGIN_CLIENT_SECRET" ]] || {
+            echo "::error::read-only probe credential unavailable; authenticated probes will fail as missing auth" >&2
+            exit 1
+          }
+          request_body="$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')"
+          response="$(curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-all-errors --connect-timeout 5 --max-time 20 \
+            -X POST "${PANTHEON_BFF_BASE_URL%/}/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' -d "$request_body")"
+          token="$(node -e '
+            const t=String(JSON.parse(process.argv[1]).access_token||"").trim();
+            if (!t || t.split(".").length !== 3) process.exit(1);
+            process.stdout.write(t);
+          ' "$response")"
+          printf '::add-mask::%s\n' "$token"
+          printf 'BFF_AUTH_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+
       - name: Management route-load baseline
         id: route_load
         continue-on-error: true
@@ -1325,6 +1364,7 @@ jobs:
           VITE_BFF_FALLBACK=strict \
           BFF_FALLBACK=strict \
           PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-desktop-results.json" \
+          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
           npx playwright test \
             e2e/01-startup-session.spec.ts \
             e2e/02-control-room.spec.ts \
@@ -1344,7 +1384,7 @@ jobs:
             e2e/18-perf.spec.ts \
             --project=chromium \
             --grep-invert "asserts MeResponse tenant/env/user/capabilities shape" \
-            --reporter=list,html,json \
+            --reporter=list,json \
             2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
 
       - name: Verify exact paired hosted deployment after all PINT proof steps
