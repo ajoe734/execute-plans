@@ -116,35 +116,30 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           clean.push(["authorization", bearer]);
           if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
+        // Same-tick, ordered ahead of the command on the one CDP connection: the
+        // browser handles this sample before the continueRequest, so its Timestamp
+        // is a lower bound of the actual command rejection that is independent of
+        // how late the rejection is delivered to this process.
+        const before = request ? session.send("Performance.getMetrics").then(
+          ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
         track(session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
-          const rejectedLocally = performance.now();
           // The network id binds Chromium's cancellation to this interception,
           // and the cancellation must be caused by a navigation (document
-          // replacement, same-document navigation or frame detach) that was
-          // observed BEFORE it. Lifecycle events can be queued behind the
-          // command rejection, so wait for them, but only accept a cancellation
-          // Chromium timestamped no later than the rejection: an invalid id on
-          // a live request, followed by later navigation or teardown, stays a
-          // protocol failure. Closure alone never proves anything afterwards.
+          // replacement, same-document navigation or frame detach). Lifecycle
+          // events can be queued behind the command rejection, so wait for them,
+          // but only accept a cancellation Chromium timestamped no later than the
+          // pre-command sample: an invalid id on a live request, followed by later
+          // navigation or teardown, stays a protocol failure, whenever the error
+          // is delivered. Closure alone never proves anything afterwards.
           const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
           if (invalidId && request) {
-            // The rejection was observed locally at rejectedLocally. The browser
-            // sample returns later, so its Timestamp is an upper bound for the
-            // rejection. Subtract the FULL local time from rejection capture to
-            // sample receipt (all dispatch and response delay; Timestamp and
-            // performance.now() both run on monotonic clocks) to get a LOWER
-            // bound. The cancellation must precede even that bound; any
-            // ambiguity stays a protocol failure.
-            const sample = await session.send("Performance.getMetrics").then(
-              ({ metrics }) => ({ at: performance.now(), value: metrics.find((metric) => metric.name === "Timestamp")?.value }),
-              () => undefined);
-            const rejectedAt = typeof sample?.value === "number" ? sample.value - (sample.at - rejectedLocally) / 1000 : undefined;
+            const rejectedAt = await before;
             const proven = () => request.canceled && request.canceledAt <= rejectedAt && (request.detached || request.sameDocument ||
               (request.loaderId && request.navigationLoader && request.loaderId !== request.navigationLoader &&
                 loaders.get(request.frameId) === request.navigationLoader));
-            if (rejectedAt !== undefined) {
+            if (typeof rejectedAt === "number") {
               for (let waited = 0; waited < 1000 && !proven(); waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
               if (proven()) return;
             }

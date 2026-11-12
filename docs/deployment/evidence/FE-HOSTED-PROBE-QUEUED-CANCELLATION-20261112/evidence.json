@@ -2,19 +2,43 @@
   "task": "FE-HOSTED-PROBE-QUEUED-CANCELLATION-20261112",
   "scope": "local source/real-Chromium reproduction only; NOT hosted acceptance. Hosted Management outcome and aggregate remain FAIL for the exact 82ff run.",
   "root_cause": "The continueRequest rejection handler captured closed/detached/canceled booleans before its 25ms wait, so lifecycle events (loadingFailed canceled, new Document request, frameNavigated/detach) queued behind the CDP command rejection were never seen; a genuinely cancelled intercepted request was classified as a live Invalid InterceptionId.",
-  "fix": "scripts/lib/pinned-browser-bff-bearer.mjs: for Invalid InterceptionId only, take a Chromium-clock timestamp (Performance.getMetrics) when the rejection is observed, and uses sample.Timestamp minus the FULL local elapsed time from rejection capture to sample receipt as a conservative lower bound of the browser time at rejection (no arbitrary ms tolerance; ambiguity stays a failure), then poll (10ms, 1000ms bound) for ordered facts: Network.loadingFailed canceled with Chromium timestamp <= the rejection, preceded (arrival order) by a navigation: document replacement, Page.navigatedWithinDocument, or frame detach. Closure alone is never proof, and cancellation/navigation/teardown after the rejection cannot excuse a live invalid id.",
+  "fix": "scripts/lib/pinned-browser-bff-bearer.mjs: for Invalid InterceptionId only, send Performance.getMetrics in the same tick immediately before Fetch.continueRequest. CDP processes commands in order, so its Chromium Timestamp is a lower bound of the actual command rejection that does not depend on when the rejection is delivered to the process. Then poll (10ms, 1000ms bound) for ordered facts: Network.loadingFailed canceled with Chromium timestamp <= that sample, correlated by network id to the intercepted request and caused by document replacement, Page.navigatedWithinDocument or frame detach. Missing sample = failure. Closure alone is never proof; cancellation/navigation/teardown after the rejection (however late it is delivered) cannot excuse a live invalid id.",
   "reproduction": {
     "real_chromium_tests": [
       "same-document navigation cancelling a held request settles healthy",
-      "live invalid id is not excused by context close before settle",
-      "live invalid id is not excused by unrelated navigation before settle",
       "queued cancellation lifecycle arriving after Invalid InterceptionId rejection is still proven",
-      "navigation after a live invalid id stays actionable when the clock sample is dispatched late"
+      "live invalid id then same-request navigation stays actionable when its real rejection is delivered late",
+      "live invalid id is not excused by context close before settle",
+      "live invalid id is not excused by unrelated navigation before settle"
     ],
     "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium",
     "prior_head_0b0133b5": "the 3 new tests FAIL (same-document: Invalid InterceptionId reported; close/navigation-before-settle: healthy returned wrongly)",
-    "fixed_head": "full spec 20 tests x3 repeats = 60/60 passed; the new late-clock-sample negative fails on prior head 180b212 (1/1) and passes fixed",
-    "ordering_note": "the 80ms listener hold in the queued test is an imposed schedule, not observed hosted ordering; hosted causation remains unproven. The per-request CDP lifecycle is not logged as a sanitized sequence; the test receipt only records rejection/order markers."
+    "fixed_head": "full spec 20 tests x3 repeats = 60/60 passed (exit 0)",
+    "ordering_note": "Orderings are local imposed schedules with real Chromium events (nothing synthesized); hosted causation remains unproven. Hosted Management/aggregate remain FAIL; this is not hosted acceptance.",
+    "prior_head_184c08abb": "the delayed-real-rejection negative FAILS (healthy returned wrongly, errors=0); sample was taken after catch entry",
+    "exact_82ff_helper": "queued-lifecycle, same-document positive and delayed-rejection test FAIL (3 failed) with the unchanged 82ff helper: Invalid InterceptionId reported for a cancelled request",
+    "commands": [
+      "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --repeat-each=3",
+      "npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts"
+    ],
+    "lifecycle_sequence": {
+      "queued_positive": [
+        "request paused (held, networkId bound)",
+        "document navigation cancels request: Network.loadingFailed canceled, ERR_ABORTED, ts T_c",
+        "Page.frameNavigated with new loaderId",
+        "ordered pre-command sample ts T_s >= T_c",
+        "Fetch.continueRequest rejected Invalid InterceptionId",
+        "helper: T_c <= T_s and navigation proven => healthy"
+      ],
+      "live_invalid_then_navigation_negative": [
+        "request paused",
+        "ordered pre-command sample ts T_s",
+        "Fetch.continueRequest rejected Invalid InterceptionId while request live",
+        "navigation cancels same request: ts T_c > T_s",
+        "original rejection delivered late to helper",
+        "helper: T_c > T_s => transport failure retained"
+      ]
+    }
   },
   "negatives_preserved": [
     "live abort then navigation (also with late lifecycle)",
