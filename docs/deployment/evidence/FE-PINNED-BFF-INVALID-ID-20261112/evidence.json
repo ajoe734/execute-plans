@@ -44,5 +44,20 @@
     },
     "old_trace": "loadingFailed(canceled, same network id) -> frameDetached -> Performance sample -> Fetch.continueRequest Invalid InterceptionId; assertHealthy retained GET /held net::ERR_ABORTED and CDP InvalidId",
     "hosted": "No hosted acceptance claimed."
+  },
+  "observed_abort_then_detach_addendum": {
+    "review_finding": "P1 on 80d28fb8: detach arriving before the sample marked a previously observed live ERR_ABORTED failure as detach-caused, and requestfailed excused it via isDetached() after its 25ms delay; real Chromium repro (fixture review observed live abort then immediate detach, x3) left transport.errors=[] and assertHealthy passing.",
+    "measured_event_order": "Detach teardown: Page.frameSubtreeWillBeDetached -> Network.loadingFailed(canceled) -> Page.frameDetached. Live JS abort then later removal: Network.loadingFailed(canceled) -> frameSubtreeWillBeDetached -> frameDetached. Hosted ordering remains unmeasured (unknown).",
+    "fix": "Detach evidence is now causal: a cancellation is detach-caused only if Page.frameSubtreeWillBeDetached for the request's frame (or an ancestor) preceded its Network.loadingFailed. The arrival-order `sampled` gate and the post-delay req.frame().isDetached() excuse are removed; requestfailed consumes a per-url detach-cancel record instead. Same-id canceledAt<=pre-command-sample rule, navigation/same-document proofs and no-global-swallow unchanged.",
+    "new_test": "observed live abort then immediate iframe removal before sample stays actionable (x3, real Chromium; asserts ERR_ABORTED retained and Invalid InterceptionId thrown)",
+    "exit_codes": {
+      "reviewer_fixture_before_fix_80d28fb8": 1,
+      "reviewer_fixture_after_fix_repeat3": 0,
+      "full_browser_spec_25_passed": 0,
+      "vitest_auth_aggregate_46": 0,
+      "eslint_changed": 0,
+      "git_diff_check": 0
+    },
+    "hosted": "No hosted acceptance, credentials or deploy activity."
   }
 }

@@ -475,6 +475,25 @@ test("live abort then later iframe removal stays actionable", async () => {
   } finally { c.release(); await c.context.close(); await c.transport.settle(); }
 });
 
+test("observed live abort then immediate iframe removal before sample stays actionable", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception();
+    try {
+      const frame = await frameFetch(c, true);
+      const failed = c.page.waitForEvent("requestfailed", { predicate: (req) => req.url() === `${bffOrigin}/held` });
+      await frame.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
+      const req = await failed;
+      await expect.poll(() => c.receipt.canceled).toBe(true);
+      expect(req.frame().isDetached()).toBe(false);
+      await c.page.evaluate(() => document.querySelector("iframe")!.remove());
+      c.release();
+      await c.transport.settle();
+      expect(c.transport.errors.some((e) => e.includes("ERR_ABORTED"))).toBe(true);
+      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
 test("exact 82ff queued cancellation fails; maintained transport proves the obsolete request", async () => {
   const source = execFileSync("git", ["show", `${INTERCEPTION_BASE}:scripts/lib/pinned-browser-bff-bearer.mjs`], { encoding: "utf8" });
   const predecessor = vm.runInNewContext(source.replaceAll("export ", "") + "\ninstallPinnedBffBearer", { URL, process, setTimeout });

@@ -57,9 +57,12 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     if (pages.has(page)) return pages.get(page);
     const ready = (async () => {
       const session = await context.newCDPSession(page);
-      const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set();
+      const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set(), parents = new Map(), detaching = new Set();
+      // Cancellations Chromium issued while the frame subtree was already being torn down.
+      const detachCancelled = new Map();
+      const underDetach = (frameId) => { for (let id = frameId, hops = 0; id && hops < 64; id = parents.get(id), hops++) if (detaching.has(id)) return true; return false; };
       session.on("Network.requestWillBeSent", (event) => {
-        const bound = { frameId: event.frameId, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0 };
+        const bound = { frameId: event.frameId, url: event.request?.url, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0 };
         const early = network.get(event.requestId);
         // Chromium may deliver Fetch.requestPaused before Network.requestWillBeSent
         // for the same network id. Bind the later event to the already-paused
@@ -79,6 +82,11 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // Arrival order: a same-document navigation observed before the cancel.
           request.sameDocument = (documentNavigations.get(request.frameId) || 0) > request.documentNavigations;
           request.navigationLoader = navigating.get(request.frameId);
+          // Causal, not arrival-order: Chromium announces the teardown
+          // (frameSubtreeWillBeDetached) before it cancels the frame's requests.
+          // A cancellation delivered before that announcement was live and stays one.
+          request.detached = underDetach(request.frameId);
+          if (request.detached && request.url) detachCancelled.set(request.url, (detachCancelled.get(request.url) || 0) + 1);
         }
         network.delete(requestId);
       });
@@ -86,12 +94,11 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         loaders.set(frame.id, frame.loaderId);
         navigating.delete(frame.id);
       });
+      session.on("Page.frameAttached", ({ frameId, parentFrameId }) => parents.set(frameId, parentFrameId));
+      session.on("Page.frameSubtreeWillBeDetached", ({ frameId }) => detaching.add(frameId));
       session.on("Page.frameDetached", ({ frameId }) => {
-        // Chromium reports the detach-induced cancellation (loadingFailed) before
-        // frameDetached, so `failed` cannot gate it. Detach is evidence only when
-        // observed before the pre-command sample; one seen after the command was
-        // already dispatched cannot excuse a live failure.
-        for (const request of interceptions) if (request.frameId === frameId && !request.sampled && !request.closed) request.detached = true;
+        detaching.delete(frameId);
+        parents.delete(frameId);
         loaders.delete(frameId);
         navigating.delete(frameId);
       });
@@ -106,11 +113,13 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       page.on("request", (req) => requests.set(req, generations.get(req.frame()) || 0));
       page.on("requestfailed", (req) => {
         if (originOf(req.url()) !== bffOrigin) return;
-        // Chromium cancels open SSE on navigation. Verify the frame changed or
-        // the page/context closed; an arbitrary live transport failure must fail.
+        // Chromium cancels open SSE on navigation. Verify the frame changed, the
+        // frame teardown preceded the cancellation, or the page/context closed; an arbitrary live transport failure must fail.
         track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
           const failure = req.failure()?.errorText || "request failed";
-          if (failure === "net::ERR_ABORTED" && (closed || page.isClosed() || req.frame().isDetached() ||
+          const cancelledByDetach = detachCancelled.get(req.url()) > 0;
+          if (cancelledByDetach) detachCancelled.set(req.url(), detachCancelled.get(req.url()) - 1);
+          if (failure === "net::ERR_ABORTED" && (closed || page.isClosed() || cancelledByDetach ||
               requests.get(req) !== (generations.get(req.frame()) || 0))) return;
           record(failure, page, `${req.method()} ${new URL(req.url()).pathname}`);
         }));
@@ -131,8 +140,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // Timestamp therefore predates the actual command rejection, regardless
         // of command scheduling or delayed delivery of the rejection to Node.
         const before = request ? session.send("Performance.getMetrics").then(
-          ({ metrics }) => { request.sampled = true; return metrics.find((metric) => metric.name === "Timestamp")?.value; },
-          () => { request.sampled = true; return undefined; }) : undefined;
+          ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
         const continueRequest = (rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
