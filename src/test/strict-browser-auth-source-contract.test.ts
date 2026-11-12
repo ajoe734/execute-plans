@@ -102,7 +102,7 @@ describe("pinned native transport error propagation", () => {
     session.emit("Fetch.requestPaused", { requestId: "one", request: { url: "https://api.dev.mvl-cap.tw/bff/events/stream" } });
     await transport.settle();
     expect(() => transport.assertHealthy()).toThrow(/CDP continueRequest.*socket failure \[REDACTED\]/);
-    expect(calls).toEqual(["Network.enable", "Page.enable", "Fetch.enable", "Fetch.continueRequest", "Fetch.failRequest"]);
+    expect(calls).toEqual(["Network.enable", "Page.enable", "Performance.enable", "Fetch.enable", "Fetch.continueRequest", "Fetch.failRequest"]);
     expect(transport.errors.join()).not.toContain("secret-test-token");
   });
 });
