@@ -63,14 +63,25 @@ const IDENTITY_HEADERS = ["x-request-id", "x-correlation-id", "x-trace-id", "ser
 export const sha256 = (text) => crypto.createHash("sha256").update(text).digest("hex");
 
 export function makeRedactor(secrets) {
-  const list = secrets.filter((s) => typeof s === "string" && s.length > 0);
-  return (value) => {
+  const base = secrets.filter((s) => typeof s === "string" && s.length > 0);
+  // Also cover the JSON-escaped representation (quote/backslash/control chars).
+  const list = [...new Set([...base, ...base.map((s) => JSON.stringify(s).slice(1, -1))])].filter(Boolean);
+  const redact = (value) => {
     let text = String(value);
     for (const secret of list) text = text.split(secret).join("[REDACTED]");
     return text
       .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[JWT REDACTED]")
       .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [REDACTED]");
   };
+  const deep = (v) => {
+    if (typeof v === "string") return redact(v);
+    if (Array.isArray(v)) return v.map(deep);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [redact(k), deep(x)]));
+    return v;
+  };
+  // Sanitize structured string values BEFORE serialization, then the text again as a backstop.
+  redact.json = (value, space) => redact(JSON.stringify(deep(value), null, space));
+  return redact;
 }
 
 /** Nearest-rank percentile: sorted[ceil(p*n)-1]. */
@@ -330,7 +341,7 @@ async function loadChromium() {
   throw new Error("Playwright package not resolvable (install playwright or @playwright/test)");
 }
 
-function observe(ctx, page, row, API, { onBlockedWrite }) {
+export function observe(ctx, page, row, API, { onBlockedWrite }) {
   const requestStarts = new WeakMap();
   const state = { loginAcceptedAt: Infinity, observeHttp: true, firstFleetStarted: undefined, firstFleetUrl: undefined };
   page.on("request", (r) => {
@@ -361,10 +372,39 @@ function observe(ctx, page, row, API, { onBlockedWrite }) {
     (expected401 ? row.prelogin_expected_401 : row.http_api_errors).push(witness);
   });
   page.on("pageerror", (e) => row.page_errors.push(row.__redact(e.message)));
+  // net::ERR_ABORTED is ignorable ONLY with real navigation/frame/page-close evidence.
+  // Unproven (e.g. a live AbortController.abort() on a still-present page) stays a failure.
+  let navCount = 0;
+  const navAtStart = new WeakMap();
+  const unproven = [];
+  const settle = () => {
+    const now = Date.now();
+    for (const { e, at } of unproven.splice(0)) {
+      if (now - at > 250) continue; // only the event ordering race, not a later unrelated navigation
+      const i = row.failed_api_requests.indexOf(e);
+      if (i >= 0) row.failed_api_requests.splice(i, 1);
+      row.cancelled_api_requests.push({ ...e, evidence: "navigation_or_close" });
+    }
+  };
+  page.on("request", (r) => navAtStart.set(r, navCount));
+  page.on("framenavigated", (f) => {
+    if (f.parentFrame && f.parentFrame()) return;
+    navCount++;
+    settle();
+  });
+  page.on("close", () => { navCount++; settle(); });
   page.on("requestfailed", (r) => {
     if (!r.url().startsWith(API + "/")) return;
     const e = { url: r.url(), method: r.method(), error: r.failure()?.errorText };
-    (e.error === "net::ERR_ABORTED" ? row.cancelled_api_requests : row.failed_api_requests).push(e);
+    if (e.error !== "net::ERR_ABORTED") return void row.failed_api_requests.push(e);
+    let detached = false;
+    try { detached = Boolean(r.frame?.()?.isDetached?.()); } catch { /* frame gone */ }
+    if (detached || page.isClosed?.() || navCount > (navAtStart.get(r) ?? navCount)) {
+      row.cancelled_api_requests.push({ ...e, evidence: "navigation_or_close" });
+    } else {
+      row.failed_api_requests.push(e);
+      unproven.push({ e, at: Date.now() }); // may be reclassified if the navigation event arrives afterwards
+    }
   });
   return { state, install: () => ctx.route(API + "/**", async (route) => {
     const req = route.request();
@@ -397,7 +437,7 @@ export async function run(input, deps = {}) {
   fs.mkdirSync(deps.outDir, { recursive: true, mode: 0o700 });
   const dir = fs.mkdtempSync(path.join(deps.outDir, "paired-readonly-"));
   fs.chmodSync(dir, 0o700);
-  const save = (name, data) => fs.writeFileSync(path.join(dir, name), redact(JSON.stringify(data, null, 2)) + "\n", { mode: 0o600 });
+  const save = (name, data) => fs.writeFileSync(path.join(dir, name), redact.json(data, 2) + "\n", { mode: 0o600 });
 
   const out = {
     started_at: new Date().toISOString(),
@@ -748,7 +788,7 @@ async function main() {
   try {
     const { out, dir } = await run(input, { outDir });
     process.stdout.write(
-      redact(JSON.stringify({ file: path.join(dir, "result.json"), pass: out.pass, verdict: out.verdict, errors: out.errors, role_errors: Object.fromEntries(ROLE_ORDER.map((n) => [n, out.profiles[n]?.errors])), strategy_errors: out.strategy.session?.errors })) + "\n",
+      redact.json({ file: path.join(dir, "result.json"), pass: out.pass, verdict: out.verdict, errors: out.errors, role_errors: Object.fromEntries(ROLE_ORDER.map((n) => [n, out.profiles[n]?.errors])), strategy_errors: out.strategy.session?.errors }) + "\n",
     );
     if (!out.pass) process.exitCode = 1;
   } catch (e) {
