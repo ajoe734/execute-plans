@@ -116,13 +116,12 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           clean.push(["authorization", bearer]);
           if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
-        // Same-tick, ordered ahead of the command on the one CDP connection: the
-        // browser handles this sample before the continueRequest, so its Timestamp
-        // is a lower bound of the actual command rejection that is independent of
-        // how late the rejection is delivered to this process.
+        // Await the browser's sample before dispatching continueRequest. Its
+        // Timestamp therefore predates the actual command rejection, regardless
+        // of command scheduling or delayed delivery of the rejection to Node.
         const before = request ? session.send("Performance.getMetrics").then(
           ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
-        track(session.send("Fetch.continueRequest", { requestId: event.requestId,
+        track(Promise.resolve(before).then((rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
           // The network id binds Chromium's cancellation to this interception,
@@ -135,7 +134,6 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // is delivered. Closure alone never proves anything afterwards.
           const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
           if (invalidId && request) {
-            const rejectedAt = await before;
             const proven = () => request.canceled && request.canceledAt <= rejectedAt && (request.detached || request.sameDocument ||
               (request.loaderId && request.navigationLoader && request.loaderId !== request.navigationLoader &&
                 loaders.get(request.frameId) === request.navigationLoader));
@@ -146,7 +144,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           }
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
-        }).finally(() => interceptions.delete(request)));
+        })).finally(() => interceptions.delete(request)));
       });
       await session.send("Network.enable");
       await session.send("Page.enable");
