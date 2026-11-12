@@ -497,6 +497,57 @@ for (const cause of ["live abort", "live abort then navigation", "invalid live p
   });
 }
 
+// Chromium can deliver Fetch.requestPaused before Network.requestWillBeSent for
+// the same network id. This only defers delivery (in order) of real Network/Page
+// events to the helper's listeners until the helper has seen the held request's
+// pause; no event or protocol result is synthesized.
+let pauseFirst = false;
+const pauseBeforeNetwork = ((context: import("@playwright/test").BrowserContext, opts: unknown) => {
+  const create = context.newCDPSession.bind(context);
+  context.newCDPSession = async (page) => {
+    const session = await create(page), on = session.on.bind(session);
+    const queue: (() => void)[] = [];
+    let released = false;
+    session.on = ((event: string, listener: (e: never) => void) => on(event as never, ((e: { request?: { url: string } }) => {
+      if (event === "Fetch.requestPaused") {
+        listener(e as never);
+        if (pauseFirst && !released && e.request?.url === `${bffOrigin}/held`) { released = true; queue.splice(0).forEach((f) => f()); }
+      } else if (pauseFirst && !released && /^(Network|Page)\./u.test(event)) queue.push(() => listener(e as never));
+      else listener(e as never);
+    }) as never)) as typeof session.on;
+    return session;
+  };
+  return installPinnedBffBearer(context, opts as Parameters<typeof installPinnedBffBearer>[1]);
+}) as typeof installPinnedBffBearer;
+
+test("a cancellation proven for a request whose pause preceded its Network.requestWillBeSent settles healthy", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception(pauseBeforeNetwork);
+    try {
+      pauseFirst = true;
+      await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await c.paused;
+      await c.page.goto(`${feOrigin}/live-detail`);
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+      c.transport.assertHealthy();
+    } finally { pauseFirst = false; c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("pause-before-network ordering still reports a live invalid protocol id", async () => {
+  const c = await controlledInterception(pauseBeforeNetwork, true);
+  try {
+    pauseFirst = true;
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    c.release();
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { pauseFirst = false; c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
 const BASE = "aa17cd4fc390e2c311ef50cbd5f7d2160faea775";
 for (const script of ["probe-route-load-baseline", "accept-management-hosted-production"]) {
   test(`exact aa17 ${script} buffers real HTTP200 SSE until context disposal or 30000ms`, async () => {

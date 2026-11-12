@@ -1,0 +1,26 @@
+{
+  "task": "FE-PINNED-BFF-INVALID-ID-20261112",
+  "scope": "Local source and real-Chromium reproduction only. No hosted, SSH, provider, credential, Root or business-write activity.",
+  "hosted_acceptance": {
+    "status": "NOT_RUN_BY_THIS_TASK",
+    "note": "Original Root 43215810588 / a7ff971 / 352cb886 FE gate reported Fetch.continueRequest Invalid InterceptionId; hosted causation is not proven here. Candidate is not claimed accepted; redeploy and QA remain with the original STRAT Human/Ops owner."
+  },
+  "local_root_cause": "Chromium can deliver Fetch.requestPaused before Network.requestWillBeSent for the same network id (observed locally for XHR /held, e.g. network id 7152.2, in the full-suite run). The helper looked up the network entry only at pause time, found none, and therefore had no lifecycle binding or pre-command sample; a later real navigation-cancelled Invalid InterceptionId could not be proven and was recorded as a transport failure. Historical hosted ordering is unmeasured (unknown).",
+  "fix": "On requestPaused without a network entry, register an unbound placeholder under the network id; the later requestWillBeSent binds frame/loader onto that same object. Proof rules are unchanged (same-id cancellation timestamped no later than the pre-command Performance sample plus document replacement, same-document navigation or detach). An unbound request never gains proof and still fails closed. No global swallow, no assertHealthy removal, no timeout/SLA change.",
+  "files": [
+    "scripts/lib/pinned-browser-bff-bearer.mjs",
+    "e2e/hosted-bff-streaming-transport.spec.ts"
+  ],
+  "unchanged_callers": ["scripts/accept-management-hosted-production.mjs", "scripts/probe-route-load-baseline.mjs"],
+  "reproduction": {
+    "command": "PLAYWRIGHT_BROWSERS_PATH=<chromium 1223 cache> PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts",
+    "before_fix": "Full suite intermittently failed 2 of 6 runs (queued-positive, same-document and exact-82ff tests) with Pinned BFF transport failures: Fetch.continueRequest Invalid InterceptionId; instrumented runs showed the failing requests had no network entry at pause time. New deterministic regression (real Chromium, real event delivery deferred in order, nothing synthesized) fails on the pre-fix helper (exit non-zero, timed out).",
+    "after_fix": "Full spec exit 0; 5 consecutive repeats of the 18 non-aa17 tests exit 0; new positive and live-invalid-id negative regressions pass; all PR989 positive/negative regressions retained."
+  },
+  "other_checks": {
+    "vitest": "strict-browser-auth-source-contract, aggregate-release-gate-auth-truth, aggregate-release-gate-hosted-auth: 46 passed",
+    "eslint_changed_files": 0,
+    "tsc_noEmit": 0
+  },
+  "trace_policy": "No tokens, auth headers, URLs with data or business content recorded."
+}

@@ -59,7 +59,13 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       const session = await context.newCDPSession(page);
       const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set();
       session.on("Network.requestWillBeSent", (event) => {
-        network.set(event.requestId, { frameId: event.frameId, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0 });
+        const bound = { frameId: event.frameId, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0 };
+        const early = network.get(event.requestId);
+        // Chromium may deliver Fetch.requestPaused before Network.requestWillBeSent
+        // for the same network id. Bind the later event to the already-paused
+        // interception (same object) instead of replacing it, so its lifecycle
+        // proof is not lost. A redirect hop (already bound) still starts fresh.
+        if (early?.unbound) { Object.assign(early, bound); delete early.unbound; } else network.set(event.requestId, bound);
         if (event.type === "Document") navigating.set(event.frameId, event.loaderId);
       });
       session.on("Network.loadingFinished", ({ requestId }) => network.delete(requestId));
@@ -106,7 +112,8 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         }));
       });
       session.on("Fetch.requestPaused", (event) => {
-        const request = network.get(event.networkId);
+        let request = network.get(event.networkId);
+        if (!request && event.networkId) { request = { unbound: true }; network.set(event.networkId, request); }
         if (request) interceptions.add(request);
         const { url, headers = {} } = event.request;
         const pinned = originOf(url) === bffOrigin;
