@@ -642,3 +642,31 @@ for (const script of ["probe-route-load-baseline", "accept-management-hosted-pro
     console.log(JSON.stringify({ base: BASE, script, actualHttp: 200, contentType: "text/event-stream", error: error.split("Call log:")[0].trim() }));
   });
 }
+
+test("same-URL frame detach credit cannot excuse a live abort in another frame", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await open();
+    try {
+      await c.page.evaluate((u) => { const f = document.createElement("iframe"); f.src = u; document.body.append(f); }, `${feOrigin}/frame`);
+      await expect.poll(() => c.page.frames().length).toBe(2);
+      await c.page.frames()[1].waitForLoadState();
+      const pendingUrl = `${bffOrigin}/pending`;
+      await c.page.evaluate((u) => {
+        const controller = new AbortController();
+        Object.assign(window, { cancelMain: () => controller.abort() });
+        void fetch(u, { signal: controller.signal }).catch(() => {});
+      }, pendingUrl);
+      await c.page.frames()[1].evaluate((u) => { void fetch(u).catch(() => {}); }, pendingUrl);
+      await expect.poll(() => bffSeen.filter((s) => s.path === "/pending").length).toBe(attempt * 2 + 2);
+      let failures = 0;
+      c.page.on("requestfailed", (req) => { if (req.url() === pendingUrl) failures++; });
+      const mainFailed = c.page.waitForEvent("requestfailed", { predicate: (req) => req.frame() === c.page.mainFrame() && req.url() === pendingUrl });
+      await c.page.evaluate(() => (window as unknown as { cancelMain: () => void }).cancelMain());
+      await mainFailed;
+      await c.page.evaluate(() => { const f = document.querySelector("iframe")!; f.contentWindow!.history.pushState({}, "", "/changed"); f.remove(); });
+      await expect.poll(() => failures).toBe(2);
+      await c.transport.settle();
+      expect(() => c.transport.assertHealthy()).toThrow(/ERR_ABORTED/);
+    } finally { await c.context.close(); await c.transport.settle(); }
+  }
+});

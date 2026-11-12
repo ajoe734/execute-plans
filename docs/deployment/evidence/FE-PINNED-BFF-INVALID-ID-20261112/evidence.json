@@ -59,5 +59,16 @@
       "git_diff_check": 0
     },
     "hosted": "No hosted acceptance, credentials or deploy activity."
+  },
+  "same_url_frame_credit_addendum": {
+    "root_cause": "detachCancelled credits were keyed only by URL; a live aborted request in the main frame (same URL as a request in a detached iframe) consumed the iframe's detach credit, and the iframe's own failure was excused by changed generation, hiding the live ERR_ABORTED.",
+    "fix": "requestfailed may consume a detach credit only when the failed Playwright request's own frame isDetached(); a live frame's abort never consumes another frame's credit.",
+    "new_test": "same-URL frame detach credit cannot excuse a live abort in another frame (negative, x3, real Chromium, nothing synthesized)",
+    "exit_codes": {
+      "old_helper_7b45ff5d3_new_negative": 1,
+      "fixed_helper_new_negative_repeat3": 0,
+      "full_spec": "25 passed; 1 failed: pre-existing 'exact aa17 accept-management-hosted-production' timing test, which loads historical aa17 source via git and does not exercise the modified helper"
+    },
+    "command": "npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --grep 'same-URL frame detach' --repeat-each=3"
   }
 }

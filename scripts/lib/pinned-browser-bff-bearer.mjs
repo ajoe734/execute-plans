@@ -117,7 +117,9 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // frame teardown preceded the cancellation, or the page/context closed; an arbitrary live transport failure must fail.
         track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
           const failure = req.failure()?.errorText || "request failed";
-          const cancelledByDetach = detachCancelled.get(req.url()) > 0;
+          // The failed request's own frame must be detached: a live frame's abort
+          // never consumes a credit earned by a different frame's teardown.
+          const cancelledByDetach = req.frame().isDetached() && detachCancelled.get(req.url()) > 0;
           if (cancelledByDetach) detachCancelled.set(req.url(), detachCancelled.get(req.url()) - 1);
           if (failure === "net::ERR_ABORTED" && (closed || page.isClosed() || cancelledByDetach ||
               requests.get(req) !== (generations.get(req.frame()) || 0))) return;
