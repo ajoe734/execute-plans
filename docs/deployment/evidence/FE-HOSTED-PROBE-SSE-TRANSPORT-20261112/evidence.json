@@ -1,44 +1,143 @@
 {
   "task": "FE-HOSTED-PROBE-SSE-TRANSPORT-20261112",
-  "baseHead": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
-  "scope": "source-only local transport regression; NOT hosted product acceptance, no provider/VM/credential/workflow/service action",
-  "rootCause": "Both probes awaited route.fetch (buffers the full body) for a never-ending HTTP 200 text/event-stream response: one rejects on context disposal, the other times out (30000ms in the probe).",
-  "fix": {
-    "sharedTransport": "scripts/lib/pinned-browser-bff-bearer.mjs (dependency-free; replaces the duplicated helpers in both probes; no node http/https)",
-    "finiteReads": "unchanged: route.fetch maxRedirects:0 + fulfill",
-    "sse": "GET + Accept text/event-stream: route.fallback() so the browser streams natively; a per-page CDP Fetch guard (context.newCDPSession) adds the bearer to that pinned-BFF request only and strips Authorization/x-tenant-id from any request to another origin (replayed redirect). Decided per actual request, so a response that changes between GETs cannot bypass it. A page without a guard => SSE aborted, no credential.",
-    "errors": "install returns {errors, assertHealthy}; only closed-target errors with the page/context verifiably closed are ignored; others abort that request and are recorded. Route-load sets the probe error; the acceptance probe throws before continuing."
+  "owner": "Codex",
+  "reviewer": "Claude",
+  "base_head": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
+  "scope": "Source-only repair and isolated real-browser transport tests. No hosted acceptance, login, provider, VM, workflow dispatch, runtime change, write, release or rollback.",
+  "validation_head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+  "delivery_binding": "This manifest-only final commit preserves the source/test blobs below. The final delivery head must be frozen by governed handoff only after authorized publication; independent review/CI/native integration remain required.",
+  "validated_blobs": {
+    "e2e/hosted-bff-streaming-transport.spec.ts": "4fe21cc624afcce546ae1ae758480ffc9028db21",
+    "scripts/accept-management-hosted-production.mjs": "bc09051973567e43227c3adbd6a7c84667f3ba67",
+    "scripts/lib/pinned-browser-bff-bearer.mjs": "8cb192a7371bafc529b7452fbe14182fb553ff6f",
+    "scripts/probe-route-load-baseline.mjs": "4c5045694b5e84e4665828f9cada8e9d19cf3883",
+    "src/test/aggregate-release-gate-auth-truth.test.ts": "3340c60f8fca395b836803ab50bb4b5797e5f805",
+    "src/test/aggregate-release-gate-hosted-auth.test.ts": "7826ba65374747acc2b3860f9a9633e060cdaba5",
+    "src/test/strict-browser-auth-source-contract.test.ts": "f7bb35f3394f50e1da737259ce2e7879bb10f4c0"
   },
-  "findingDuringWork": "Playwright route.continue({headers}) replays headers on redirects and never re-routes the redirected request (coreBundle _alreadyContinuedParams). The prior header-probe + continue design was reviewed REJECT: two separate GETs, the second can redirect (reproduced by reviewer: foreign origin got the bearer).",
-  "tests": [
+  "primary_receipt": {
+    "status": "READ by this worker before implementation",
+    "path": "/tmp/pantheon-compat-residual-20261111/root431537-primary-sse-failure-receipt.json",
+    "sha256": "638b64e198bc213198728dd5b619c0870b4393eee5b023e2d634571ff4e39389",
+    "github_job": "https://github.com/ajoe734/execute-plans/actions/runs/43157389135/job/130980377601",
+    "root_run": 43153774339,
+    "child_run": 43157389135,
+    "job": 130980377601,
+    "frontend": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
+    "backend": "8999306d1cc30e3fa36b09ee7cdccb1c5431aa52",
+    "actual_failures": [
+      "route-load: route.fetch: Request context disposed. after HTTP200 text/event-stream, tenant-dev",
+      "management acceptance: route.fetch: Timeout 30000ms exceeded. after HTTP200 text/event-stream, tenant-dev",
+      "compose-release-load-gate: missing downstream manifest; critical aggregate FAIL, 3 missing/failed checks"
+    ],
+    "interpretation": "Authenticated streaming transport buffered, not missing login/MFA. continue-on-error step success and separate F12 owner readback do not convert these failures to PASS."
+  },
+  "read_only_contract_inputs": {
+    "/tmp/pantheon-goal-resume-20261111/goal0533-existing-BFF-SSE-authentication-contract.json": "6a9a6e07786017b56a94b98551f1bc2bdff6687efb8547e4f9cc3d0ec38def2c",
+    "/tmp/pantheon-goal-resume-20261111/goal0533-official-CDP-continueRequest-header-redirect-contract.json": "faa99159049f4eb80c461a74db9cf68e3cae3020f0348b303850966962278576"
+  },
+  "exact_base_reproduction": {
+    "method": "git show retrieves both exact aa17 scripts. Existing installPinnedBffBearer and origin validation are executed verbatim using node:vm in e2e/hosted-bff-streaming-transport.spec.ts. Real Chromium requests genuine local HTTPS HTTP200 text/event-stream, with synthetic bearer. The server writes an SSE event and leaves the body open until teardown. No mocked/aborted stream used to obtain readiness.",
+    "route_load_observation": "No event reaches browser while route.fetch buffers. Disposing context.request rejects route.fetch: Target page, context or browser has been closed. This local Playwright version reports the teardown differently from the primary receipt (Request context disposed.); both are retained distinctly.",
+    "management_observation": "No event reaches browser; route.fetch rejects Timeout 30000ms exceeded. after the full 30000ms, not a shortened timeout.",
+    "harness_correction": "Set context default timeout to 30000ms for original helper: Playwright Test action timeout otherwise overrides the standalone default. Baseline endpoint sends one chunk without heartbeats, leaving the body open.",
+    "result": "2 expected old-transport failures reproduced; this is local source reproduction, not a rerun of the actual hosted job."
+  },
+  "repair": {
+    "implementation": "One dependency-free helper using native Chromium CDP Fetch interception for finite and SSE requests. Removes the preflight GET, route.fetch/fulfill/continue transports and duplicated caller helpers.",
+    "credentials": "Fetch.continueRequest header overrides apply to one actual request only. Exact pinned HTTPS BFF origin includes port. Each redirect is intercepted independently; foreign origin never receives this bearer. Same-origin redirect gets pinned auth. Browser storage, URL tokens and cookie-based substitutes are not used.",
+    "registration": "Existing pages are awaited at installation; page events attach future pages, and both callers await transport.attachPage before any protected request.",
+    "tenant": "Remove all frontend X-Tenant-Id case variants on pinned requests; preserve authenticated default or apply the same explicit override to finite and streaming requests.",
+    "errors": "CDP failure is recorded and the paused request failed; both callers settle pending observations and fail health checks. Network failures include SSE, even though route-load excludes SSE lifecycle from readiness. Ignore ERR_ABORTED only after verified page/context closure or frame navigation; ignore closed/disposed/detached protocol errors only if target really closed. Error text redacts the synthetic or supplied token.",
+    "boundaries": "Same FE/local-candidate origin validation, content readiness milestones, timeouts, samples, latency limits, strict auth and aggregate gates. Pure bearer normalizer and evidence redactor unchanged; no new package/proxy/service/framework."
+  },
+  "validation": [
     {
-      "cmd": "playwright test e2e/hosted-bff-streaming-transport.spec.ts (temporary root config, real Chromium + local HTTPS)",
-      "result": "6 passed: SSE open + finite JSON + navigation/closure with no unhandled rejection; cross-origin redirect (finite+SSE); first-200-then-302 flip; unrelated failure surfaced/teardown quiet; tenant consistency; fail-closed install"
+      "command": "timeout 100s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=list --output=/tmp/fe-sse-repo-config-results",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0,
+      "result": "10/10 passed in 35.2s: 8 corrected browser cases plus 2 exact-base failure reproductions. The FE URL disables the repo webserver; all actual requests use the local servers created by the test.",
+      "log": "/tmp/fe-sse-browser-repo-config.log"
     },
     {
-      "cmd": "mutation: guard adds bearer to every origin",
-      "result": "redirect and flip tests FAIL (leak detected), others pass"
+      "command": "timeout 90s npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-hard-gates.test.ts --maxWorkers=2",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0,
+      "result": "4 files; 68/68 passed; includes failed actual CDP continue/failRequest and token-redaction counterexample.",
+      "log": "/tmp/fe-sse-vitest-typed.log"
     },
     {
-      "cmd": "vitest run strict-browser-auth-source-contract + aggregate-release-gate-auth-truth + aggregate-release-gate-hosted-auth",
-      "result": "3 files, 45 passed"
+      "command": "timeout 180s npm run typecheck",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0,
+      "log": "/tmp/fe-sse-typecheck-final.log"
     },
     {
-      "cmd": "npm run typecheck; eslint on spec + contract test; node --check on both probes and shared lib",
-      "result": "clean"
+      "command": "npx eslint e2e/hosted-bff-streaming-transport.spec.ts src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0,
+      "log": "/tmp/fe-sse-eslint-typed.log"
+    },
+    {
+      "command": "node --check scripts/lib/pinned-browser-bff-bearer.mjs; node --check scripts/probe-route-load-baseline.mjs; node --check scripts/accept-management-hosted-production.mjs; git diff --check",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0
+    },
+    {
+      "command": "timeout 150s env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build -- --outDir /tmp/fe-sse-strict-dist-final",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0,
+      "result": "Built in 47.80s; existing chunk-size warning.",
+      "log": "/tmp/fe-sse-build-final.log"
+    },
+    {
+      "command": "timeout 45s node scripts/release-candidate.mjs digest --dist-dir /tmp/fe-sse-strict-dist-final",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0,
+      "digest": "24541542d199292bb44528b086399b4a0801fbd7d9fe0944bf03fd5363ab7955"
+    },
+    {
+      "command": "python3 scripts/git/check_commit_trailers.py --range aa17cd4fc390e2c311ef50cbd5f7d2160faea775..HEAD --skip-merge",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0
+    },
+    {
+      "command": "python3 \"$PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py\" --base aa17cd4fc390e2c311ef50cbd5f7d2160faea775 --head HEAD",
+      "head": "0c1dc43767fb1e2d53f7a444e1a7009201f00d8d",
+      "exit": 0,
+      "production": {
+        "added": 115,
+        "deleted": 118,
+        "net": -3
+      }
     }
   ],
-  "notDone": "No hosted run, receipt reading, release, rollback or all12 completion; these stay with the original publisher. Local transport regression is not hosted product acceptance.",
-  "scopeGrant": "aggregate-release-gate-auth-truth and -hosted-auth tests admitted; adapted to read the shared lib",
-  "receiptProvenance": {
-    "status": "NOT READ",
-    "detail": "The sanitized primary receipt for child43157389135/job130980377601 was not available to this worker; the hosted failure itself is taken from the task brief and is not independently confirmed here. Only the source-level cause is reproduced."
-  },
-  "exactBaseReproduction": {
-    "base": "aa17cd4fc390e2c311ef50cbd5f7d2160faea775",
-    "method": "local HTTP server returning 200 text/event-stream that never ends; base route logic (route.fetch headers+authorization, maxRedirects:0, then fulfill) in real Chromium via an EventSource",
-    "result": "route.fetch rejected after 3010ms: Timeout 3000ms exceeded (timeout shortened from the probe's 30000ms)",
-    "scope": "local, not the hosted receipt"
-  },
-  "validatedHead": "see PR #987 head after rewrite; commit trailers restored (LLM-Agent/Task-ID/Reviewer), subjects <=72"
+  "corrected_head_browser_cases": [
+    "One authenticated GET delivers open SSE while finite JSON readiness, navigation and closure complete without unhandled rejection, including a pending finite response body",
+    "Finite and SSE foreign-origin redirects disclose no bearer (same host, different port)",
+    "Changing response: first authenticated GET is SSE200, second GET is foreign302; exactly one GET per attempt and foreign receives no bearer",
+    "Finite socket reset propagates; verified teardown remains quiet",
+    "Authenticated default and explicit tenant selection are consistent for finite and SSE",
+    "Missing token, foreign BFF target, foreign FE target fail closed before requests",
+    "Same-origin302 preserves auth/tenant and delivers hello,tick,tick on one destination GET",
+    "Actual SSE socket reset propagates to health check"
+  ],
+  "earlier_nonpasses": [
+    "Initial harness: 7/10 browser passed; disposal assertion mismatched the local error and default timeout/body heartbeat prevented the intended baseline timeout. Corrected harness then all 10 passed, including the full 30000ms failure.",
+    "First added SSE network-error assertion ran before the deferred network observation; regression now waits for the observed failure, then settles and asserts health.",
+    "Initial 90s typecheck batch timed out (exit124), never counted passed. Next typecheck found tuple inference and unused ts-expect-error (exit2); both corrected; final typecheck exit0.",
+    "First lint found prefer-const in the baseline harness; corrected and final lint exit0."
+  ],
+  "publication": {
+    "pr": "https://github.com/ajoe734/execute-plans/pull/987",
+    "base": "dev",
+    "branch": "task/FE-HOSTED-PROBE-SSE-TRANSPORT-20261112",
+    "remote_head_observed": "682c69a559b7ff3b1e406ab556fdc5eb8e0f85c7",
+    "local_history": "Recovery began with already rewritten local dd6e8250fdcb17186980552dc18edb60b2288763, then task-scoped Codex anchor commits. Local series passes commit trailers. Rejected original remote commits are not ancestors, so a normal fast-forward push cannot publish this repaired history.",
+    "dry_run_command": "git push --dry-run origin HEAD:refs/heads/task/FE-HOSTED-PROBE-SSE-TRANSPORT-20261112",
+    "dry_run_exit": 1,
+    "dry_run_result": "non-fast-forward rejected; no remote update",
+    "hold": "Explicit authorization for a narrowly leased history-repair push is required by task-closeout-finalization.md. No force push attempted. Remote required CI remains failed on old 682c69a5; new-head CI, Claude review, native integration and owner done are pending.",
+    "hosted_status": "NOT RUN; no claim of deployment update, new hosted acceptance or all12 completion. Sole original publisher owns those later proofs."
+  }
 }
