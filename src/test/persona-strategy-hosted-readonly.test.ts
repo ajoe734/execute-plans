@@ -12,7 +12,6 @@ import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const cliUrl = pathToFileURL(path.resolve(process.cwd(), "scripts/accept-persona-strategy-hosted-readonly.mjs")).href;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let cli: any;
 beforeAll(async () => {
   cli = await import(/* @vite-ignore */ cliUrl);
@@ -124,7 +123,7 @@ function pageHtml(url: URL, loggedIn: boolean, opts: Opts) {
 <button onclick="fetch('/bff/me').catch(()=>{});fetch('/bff/auth/dev-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({client_id:document.getElementById('dev-account').value,client_secret:document.getElementById('dev-password').value})}).then(r=>r.ok&&location.reload())">Sign in</button>`;
   }
   const p = url.pathname;
-  const leak = opts.leakSecret ? `throw new Error('leak ${SECRETS.TEST_ADMIN}');` : "";
+  const leak = opts.leakSecret ? `setTimeout(()=>{throw new Error('leak ${SECRETS.TEST_ADMIN}')},0);` : "";
   const table = (id: string, readUrl: string, title: string, extra = "") => `<h1>${title}</h1>${extra}<div data-testid="${id}"><table><tbody></tbody></table></div>
 <script>${leak}fetch('${readUrl}',{credentials:'include'}).then(r=>r.json()).then(j=>{const rows=(j.data.items||[]);document.querySelector('tbody').innerHTML=rows.map(x=>'<tr><td>'+(x.connector_id||x.persona_id||x.id)+'</td><td>cell</td></tr>').join('')||'<tr><td>none</td></tr>'});</script>`;
   if (p === "/management/persona-fleet") return table("persona-fleet-table-scroll", "/bff/management/persona-fleet?data=regular", "Persona Fleet");
@@ -320,7 +319,7 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     expect(changed.out.strategy.performance.fleet_browser_warm.pass).toBe(true); // measured checks stay independent of parity
 
     const reconciled = await execute({ mutate: true }, (i) => {
-      i.expected.reconciliations = [{ path: "/bff/strategies?page_size=20", pointer: "/data/items/0/note", owner: "strategy-owner", reason: "documented fixture reconciliation", after: "CHANGED" }] as never;
+      (i.expected as Record<string, unknown>).reconciliations = [{ path: "/bff/strategies?page_size=20", pointer: "/data/items/0/note", owner: "strategy-owner", reason: "documented fixture reconciliation", after: "CHANGED" }];
     });
     expect(reconciled.out.strategy.parity.exact_equal).toBe(false);
     expect(reconciled.out.strategy.parity.documented_reconciliations).toHaveLength(1);
