@@ -250,7 +250,7 @@ describe("hosted acceptance uses the same tenant for Node and browser reads", ()
         url: `https://api.dev.mvl-cap.tw${endpoint}`,
         headers: { "X-Tenant-Id": "stale-frontend-tenant", "x-tenant-id": "another-stale-tenant", accept: "application/json" },
       } });
-      const headers = new Headers(calls.at(-1)!.headers.map(({ name, value }) => [name, value]));
+      const headers = new Headers(calls.at(-1)!.headers.map(({ name, value }): [string, string] => [name, value]));
       expect(headers.get("x-tenant-id")).toBe(expectedHeader ?? null);
       expect(headers.get("authorization")).toBe(`Bearer ${token}`);
       expect(headers.get("accept")).toBe("application/json");

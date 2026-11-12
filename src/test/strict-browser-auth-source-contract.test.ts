@@ -89,7 +89,6 @@ describe("strict browser auth source contract", () => {
 describe("pinned native transport error propagation", () => {
   it("records a failed actual CDP continue, fails that request, and redacts the token", async () => {
     const { EventEmitter } = await import("node:events");
-    // @ts-expect-error dependency-free ESM helper
     const { installPinnedBffBearer } = await import("../../scripts/lib/pinned-browser-bff-bearer.mjs");
     const session = new EventEmitter();
     const calls: string[] = [];
