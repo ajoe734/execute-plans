@@ -75,11 +75,9 @@ const CLICK_WRITE_CTAS = argv["click-write-ctas"] === "true" || process.env.PANT
 const STRICT_SOURCE_SCAN = process.env.PANTHEON_ACCEPT_STRICT_SOURCE_SCAN === "1";
 const LOAD_GATE_ONLY = argv["load-gate-only"] === "true";
 
-// The hosted dev BFF's stub-auth allows only the `pantheon-dev` tenant (see
-// `/bff/me` -> tenant.allowed_ids). `e2e/helpers/auth.ts`'s DEFAULT_FE_TENANT_ID
-// ("tenant-dev") is a fixture-mock-only value for the CI-safe Playwright specs
-// and 403s against the real hosted BFF.
-const TENANT_ID = process.env.PANTHEON_TENANT_ID || "pantheon-dev";
+// Let the BFF select the authenticated tenant unless the caller explicitly
+// selects one. Apply that same selection to browser and Node read probes.
+const TENANT_ID = (process.env.PANTHEON_TENANT_ID || "").trim();
 const BEARER_TOKEN = normalizeOptionalBearerToken(
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || ""
 );
@@ -128,18 +126,24 @@ function pinnedTargetProblem({ feBase, bffBase, env = process.env }) {
 }
 
 /** Attach Authorization only to pinned-BFF requests; throws before auth on an unpinned target. */
-async function installPinnedBffBearer(context, { token, feBase, bffBase, env = process.env }) {
+async function installPinnedBffBearer(context, { token, feBase, bffBase, tenantId = "", env = process.env }) {
   const problem = pinnedTargetProblem({ feBase, bffBase, env });
   if (problem) throw new Error(`Refusing to release BFF credential: ${problem}`);
   const bffOrigin = originOf(bffBase);
   await context.route(`${bffOrigin}/**`, async (route) => {
     const request = route.request();
     if (originOf(request.url()) !== bffOrigin) return route.continue();
+    // Discard any frontend tenant header so both probe clients follow the
+    // authenticated default, or the same explicit override, on every BFF read.
+    const headers = Object.fromEntries(
+      Object.entries(request.headers()).filter(([name]) => name.toLowerCase() !== "x-tenant-id"),
+    );
+    if (tenantId) headers["x-tenant-id"] = tenantId;
     // route.continue({headers}) would replay the credential across redirects to
     // unpinned origins; fetch without following redirects and fulfill instead so
     // any redirect target is re-routed (and stays unauthenticated).
     const response = await route.fetch({
-      headers: { ...request.headers(), authorization: `Bearer ${token}` },
+      headers: { ...headers, authorization: `Bearer ${token}` },
       maxRedirects: 0,
     });
     return route.fulfill({ response });
@@ -380,7 +384,7 @@ function authHeaders(token, tenantId) {
   return {
     Accept: "application/json",
     Authorization: bearerAuthorization(token),
-    "X-Tenant-Id": tenantId,
+    ...(tenantId ? { "X-Tenant-Id": tenantId } : {}),
     "X-Request-Id": `mgmt-gap-006-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   };
 }
@@ -597,7 +601,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 
-  await installPinnedBffBearer(context, { token: BEARER_TOKEN, feBase: FE_BASE, bffBase: BFF_BASE });
+  await installPinnedBffBearer(context, { token: BEARER_TOKEN, feBase: FE_BASE, bffBase: BFF_BASE, tenantId: TENANT_ID });
 
   const page = await context.newPage();
   page.setDefaultTimeout(ROUTE_TIMEOUT_MS);

@@ -22,7 +22,7 @@
     "write proof and finite Loops/provider cases remain not-applicable/skipped; gate-before-switch, manifest admission and rollback untouched",
     "stale-host readback checks (gate 3/4, Gate 8 core evidence) remain advisory pre-switch; required authenticated probes no longer are"
   ],
-  "sourceTests": "npm run test -- src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/paired-release-workflow.test.ts src/test/e2e-auth-helper-session.test.ts src/test/aggregate-release-gate-hard-gates.test.ts: 6 files, 93/93 passed. Covers required failures, missing-auth, permitted skips, pinned bearer and sentinel redaction; the route-load criteria check is static, not a live 401 server run.",
+  "sourceTests": "npm run test -- src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/paired-release-workflow.test.ts src/test/e2e-auth-helper-session.test.ts src/test/aggregate-release-gate-hard-gates.test.ts: 6 files, 98/98 passed, exit 0 on 2026-11-12. Covers required failures, missing-auth, permitted skips, pinned bearer, sentinel redaction and same-tenant default/override behavior; the route-load criteria check is static, not a live 401 server run.",
   "reviewCorrection": {
     "rejectedHead": "690aa1698bcc1eb484a3afed3bed281c4d250190",
     "base": "acf3efaeb9141e1abd80375c9c2a357328c02c79",
@@ -49,6 +49,19 @@
     },
     "offlineRegression": "Loopback-only synthetic response cases exercise the same two-GET helper as the hosted test: pending-empty plus versioned decided/revoked data-array rows, empty owner data, invalid owner versions, 401 from either endpoint, and malformed/nonversioned pending rows. Offline cases cannot count as genuine hosted owner evidence.",
     "validation": "npm run test -- src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/paired-release-workflow.test.ts src/test/e2e-auth-helper-session.test.ts src/test/aggregate-release-gate-hard-gates.test.ts: 93/93 passed, exit 0. npx playwright test e2e/12-approvals.spec.ts --project=chromium --grep 'F12 lane boundary regressions' --reporter=list: 3/3 passed, exit 0 (loopback build, no hosted proof). git diff --check passed. Fresh exact-head remote CI and assigned Claude review remain required before native integration."
+  },
+  "tenantConsistencyCompletion": {
+    "sourceHeadBeforeCorrection": "58dae0cc245db1c9a6e5a7a65ccf208187a87dae",
+    "problem": "Hosted acceptance Node RBAC/live-ID reads forced pantheon-dev while browser bearer reads omitted tenant selection, producing different tenant contexts. The old stub-only/tenant-dev-403 comment was obsolete.",
+    "diagnosticReference": {
+      "path": "/tmp/pantheon-compat-residual-20261111/probe-tenant-readonly-result.json",
+      "recordedAt": "2026-11-12T01:12:25Z to 01:12:26Z",
+      "scope": "Human/Ops read-only diagnostic summarized in canonical task state; not rerun or treated as hosted acceptance by this source worker.",
+      "result": "Normal OP_A bearer /bff/me returned 200 with tenant-dev/operator without X-Tenant-Id; explicit pantheon-dev and tenant-dev each returned 200 selecting that tenant. Shell-summary returned 200 in all three cases. This describes existing tenant selection, not an auth-policy denial or bypass."
+    },
+    "correction": "Default Node and pinned-browser requests omit X-Tenant-Id and follow the authenticated server tenant. Existing explicit PANTHEON_TENANT_ID is trimmed and applied to both. Browser interception removes conflicting frontend tenant headers before applying that same selection. BFF auth policy, credential provenance, origin pins, redirect isolation, redaction, F12 owner requirements and deployment flow remain unchanged.",
+    "offlineRegression": "The maintained acceptance functions run with synthetic fetch/route boundaries. Cases cover unset and blank overrides plus explicit pantheon-dev and tenant-dev, assert all Node RBAC/live-ID headers, selected live IDs, matching browser headers despite stale mixed-case frontend headers, bearer attachment and maxRedirects=0. CLI wiring is checked separately. No real credentials or business writes.",
+    "validation": "Focused six-file Vitest batch 98/98 passed (exit 0); node --check scripts/accept-management-hosted-production.mjs and git diff --check passed (exit 0). Fresh exact-head CI, assigned Claude review and canonical integration pending at source commit preparation; prior green CI applies only to the prior head."
   },
   "notProven": "No real protected-run or hosted proof from this source-only worker; local operator/original publisher own the authenticated gate execution.",
   "authApplicability": "Trusted exact-dev dispatch receives a short-lived operator token via existing dev-login; untrusted PR/push/branch runs remain credential-free and required authenticated probes fail honestly as missing-auth. paired-release-workflow.test.ts now asserts exactly one secret reference in the ordinary job.",
