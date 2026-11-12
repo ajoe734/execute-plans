@@ -1,0 +1,59 @@
+{
+  "task": "FE-PINNED-BFF-CRAWL-LIFECYCLE-20261112",
+  "scope": "source-only; local real-Chromium regressions are NOT hosted acceptance",
+  "primary": {
+    "file": "goal-FE432924-exact-af2b-recurrent-CDP-failure-sanitized-primary-20261112.json",
+    "sha256": "eb1e3f96a689f44a28b5cbb34ea2f0015decffbad7b10868700661b7402e5cf6",
+    "exactFE": "af2b9e431b97ef4ea1665e316c857e344668dc5c",
+    "workflowRun": 43292468978,
+    "job": 131442013583,
+    "observed": "npm run accept:mgmt:hosted exit 1 at assertHealthy: Fetch.continueRequest Invalid InterceptionId during the 95-route + live-detail crawl; continue-on-error step conclusion success is not a pass",
+    "notClaimed": [
+      "missing auth",
+      "BFF HTTP 502",
+      "market freshness",
+      "provider quota"
+    ]
+  },
+  "diagnosis": {
+    "method": "Local real Chromium + real HTTPS BFF, 40-95 sequential page.goto(domcontentloaded) crawl with open EventSource and 80-200 overlapping BFF reads per page, run under CPU contention (12 busy loops on 12 cores). Same installPinnedBffBearer, both caller lifecycles (accept-management-hosted-production crawl; probe-route-load-baseline single page) share the helper.",
+    "reproduced": "Unmodified helper: every false failure was a navigation-cancelled BFF read (e.g. 1893 DIAGABORT records, all replacing=true, detached=false, sameDocument=false, no commit observed yet). Failures reported as net::ERR_ABORTED, not Invalid InterceptionId.",
+    "rootCause": "Three judgments of an already-causal navigation cancellation were decided by fixed timers instead of by the causal fact they wait for: (1) 25ms after loadingFailed for the replacing navigation's frameNavigated; (2) a 1000ms poll for the same commit in the Invalid InterceptionId proof; (3) 25ms after Playwright's requestfailed for the helper's own CDP loadingFailed record (native tally). Under load the helper's CDP session lags Playwright and the commit trails the cancellation, so timers expire first. Invalid InterceptionId uses interleaving (2); it was demonstrated deterministically (real Chromium events, delivery of Page.frameNavigated deferred in order), not reproduced from the hosted trace.",
+    "limit": "The hosted trace carries only the first five error strings and the exact hosted Invalid InterceptionId ordering is unproven. Locally, the unforced crawl under load reproduces the sibling false failure (navigation-cancelled reads reported ERR_ABORTED) with the unmodified helper; Invalid InterceptionId is covered only by imposed schedules. No hosted acceptance claim."
+  },
+  "change": {
+    "helper": "scripts/lib/pinned-browser-bff-bearer.mjs: one per-request causal reading (committed/excused) used by the abort, Playwright-fallback and Invalid InterceptionId paths; unresolved judgments wait for the commit/native record event and are settled by settle() (Performance.getMetrics drain + Page.getFrameTree), never by a timer; 'replacing navigation' now requires the navigation's Document request to precede the cancellation by Chromium timestamp (not arrival order); committed navigations only clear themselves and superseded ones from the in-flight list. Existing cancellation-fact bounded wait (1000ms, rejection-queued events) and canceledAt<=pre-command-sample rule unchanged.",
+    "unchanged": [
+      "live abort/invalid id stays failure after later navigation or closure",
+      "no blanket ignore of Invalid InterceptionId or ERR_ABORTED",
+      "bearer release scope, tenant, redirect non-disclosure",
+      "95-route content milestones, aggregate thresholds"
+    ]
+  },
+  "tests": {
+    "baseline": "git HEAD af2b9e431: 29 passed",
+    "new": [
+      "navigation cancelling an abortable BFF read is excused however late its commit reaches the helper (x3)",
+      "a live abort is not excused by a later navigation commit; same-URL overlap cannot excuse it (exactly one ERR_ABORTED)",
+      "Invalid InterceptionId for a request cancelled by a navigation is proven however late the commit reaches the helper (>1200ms)",
+      "a late navigation commit cannot excuse a live invalid protocol id",
+      "the helper's own record of a navigation cancellation may trail Playwright's; causality, not arrival, decides (positive + live-abort negative)",
+      "crawl lifecycle trace: 40-route sequential goto crawl with open SSE + 60 overlapping reads + a pending read per page; observer-only sanitized per-request Fetch/Network/Page trace (method/path/opaque ids/order, no headers/tokens/query); asserts every canceled read has a replacing navigation already started by its Chromium timestamp and every Invalid InterceptionId has a prior cancellation of its own network id; PANTHEON_CRAWL_TRACE=<file> writes the trace"
+    ],
+    "oldHelperOnNewTests": "the two positive late-commit tests fail on af2b helper (GET /held ERR_ABORTED; Invalid InterceptionId; GET /pending ERR_ABORTED); the two negatives pass on both",
+    "commands": [
+      "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium  => 35 passed",
+      "npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts  => 46 passed",
+      "node --check scripts/lib/pinned-browser-bff-bearer.mjs  => ok",
+      "npx tsc --noEmit -p tsconfig.app.json  => no errors (spec is outside this project; stricter ad-hoc tsc flags only report pre-existing patterns)"
+    ],
+    "loadCrawl": "same crawl fixture under CPU contention: before 1196-6107 false ERR_ABORTED per run; after 0 errors, 0 after context close (2 configurations)",
+    "honesty": "no hosted run, no VM/secret/workflow action performed; CI/native review/closure pending"
+  },
+  "causalTrace": {
+    "command": "PANTHEON_CRAWL_TRACE=/tmp/crawl-trace.json PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium -g 'crawl lifecycle trace'",
+    "unloaded": "new helper: 2307-2327 canceled reads, 41 replacing navigations, 0 Invalid InterceptionId, all causally explained, healthy. af2b helper: also passes unloaded (2304 canceled reads)",
+    "underCpuContention": "12 busy loops on 12 cores: af2b helper FAILS with 'Pinned BFF transport failures: GET /ready: net::ERR_ABORTED' x5+ (false failures: every cancel traced to a started replacing navigation); new helper passes (2031-2076 canceled reads, 0 errors)",
+    "invalidIdsObserved": "0 unforced Invalid InterceptionId in any local crawl run. The mechanism (cancel of the paused request's network id by the replacing navigation before continueRequest, with the commit delivered later) is shown only with the imposed-schedule tests; it is NOT proven to be the hosted ordering."
+  }
+}
