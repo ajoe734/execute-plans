@@ -130,13 +130,17 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // protocol failure. Closure alone never proves anything afterwards.
           const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
           if (invalidId && request) {
-            // The sample is requested at the moment the rejection is observed and
-            // must come back promptly. A sample that arrives late no longer represents the rejection;
-            // treat it as absent so the failure stays actionable.
+            // The rejection was observed locally at rejectedLocally. The browser
+            // sample returns later, so its Timestamp is an upper bound for the
+            // rejection. Subtract the FULL local time from rejection capture to
+            // sample receipt (all dispatch and response delay; Timestamp and
+            // performance.now() both run on monotonic clocks) to get a LOWER
+            // bound. The cancellation must precede even that bound; any
+            // ambiguity stays a protocol failure.
             const sample = await session.send("Performance.getMetrics").then(
               ({ metrics }) => ({ at: performance.now(), value: metrics.find((metric) => metric.name === "Timestamp")?.value }),
               () => undefined);
-            const rejectedAt = sample && sample.at - rejectedLocally <= 50 ? sample.value : undefined;
+            const rejectedAt = typeof sample?.value === "number" ? sample.value - (sample.at - rejectedLocally) / 1000 : undefined;
             const proven = () => request.canceled && request.canceledAt <= rejectedAt && (request.detached || request.sameDocument ||
               (request.loaderId && request.navigationLoader && request.loaderId !== request.navigationLoader &&
                 loaders.get(request.frameId) === request.navigationLoader));
