@@ -77,12 +77,22 @@ export function makeRedactor(secrets) {
       .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[JWT REDACTED]")
       .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [REDACTED]")
       // Opaque credential fields in free text / query strings / JSON-ish text (key=value, key: value, "key":"value").
-      .replace(CREDENTIAL_FIELD_RE, (_m, key, sep) => `${key}${sep}[REDACTED]`);
+      .replace(CREDENTIAL_FIELD_RE, (_m, key) => `${key}[REDACTED]`);
   };
+  // A diff record ({path,before,after}) whose JSON pointer crosses a credential key must not persist its values.
+  const sensitivePointer = (p) => typeof p === "string" && p.split("/").some((seg) => CREDENTIAL_KEY_RE.test(seg));
   const deep = (v) => {
     if (typeof v === "string") return redact(v);
     if (Array.isArray(v)) return v.map(deep);
-    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [redact(k), CREDENTIAL_KEY_RE.test(k) && x !== null && typeof x !== "object" ? "[REDACTED]" : deep(x)]));
+    if (v && typeof v === "object") {
+      const hide = sensitivePointer(v.path) && ("before" in v || "after" in v);
+      return Object.fromEntries(
+        Object.entries(v).map(([k, x]) => [
+          redact(k),
+          (CREDENTIAL_KEY_RE.test(k) && x !== null) || (hide && (k === "before" || k === "after")) ? "[REDACTED]" : deep(x),
+        ]),
+      );
+    }
     return v;
   };
   // Sanitize structured string values BEFORE serialization, then the text again as a backstop.
@@ -383,26 +393,15 @@ export function observe(ctx, page, row, API, { onBlockedWrite }) {
   // Unproven (e.g. a live AbortController.abort() on a still-present page) stays a failure.
   let navCount = 0;
   const navAtStart = new WeakMap();
-  const unproven = [];
-  const settle = () => {
-    const now = Date.now();
-    for (const { e, at } of unproven.splice(0)) {
-      if (now - at > 250) continue; // only the event ordering race, not a later unrelated navigation
-      const i = row.failed_api_requests.indexOf(e);
-      if (i >= 0) row.failed_api_requests.splice(i, 1);
-      row.cancelled_api_requests.push({ ...e, evidence: "navigation_or_close" });
-    }
-  };
   page.on("request", (r) => {
     // Only a real cross-document main-frame navigation request counts. framenavigated also fires for
     // same-document history.pushState/hash changes, which do NOT cancel in-flight fetches.
     let docNav = false;
     try { docNav = r.isNavigationRequest() && !r.frame().parentFrame(); } catch { /* frame gone */ }
-    if (docNav) { navCount++; settle(); }
+    if (docNav) navCount++;
     navAtStart.set(r, docNav ? navCount - 1 : navCount);
   });
-  page.on("close", () => { navCount++; settle(); });
-  page.on("requestfailed", (r) => {
+    page.on("requestfailed", (r) => {
     if (!r.url().startsWith(API + "/")) return;
     const e = { url: r.url(), method: r.method(), error: r.failure()?.errorText };
     if (e.error !== "net::ERR_ABORTED") return void row.failed_api_requests.push(e);
@@ -411,8 +410,8 @@ export function observe(ctx, page, row, API, { onBlockedWrite }) {
     if (detached || page.isClosed?.() || navCount > (navAtStart.get(r) ?? navCount)) {
       row.cancelled_api_requests.push({ ...e, evidence: "navigation_or_close" });
     } else {
+      // Already-witnessed live failure: a LATER navigation/close must never erase it.
       row.failed_api_requests.push(e);
-      unproven.push({ e, at: Date.now() }); // may be reclassified if the navigation event arrives afterwards
     }
   });
   return { state, install: () => ctx.route(API + "/**", async (route) => {
@@ -451,7 +450,7 @@ export async function run(input, deps = {}) {
   const out = {
     started_at: new Date().toISOString(),
     scope:
-      "ORIGINAL same-pair Persona/strategy read-only acceptance: four sequential real GUI logins (TEST_ADMIN, OPERATOR_A, OPERATOR_B, VIEWER) with Fleet/holdings/DataSources reads, logout+me401, then admin 20 warm Fleet reads, original 13 baseline captures, 10-repeat timings; only auth login/refresh/logout writes",
+      "ORIGINAL same-pair Persona/strategy read-only acceptance: four sequential real GUI logins (TEST_ADMIN, OPERATOR_A, OPERATOR_B, VIEWER) with Fleet/holdings/DataSources reads, logout+me401, then admin 20 warm Fleet reads, original 13 baseline captures, 10-repeat timings, then the original report supplementary 9 canonical + 4 retired GETs + 4 Management views as OPERATOR_A; only auth login/refresh/logout writes",
     source_hashes: { baseline_sha256: input.baseline_identity.sha256, expected_pair: expected.pair },
     thresholds: THRESHOLDS,
     source_owner_registry: registry,
@@ -724,12 +723,122 @@ export async function run(input, deps = {}) {
     }
   }
 
+  // ---- Phase 3: ORIGINAL report supplementary read-only protocol (AFTER the measured phases; not a 5th benchmark/profile)
+  // 9 canonical GETs + 4 retired-path GETs + 4 Management views, as OPERATOR_A via a separate RAM-only GUI login.
+  // Supplementary failures stay real in out.pass but are NOT part of verdict.all_acceptances_proven (release aggregation unchanged).
+  async function runSupplementary() {
+    const profile = profiles.OPERATOR_A;
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await ctx.newPage();
+    const row = (out.supplementary = Object.assign(newRow(redact), { api_reads: [], retired_reads: [], views: [], pass: false }));
+    const obs = observe(ctx, page, row, API, { onBlockedWrite: blockedWrite });
+    await obs.install();
+    const rowsOf = (j) => j?.items ?? j?.data?.items ?? j?.data?.personas ?? (Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : []);
+    const get = async (p, bucket) => {
+      const at = new Date().toISOString();
+      const begin = performance.now();
+      const res = await ctx.request.get(API + p, { timeout: THRESHOLDS.navigation_timeout_ms });
+      const text = await res.text();
+      let j = null;
+      try { j = JSON.parse(text); } catch { /* non-JSON body */ }
+      const witness = { method: "GET", path: p, status: res.status(), at, ms: Math.round(performance.now() - begin), body_sha256: sha256(text), row_count: rowsOf(j).length, meta: j?.meta ?? null, error_code: j?.error?.code ?? j?.code ?? null };
+      bucket.push(witness);
+      return { j, witness };
+    };
+    try {
+      await page.goto(WEB + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
+      const step = await guardedLogin(page, profile, row);
+      await step.click();
+      row.ui_login_status = (await step.login).status();
+      assert.equal(row.ui_login_status, 200, "supplementary GUI login");
+      await page.locator("h1").first().waitFor({ state: "visible", timeout: THRESHOLDS.navigation_timeout_ms });
+      const me = await get("/bff/me", row.api_reads);
+      assert.equal(me.witness.status, 200, "supplementary me");
+      const ident = evaluateIdentity(me.j?.data ?? me.j, expected.tenant_id, expected.roles.OPERATOR_A);
+      Object.assign(row, { subject: ident.subject, tenant: ident.tenant, roles: ident.roles });
+      assert.deepEqual(ident.failures, [], "supplementary verified OPERATOR_A identity");
+      let strategy;
+      for (const p of ["/bff/personas", "/bff/strategies?page_size=5", "/bff/deployments", "/bff/runtimes", "/bff/ranking-formulas", "/bff/mcp-servers", "/bff/mcp-tools"]) {
+        const r = await get(p, row.api_reads);
+        assert.equal(r.witness.status, 200, `supplementary canonical read ${p}`);
+        if (p.startsWith("/bff/strategies?")) strategy = rowsOf(r.j).find((x) => x?.id || x?.strategy_id);
+      }
+      assert.ok(strategy, "a current live strategy id is required for the canonical detail read");
+      const sid = strategy.id ?? strategy.strategy_id;
+      row.strategy_id_source = "live /bff/strategies?page_size=5 first row";
+      const detail = await get("/bff/strategies/" + encodeURIComponent(sid), row.api_reads);
+      assert.equal(detail.witness.status, 200, "supplementary canonical strategy detail");
+      row.strategy_detail = { data_keys: Object.keys(detail.j?.data ?? {}), rules_present: detail.j?.data?.rules != null, surfaces: detail.j?.meta?.surfaces ?? null };
+      // Retired paths: known impossible ids / read methods only. 404 vs 405 meaning is recorded, never read as CRUD success.
+      for (const p of ["/bff/ranking/formulas", "/api/v1/deployment-plans", "/bff/mcp/servers", "/bff/mcp/servers/__compat_residual_nonexistent__"]) {
+        const r = await get(p, row.retired_reads);
+        assert.ok([404, 405].includes(r.witness.status), `retired path ${p} expected 404/405, got ${r.witness.status}`);
+        r.witness.meaning = r.witness.status === 405 ? "route exists, GET method not allowed (not CRUD success)" : "route absent";
+      }
+      for (const [p, apiPath, destination, destQuery] of [
+        ["/management/deployments", "/bff/deployments", "/management/deployments", null],
+        ["/management/rankings", "/bff/management/persona-league", "/management/rankings", null],
+        ["/management/mcp", "/bff/mcp-servers", "/management/mcp", null],
+        ["/management/performance-attribution?tab=overview", "/bff/management/performance-attribution", "/management/performance", "attribution"],
+      ]) {
+        const began = Date.now();
+        const wait = page.waitForResponse((r) => new URL(r.url()).pathname === apiPath && r.request().method() === "GET", { timeout: THRESHOLDS.navigation_timeout_ms });
+        await page.goto(WEB + p, { waitUntil: "domcontentloaded" });
+        const response = await wait;
+        const bodyText = await response.text();
+        await response.finished();
+        const view = { requested: p, api_path: apiPath, api_status: response.status() };
+        row.views.push(view);
+        assert.equal(response.status(), 200, `view API ${apiPath}`);
+        await page.locator("h1").first().waitFor({ state: "visible", timeout: THRESHOLDS.navigation_timeout_ms });
+        await page.waitForFunction(() => !document.body.innerText.includes("載入中") && !document.querySelector('[data-testid$="loading"]'), {}, { timeout: THRESHOLDS.navigation_timeout_ms });
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        let body = null;
+        try { body = JSON.parse(bodyText); } catch { /* non-JSON */ }
+        const url = new URL(page.url());
+        view.actual_path = url.pathname;
+        view.actual_query = url.search;
+        view.heading = await page.locator("h1").first().innerText();
+        view.api_row_count = rowsOf(body).length;
+        view.api_meta = body?.meta ?? null;
+        view.visible_rows = await page.locator("table tbody tr").count();
+        view.body_excerpt = (await page.evaluate(() => (document.querySelector("main") ?? document.body).innerText)).slice(0, 1800);
+        view.visible_ms = Date.now() - began;
+        view.readiness = view.api_meta?.status === "degraded" ? "degraded_observed" : view.api_row_count === 0 ? "honest_empty_observed" : view.visible_rows > 0 ? "data_rows_visible" : "unproven";
+        view.ready_definition = "Real API body complete; loading markers gone; two animation frames; row readiness needs real visible rows when the API returned rows (a heading alone or an empty-state placeholder is not usable data)";
+        assert.equal(view.actual_path, destination, `${p} actual destination`);
+        if (destQuery) assert.equal(url.searchParams.get("tab"), destQuery, `${p} canonical tab`);
+        assert.notEqual(view.readiness, "unproven", `${p} returned ${view.api_row_count} rows but none visible`);
+      }
+      assert.deepEqual(row.page_errors, [], "supplementary page errors");
+      assert.deepEqual(row.failed_api_requests, [], "supplementary failed API calls");
+      assert.deepEqual(row.http_api_errors, [], "supplementary unexpected HTTP API failures");
+    } catch (e) {
+      row.errors.push(redact(e.message));
+    } finally {
+      obs.state.observeHttp = false;
+      try {
+        const logout = await ctx.request.post(API + "/bff/logout", { headers: { Origin: WEB } });
+        row.api_logout_status = logout.status();
+        const after = await ctx.request.get(API + "/bff/me");
+        row.after_logout_me_status = after.status();
+        if (logout.status() !== 200 || after.status() !== 401) row.errors.push("supplementary logout/me401 failed");
+      } catch (e) {
+        row.errors.push(redact(e.message));
+      } finally {
+        await ctx.close().catch(() => {});
+      }
+    }
+    row.pass = row.errors.length === 0 && out.blocked_writes.length === 0 && row.api_reads.length === 9 && row.retired_reads.length === 4 && row.views.length === 4;
+  }
+
   try {
     out.before = await pair("before");
     for (const name of ROLE_ORDER) await runProfile(name);
     out.after_four_role = await pair("after four-role");
     assert.deepEqual(out.after_four_role, out.before, "pair identity changed during four-role phase");
     await runAdminBatch();
+    await runSupplementary();
     out.after = await pair("after");
     assert.deepEqual(out.after, out.before, "pair identity changed during run");
   } catch (e) {
@@ -766,7 +875,8 @@ export async function run(input, deps = {}) {
     out.verdict.strategy_measured_checks_pass &&
     S.parity?.unreconciled_difference_count === 0;
   out.verdict.note = "Hosted-run result only when executed by the protected original caller; fixture/local runs are not hosted proof. Pass here is not product/all-roles/financial PASS.";
-  out.pass = out.verdict.all_acceptances_proven;
+  out.verdict.supplementary_pass = out.supplementary?.pass === true;
+  out.pass = out.verdict.all_acceptances_proven && out.verdict.supplementary_pass;
   out.finished_at = new Date().toISOString();
   save("result.json", out);
   return { out, dir };
@@ -805,7 +915,7 @@ async function main() {
   try {
     const { out, dir } = await run(input, { outDir });
     process.stdout.write(
-      redact.json({ file: path.join(dir, "result.json"), pass: out.pass, verdict: out.verdict, errors: out.errors, role_errors: Object.fromEntries(ROLE_ORDER.map((n) => [n, out.profiles[n]?.errors])), strategy_errors: out.strategy.session?.errors }) + "\n",
+      redact.json({ file: path.join(dir, "result.json"), pass: out.pass, verdict: out.verdict, errors: out.errors, role_errors: Object.fromEntries(ROLE_ORDER.map((n) => [n, out.profiles[n]?.errors])), strategy_errors: out.strategy.session?.errors, supplementary_errors: out.supplementary?.errors }) + "\n",
     );
     if (!out.pass) process.exitCode = 1;
   } catch (e) {

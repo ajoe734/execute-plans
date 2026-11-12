@@ -4,12 +4,13 @@
   "artifacts": {
     "cli": "scripts/accept-persona-strategy-hosted-readonly.mjs",
     "tests": "src/test/persona-strategy-hosted-readonly.test.ts",
-    "cli_sha256": "8d49fbffe8627bad79aa2eae3991232aff6c0cb06ea85ee8b6b4e1c305768281",
-    "tests_sha256": "06dee63d53609d2ee4e2957caf1cfa4e8cefeb5f9722c87015b11d9cb9d94b2a"
+    "cli_sha256": "d0d46ec0c369e4aa3065a13f97bbe16ab1be4b032c37d9769f856592ddfc28fe",
+    "tests_sha256": "a3f51ab8cfc4c812eb18232e16d24b0823757c2ba90223865ea6ad30448e9fdd"
   },
   "source_references_inspected_fully_not_executed": [
     "/tmp/pantheon-root01a15322-resume-20261111/four-profile-readonly.cjs",
-    "/tmp/pantheon-root01a15322-resume-20261111/strategy-readonly-acceptance.cjs"
+    "/tmp/pantheon-root01a15322-resume-20261111/strategy-readonly-acceptance.cjs",
+    "/tmp/compat-residual-probe.cjs (sha256 7adaffe7577b1841263cc53a98f242d2b7249839ce836095d18e8a953bb47fee; read-only code input, supplementary protocol ported, never executed)"
   ],
   "invocation": "node scripts/accept-persona-strategy-hosted-readonly.mjs --out-dir <private-dir> < input.json  (only argv is --out-dir; credentials stdin/RAM only)",
   "input_contract": {
@@ -22,7 +23,7 @@
   "output_contract": {
     "stdout": "sanitized summary {file, pass, verdict, errors, role_errors}; exit 0 pass, 1 acceptance fail, 2 input/usage/runtime failure",
     "private_files": "<out-dir>/paired-readonly-*/{result.json,current-responses.json,full-baseline-differences.json} (dir 0700, files 0600); no screenshots/trace/video",
-    "result.json": "per-role cold timings, routes, me identity, logout/me401; strategy warm 20 samples, 13 captures with request ids/UTC/sha256, 10-repeat samples, hide_retired, persona_detail, parity (exact_equal, documented_reconciliations separate, unreconciled), source hashes, blocked_writes, errors"
+    "result.json": "per-role cold timings, routes, me identity, logout/me401; strategy warm 20 samples, 13 captures with request ids/UTC/sha256, 10-repeat samples, hide_retired, persona_detail, parity (exact_equal, documented_reconciliations separate, unreconciled), source hashes, blocked_writes, errors; supplementary{api_reads(9),retired_reads(4),views(4),identity,logout/me401}"
   },
   "protected_caller_integration": "Original protected GitHub dev workflow (existing secrets) pipes JSON on stdin after the pair is accepted; this task creates no workflow/secret and does no hosted run. Caller may need a separate small backend wiring task.",
   "preserved_original_checks": {
@@ -34,9 +35,10 @@
     "parity": "all 13 raw diffs retained; exact_equal never forced; documented reconciliations reported separately",
     "fleet_typed_classification": "trading/regular/exclude filters + typed purpose/data_scope/classification_confirmed/archived",
     "data_sources": "exact owner connector inventory; legacy: degraded+legacy_projection+commands false+no action fields+banner+no More actions; governed owner mode supported",
-    "errors": "no pageerror/failed/unexpected HTTP; only prelogin me/readiness 401 excluded; aborted requests recorded separately",
+    "errors": "no pageerror/failed/unexpected HTTP; only prelogin me/readiness 401 excluded; aborted requests recorded separately; a live request failure is never erased by a later unrelated navigation/close (no deferred reclassification); benign abort requires causal navigation/detach/close evidence at failure time",
     "writes": "only auth login/refresh/logout allowed; others blocked and reported",
-    "pair": "manifest accepted + strict BFF version before reads; identical pair before/after four-role/after batch"
+    "pair": "manifest accepted + strict BFF version before reads; identical pair before/after four-role/after batch",
+    "supplementary_original_report_protocol": "AFTER the measured phases, separate OPERATOR_A GUI login (not a 5th benchmark/profile): 9 canonical GETs (me, personas, strategies?page_size=5, deployments, runtimes, ranking-formulas, mcp-servers, mcp-tools, strategies/{live id}), 4 retired GETs (404/405 only, meaning recorded), 4 views (management/deployments, rankings, mcp, performance-attribution?tab=overview -> performance?tab=attribution) waiting API body + loading markers gone + 2 RAF; records status/count/readiness/text/elapsed; empty/degraded are honest observations. Failures keep out.pass false but do NOT enter verdict.all_acceptances_proven (release aggregation unchanged); verdict.supplementary_pass reported separately."
   },
   "intentional_deviations_from_private_sources": [
     "machine-specific Playwright path -> package resolution (playwright, then @playwright/test)",
@@ -47,7 +49,7 @@
   ],
   "local_verification": {
     "command": "npx vitest run src/test/persona-strategy-hosted-readonly.test.ts",
-    "result": "28 passed (14 pure/stub incl. live-abort + same-document navigation + JSON-escaped secret regressions, 4 real-Chromium abort-accounting cases, 9 local loopback fixture/browser)",
+    "result": "35 passed (pure/stub, real-Chromium abort accounting incl. live-abort-then-later-navigation negative and genuine navigation-teardown positive, local loopback fixture/browser incl. supplementary phase pass/empty-MCP/failure cases)",
     "tsc_app_errors_in_new_files": 0,
     "eslint": "clean",
     "note": "loopback fixtures are explicitly not hosted proof"

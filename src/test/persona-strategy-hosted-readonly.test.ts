@@ -49,7 +49,7 @@ function baselineFile() {
   return JSON.stringify(base);
 }
 
-type Opts = { mutate?: boolean; dsMode?: "legacy_projection" | "governed_owner"; wrongRoleFor?: string; writeOnDetail?: boolean; leakSecret?: boolean; slowFleetMs?: number; pairId?: string; detailError?: boolean; detailHttpError?: boolean; detailReqFail?: boolean };
+type Opts = { mutate?: boolean; dsMode?: "legacy_projection" | "governed_owner"; wrongRoleFor?: string; writeOnDetail?: boolean; leakSecret?: boolean; slowFleetMs?: number; pairId?: string; detailError?: boolean; detailHttpError?: boolean; detailReqFail?: boolean; suppEmptyMcp?: boolean; suppRetiredOk?: boolean; suppDeploymentsHidden?: boolean };
 
 function startFixture(opts: Opts = {}) {
   const sessions = new Map<string, string>();
@@ -101,6 +101,15 @@ function startFixture(opts: Opts = {}) {
       if (url.pathname === "/bff/socketdrop") return void req.socket.destroy();
       if (url.pathname === "/bff/management/data-sources") return json(200, dataSourcesBody(dsMode));
       if (url.pathname.startsWith("/bff/personas/")) return json(200, { data: { id: PERSONA } });
+      if (url.pathname === "/bff/personas") return json(200, { data: { personas: [{ id: PERSONA }] } });
+      if (url.pathname === "/bff/deployments") return json(200, { data: { items: [{ id: "d1" }] } });
+      if (url.pathname === "/bff/runtimes" || url.pathname === "/bff/ranking-formulas" || url.pathname === "/bff/mcp-tools") return json(200, { data: { items: [{ id: "x1" }] } });
+      if (url.pathname === "/bff/mcp-servers") return json(200, { data: { items: opts.suppEmptyMcp ? [] : [{ id: "m1" }] } });
+      if (url.pathname === "/bff/management/persona-league") return json(200, { data: { items: [{ id: "r1" }] } });
+      if (url.pathname === "/bff/management/performance-attribution") return json(200, { data: { items: [{ id: "a1" }] } });
+      if (url.pathname.startsWith("/bff/strategies/")) return json(200, { data: { id: "s", rules: {} }, meta: { surfaces: ["fixture"] } });
+      if (opts.suppRetiredOk && url.pathname === "/bff/ranking/formulas") return json(200, { data: { items: [] } });
+      if (url.pathname === "/bff/ranking/formulas" || url.pathname === "/bff/mcp/servers") return json(405, { error: "method" });
       const key = url.pathname + url.search;
       if (url.pathname === "/bff/strategies") return json(200, { ...strategyBody(key, Boolean(opts.mutate)) });
     }
@@ -138,6 +147,10 @@ function pageHtml(url: URL, loggedIn: boolean, opts: Opts) {
   if (p.startsWith("/management/personas/"))
     return `${opts.detailError ? "<script>setTimeout(()=>{throw new Error('admin-detail-fixture-error')},0)</script>" : ""}${opts.detailHttpError ? "<script>fetch('/bff/nonexistent')</script>" : ""}${opts.detailReqFail ? "<script>fetch('/bff/socketdrop').catch(()=>{})</script>" : ""}${table("persona", "/bff/personas/" + PERSONA, "Persona " + PERSONA)}${opts.writeOnDetail ? "<script>fetch('/bff/strategies',{method:'POST',credentials:'include',body:'{}'}).catch(()=>{})</script>" : ""}`;
   if (p === "/management/strategies") return table("strategies", "/bff/strategies", "Strategies");
+  if (p === "/management/deployments") return opts.suppDeploymentsHidden ? "<h1>Deployments</h1>" : table("deployments", "/bff/deployments", "Deployments");
+  if (p === "/management/rankings") return table("rankings", "/bff/management/persona-league", "Rankings");
+  if (p === "/management/mcp") return table("mcp", "/bff/mcp-servers", "MCP");
+  if (p === "/management/performance-attribution") return `<div id="app"><p>載入中</p></div><script>fetch('/bff/management/performance-attribution',{credentials:'include'}).then(r=>r.json()).then(j=>{history.replaceState(null,'','/management/performance?tab=attribution');document.getElementById('app').innerHTML='<h1>Attribution</h1><table><tbody>'+j.data.items.map(x=>'<tr><td>'+x.id+'</td></tr>').join('')+'</tbody></table>'})</script>`;
   return "<h1>Unknown</h1>";
 }
 
@@ -253,6 +266,33 @@ describe("pure acceptance logic", () => {
     expect(JSON.parse(text).note).not.toBe(secret);
   });
 
+  it("redacts credential values inside diff and parity records while retaining every difference", () => {
+    const redact = cli.makeRedactor([]);
+    const diff = {
+      "/bff/x": cli.differences(
+        { access_token: "fixture-old-opaque", nested: { refresh_token: "fixture-old-refresh" }, ok: 1 },
+        { access_token: "fixture-new-opaque", nested: { refresh_token: "fixture-new-refresh" }, ok: 2 },
+      ),
+    };
+    const parity = cli.reconcileDifferences(diff, [{ path: "/bff/x", pointer: "/ok", owner: "o", reason: "r" }]);
+    for (const data of [diff, parity]) {
+      const text = redact.json(data, 2);
+      expect(text).not.toMatch(/fixture-(old|new)-/);
+      expect(() => JSON.parse(text)).not.toThrow();
+    }
+    expect(parity.exact_equal).toBe(false);
+    const out = JSON.parse(redact.json(diff, 2));
+    expect(out["/bff/x"].map((d: { path: string }) => d.path).sort()).toEqual(["/access_token", "/nested/refresh_token", "/ok"]);
+    expect(out["/bff/x"].find((d: { path: string }) => d.path === "/ok")).toMatchObject({ before: 1, after: 2 });
+  });
+
+  it("redacts credential-valued arrays and objects wholesale as valid JSON", () => {
+    const redact = cli.makeRedactor([]);
+    const text = redact.json({ access_token: ["fixture-opaque"], client_secret: { v: "fixture-opaque2" } }, 2);
+    expect(text).not.toContain("fixture-opaque");
+    expect(JSON.parse(text)).toEqual({ access_token: "[REDACTED]", client_secret: "[REDACTED]" });
+  });
+
   it("redacts opaque token fields in error text, URLs and structured keys", () => {
     const redact = cli.makeRedactor([]);
     const msg = "boom access_token=review-fixture-opaque-access refresh_token=review-fixture-opaque-refresh";
@@ -295,19 +335,23 @@ describe("pure acceptance logic", () => {
       expect(t.row.failed_api_requests).toHaveLength(1);
       expect(t.row.cancelled_api_requests).toHaveLength(0);
     });
-    it("accepts an abort caused by a real main-frame navigation (either event order)", () => {
+    it("accepts an abort caused by an already-started main-frame navigation", () => {
       const a = mk();
       a.emit("request", a.req);
       a.emit("request", a.navReq);
       a.emit("requestfailed", a.req);
       expect(a.row.failed_api_requests).toHaveLength(0);
       expect(a.row.cancelled_api_requests).toHaveLength(1);
+    });
+    it("never erases an already-witnessed live failure on later navigation or close", () => {
       const b = mk();
       b.emit("request", b.req);
       b.emit("requestfailed", b.req);
       b.emit("request", b.navReq);
-      expect(b.row.failed_api_requests).toHaveLength(0);
-      expect(b.row.cancelled_api_requests).toHaveLength(1);
+      b.close();
+      b.emit("close");
+      expect(b.row.failed_api_requests).toHaveLength(1);
+      expect(b.row.cancelled_api_requests).toHaveLength(0);
     });
   });
 
@@ -318,6 +362,36 @@ describe("pure acceptance logic", () => {
       ["same-document pushState after live abort", "c.abort(); await new Promise((r) => setTimeout(r, 100)); history.pushState({}, '', '/pushed');", 1, 0],
       ["real document navigation cancels", "location.href = '/next';", 0, 1],
     ];
+    it("live abort then later unrelated document navigation keeps the failure", async () => {
+      const server = http.createServer((req, res) => {
+        if (req.url?.startsWith("/bff/hang")) { res.writeHead(200, { "content-type": "text/plain" }); return void res.write("first-byte"); }
+        res.setHeader("content-type", "text/html");
+        res.end("<p>doc</p>");
+      });
+      await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+      const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+      const browser = await chromium.launch();
+      try {
+        const ctx = await browser.newContext();
+        const page = await ctx.newPage();
+        const row = { page_errors: [], failed_api_requests: [], cancelled_api_requests: [], http_api_errors: [], prelogin_expected_401: [] } as Record<string, unknown[]>;
+        cli.observe(ctx, page, row, origin, { onBlockedWrite: () => {} });
+        await page.goto(origin + "/");
+        const failedEvt = page.waitForEvent("requestfailed", { predicate: (r) => r.url().includes("/bff/hang") });
+        await page.evaluate(() => { (window as any).c = new AbortController(); void fetch("/bff/hang", { signal: (window as any).c.signal }).catch(() => {}); });
+        await page.waitForTimeout(100);
+        await page.evaluate(() => (window as any).c.abort());
+        await failedEvt;
+        await page.goto(origin + "/later-unrelated");
+        await page.waitForTimeout(300);
+        expect(row.failed_api_requests).toHaveLength(1);
+        expect(row.cancelled_api_requests).toHaveLength(0);
+      } finally {
+        await browser.close();
+        server.closeAllConnections();
+        server.close();
+      }
+    }, 30000);
     for (const [name, script, failed, cancelled] of scenarios) {
       it(name, async () => {
         const server = http.createServer((req, res) => {
@@ -409,6 +483,13 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     }
     expect(out.strategy.performance.fleet_browser_warm.samples).toHaveLength(20);
     expect(Object.keys(out.strategy.captures)).toHaveLength(13);
+    expect(out.supplementary).toMatchObject({ pass: true, api_reads: expect.any(Array), api_logout_status: 200, after_logout_me_status: 401 });
+    expect(out.supplementary.api_reads).toHaveLength(9);
+    expect(out.supplementary.retired_reads.map((r: { status: number }) => r.status).every((x: number) => x === 404 || x === 405)).toBe(true);
+    expect(out.supplementary.retired_reads).toHaveLength(4);
+    expect(out.supplementary.views.map((v: { actual_path: string }) => v.actual_path)).toEqual(["/management/deployments", "/management/rankings", "/management/mcp", "/management/performance"]);
+    expect(out.supplementary.views[3].actual_query).toBe("?tab=attribution");
+    expect(out.supplementary.api_reads.at(-1).path).toBe("/bff/strategies/s-" + "/bff/strategies?page_size=5".length);
     expect(out.verdict.exact_equal).toBe(true);
     expect(out.pass).toBe(true);
     expect(fx.receivedWrites).toEqual([]);
@@ -432,6 +513,24 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     expect(reconciled.out.strategy.parity.exact_equal).toBe(false);
     expect(reconciled.out.strategy.parity.documented_reconciliations).toHaveLength(1);
     expect(reconciled.out.pass).toBe(true);
+  }, 240_000);
+
+  it("supplementary: honest empty MCP is an observation, not a failure", async () => {
+    const { out } = await execute({ suppEmptyMcp: true });
+    expect(out.supplementary.views[2].readiness).toBe("honest_empty_observed");
+    expect(out.supplementary.pass).toBe(true);
+    expect(out.pass).toBe(true);
+  }, 120_000);
+
+  it("supplementary: failures stay real in out.pass but not in the original aggregation", async () => {
+    for (const o of [{ suppRetiredOk: true }, { suppDeploymentsHidden: true }] as Opts[]) {
+      const { out } = await execute(o);
+      expect(out.supplementary.pass).toBe(false);
+      expect(out.supplementary.errors.length).toBeGreaterThan(0);
+      expect(out.verdict.all_acceptances_proven).toBe(true);
+      expect(out.verdict.supplementary_pass).toBe(false);
+      expect(out.pass).toBe(false);
+    }
   }, 240_000);
 
   it("aggregates a failing role without hiding the other three", async () => {
