@@ -295,6 +295,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
     await send("Page.enable");
     session.send = (async (method: string, params: { requestId?: string }) => {
       if (method === "Fetch.continueRequest" && params.requestId === held) {
+        heldSample = false;
         reached();
         await dispatch;
         if (invalidLiveId) params = { ...params, requestId: "missing-live-interception" };
@@ -429,6 +430,50 @@ for (const teardown of ["context close", "unrelated navigation"] as const) {
     }
   });
 }
+
+async function frameFetch(c: Awaited<ReturnType<typeof controlledInterception>>, abortable: boolean) {
+  await c.page.evaluate((u) => { const f = document.createElement("iframe"); f.src = u; document.body.append(f); }, `${feOrigin}/frame`);
+  await expect.poll(() => c.page.frames().length).toBe(2);
+  const frame = c.page.frames()[1];
+  await frame.waitForLoadState();
+  await frame.evaluate(({ u, abortable }) => {
+    const controller = new AbortController();
+    Object.assign(window, { cancelHeld: () => controller.abort() });
+    void fetch(u, abortable ? { signal: controller.signal } : undefined).catch(() => {});
+  }, { u: `${bffOrigin}/held`, abortable });
+  await c.paused;
+  return frame;
+}
+
+test("iframe removal cancelling a held interception settles healthy", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await controlledInterception();
+    try {
+      await frameFetch(c, false);
+      await c.page.evaluate(() => document.querySelector("iframe")!.remove());
+      await expect.poll(() => c.receipt.canceled).toBe(true);
+      c.release();
+      await c.transport.settle();
+      expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+      c.transport.assertHealthy();
+      console.log(JSON.stringify({ scenario: "frame-detach-positive", attempt, ...c.receipt }));
+    } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+  }
+});
+
+test("live abort then later iframe removal stays actionable", async () => {
+  const c = await controlledInterception();
+  try {
+    const frame = await frameFetch(c, true);
+    await frame.evaluate(() => (window as unknown as { cancelHeld: () => void }).cancelHeld());
+    await expect.poll(() => c.receipt.canceled).toBe(true);
+    c.release();
+    await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+    await c.page.evaluate(() => document.querySelector("iframe")!.remove());
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
 
 test("exact 82ff queued cancellation fails; maintained transport proves the obsolete request", async () => {
   const source = execFileSync("git", ["show", `${INTERCEPTION_BASE}:scripts/lib/pinned-browser-bff-bearer.mjs`], { encoding: "utf8" });

@@ -87,7 +87,11 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         navigating.delete(frame.id);
       });
       session.on("Page.frameDetached", ({ frameId }) => {
-        for (const request of interceptions) if (request.frameId === frameId && !request.failed) request.detached = true;
+        // Chromium reports the detach-induced cancellation (loadingFailed) before
+        // frameDetached, so `failed` cannot gate it. Detach is evidence only when
+        // observed before the pre-command sample; one seen after the command was
+        // already dispatched cannot excuse a live failure.
+        for (const request of interceptions) if (request.frameId === frameId && !request.sampled && !request.closed) request.detached = true;
         loaders.delete(frameId);
         navigating.delete(frameId);
       });
@@ -106,7 +110,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // the page/context closed; an arbitrary live transport failure must fail.
         track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
           const failure = req.failure()?.errorText || "request failed";
-          if (failure === "net::ERR_ABORTED" && (closed || page.isClosed() ||
+          if (failure === "net::ERR_ABORTED" && (closed || page.isClosed() || req.frame().isDetached() ||
               requests.get(req) !== (generations.get(req.frame()) || 0))) return;
           record(failure, page, `${req.method()} ${new URL(req.url()).pathname}`);
         }));
@@ -127,7 +131,8 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // Timestamp therefore predates the actual command rejection, regardless
         // of command scheduling or delayed delivery of the rejection to Node.
         const before = request ? session.send("Performance.getMetrics").then(
-          ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
+          ({ metrics }) => { request.sampled = true; return metrics.find((metric) => metric.name === "Timestamp")?.value; },
+          () => { request.sampled = true; return undefined; }) : undefined;
         const continueRequest = (rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {

@@ -11,7 +11,10 @@
     "scripts/lib/pinned-browser-bff-bearer.mjs",
     "e2e/hosted-bff-streaming-transport.spec.ts"
   ],
-  "unchanged_callers": ["scripts/accept-management-hosted-production.mjs", "scripts/probe-route-load-baseline.mjs"],
+  "unchanged_callers": [
+    "scripts/accept-management-hosted-production.mjs",
+    "scripts/probe-route-load-baseline.mjs"
+  ],
   "reproduction": {
     "command": "PLAYWRIGHT_BROWSERS_PATH=<chromium 1223 cache> PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts",
     "before_fix": "Full suite intermittently failed 2 of 6 runs (queued-positive, same-document and exact-82ff tests) with Pinned BFF transport failures: Fetch.continueRequest Invalid InterceptionId; instrumented runs showed the failing requests had no network entry at pause time. New deterministic regression (real Chromium, real event delivery deferred in order, nothing synthesized) fails on the pre-fix helper (exit non-zero, timed out).",
@@ -22,5 +25,24 @@
     "eslint_changed_files": 0,
     "tsc_noEmit": 0
   },
-  "trace_policy": "No tokens, auth headers, URLs with data or business content recorded."
+  "trace_policy": "No tokens, auth headers, URLs with data or business content recorded.",
+  "frame_detach_addendum": {
+    "root_cause": "For a real iframe removal Chromium emits Network.loadingFailed(canceled) BEFORE Page.frameDetached for the same network id. The helper's frameDetached handler required !request.failed, and requestfailed treated the detached-frame ERR_ABORTED as live, so detach proof was discarded.",
+    "fix": "frameDetached now marks detached for same-frame interceptions that have not yet had their pre-command Performance sample (request.sampled) and are not closed; a detach observed after the sample/command cannot excuse a live failure. requestfailed also accepts ERR_ABORTED when the request's frame is detached (checked after the existing 25ms delay). Same-id canceledAt<=pre-command sample rule unchanged; no blanket suppression.",
+    "heldSample_scope": "Test harness clears heldSample when the held continuation begins so a later navigation sample is not held.",
+    "new_tests": [
+      "iframe removal cancelling a held interception settles healthy (x3, positive)",
+      "live abort then later iframe removal stays actionable (negative: Invalid InterceptionId and ERR_ABORTED retained)"
+    ],
+    "commands": "PLAYWRIGHT_BROWSERS_PATH=<cache> PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts [--grep 'iframe removal']",
+    "exit_codes": {
+      "old_helper_c276a414_detach_positive": 1,
+      "new_helper_detach_tests_repeat3_twice": 0,
+      "new_helper_full_suite_24_passed": 0,
+      "vitest_auth_aggregate_46": 0,
+      "eslint_changed": 0
+    },
+    "old_trace": "loadingFailed(canceled, same network id) -> frameDetached -> Performance sample -> Fetch.continueRequest Invalid InterceptionId; assertHealthy retained GET /held net::ERR_ABORTED and CDP InvalidId",
+    "hosted": "No hosted acceptance claimed."
+  }
 }
