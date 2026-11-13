@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it } from "vitest";
 import "@/i18n";
 import { CaseFileViewPanel } from "./CaseFileViewPanel";
-import { packetView, panelView } from "./__tests__/fixtures";
+import { caseFile, packetView, panelView } from "./__tests__/fixtures";
 
 afterEach(cleanup);
 
@@ -45,5 +45,18 @@ describe("CaseFileViewPanel", () => {
     expect(screen.getByTestId("v-unavailable-reason").textContent).toContain("no_case_file_recorded");
     rerender(<CaseFileViewPanel view={undefined} scope="m" testId="v" />);
     expect(screen.getByTestId("v-unavailable-reason").textContent).toContain("case_file_view_not_returned");
+  });
+
+  it("honors decision.case_file_id when several case files share an item_id", () => {
+    const cf2 = { ...caseFile, case_file_id: "cf-2" };
+    const view = { status: "ok", case_files: [caseFile, cf2], decisions: [
+      { kind: "a", status: "x", case_file_id: "cf-2", cited_item_ids: ["facts:1"], unresolved_item_ids: [] },
+      { kind: "b", status: "x", case_file_id: "cf-9", cited_item_ids: ["facts:1"], unresolved_item_ids: [] },
+    ] };
+    render(<CaseFileViewPanel view={view} scope="p" testId="v" />);
+    fireEvent.click(screen.getByTestId("v-decision-0-cite-facts:1"));
+    expect(document.activeElement?.id).toBe("cf-p-cf-2-facts:1");
+    expect(screen.queryByTestId("v-decision-1-cite-facts:1")).toBeNull();
+    expect(screen.getByTestId("v-decision-1-unavailable-facts:1")).toBeInTheDocument();
   });
 });

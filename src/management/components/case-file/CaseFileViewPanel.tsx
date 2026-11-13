@@ -28,10 +28,14 @@ function Unavailable({ reason, testId }: { reason?: string | null; testId: strin
   );
 }
 
-function Citations({ scope, c, testId }: { scope: string; c: CaseFileCitations; testId: string }) {
+function Citations({ resolve, c, testId }: {
+  /** Per-item scope lookup; null when the target case file / item is unavailable. */
+  resolve: (id: string) => string | null; c: CaseFileCitations; testId: string;
+}) {
   const { t } = useTranslation();
   const jump = (id: string) => {
-    const el = document.getElementById(anchorId(scope, id));
+    const sc = resolve(id);
+    const el = sc === null ? null : document.getElementById(anchorId(sc, id));
     el?.scrollIntoView?.({ block: "nearest" });
     el?.focus?.();
   };
@@ -40,7 +44,13 @@ function Citations({ scope, c, testId }: { scope: string; c: CaseFileCitations; 
   }
   return (
     <span data-testid={`${testId}-cites`} className="inline-flex flex-wrap gap-1 text-xs">
-      {c.cited_item_ids.map((id) => (
+      {c.cited_item_ids.map((id) => resolve(id) === null ? (
+        <span key={id} data-testid={`${testId}-unavailable-${id}`}
+              className="rounded border border-destructive px-1 font-mono text-destructive"
+              title={t("caseFile.unresolvedHint")}>
+          {id} · {t("caseFile.unresolved")}
+        </span>
+      ) : (
         <button key={id} type="button" onClick={() => jump(id)} data-testid={`${testId}-cite-${id}`}
                 className="rounded border border-border px-1 font-mono underline">
           {id}
@@ -140,13 +150,17 @@ export function CaseFileViewPanel({
   const v: CaseFileView = result.view;
   const cases = Array.isArray(v.case_files) ? v.case_files : v.case_file ? [v.case_file] : [];
   const citeScope = (c: CaseFile) => (cases.length > 1 ? `${scope}-${c.case_file_id}` : scope);
-  // Citations resolve inside the (single) case file; with several, link to the first that has the item.
-  const citeScopeFor = (id: string) => {
-    const hit = cases.find((c) => Object.values(c.groups).some((g) => g.items.some((i) => i.item_id === id)));
-    return hit ? citeScope(hit) : scope;
+  // Each cited item resolves separately. A decision bound to a case_file_id only
+  // resolves inside that case file; unbound claims use the first case holding the item.
+  const hasItem = (c: CaseFile, id: string) =>
+    Object.values(c.groups).some((g) => g.items.some((i) => i.item_id === id));
+  const resolverFor = (boundId?: string | null) => (id: string): string | null => {
+    const pool = boundId ? cases.filter((c) => c.case_file_id === boundId) : cases;
+    const hit = pool.find((c) => hasItem(c, id));
+    return hit ? citeScope(hit) : null;
   };
-  const cite = (c: CaseFileCitations, tid: string) => (
-    <Citations scope={c.cited_item_ids[0] ? citeScopeFor(c.cited_item_ids[0]) : scope} c={c} testId={tid} />
+  const cite = (c: CaseFileCitations, tid: string, boundId?: string | null) => (
+    <Citations resolve={resolverFor(boundId)} c={c} testId={tid} />
   );
   return (
     <div data-testid={testId} className="space-y-3">
@@ -159,7 +173,7 @@ export function CaseFileViewPanel({
           <ul className="space-y-1">
             {v.decisions.map((d, n) => (
               <li key={n} data-testid={`${testId}-decision-${n}`} className="text-sm">
-                {dash(d.kind)} · {dash(d.status)} {cite(d, `${testId}-decision-${n}`)}
+                {dash(d.kind)} · {dash(d.status)} {cite(d, `${testId}-decision-${n}`, d.case_file_id)}
                 {d.none_applicable_reason ? (
                   <span className="ml-2 text-xs text-muted-foreground">
                     {t("caseFile.noneApplicable")}: {d.none_applicable_reason}
