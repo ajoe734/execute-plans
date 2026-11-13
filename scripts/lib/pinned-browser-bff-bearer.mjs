@@ -42,7 +42,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   const problem = pinnedTargetProblem({ feBase, bffBase, env });
   if (problem || !token) throw new Error(`Refusing to release BFF credential: ${problem || "no token supplied"}`);
   const bffOrigin = originOf(bffBase), bearer = `Bearer ${token}`;
-  const errors = [], pages = new WeakMap(), holds = new WeakMap(), pending = new Set(), finalizers = new Set();
+  const errors = [], terminatedBeforeSend = [], pages = new WeakMap(), holds = new WeakMap(), pending = new Set(), finalizers = new Set();
   let closed = false;
   context.on("close", () => { closed = true; });
   const record = (error, page, label) => {
@@ -147,11 +147,15 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
             const label = `${request.method || "GET"} ${new URL(url).pathname}`;
             nativeAborted.set(url, (nativeAborted.get(url) || 0) + 1);
             // The brief delay only lets same-document/detach facts land; the replacing commit is awaited causally.
-            track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
+            // A failed continuation never sent this paused request. Judge an
+            // abort only after the browser accepted its continuation; the reply
+            // can arrive after loadingFailed, so retain this request's judgment.
+            const judge = () => track(new Promise((resolve) => setTimeout(resolve, 25)).then(() => {
               if (gone || detached || sameDocument || committed(request)) return;
               const entry = { ok: () => committed(request), fail: () => record("net::ERR_ABORTED", page, label) };
               if (replacing) awaiting.add(entry); else entry.fail();
             }));
+            if (request.continued) judge(); else request.judgeFailure = judge;
           }
         }
         network.delete(requestId);
@@ -231,6 +235,14 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           navigationLoader: request?.navigationLoader ?? null,
         })}`;
         const pinned = originOf(url) === bffOrigin;
+        // Fetch is enabled only at Request stage. Response pauses are never
+        // eligible if a caller/session changes that configuration.
+        const requestStage = event.responseStatusCode === undefined && event.responseErrorReason === undefined;
+        const terminated = (reason) => terminatedBeforeSend.push({
+          outcome: "terminated_before_send", interceptionId: event.requestId,
+          networkId: event.networkId || null, path: new URL(url).pathname,
+          requestStage: "Request", pausePhase, phase, reason,
+        });
         const clean = Object.entries(headers).filter(([name, value]) =>
           !(["authorization", "x-tenant-id"].includes(name.toLowerCase()) && (pinned || value === bearer || name.toLowerCase() === "x-tenant-id")));
         if (pinned) {
@@ -240,13 +252,15 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         const resume = (deferred = false) => {
           // A queued request on a closed target cannot be continued. No command
           // was issued for it; errors from commands already dispatched stay errors.
-          if (deferred && (closed || page.isClosed())) { interceptions.delete(request); return; }
+          if (deferred && (closed || page.isClosed())) {
+            if (pinned && requestStage) terminated("target_closed_before_continuation");
+            interceptions.delete(request); return;
+          }
           // Await the browser's sample before dispatching continueRequest. Its
           // Timestamp therefore predates the actual command rejection, regardless
           // of command scheduling or delayed delivery of the rejection to Node.
-          // Cancellation after this lower bound is ambiguous: CDP exposes no failure
-          // timestamp. Fail closed even if it was legitimate; the maintained caller
-          // drains/checks outstanding commands before navigating or closing.
+          // Retain this sample as diagnostic context for other command failures;
+          // Request-stage Invalid InterceptionId no longer needs timing proof.
           const before = request ? session.send("Performance.getMetrics").then(
             ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
           const continueRequest = (sampledBeforeCommand) => {
@@ -254,32 +268,27 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
             // record already proves navigation cancellation, retire it without
             // issuing a command for an obsolete id. Live/unknown requests proceed
             // through the unchanged conservative error judgment below.
-            if (deferred && request?.canceled && excused(request)) return;
+            if (deferred && request?.canceled && excused(request)) {
+              if (pinned && requestStage) terminated("cancelled_before_continuation");
+              return;
+            }
             issuePhase = phase;
             sampledBeforeIssue = sampledBeforeCommand;
             return session.send("Fetch.continueRequest", { requestId: event.requestId,
             headers: clean.map(([name, value]) => ({ name, value: String(value) }))
+          }).then(() => {
+            if (request) { request.continued = true; request.judgeFailure?.(); }
           }).catch(async (error) => {
             rejectionPhase = phase;
-            // The network id binds Chromium's cancellation to this interception,
-            // and the cancellation must be caused by a navigation (document
-            // replacement, same-document navigation or frame detach). Lifecycle
-            // events can be queued behind the command rejection, so wait for them,
-            // but only accept a cancellation Chromium timestamped no later than the
-            // pre-command sample: an invalid id on a live request, followed by later
-            // navigation or teardown, stays a protocol failure, whenever the error
-            // is delivered. Closure alone never proves anything afterwards.
+            // Operator decision 2026-11-13: a Request-stage pause holds the
+            // request before sending. Invalid InterceptionId means this command
+            // could not continue it. Record without requiring navigation timing;
+            // route/detail data checks still determine acceptance. Every other
+            // protocol error, and failures after successful continuation, fail.
             const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
-            if (invalidId && request && typeof sampledBeforeCommand === "number") {
-              const cancelled = () => request.canceled && request.canceledAt <= sampledBeforeCommand;
-              const proven = () => cancelled() && excused(request);
-              // The cancellation fact may be queued behind this rejection: give it the
-              // existing bounded wait. Once it has arrived, only the replacing commit can
-              // still be outstanding, and that is awaited causally, never by timer.
-              const pendingCommit = () => cancelled() && request.navigationLoader && request.navigationLoader !== request.loaderId;
-              for (let waited = 0; waited < 1000 && !proven() && !pendingCommit(); waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
-              if (proven()) return;
-              if (pendingCommit()) { awaiting.add({ ok: proven, fail: () => record(error, page, failureLabel()) }); return; }
+            if (pinned && requestStage && !request?.continued && invalidId) {
+              terminated("invalid_interception_id");
+              return;
             }
             record(error, page, failureLabel());
             await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
@@ -299,7 +308,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       // unrelated origins creates continuation commands that can race their
       // independent cancellation. CDP overrides apply to this hop only; the
       // browser handles foreign redirects without inheriting our bearer/tenant.
-      // Keep the exact origin check above and all issued-command judgments.
+      // Keep the exact origin check above and successful-continuation judgments.
       await session.send("Fetch.enable", { patterns: [{ urlPattern: `${bffOrigin}/*`, requestStage: "Request" }] });
     })();
     pages.set(page, ready);
@@ -310,7 +319,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   };
   context.on("page", (page) => { attachPage(page); });
   await Promise.all(context.pages().map(attachPage));
-  return { errors, attachPage,
+  return { errors, terminatedBeforeSend, attachPage,
     async navigate(page, targetUrl, { timeout }) {
       await attachPage(page);
       const release = holds.get(page)("navigation");

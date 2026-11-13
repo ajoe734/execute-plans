@@ -161,8 +161,8 @@ function textFindings(text) {
 }
 
 function isBffUrl(url) {
-  if (!url.startsWith(BFF_BASE)) return false;
   try {
+    if (new URL(url).origin !== new URL(BFF_BASE).origin) return false;
     const pathname = new URL(url).pathname;
     return pathname.startsWith("/bff/") || ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname);
   } catch {
@@ -187,14 +187,31 @@ async function crawlRoute(page, route, { source, transport }) {
   const responses = [];
   const failedRequests = [];
   const consoleErrors = [];
+  const routeRequests = new Set();
+  const dataReads = [];
+  const isDataUrl = (url) => {
+    const pathname = new URL(url).pathname;
+    return isBffUrl(url) && pathname.startsWith("/bff/") &&
+      !["/bff/me", "/bff/auth/readiness", "/bff/management/shell-summary"].includes(pathname) &&
+      !/\/(?:stream|events)(?:\/|$)/u.test(pathname);
+  };
 
   const onRequest = (req) => {
     const url = req.url();
     if (isBffUrl(url)) requests.push({ method: req.method(), url });
+    if (isDataUrl(url) && req.method() === "GET") routeRequests.add(req);
   };
   const onResponse = (res) => {
     const url = res.url();
     if (isBffUrl(url)) responses.push({ status: res.status(), method: res.request().method(), url });
+    if (!routeRequests.has(res.request())) return;
+    const read = { path: new URL(url).pathname, status: res.status(), complete: false, valid: false };
+    dataReads.push(read);
+    // Do not keep response bodies or credentials. A response header alone does
+    // not establish that finite route data arrived; open streams are excluded.
+    void res.json().then((body) => {
+      read.valid = body !== null && typeof body === "object" && !body.error && body.ok !== false && body.success !== false;
+    }, () => {}).finally(() => { read.complete = true; });
   };
   const onRequestFailed = (req) => {
     const url = req.url();
@@ -219,12 +236,39 @@ async function crawlRoute(page, route, { source, transport }) {
   try {
     const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport);
     if (navErrorMaybe) throw navErrorMaybe;
-    await page
-      .waitForFunction(() => (document.body?.innerText || "").trim().length > 15, undefined, { timeout: SETTLE_TIMEOUT_MS })
-      .catch(() => {});
-    await page.waitForTimeout(400);
-    finalUrl = await page.evaluate(() => window.location.pathname + window.location.search);
-    bodyText = (await page.locator("body").innerText().catch(() => "")) || "";
+    // Reuse the existing settle budget for auth, lazy-route resolution,
+    // redirects and finite data. A long loading message is never readiness.
+    const deadline = Date.now() + SETTLE_TIMEOUT_MS;
+    const expectedPath = expectedCanonicalPath(requestedPathname) || requestedPathname;
+    let ready = false;
+    do {
+      const snapshot = await page.evaluate(() => {
+        const content = document.querySelector("main") || document.body;
+        return {
+          path: window.location.pathname, finalUrl: window.location.pathname + window.location.search,
+          body: document.body?.innerText || "", content: content?.innerText || "",
+          busy: Boolean(content?.querySelector('[aria-busy="true"], [data-state="loading"]')),
+          login: Boolean(document.querySelector('input[type="password"]')),
+        };
+      });
+      finalUrl = snapshot.finalUrl;
+      bodyText = snapshot.body;
+      const loading = /(?:^|\n)\s*(?:Loading(?:\s*[.…]+)?|Verifying (?:Pantheon session|Agora access)[.…]*|(?:正在)?載入(?:中)?[.…]*|資料載入中[.…]*)\s*(?:$|\n)/iu.test(snapshot.content);
+      const dataError = /(?:^|\n)\s*(?:Failed to (?:load|fetch)|Unable to load|載入失敗|無法載入|資料讀取失敗)/iu.test(snapshot.content);
+      // Historical fixture ids may honestly render not-found. Live-id details
+      // must return real data; a 404 there is a failure.
+      const honestNotFound = route.kind === "detail-or-alias" && source === "baseline-or-live-nav" &&
+        /not found|找不到|不存在/iu.test(snapshot.content);
+      const validReads = dataReads.filter((read) => read.complete &&
+        ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
+      const failedReads = dataReads.filter((read) => read.complete && !validReads.includes(read));
+      ready = snapshot.path === expectedPath && !snapshot.login && !snapshot.busy && !loading && !dataError &&
+        snapshot.content.trim().length > 15 && validReads.length > 0 && failedReads.length === 0 &&
+        dataReads.every((read) => read.complete);
+      if (ready || Date.now() >= deadline) break;
+      await page.waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
+    } while (true);
+    if (!ready) status = "datafail";
     if (bodyText.includes("畫面渲染失敗")) status = "crash";
     else if (bodyText.trim().length < 15) status = "blank";
   } catch (err) {
@@ -286,6 +330,7 @@ async function crawlRoute(page, route, { source, transport }) {
     finalUrl,
     alias,
     controls,
+    dataCheck: { pass: status === "ok", reads: dataReads },
     bffRequestCount: requests.length,
     bffResponseCount: responses.length,
     bffFailedCount: failedRequests.length,
@@ -576,7 +621,7 @@ async function main() {
   const liveIdResults = [];
   for (const resolved of liveIdResolution) {
     if (!resolved.routePath) continue;
-    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail" }, { source: `live-id:${resolved.entity}`, transport });
+    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail", entity: resolved.entity }, { source: `live-id:${resolved.entity}`, transport });
     liveIdResults.push(result);
   }
 
@@ -595,6 +640,7 @@ async function main() {
 
   const allResults = [...results, ...liveIdResults];
   const crashRoutes = allResults.filter((r) => r.status === "crash" || r.status === "blank" || r.status === "navfail");
+  const dataFailRoutes = allResults.filter((r) => !r.dataCheck.pass);
   const aliasFailRoutes = allResults.filter((r) => r.alias?.directRenderFail);
   const detailHonestyFailRoutes = allResults.filter((r) => r.detailHonestyViolations.length > 0);
   const seedFallbackArmedRoutes = allResults.filter((r) => r.mockFindings.some((m) => m.id === "seed_fallback_armed"));
@@ -616,6 +662,7 @@ async function main() {
 
   const gateChecks = [
     { label: "No route crashes, is blank, or fails to navigate.", status: crashRoutes.length === 0 ? "pass" : "fail", note: `count:${crashRoutes.length}` },
+    { label: "Every route and detail resolves auth/loading and completes its data checks.", status: dataFailRoutes.length === 0 ? "pass" : "fail", note: `count:${dataFailRoutes.length}` },
     { label: "No known alias direct-renders instead of redirecting to its canonical path.", status: aliasFailRoutes.length === 0 ? "pass" : "fail", note: `count:${aliasFailRoutes.length}` },
     { label: "No detail route shows raw undefined/NaN/Invalid Date.", status: detailHonestyFailRoutes.length === 0 ? "pass" : "fail", note: `count:${detailHonestyFailRoutes.length}` },
     { label: "No route claims seed fallback armed in strict-live mode.", status: seedFallbackArmedRoutes.length === 0 ? "pass" : "fail", note: `count:${seedFallbackArmedRoutes.length}` },
@@ -657,6 +704,7 @@ async function main() {
     loadGate,
     sourceScan: { ...sourceScan, findings: sourceScan.findings.slice(0, 200) },
     gateChecks,
+    pinnedTransport: { terminatedBeforeSend: transport.terminatedBeforeSend },
     result: {
       pass,
       overall,
