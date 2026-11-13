@@ -1353,7 +1353,8 @@ test("actual caller preserves a genuine invalid id on a queued new-document requ
     expect(c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
     expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
     const before = c.page.url();
-    await expect(navigate(c.page, `${feOrigin}/later`, c.transport)).rejects.toThrow(/Invalid InterceptionId/);
+    const failure = await navigate(c.page, `${feOrigin}/later`, c.transport).then(() => undefined, (error: unknown) => error);
+    expect(String(failure)).toContain("Invalid InterceptionId");
     expect(c.page.url()).toBe(before);
   } finally { c.release(); await c.context.close(); await c.transport.settle(); }
 });
