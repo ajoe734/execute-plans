@@ -323,7 +323,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
       if (samplingHeld) { heldSample = false; reached(); await dispatch; }
       try {
         const result = await send(method as Parameters<CDPSession["send"]>[0], params);
-        if (samplingHeld) note("Performance.getMetrics", {
+        if (method === "Performance.getMetrics" && held) note("Performance.getMetrics", {
           timestamp: (result as { metrics: { name: string; value: number }[] }).metrics.find((m) => m.name === "Timestamp")?.value,
         });
         return result;
@@ -425,8 +425,8 @@ test(`live invalid id then same-request navigation stays actionable when its rea
     await expect.poll(() => c.receipt.canceled).toBe(true);
     c.releaseRejection();
     await c.transport.settle();
+    console.log(JSON.stringify({ scenario: "live-invalid-delayed-rejection", lateSample, ...c.receipt, transportErrors: c.transport.errors, expectedHealth: "fail" }));
     expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
-    console.log(JSON.stringify({ scenario: "live-invalid-delayed-rejection", ...c.receipt, expectedHealth: "fail" }));
   } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
 });
 }
