@@ -214,27 +214,27 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(screen.queryByText("auth ready")).not.toBeInTheDocument();
   });
 
-  it("shows a fast provider snapshot while the auth probe refreshes in the background", async () => {
-    const probe = deferred<AssistantProvidersResult>();
-    const fetchProviders = vi.fn(({ authProbe }: { authProbe?: boolean }) => {
-      if (authProbe) return probe.promise;
-      return Promise.resolve({
-        ok: true,
-        kind: "ok",
-        status: "ok",
-        providers: [
-          {
-            provider: "codex",
-            providerName: "Codex CLI",
-            runtime: "openclaw_gateway_cli_mount",
-            ready: true,
-            status: "ready",
-            authStatus: "not_checked",
-          },
-        ],
-        meta: { auth_probe: false },
-      } satisfies AssistantProvidersResult);
-    });
+  const snapshotResult = {
+    ok: true,
+    kind: "ok",
+    status: "ok",
+    providers: [
+      {
+        provider: "codex",
+        providerName: "Codex CLI",
+        runtime: "openclaw_gateway_cli_mount",
+        ready: true,
+        status: "ready",
+        authStatus: "not_checked",
+      },
+    ],
+    meta: { auth_probe: false },
+  } satisfies AssistantProvidersResult;
+
+  it("does not run the live auth probe on mount and shows the last known status", async () => {
+    const fetchProviders = vi.fn(({ authProbe }: { authProbe?: boolean }) =>
+      authProbe ? new Promise<AssistantProvidersResult>(() => {}) : Promise.resolve(snapshotResult),
+    );
 
     render(
       <MemoryRouter>
@@ -243,9 +243,32 @@ describe("OpenClawLlmAuthPanel", () => {
     );
 
     expect(await screen.findByText("Codex CLI")).toBeInTheDocument();
-    expect(screen.getByText("checking auth")).toBeInTheDocument();
-    expect(screen.getByText("Updating LLM provider auth probe results.")).toBeInTheDocument();
-    expect(screen.getByText("not_checked").closest("[class]")?.className).not.toContain("border-status-success/30");
+    expect(screen.getByText("not_checked")).toBeInTheDocument();
+    expect(screen.getByText("auth not checked")).toBeInTheDocument();
+    expect(screen.queryByText("checking auth")).not.toBeInTheDocument();
+    expect(fetchProviders).toHaveBeenCalled();
+    expect(fetchProviders.mock.calls.every(([args]) => !args.authProbe)).toBe(true);
+  });
+
+  it("runs the live auth probe only when the operator clicks the explicit control", async () => {
+    const probe = deferred<AssistantProvidersResult>();
+    const fetchProviders = vi.fn(({ authProbe }: { authProbe?: boolean }) =>
+      authProbe ? probe.promise : Promise.resolve(snapshotResult),
+    );
+
+    render(
+      <MemoryRouter>
+        <OpenClawLlmAuthPanel api={api({ fetchProviders })} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Codex CLI")).toBeInTheDocument();
+    expect(fetchProviders.mock.calls.some(([args]) => args.authProbe)).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /Check auth now/i }));
+
+    expect(await screen.findByText("Updating LLM provider auth probe results.")).toBeInTheDocument();
+    expect(fetchProviders.mock.calls.filter(([args]) => args.authProbe)).toHaveLength(1);
 
     await act(async () => {
       probe.resolve({

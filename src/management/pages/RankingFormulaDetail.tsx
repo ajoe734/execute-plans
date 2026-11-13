@@ -115,7 +115,7 @@ export const RankingFormulaDetail = () => {
   const nav = useNavigate();
   const { data: f, loading, isError, error } = useLiveDetail<RankingFormula>(
     id,
-    (entityId) => bffV1.rankingFormulas.list().then((rows) => rows.find((x) => x.id === entityId)),
+    (entityId) => bffV1.rankingFormulas.get(entityId),
     { kinds: ["rankingFormulas"] },
   );
   const [audit, setAudit] = useState<AuditEvent[]>([]);
