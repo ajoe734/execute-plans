@@ -38,6 +38,7 @@ import { PersonaPolicyViolationsTab } from "../components/detail/PersonaPolicyVi
 import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTab";
 import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
 import { resolvePersonaForDetail } from "./personaDetailData";
+import { PersonaStrategyPoolPanel } from "../components/persona/PersonaStrategyPoolPanel";
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
@@ -444,6 +445,19 @@ export const PersonaDetail = () => {
                     </Link>
                   </Button>
                 </div>
+              </Section>
+            ),
+          },
+          {
+            value: "strategyPool", label: t("persona.pool.title", { defaultValue: "策略池" }),
+            content: (
+              <Section>
+                <PersonaStrategyPoolPanel
+                  management={management}
+                  managementUnavailable={
+                    managementState === "error" || (managementState === "ready" && !management?.data)
+                  }
+                />
               </Section>
             ),
           },
