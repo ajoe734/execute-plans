@@ -1352,6 +1352,12 @@ test("actual caller preserves a genuine invalid id on a queued new-document requ
     expect(c.receipt.canceled).toBe(false);
     expect(c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
     expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    const detail = JSON.parse(c.transport.errors.find((e: string) => e.includes("Invalid InterceptionId"))!.match(/CDP continueRequest (\{.*\}):/)![1]);
+    expect(detail).toMatchObject({ path: "/held", pausePhase: "navigation", queued: true,
+      issued: true, bound: true, canceled: false });
+    expect(detail.interceptionId).toBeTruthy();
+    expect(detail.networkId).toBeTruthy();
+    expect(typeof detail.sampledBeforeIssue).toBe("number");
     const before = c.page.url();
     const failure = await navigate(c.page, `${feOrigin}/later`, c.transport).then(() => undefined, (error: unknown) => error);
     expect(String(failure)).toContain("Invalid InterceptionId");

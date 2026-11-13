@@ -99,10 +99,19 @@ describe("pinned native transport error propagation", () => {
     const page = Object.assign(new EventEmitter(), { isClosed: () => false });
     const context = Object.assign(new EventEmitter(), { pages: () => [page], newCDPSession: async () => session });
     const transport = await installPinnedBffBearer(context, { token: "secret-test-token", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
-    session.emit("Fetch.requestPaused", { requestId: "one", request: { url: "https://api.dev.mvl-cap.tw/bff/events/stream" } });
+    session.emit("Fetch.requestPaused", { requestId: "one", request: {
+      url: "https://api.dev.mvl-cap.tw/bff/events/stream?private=query-secret",
+      headers: { Cookie: "cookie-secret", Authorization: "header-secret" },
+    } });
     await transport.settle();
     expect(() => transport.assertHealthy()).toThrow(/CDP continueRequest.*socket failure \[REDACTED\]/);
     expect(calls).toEqual(["Network.enable", "Page.enable", "Performance.enable", "Page.getFrameTree", "Fetch.enable", "Fetch.continueRequest", "Fetch.failRequest"]);
     expect(transport.errors.join()).not.toContain("secret-test-token");
+    expect(transport.errors.join()).not.toMatch(/query-secret|cookie-secret|header-secret|\?private/);
+    const detail = JSON.parse(transport.errors[0].match(/CDP continueRequest (\{.*\}):/)![1]);
+    expect(detail).toMatchObject({ interceptionId: "one", networkId: null,
+      path: "/bff/events/stream", pausePhase: "active", issuePhase: "active",
+      rejectionPhase: "active", queued: false, issued: true, bound: false,
+      sampledBeforeIssue: null, canceled: false });
   });
 });
