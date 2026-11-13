@@ -1,9 +1,12 @@
 {
   "task": "FE-PINNED-BFF-B523-COUNTEREXAMPLE-20261113",
-  "outcome": "Incomplete candidate; acceptance 2 remains unmet. Not ready for independent approval, merge, or release.",
+  "outcome": "Source repair locally validated under the explicit conservative caller contract; ready to freeze for independent Codex2 review. Current CI/native integration/merge/owner DONE and protected hosted acceptance remain required.",
+  "base_sha": "b5235ef35b9d89bbd260d6ac4a3d98aed2f8c19d",
   "verified_source_sha256": {
+    "scripts/lib/pinned-browser-bff-bearer.mjs": "c233cb1ab09b92d14c8bc4bc33bee5f40d41fc3522e42668c27ddca2a9ad117f",
     "scripts/accept-management-hosted-production.mjs": "ac8554bcce831dbf32d34d30ab5e3458c4de70c109010ce16be587373eded9dd",
-    "e2e/hosted-bff-streaming-transport.spec.ts": "bc292e36c5d94e95b016421448532db0ce9c4788225973499cbb91fbaefc8262"
+    "e2e/hosted-bff-streaming-transport.spec.ts": "807a7ef5b50da179c3ab9a877a77d7ad5a5a92cc7cb25eb853b46d6a1875eade",
+    "src/test/strict-browser-auth-source-contract.test.ts": "ba8673399026d0a9fc4b3a7f377acfe35e9cd4f91d5a4fb9a7dee095dcc0e168"
   },
   "counterexample": {
     "root_run": 43332115634,
@@ -16,36 +19,157 @@
     ],
     "unknowns": "Only the first 5 error strings were retained; total count, exact request ids and historical ordering are unknown and not reconstructed."
   },
-  "fixes": {
-    "lint": "test.info() replaces the empty fixture pattern; real TestInfo semantics kept, no lint disable.",
-    "caller_candidate": "Anchor f38dbc5d5: existing gotoRouteWithRetry (including retries) and discoverLiveNav settle/check before their navigation. Both crawl loops pass the same installed transport. Final settlement/check runs with the browser still available, with browser.close in finally, followed by the existing post-close check. settle drains interception commands rather than open SSE bodies. This is a candidate lifecycle improvement, not a proven complete repair.",
-    "helper": "Unchanged from rejected head 048eee437879b2ca1b3c93b1ab09ea3fc0137520, SHA256 db71191b901801966f58565f742d74085600c5bc1651fdf486ce1673a91d4d15. The prior claim that the post-command sample proves a cancellation preceded the command failure is withdrawn: it only supplies an upper bound. The retained late-sample negative regression fails."
+  "immutable_acceptance": [
+    "Use actual Root43332115634 bound FE43335791094 artifact13998717064 and exact b5235ef35b9d89bbd260d6ac4a3d98aed2f8c19d source as the counterexample. Preserve its two real failures: no-empty-pattern in streaming spec756:113 and Management Invalid InterceptionId at helper256/consumer587 after95route crawl. Backend restart passed. First5 strings do not establish totalcount or exact historical request order; keep unknowns honest rather than require impossible reconstruction. Earlier991/993 source delivery stays archived with its real coverage.",
+    "Make the smallest maintainable correction in the existing helper and actual caller lifecycle that removes false protocol failures from legitimate cancellation while keeping genuine live transport errors observable. Exercise a relevant real Chromium path with the existing fixtures and retain existing opposite-case regressions plus strict bearer-origin and redirect-secret boundaries. Reuse the current helper; no blanket InvalidID suppression or synthetic auth or timeout/retry inflation or new coordination/diagnostic framework.",
+    "Fix the empty Playwright fixture pattern without disabling lint or losing real TestInfo semantics. Run npm run lint and the focused existing Chromium plus strict-auth checks affected by the change; record commands and failures honestly. Do not broaden unrelated test coverage or claim local results as actual hosted95route/detail acceptance.",
+    "Use a clean current-dev worktree in separate execute-plans and only granted artifacts. Commit required trailers and frozen evidence then push a dev PR for genuine assigned reviewer approval and current required CI/native integration. Source only; no secret reads or SSH/VM/provider/business writes or workflow dispatch/restart. Original sole publisher Root01a15322 retains compensation and later exact-pair release ownership. Original full95route/detail gate and four-role20warm13fullraw acceptance remain; no unchanged b523 rerun."
+  ],
+  "source_criterion2_addendum": "2026-11-13T01:54:08.939667+00:00: Pre-freeze consistency check for SAME source/g3; original explicit Human/Ops conservative-ambiguity addendum is fully preserved at /tmp/pantheon-compat-residual-20261111/FE994-before-imposed-schedule-expectation-check.json and review_requeue_intent.reason. No new AC/test framework/algorithm imposed.\n\nRead-only current1bd3d3378 helper is conservative pre-command lower bound, as intended; local focused-v2 ninecasespass is valid local result. HOWEVER existing last two busy-successive-navigation cases still unconditionally assertHealthy with titles 'settle healthy', while comment now states after-sample cancellation must fail closed. They do not drain the actual caller before each goto and their native scheduling can differ under load. Original first genuine PR994 review reproduced precisely command-only-delayed pre-sample falsefailure, so one present ninecasepass does not show the ambiguous interval absent. Before freeze, make those retained cases/claims match the explicit source contract without silently deleting/skipping/xfailing cases or accepting any arbitrary error as success. If expected behavior depends on actual order, establish the needed causal fixture condition explicitly and document old-to-new expectation; keep an imposed after-pre-sample/held-real-command cancellation as conservativeFAIL and demonstrate healthy loaded navigation via the ACTUAL drain/check caller. Existing local loopback/controlledInterception fixtures suffice; no blanketerrorcatch/newgeneralclassifier/retries/platform.\n\nThe delayed-sample negative fixture's new continueStarted condition reasonably avoids holding a PREcommand sample before dispatch can begin; please retain exact048 genuinely failing that adapted negative so it is not a vacuous test. Genuine-error negatives, nativeSSE/origin/tenant/redirect and full actual95gate unchanged; independentCodex2 still decides actualnewhead, no source/hostedapproval here. This is a bounded test/claim consistency observation, not a demand to reconstruct an unavailable native failure timestamp. Native fullreopen context /tmp/pantheon-compat-residual-20261111/FE994-before-imposed-schedule-expectation-check.json; same five artifacts/solepublisher unchanged.",
+  "repair": {
+    "helper": "Restores the conservative pre-command browser-clock sample from b523 (names the bound sampledBeforeCommand). Only cancellation of the same network request timestamped no later than that lower bound, with its existing navigation/detach evidence, can excuse InvalidID. A missing bound or cancellation after it remains a real transport failure, even if cancellation was legitimate. The rejected 048 post-command sample supplied only an upper bound and is no longer used.",
+    "caller": "Keeps the f38dbc5d5 actual caller drain/check before discovery and every route-navigation attempt, including retry. Both route/detail loops use the same transport. Final settlement/check runs before browser close, browser close is in finally, and the existing post-close settlement/check remains. settle drains continuation work; it does not wait for open SSE bodies.",
+    "lint": "test.info() replaces the original empty fixture pattern and retains actual Playwright TestInfo attachment semantics. No lint disables.",
+    "boundaries": "No bearer-origin, tenant, redirect-secret, cookie/auth system, timeout/retry, provider, VM, deployment or release policy changes."
   },
-  "causal_observation_limit": {
-    "retained_regression": "live invalid id then same-request navigation stays actionable when its real rejection is delivered late and the sample is late",
-    "mechanism": "The existing controlledInterception fixture delays delivery of the real Chromium rejection, and delays actual Performance.getMetrics dispatch on that same existing rejectionGate. The genuine command error, navigation, request cancellation and sample are not synthesized. This schedule is a local acceptance counterexample, not a claim about the hosted historical ordering.",
-    "focused_native_receipt": {
-      "order": ["real Fetch.continueRequest Invalid InterceptionId", "same-request Network.loadingFailed canceled=true", "Page.frameNavigated", "rejection delivered to helper", "Performance.getMetrics"],
-      "cancellation_timestamp": 174645.010512,
-      "post_command_sample_timestamp": 174645.048287,
-      "transport_errors": [],
-      "expected": "assertHealthy throws Invalid InterceptionId",
-      "actual": "assertHealthy did not throw"
-    },
-    "limit": "The CDP error response exposes no Chromium execution timestamp. A post-command sample S and cancellation timestamp C with C <= S permit both failure-before-cancellation and cancellation-before-failure. Delaying delivery of the error and lifecycle events can leave the helper the same observations in both cases. A pre-command sample supplies a lower bound and instead rejects legitimate cancellation after that sample while the command is delayed (the two existing successive-navigation regressions remain). Neither bound is the missing failure instant.",
-    "caller_result": "All four relevant actual caller navigation-function cases pass in real Chromium: open authenticated native SSE stays usable until navigation, held interception completes before navigation, and a genuine live invalid id is reported before navigation even when rejection/sample delivery is held. These tests execute the exact caller function source with the existing loopback fixtures; they do not run the complete hosted CLI or prove that future renderer requests cannot race after settle returns.",
-    "minimal_forward_proposal": "Keep the existing caller drain/check candidate and the live-error negative control. Original Human/Ops must decide the minimal repair/observation contract for the unresolved interval: fail closed on ambiguous InvalidID and prevent controlled navigation/teardown while interception work is outstanding, or supply a causally ordered native failure observation through the existing transport. Merely renaming or moving a clock sample cannot supply that observation. No new coordination framework, auth/cookie system, broader diagnostics platform, retry/timeout inflation, or waiver of the full hosted gate is proposed. No decision is presumed here."
+  "native_regressions": {
+    "live_error_negative": "Retains both real-rejection-delivery schedules, including the independent late post-command sample schedule. A real live InvalidID followed by same-request navigation must throw. The current helper uses a pre-command sample, so it cannot enter the old post-command sampling window.",
+    "fixture_adjustments": "The existing rejectionGate delays only a Performance sample called while the held continuation is outstanding (the old helper post-command sample), rather than all later samples for new navigations. This avoids deadlocking a new navigation when the corrected helper awaits its own pre-command sample. The same fixture still reproduces the rejected exact-048 defect. The receipt marks the held request sample explicitly; assertions no longer mistake a different navigation sample for it.",
+    "ambiguity": "Adds a real-Chromium cancellation-after-pre-sample test: complete the pre-command sample, hold genuine command dispatch, navigate/cancel the same request, then dispatch and receive the native InvalidID. Health must FAIL because the helper cannot reconstruct the failure instant. This is a transport-failure assertion, not a product success relabel.",
+    "existing_expectations": "No existing genuine-error negative is changed, skipped or expected-failed. Both original successive-navigation imposed schedules are retained with their healthy assertions; current runs satisfy them. They are not proof that every loaded schedule has sufficient causal evidence. Any ambiguous InvalidID would still fail those assertions. The separate deterministic after-sample schedule explicitly requires unhealthy transport.",
+    "actual_caller": "Execute exact maintained caller function source in the existing native Chromium/HTTPS fixtures. Four discovery/navigation cases check held continuation plus authenticated open SSE or a delayed real live error; the retry case uses a real HTTP 204 and new held work before attempt 2; two teardown cases execute the exact final close block with an actual separate Chromium browser. Two additional loaded navigation cases drain six reads per route across three routes with native command dispatch delayed 200ms, with/without delayed samples, and open SSE. No transport response/error is synthesized.",
+    "opposite_cases": "Retains live abort, live invalid id, later unrelated navigation, wrong-frame detach, same-URL overlap, failed HTTP204, same-document navigation, delayed native lifecycle/commit, origin/tenant, redirect-secret and native SSE controls."
   },
+  "remaining_limits": [
+    "CDP error responses have no native command-failure timestamp. C <= post-command S does not establish C <= failure. The conservative bound may reject a legitimate cancellation in the unobserved interval; this is intentional fail-closed behavior.",
+    "Caller drain/check is bounded prevention for maintained navigation/retry/teardown, not proof that no new renderer request can race after settle returns. Local function/block execution is not a complete hosted CLI run.",
+    "Historical first-five hosted strings still do not establish total count, request identity or exact hosted order. No exact hosted cause is claimed.",
+    "Original full95route/detail acceptance must really pass on the next reviewed/merged fixed FE/BFF pair before any switch/product claim. Any protocol error there, including ambiguous InvalidID, fails the gate. Original four-role20warm10+10p5013fullraw/report9+4GET4views/privatebaseline/persona/thresholds/failedsamples/rollback remain unchanged. Root01a15322 alone owns publication/compensation; no unchanged b523/048 hosted retry."
+  ],
   "local_verification": {
-    "dependency_setup": "Initial lint/Playwright/Vitest attempts exited 127 because node_modules was absent. timeout 180s npm ci --no-audit --no-fund then exited 0 (948 packages).",
     "commands": [
-      "timeout 90s npm run lint -> exit 0; 0 errors, 89 existing warnings",
-      "timeout 60s node_modules/.bin/vitest run src/test/strict-browser-auth-source-contract.test.ts -> exit 0; 7 passed",
-      "timeout 120s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep 'actual .*drains|live invalid id then same-request' --output=/tmp/fe994-caller-lifecycle-results --reporter=list -> exit 1; 5 passed, 1 failed (late-sample negative control)",
-      "timeout 240s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 PLAYWRIGHT_JSON_OUTPUT_NAME=/tmp/fe994-caller-full-chromium.json node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --output=/tmp/fe994-caller-full-results --reporter=list,json > /tmp/fe994-caller-full-chromium.log 2>&1 -> exit 1; 44 passed, 1 failed (3.1m). All original 40 cases and four new actual caller cases pass; retained independent late-sample negative fails.",
-      "git diff --check -> exit 0"
+      {
+        "command": "timeout 100s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"successive navigations|actual .*drains|live invalid id then same-request|queued cancellation lifecycle\" --output=/tmp/fe994-conservative-focused-results --reporter=list",
+        "exit": 143,
+        "result": "Stopped with SIGTERM after the initial fixture gate deadlocked a new pre-command sample. Incomplete, not passed. Fixture scoped as documented; later batches completed."
+      },
+      {
+        "command": "timeout 110s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"successive navigations|actual .*drains|live invalid id then same-request|queued cancellation lifecycle\" --output=/tmp/fe994-conservative-focused-v2-results --reporter=list",
+        "exit": 0,
+        "result": "9 passed (1.1m); intermediate source, followed by new actual lifecycle regressions."
+      },
+      {
+        "command": "timeout 90s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"actual retry|actual browser close|cancellation after the pre-command\" --output=/tmp/fe994-conservative-lifecycle-results --reporter=list",
+        "exit": 0,
+        "result": "4 passed (8.0s)."
+      },
+      {
+        "command": "timeout 300s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 PLAYWRIGHT_JSON_OUTPUT_NAME=/tmp/fe994-conservative-full-chromium.json node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --output=/tmp/fe994-conservative-full-results --reporter=list,json",
+        "exit": 0,
+        "result": "51 passed (2.8m); 0 skipped, 0 flaky, 0 unexpected, no runner errors. Exact source hashes above."
+      },
+      {
+        "command": "timeout 60s node_modules/.bin/vitest run src/test/strict-browser-auth-source-contract.test.ts",
+        "exit": 0,
+        "result": "7 passed, final source."
+      },
+      {
+        "command": "timeout 90s npm run lint",
+        "exit": 0,
+        "result": "0 errors / 89 warnings, final source."
+      },
+      {
+        "command": "timeout 45s node_modules/.bin/playwright test --config=/tmp/fe994-rejected-head-late-sample-control/playwright.config.mjs --grep \"live invalid id then same-request navigation stays actionable when its real rejection is delivered late and the sample is late\" --output=/tmp/fe994-rejected-head-late-sample-control/results",
+        "exit": 1,
+        "result": "1 FAILED. Diagnostic of exact rejected 048 helper, not a passed check: current spec differs only in helper import, native error plus later cancellation/post-sample still yields no health error and fails the unchanged toThrow assertion. The final-source equivalent passes by exposing the error."
+      },
+      {
+        "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge",
+        "exit": 0,
+        "result": "All source anchors pass; final freeze message also checked before commit."
+      },
+      {
+        "command": "python3 \"$PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py\" --base b5235ef35b9d89bbd260d6ac4a3d98aed2f8c19d --head HEAD",
+        "exit": 0,
+        "result": "Source anchor: production +25/-11 net +14; test +210/-16 net +194; docs/evidence +51/-0 net +51. Final evidence counts checked again after freeze."
+      },
+      {
+        "command": "python3 scripts/git/check_generated_files.py <five declared artifact paths>; git diff --check",
+        "exit": 0,
+        "result": "Only declared source/evidence artifacts; no whitespace errors."
+      }
     ],
-    "caveat": "The retained failure is neither skipped nor marked as expected failure. Local results are not hosted 95-route/detail acceptance."
+    "local_raw_sha256": {
+      "/tmp/fe994-conservative-focused.log": "4d6916a6e7f0fad954e3cc3e3c4330871c39ddf1a97b04bae0d96706f2a8cb9a",
+      "/tmp/fe994-conservative-focused-v2.log": "543e0f66c59b76c565a174f180c7b749c11797e46be9e7c0bca7c204304d136d",
+      "/tmp/fe994-conservative-lifecycle.log": "c1d95119f2fa240261549a4f379d9aa3f8c7fb6d4c25f7aa455dee0a0e2c3ebe",
+      "/tmp/fe994-conservative-full-chromium.log": "229a8cac9398d40947307c63c736865578b70a9fc7eeccaa1b51ad021758f701",
+      "/tmp/fe994-conservative-full-chromium.json": "ba198e2a53915f51243298e5ed41db345c0a645cbf6ee9362bd954715d81a05d",
+      "/tmp/fe994-conservative-final-lint.log": "b3e8e7639a3c2850b54b92c07e8e3f9bfb1582cbe4d306359f3925ed858b37ca",
+      "/tmp/fe994-conservative-final-strict-auth.log": "9471f238e2e637f0aa42860ed48fb9f2070a31a2231146dc920b61009e7d233a",
+      "/tmp/fe994-rejected-head-late-sample-control/output.log": "f33b03f13dadc6c8264f65a1d5269836cc9dbf9848f289a92f335119b0ca06a4",
+      "/tmp/fe994-rejected-head-late-sample-control/rejected-helper.mjs": "db71191b901801966f58565f742d74085600c5bc1651fdf486ce1673a91d4d15",
+      "/tmp/fe994-rejected-head-late-sample-control/rejected.spec.ts": "8a1e42cbf29ed7b2bb6f6e20c63e953ce5c3fe00052862dd9c8e34d5599131ae"
+    },
+    "caveat": "Local raw paths are worker evidence, not durable hosted acceptance. Historical incomplete 44-pass/1-fail record is retained below unchanged. No failed/interrupted check is counted as passed."
   },
-  "unchanged": "Original full 95-route/detail gate and four-role 20-warm 13 full-raw acceptance remain; Root01a15322 keeps compensation and release ownership. No hosted claim."
+  "historical_incomplete_1814425f": {
+    "task": "FE-PINNED-BFF-B523-COUNTEREXAMPLE-20261113",
+    "outcome": "Incomplete candidate; acceptance 2 remains unmet. Not ready for independent approval, merge, or release.",
+    "verified_source_sha256": {
+      "scripts/accept-management-hosted-production.mjs": "ac8554bcce831dbf32d34d30ab5e3458c4de70c109010ce16be587373eded9dd",
+      "e2e/hosted-bff-streaming-transport.spec.ts": "bc292e36c5d94e95b016421448532db0ce9c4788225973499cbb91fbaefc8262"
+    },
+    "counterexample": {
+      "root_run": 43332115634,
+      "frontend_run": 43335791094,
+      "artifact": 13998717064,
+      "source": "b5235ef35b9d89bbd260d6ac4a3d98aed2f8c19d",
+      "failures": [
+        "lint: e2e/hosted-bff-streaming-transport.spec.ts 756:113 no-empty-pattern",
+        "management acceptance: CDP continueRequest Invalid InterceptionId (helper:256, consumer:587) after the 95-route crawl"
+      ],
+      "unknowns": "Only the first 5 error strings were retained; total count, exact request ids and historical ordering are unknown and not reconstructed."
+    },
+    "fixes": {
+      "lint": "test.info() replaces the empty fixture pattern; real TestInfo semantics kept, no lint disable.",
+      "caller_candidate": "Anchor f38dbc5d5: existing gotoRouteWithRetry (including retries) and discoverLiveNav settle/check before their navigation. Both crawl loops pass the same installed transport. Final settlement/check runs with the browser still available, with browser.close in finally, followed by the existing post-close check. settle drains interception commands rather than open SSE bodies. This is a candidate lifecycle improvement, not a proven complete repair.",
+      "helper": "Unchanged from rejected head 048eee437879b2ca1b3c93b1ab09ea3fc0137520, SHA256 db71191b901801966f58565f742d74085600c5bc1651fdf486ce1673a91d4d15. The prior claim that the post-command sample proves a cancellation preceded the command failure is withdrawn: it only supplies an upper bound. The retained late-sample negative regression fails."
+    },
+    "causal_observation_limit": {
+      "retained_regression": "live invalid id then same-request navigation stays actionable when its real rejection is delivered late and the sample is late",
+      "mechanism": "The existing controlledInterception fixture delays delivery of the real Chromium rejection, and delays actual Performance.getMetrics dispatch on that same existing rejectionGate. The genuine command error, navigation, request cancellation and sample are not synthesized. This schedule is a local acceptance counterexample, not a claim about the hosted historical ordering.",
+      "focused_native_receipt": {
+        "order": [
+          "real Fetch.continueRequest Invalid InterceptionId",
+          "same-request Network.loadingFailed canceled=true",
+          "Page.frameNavigated",
+          "rejection delivered to helper",
+          "Performance.getMetrics"
+        ],
+        "cancellation_timestamp": 174645.010512,
+        "post_command_sample_timestamp": 174645.048287,
+        "transport_errors": [],
+        "expected": "assertHealthy throws Invalid InterceptionId",
+        "actual": "assertHealthy did not throw"
+      },
+      "limit": "The CDP error response exposes no Chromium execution timestamp. A post-command sample S and cancellation timestamp C with C <= S permit both failure-before-cancellation and cancellation-before-failure. Delaying delivery of the error and lifecycle events can leave the helper the same observations in both cases. A pre-command sample supplies a lower bound and instead rejects legitimate cancellation after that sample while the command is delayed (the two existing successive-navigation regressions remain). Neither bound is the missing failure instant.",
+      "caller_result": "All four relevant actual caller navigation-function cases pass in real Chromium: open authenticated native SSE stays usable until navigation, held interception completes before navigation, and a genuine live invalid id is reported before navigation even when rejection/sample delivery is held. These tests execute the exact caller function source with the existing loopback fixtures; they do not run the complete hosted CLI or prove that future renderer requests cannot race after settle returns.",
+      "minimal_forward_proposal": "Keep the existing caller drain/check candidate and the live-error negative control. Original Human/Ops must decide the minimal repair/observation contract for the unresolved interval: fail closed on ambiguous InvalidID and prevent controlled navigation/teardown while interception work is outstanding, or supply a causally ordered native failure observation through the existing transport. Merely renaming or moving a clock sample cannot supply that observation. No new coordination framework, auth/cookie system, broader diagnostics platform, retry/timeout inflation, or waiver of the full hosted gate is proposed. No decision is presumed here."
+    },
+    "local_verification": {
+      "dependency_setup": "Initial lint/Playwright/Vitest attempts exited 127 because node_modules was absent. timeout 180s npm ci --no-audit --no-fund then exited 0 (948 packages).",
+      "commands": [
+        "timeout 90s npm run lint -> exit 0; 0 errors, 89 existing warnings",
+        "timeout 60s node_modules/.bin/vitest run src/test/strict-browser-auth-source-contract.test.ts -> exit 0; 7 passed",
+        "timeout 120s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep 'actual .*drains|live invalid id then same-request' --output=/tmp/fe994-caller-lifecycle-results --reporter=list -> exit 1; 5 passed, 1 failed (late-sample negative control)",
+        "timeout 240s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 PLAYWRIGHT_JSON_OUTPUT_NAME=/tmp/fe994-caller-full-chromium.json node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --output=/tmp/fe994-caller-full-results --reporter=list,json > /tmp/fe994-caller-full-chromium.log 2>&1 -> exit 1; 44 passed, 1 failed (3.1m). All original 40 cases and four new actual caller cases pass; retained independent late-sample negative fails.",
+        "git diff --check -> exit 0"
+      ],
+      "caveat": "The retained failure is neither skipped nor marked as expected failure. Local results are not hosted 95-route/detail acceptance."
+    },
+    "unchanged": "Original full 95-route/detail gate and four-role 20-warm 13 full-raw acceptance remain; Root01a15322 keeps compensation and release ownership. No hosted claim."
+  },
+  "delivery": "Same task branch and PR994 against dev; only the five granted artifacts are in scope. No auto-merge request or workflow dispatch. New exact-head/manifest binding must be frozen for assigned Codex2; no approval is inferred from local counts.",
+  "source_anchor_sha": "50784ecf7a786279e59419e59ac73a102b76c6cb"
 }
