@@ -3913,6 +3913,7 @@ export default {
         allFilteredHint: "目前篩選下沒有 persona。請切換資料範圍或顯示已封存資料。",
       },
     },
+    strategy: { detailNotFound: "找不到策略 {{id}}。" },
     inbox: {
       title: "人類收件匣",
       subtitleFmt: "{{count}} 種類型 · 預先顯示所需角色與後果 · 直接連到能處理的頁面。",
@@ -3934,6 +3935,8 @@ export default {
       loadingDetail: "載入收件匣項目…",
       detailUnavailableTitle: "無法載入收件匣項目",
       detailUnavailableBody: "目前無法取得此項目的 live 詳情；請回到收件匣重新開啟。",
+      detailNotFoundTitle: "找不到收件匣項目",
+      detailNotFoundBody: "找不到收件匣項目 {{id}}，可能已處理或封存。",
       evidenceCountFmt: "查看 {{count}} 項證據",
       focusLoadingPersonaFmt: "正在載入 {{persona}} 的收件匣項目…",
       focusedPersonaFmt: "已聚焦 Persona：{{persona}} · {{count}} 筆待處理項目",
