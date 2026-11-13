@@ -377,6 +377,20 @@ export const paths = {
   tradeLessonDecide: (personaId: string, lessonId: string) =>
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:decide`,
 
+  // ---- 2026-11-12 Agora learning surfaces (restored thin BFF routes) ----
+  agoraCommitteeSessions: () => `${BASE}/agora/committee/sessions`,
+  agoraCommitteeSession: (sessionId: string) => `${BASE}/agora/committee/sessions/${enc(sessionId)}`,
+  agoraCommitteeMemos: (sessionId: string) => `${BASE}/agora/committee/sessions/${enc(sessionId)}/memos`,
+  agoraCommitteeMemoPublish: (sessionId: string, memoId: string) =>
+    `${BASE}/agora/committee/sessions/${enc(sessionId)}/memos/${enc(memoId)}/publish`,
+  agoraMemoryReview: () => `${BASE}/agora/memory`,
+  agoraMemoryQuarantine: (memoryId: string) => `${BASE}/agora/memory/${enc(memoryId)}/actions/quarantine`,
+  agoraPersonaLab: (personaId: string, tail = "") => `${BASE}/agora/persona-lab/${enc(personaId)}${tail}`,
+  agoraHumanEvidenceSubmit: (kind: "signal-feedback" | "notes" | "insights" | "training-examples") =>
+    `${BASE}/agora/${kind}`,
+  agoraHumanEvidence: (evidenceId: string) => `${BASE}/agora/human-evidence/${enc(evidenceId)}`,
+  agoraPersonaHumanEvidence: (personaId: string) => `${BASE}/agora/personas/${enc(personaId)}/human-evidence`,
+
   // ---- 2026-07-12 Agora Interactions ----
   agoraInteractionsResolve: () => `${BASE}/agora/interactions/context:resolve`,
   agoraInteractionsEligible: () => `${BASE}/agora/interactions/participants:eligible`,
