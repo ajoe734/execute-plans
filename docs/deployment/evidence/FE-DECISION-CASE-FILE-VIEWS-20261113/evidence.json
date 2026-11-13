@@ -1,0 +1,35 @@
+{
+  "task": "FE-DECISION-CASE-FILE-VIEWS-20261113",
+  "owner": "Claude",
+  "reviewer": "Codex2",
+  "branch": "task/FE-DECISION-CASE-FILE-VIEWS-20261113",
+  "prerequisites": [
+    {"task": "BFF-DECISION-CASE-FILE-VIEWS-20261113", "pr": 7323, "status": "done"},
+    {"task": "FE-PERSONA-CYCLE-VIEWS-20261112", "status": "done"},
+    {"task": "FE-PERSONA-POOL-VIEWS-20261112", "status": "done"}
+  ],
+  "outcome": "Source/local qualification complete. Acceptance 4 (real browser against the dev BFF with screenshots) is NOT met: no dev BFF credential is available to this worker (https://api.dev.mvl-cap.tw returns 401 unauthenticated) and no screenshots were captured.",
+  "owned_layer": "Frontend rendering of BFF case_file_view on the persona daily-cycle packet records and the Agora committee memos; typed reader src/lib/bff-v1/caseFile.ts",
+  "not_changing": ["BFF", "owners", "routes (no new route; packet detail and committee memos reads are existing)", "no synthetic case files, memos or memories: a missing or non-ok view renders its recorded reason"],
+  "files": [
+    "src/lib/bff-v1/caseFile.ts",
+    "src/lib/bff-v1/agora/learning.ts",
+    "src/management/components/case-file/CaseFileViewPanel.tsx",
+    "src/management/components/persona/PersonaCyclePanel.tsx",
+    "src/agora/pages/learning/CommitteePage.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts"
+  ],
+  "acceptance_mapping": {
+    "1": "Persona cycle packet row loads the packet detail on demand (GET /bff/ooda/packets/{id}, existing) and shows case-file groups with excerpt, source owner/id and retrieval mode; committee memos render memo.case_file_view the same way",
+    "2": "Citations resolve per item; a decision bound to case_file_id resolves only inside that case file (duplicate item_ids across case_files no longer cross-link) and an unavailable target renders a visible unresolved marker. Each decision/claim lists cited item ids as buttons that focus the cited item; unresolved citations and uncited claims are flagged; rejected contributions show the owner's reason",
+    "3": "Non-ok view, missing view, and empty/unavailable groups render the recorded reason (or 'no reason recorded'), never a blank area",
+    "4": "NOT MET - pending dev BFF credential; see outcome"
+  },
+  "verification": {
+    "vitest": "src/management/components, src/agora/pages/learning, src/agora/i18n.guard.test.ts, src/management/pages/PersonaDetail: 20 files, 202 tests passed; entry points exercised: PersonaCyclePanel via the packet detail BFF mock route, CommitteePage via the memos route",
+    "tsc": "tsc -p tsconfig.app.json --noEmit clean",
+    "reopen_fix": "P2 citation resolution honors decision.case_file_id; regression test with cf-1/cf-2 sharing facts:1 passes (CaseFileViewPanel 7 tests)",
+    "eslint": "0 errors (3 pre-existing warnings in agora/pages/learning/shared.tsx)"
+  }
+}
