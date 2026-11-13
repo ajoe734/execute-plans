@@ -1239,15 +1239,24 @@ test("a read cancelled by a real navigation still settles healthy after an earli
 // criterion 2 addendum, 2026-11-13). Actual caller prevention is tested separately.
 for (const useCaller of [false, true]) {
 for (const delaySample of [true, false]) {
-test(`${useCaller ? "actual caller drains loaded reads and open SSE before successive navigations" : "reads cancelled by successive navigations settle healthy"} when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
+test(`${useCaller ? "actual caller drains loaded reads and open SSE before successive navigations" : delaySample ? "reads cancelled by successive navigations settle healthy" : "successive navigations retain ambiguous issued read failures"} when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
   const probeBrowser = useCaller ? await chromium.launch() : browser;
   const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
+  let issued!: () => void, releaseCommands!: () => void;
+  const firstIssue = new Promise<void>((r) => { issued = r; });
+  const commandGate = new Promise<void>((r) => { releaseCommands = r; });
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session), held = new Set<string>();
     let tail: Promise<unknown> = Promise.resolve(); // a CDP session delivers messages in order
     session.on("Fetch.requestPaused", (e) => { if (e.request.url.startsWith(`${bffOrigin}/read-`)) held.add(e.requestId); });
     session.send = (async (method: string, params: { requestId?: string }) => {
+      if (!useCaller && !delaySample && method === "Fetch.continueRequest" && held.has(params.requestId!)) {
+        // The pre-command native sample has already returned. Deliberately
+        // cancel before dispatch so the missing rejection timestamp remains
+        // ambiguous, exactly as required by the existing fail-closed policy.
+        issued(); await commandGate;
+      }
       const late = (delaySample && method === "Performance.getMetrics") || (method === "Fetch.continueRequest" && held.has(params.requestId!));
       const turn = tail;
       const run = turn.then(async () => { if (late) await new Promise((resolve) => setTimeout(resolve, 200)); });
@@ -1267,20 +1276,30 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
     for (let route = 0; route < (useCaller ? 3 : 12); route++) {
       if (useCaller) expect(await navigate(page, `${feOrigin}/route-${route}`, transport)).toBeNull();
       else await page.goto(`${feOrigin}/route-${route}`);
+      if (route > 0) releaseCommands();
       if (useCaller) expect(await startSse(page, `${bffOrigin}/sse`)).toBe("hello");
       await page.evaluate((u) => { for (let k = 0; k < 6; k++) void fetch(`${u}/read-${k}`).catch(() => {}); }, bffOrigin);
+      if (!useCaller && !delaySample && route === 0) await firstIssue;
       await page.waitForTimeout(20);
     }
     if (useCaller) expect(await navigate(page, `${feOrigin}/route-end`, transport)).toBeNull();
     else await page.goto(`${feOrigin}/route-end`);
     await page.waitForTimeout(600);
     await transport.settle();
-    transport.assertHealthy();
+    if (!useCaller && !delaySample) {
+      expect(() => transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      for (const error of transport.errors) {
+        const detail = JSON.parse(error.match(/CDP continueRequest (\{.*\}):/)![1]);
+        expect(detail.issued).toBe(true);
+        expect(detail.canceled).toBe(true);
+        expect(detail.canceledAt).toBeGreaterThan(detail.sampledBeforeIssue);
+      }
+    } else transport.assertHealthy();
     if (useCaller) {
       expect(bffSeen.filter((r) => r.path.startsWith("/read-")).length).toBe(18);
       expect(bffSeen.filter((r) => r.path === "/sse")).toHaveLength(3);
     }
-  } finally { await context.close(); await transport.settle(); if (useCaller) await probeBrowser.close(); }
+  } finally { releaseCommands(); await context.close(); await transport.settle(); if (useCaller) await probeBrowser.close(); }
 });
 }
 }
