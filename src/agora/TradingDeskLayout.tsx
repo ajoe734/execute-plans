@@ -44,7 +44,11 @@ import "./responsive.css";
 export type AgoraTab =
   | "trading-room"
   | "strategy-workshop"
-  | "strategy-performance";
+  | "strategy-performance"
+  | "committee"
+  | "memory"
+  | "persona-lab"
+  | "feedback";
 
 interface TabDef {
   id: AgoraTab;
@@ -72,6 +76,10 @@ const TABS: TabDef[] = [
     labelZh: "策略執行與績效",
     path: "/agora/strategy-performance",
   },
+  { id: "committee", label: "Committee", labelZh: "委員會", path: "/agora/committee" },
+  { id: "memory", label: "Memory", labelZh: "記憶審核", path: "/agora/memory" },
+  { id: "persona-lab", label: "Persona Lab", labelZh: "人格實驗室", path: "/agora/persona-lab" },
+  { id: "feedback", label: "Feedback", labelZh: "人的回饋", path: "/agora/feedback" },
 ];
 
 function tabFromPath(pathname: string): AgoraTab {
