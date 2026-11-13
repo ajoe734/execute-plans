@@ -186,7 +186,7 @@ async function gotoRouteWithRetry(page, targetUrl, transport, beforeAttempt = ()
 // These routes deliberately have no finite route-specific BFF read. Shell/auth
 // reads and all other readiness/error rules still apply; no implicit exemption.
 const NO_ROUTE_DATA_READS = Object.freeze({
-  "/management/settings": "Local display preferences only; no route-specific BFF data is read.",
+  "/management/settings": "Local preferences and static forms; no route-specific BFF data is read.",
 });
 
 async function crawlRoute(page, route, { source, transport }) {
@@ -203,12 +203,18 @@ async function crawlRoute(page, route, { source, transport }) {
   let awaitingCommit = false;
   let documentCommitted = false;
   const elapsed = () => Date.now() - startedAt;
+  const clearDocumentReads = (reason) => {
+    for (const entry of requestTimeline.values()) {
+      if (entry.attributed) { entry.attributed = false; entry.exclusionReason = reason; }
+    }
+    requests.length = responses.length = failedRequests.length = dataReads.length = 0;
+    routeRequests.clear();
+  };
   const beforeAttempt = (number) => {
     attempt = number;
     documentCommitted = false;
     awaitingCommit = false;
-    requests.length = responses.length = failedRequests.length = dataReads.length = 0;
-    routeRequests.clear();
+    clearDocumentReads("superseded_navigation_attempt");
     navigationAttempts.push({ attempt, startedAtMs: elapsed(), committedAtMs: null });
   };
   const onFrameNavigated = (frame) => {
@@ -231,6 +237,7 @@ async function crawlRoute(page, route, { source, transport }) {
     let mainDocument = false;
     try { mainDocument = req.frame() === page.mainFrame(); } catch { /* service worker */ }
     if (mainDocument && req.isNavigationRequest()) {
+      clearDocumentReads("replaced_document");
       awaitingCommit = true;
       documentCommitted = false;
     }
@@ -432,6 +439,17 @@ async function crawlRoute(page, route, { source, transport }) {
     detailHonestyViolations: findings.honesty,
     textSampleLen: bodyText.trim().length,
   };
+}
+
+function requestTimingReport(routes) {
+  return routes.map((r) => [
+    `### ${r.path} (${r.status})`,
+    ``,
+    `| Attempt | Request | Attributed | Start | Response | Finish | Failure time | Status / failure |`,
+    `|---|---|---|---:|---:|---:|---:|---|`,
+    ...r.bffRequests.map((q) => `| ${q.attempt} | ${q.method} ${new URL(q.url).pathname} | ${q.attributed} | ${q.startedAtMs} | ${q.responseAtMs} | ${q.finishedAtMs} | ${q.failedAtMs} | ${q.status ?? ""} ${q.failure ?? ""} |`),
+    ``,
+  ].join("\n"));
 }
 
 async function discoverLiveNav(page, transport) {
@@ -864,14 +882,7 @@ async function main() {
     `## Per-route BFF request timings`,
     ``,
     `Times are milliseconds from each route's start; null means the event was not observed. Excluded previous-document requests are diagnostic only.`,
-    ...allResults.map((r) => [
-      `### ${r.path} (${r.status})`,
-      ``,
-      `| Attempt | Request | Attributed | Start | Response | Finish | Failure time | Status / failure |`,
-      `|---|---|---|---:|---:|---:|---:|---|`,
-      ...r.bffRequests.map((q) => `| ${q.attempt} | ${q.method} ${new URL(q.url).pathname} | ${q.attributed} | ${q.startedAtMs} | ${q.responseAtMs} | ${q.finishedAtMs} | ${q.failedAtMs} | ${q.status ?? ""} ${q.failure ?? ""} |`),
-      ``,
-    ].join("\n")),
+    ...requestTimingReport(allResults),
     ``,
     `## Alias direct-render failures`,
     ``,
