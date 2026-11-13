@@ -2,13 +2,13 @@
   "task": "FE-PINNED-BFF-3F07-COUNTEREXAMPLE-20261113",
   "owner": "Codex",
   "reviewer": "Codex2",
-  "outcome": "Diagnostic source qualified locally; actual residual NOT repaired or accepted. Await a new observation from the existing sole hosted owner before selecting a behavioral repair. Not ready for acceptance review, integration or DONE.",
+  "outcome": "BFF-only native interception repair under bounded local qualification. Historical four request identities/order remain UNKNOWN. Not hosted acceptance or DONE.",
   "base_sha": "3f07fe7e185299dbce5370d80827c7a1b04e4d41",
   "branch": "task/FE-PINNED-BFF-3F07-COUNTEREXAMPLE-20261113",
   "source_anchor": "c90928c6c506e6ad6100e1f467b1838d660ed2b4",
   "verified_source_blobs": {
-    "scripts/lib/pinned-browser-bff-bearer.mjs": "6f2b8234a4c63f924df6c73ccc01f8d5831582ea",
-    "e2e/hosted-bff-streaming-transport.spec.ts": "f418df8505ad260f3b0f2b8578d83e944a53bad0",
+    "scripts/lib/pinned-browser-bff-bearer.mjs": "b1a33c434c21f9ed6f99071ee9bd79f25e499428",
+    "e2e/hosted-bff-streaming-transport.spec.ts": "aa7629a59153066c492ce173f96bbcd4df6e9809",
     "src/test/strict-browser-auth-source-contract.test.ts": "7660517b500481b0d65c732036d002c9ed5d11c6",
     "scripts/accept-management-hosted-production.mjs": "d15d81aaf22cc441518fadd514087912738ed4f8"
   },
@@ -41,8 +41,21 @@
     "classification": "Generated local fixtures only; NOT captured original evidence, hosted acceptance, exact historical reproduction or old-fails/new-passes repair proof.",
     "entry": "Existing Chromium test now executes unchanged maintained main() through report writing rather than stopping before RBAC/report aggregation. Existing actual route functions and recorded95-route baseline remain. Only fixture environment/browser/HTTP adapters are supplied to the VM.",
     "inputs": "Real Chromium and real local HTTP/HTTPS servers. Generated HTML,15 entity-list responses,200/401 RBAC responses, an explicitly generated fixture load-gate input and an empty fixture source-scan directory. These do not establish real hosted load, UI, authorization or source-scan readiness.",
-    "result": { "baseline": 95, "details": 15, "crawled": 110, "local_rbac": "pass", "transport_errors": 0, "json_report_written": true, "markdown_report_written": true },
-    "trace": ["paused after drain", "navigation returned", "cancelled:true", "paused after close drain"],
+    "result": {
+      "baseline": 95,
+      "details": 15,
+      "crawled": 110,
+      "local_rbac": "pass",
+      "transport_errors": 0,
+      "json_report_written": true,
+      "markdown_report_written": true
+    },
+    "trace": [
+      "paused after drain",
+      "navigation returned",
+      "cancelled:true",
+      "paused after close drain"
+    ],
     "json_report_sha256": "612c1a9d9e66f35a8c94aa53d76e2eb019e055aef661c17ccf36bdfa8b9b004c",
     "markdown_report_sha256": "9468203fc1b88f1f027308712ce444e78580d04047bda797e3563404598bd0f6",
     "report_directory": "/tmp/fe-3f07-report-results/hosted-bff-streaming-trans-5eccc-iscovery-and-detail-closure-chromium/attachments",
@@ -104,18 +117,46 @@
     },
     {
       "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 140 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --grep 'actual 95-route|actual caller preserves a genuine'",
-      "exits": [1, 1],
+      "exits": [
+        1,
+        1
+      ],
       "result": "Intermediate report-test adapters failed. First main used a different page from the imposed lifecycle fixture. Both used context.request after browser closure, yielding status0 RBAC. The second also encountered default-output artifact interference during failure reporting. Corrected fixture page binding, gave HTTP reads their own client, and used isolated output directories. No failed batch counts as pass.",
-      "logs": ["/tmp/fe-3f07-report.log", "/tmp/fe-3f07-report-fixed.log"]
+      "logs": [
+        "/tmp/fe-3f07-report.log",
+        "/tmp/fe-3f07-report-fixed.log"
+      ]
     }
   ],
   "next_required_input": {
-    "actor": "Human/Ops / existing sole hosted owner",
-    "request": "Using existing original authorization/environment and original maintained read-only CLI, observe any current residual with this changed diagnostic helper after verified baseline restoration. Preserve emitted report and sanitized failed-interception context. No new Root, workflow dispatch, unchanged3f07 retry, write testing or competing release path is requested.",
-    "reason": "Captured history has no failing request identity or causal order, and source author/reviewer have no hosted/credential authority. A synthetic local schedule cannot identify the actual residual. Keep history UNKNOWN; use only a new real observation to select the smallest behavioral repair.",
-    "restoration": "Canonical task coordination note reports completed original compensation and independent offline restoration verification. This source author performed no VM, SSH, public-pair or service probe.",
-    "after_input": "Implement/qualify the narrow repair only if justified, then freeze the task manifest at the pushed exact head, obtain assigned independent Codex2 review and required CI, allow canonical integration, and perform native owner DONE. None of these task-completion gates is claimed here."
+    "state": "fulfilled_by_original_sole_Ops",
+    "receipt": "/tmp/pantheon-root01a15322-resume-20261111/actual-819-admin-original-CLI-readonly-diagnostic-20261113.json",
+    "next": "Continue source qualification and obtain assigned Codex2 independent exact-head review through same PR998. Missing historical trace is not a new operator proof gate."
   },
   "protected_boundaries": "Original full95/details/aggregate-before-switch, supplementary4role20warm13raw/privatebaseline/performance/auth and exact-pair rollback remain. No financial5AC, W1-W4, Persona/pool/Loops/intraday or separateStageProd acceptance claimed. Pattern/original9aeb/all49 remain CLOSED. No source-author VM/SSH/provider/model/secrets/product/business/service/deployment operations or workflow dispatch. No new gate/grant/auth framework.",
-  "review_delivery": { "state": "draft_diagnostic_only", "assigned_reviewer": "Codex2", "independent_review": "not_requested; task incomplete", "auto_merge": false }
+  "review_delivery": {
+    "state": "local_qualification_in_progress",
+    "assigned_reviewer": "Codex2",
+    "pr": 998,
+    "independent_review": "not_yet_requested",
+    "auto_merge": false
+  },
+  "prior_diagnostic_outcome": "Diagnostic source qualified locally; actual residual NOT repaired or accepted. Await a new observation from the existing sole hosted owner before selecting a behavioral repair. Not ready for acceptance review, integration or DONE.",
+  "ops_observation": {
+    "receipt": "/tmp/pantheon-root01a15322-resume-20261111/actual-819-admin-original-CLI-readonly-diagnostic-20261113.json",
+    "receipt_sha256": "d2b04cb8612befa30ea8ea99093ddb6ab35f54bf20c7d94cdaff0c87c26b6602",
+    "json_report": "/tmp/pantheon-root01a15322-resume-20261111/original-CLI-819-actual-readonly-diagnostic-20261113/management-hosted-acceptance-2026-11-13.json",
+    "json_report_sha256": "997a83309100e56f2ad82e0a5c7d7b51c725c2bafaffa8f925e3eb0f9c24555b",
+    "read": "Read actual receipt, JSON and Markdown report plus stdout, and original official ZIP/log; no hosted operation performed by source author.",
+    "result": "NO_REPRO on restored Bee/acf pair with frozen3f07 app and helper819. 95 baseline +7 actual entity detail routes, transport_error_context=[], reports emitted. Login/me200; logout200 then me401; before/after pair stable.",
+    "limits": "CLI exit1; actual result FAIL has18 alias direct-render failures, missing load-gate input and23 soft source-scan warnings. Not pair acceptance, performance or repair PASS. No reconstruction of missing historical IDs/order."
+  },
+  "repair_evaluation": {
+    "mechanism": "Fetch.enable changes one wildcard pattern to the exact HTTPS BFF origin plus /*. Same native CDP helper/caller, existing header cleaning and lifecycle judgments; no replacement transport or error suppression.",
+    "why": "Only requests requiring BFF auth need continuation/header commands. Native FE/unrelated requests need no such command and can be canceled independently. This prevents those extra commands rather than waiving their failures.",
+    "redirect_contract": "Matching installed CDP types state header overrides do not extend to later redirect hops. Native foreign->BFF and BFF->foreign finite/SSE/changed-response tests verify per-hop behavior; no global extraHTTPHeaders exists in the helper/original caller.",
+    "retained": "All BFF active/ambiguous issued-command negatives, failure records/failRequest, exact-origin check, tenant/header cleaning, Network/Page observation, real CORS and SSE, timeouts and full original caller remain.",
+    "new_tests": "Three native security tests plus wildcard819 vs changed helper full original main95+15/report comparison. Delayed unrelated FE continuation canceled by its renderer uses real native replies/errors. Generated local schedule only; no historical RCA claim.",
+    "qualification": "209 auth/source/policy tests and5 focused Chromium tests terminal exit0. Full native and3 full-caller cases still running at anchor; no pending batch counted as PASS."
+  }
 }

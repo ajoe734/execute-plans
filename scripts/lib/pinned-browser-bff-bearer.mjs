@@ -295,7 +295,12 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       await session.send("Page.enable");
       await session.send("Performance.enable");
       mainFrameId = (await session.send("Page.getFrameTree"))?.frameTree?.frame?.id;
-      await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
+      // Only BFF requests need header overrides. Intercepting FE assets and
+      // unrelated origins creates continuation commands that can race their
+      // independent cancellation. CDP overrides apply to this hop only; the
+      // browser handles foreign redirects without inheriting our bearer/tenant.
+      // Keep the exact origin check above and all issued-command judgments.
+      await session.send("Fetch.enable", { patterns: [{ urlPattern: `${bffOrigin}/*`, requestStage: "Request" }] });
     })();
     pages.set(page, ready);
     // EventEmitter does not consume async rejections. Explicit callers still
