@@ -221,6 +221,111 @@ describe("Trade Journeys workbench", () => {
     expect(screen.getByRole("link", { name: "All journeys" })).toHaveAttribute("href", "/management/trade-journeys?tenant_id=t1&environment=paper&return_to=%2Fmanagement%2Fstrategies%2Fstrat-1&return_label=Strategy+strat-1");
   });
 
+  describe("live invalidation vs pending reads", () => {
+    const okEnvelope = { data: { items: [rows[0]] }, page_info: { total: 1, page_size: 25 }, meta: fresh };
+    function deferredList() {
+      const calls: Array<{ signal: AbortSignal; resolve: () => void; reject: (e: unknown) => void }> = [];
+      vi.mocked(api.listTradeJourneys).mockImplementation((_q, signal) => new Promise((resolve, reject) => {
+        const call = { signal: signal as AbortSignal, resolve: () => resolve(okEnvelope), reject };
+        signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+        calls.push(call);
+      }));
+      return calls;
+    }
+    let invalidate: () => void = () => {};
+    beforeEach(() => {
+      vi.mocked(api.subscribeTradeJourneys).mockImplementation((_q, handlers) => { invalidate = handlers.onInvalidate; return { close() {} }; });
+    });
+
+    it("does not abort a pending same-scope read on invalidation; a burst coalesces into one refetch after it settles", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      invalidate(); invalidate(); invalidate();
+      await new Promise(r => setTimeout(r, 20));
+      expect(calls).toHaveLength(1);
+      expect(calls[0].signal.aborted).toBe(false);
+      calls[0].resolve();
+      expect(await screen.findByText("happy-1")).toBeInTheDocument();
+      await waitFor(() => expect(calls).toHaveLength(2));
+      calls[1].resolve();
+      await new Promise(r => setTimeout(r, 20));
+      expect(calls).toHaveLength(2);
+    });
+
+    it("refetches immediately on invalidation when idle", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      calls[0].resolve();
+      await screen.findByText("happy-1");
+      invalidate();
+      await waitFor(() => expect(calls).toHaveLength(2));
+    });
+
+    it("still aborts the pending read on filter change and on unmount, and surfaces a failed read", async () => {
+      const calls = deferredList();
+      const view = renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      fireEvent.change(screen.getByLabelText("Environment"), { target: { value: "live" } });
+      await waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls[0].signal.aborted).toBe(true);
+      view.unmount();
+      expect(calls[1].signal.aborted).toBe(true);
+    });
+
+    it("keeps a failed read visible instead of hiding it", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      calls[0].reject(new Error("HTTP 500"));
+      expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 500");
+    });
+
+    it("keeps a failed current read visible while the invalidation replacement is pending, and after it fails", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      invalidate();
+      calls[0].reject(new Error("HTTP 500"));
+      await waitFor(() => expect(calls).toHaveLength(2));
+      expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+      await new Promise(r => setTimeout(r, 20));
+      expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+      calls[1].reject(new Error("HTTP 502"));
+      expect(await screen.findByText("HTTP 502")).toBeInTheDocument();
+    });
+
+    it("keeps a failure visible when a later idle invalidation starts another read, until it completes", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      calls[0].resolve();
+      await screen.findByText("happy-1");
+      invalidate();
+      await waitFor(() => expect(calls).toHaveLength(2));
+      calls[1].reject(new Error("HTTP 500"));
+      expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 500");
+      invalidate();
+      await waitFor(() => expect(calls).toHaveLength(3));
+      expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+      calls[2].resolve();
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    });
+
+    it("clears the retained failure only after a valid completed replacement", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      invalidate();
+      calls[0].reject(new Error("HTTP 500"));
+      await waitFor(() => expect(calls).toHaveLength(2));
+      calls[1].resolve();
+      expect(await screen.findByText("happy-1")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    });
+  });
+
   it("inherits the authenticated BFF session tenant on bare list navigation across list, events, row links, and resolve", async () => {
     authState.bffSession = { identity: { tenantId: "tenant-dev" } };
     const knownJourneyId = "tj_c7d14e8a-3cac-439a-81b7-7401fa2aaac3";

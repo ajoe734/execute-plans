@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import path from "node:path";
 import vm from "node:vm";
+import { build as esbuild } from "esbuild";
 // @ts-expect-error plain ESM recorded route baseline
 import { BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath } from "../scripts/lib/management-routes.mjs";
 import { expect, test, chromium, request, type Browser, type CDPSession } from "@playwright/test";
@@ -1694,4 +1695,162 @@ test("actual caller records a Request-stage invalid id on a queued new-document 
     expect(await navigate(c.page, `${feOrigin}/later`, c.transport)).toBeNull();
     expect(c.page.url()).toBe(`${feOrigin}/later`);
   } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
+// Real Chromium + the actual Trade Journeys page, list caller (bffFetch/listTradeJourneys),
+// live-events poller and pinned-bearer helper, bundled from source (or an older revision of
+// the page only) against a local HTTPS BFF whose responses the test controls. Local fixture
+// proof of the read lifecycle; never hosted acceptance.
+const PAGE = "src/management/pages/trade-journeys/TradeJourneysPage.tsx";
+async function bundleList(bffBase: string, pageRev?: string) {
+  const root = process.cwd();
+  const pageSource = pageRev ? execFileSync("git", ["show", `${pageRev}:${PAGE}`], { encoding: "utf8" }) : undefined;
+  const out = await esbuild({
+    absWorkingDir: root, write: false, bundle: true, format: "iife", platform: "browser", jsx: "automatic", logLevel: "silent",
+    stdin: { resolveDir: root, loader: "tsx", contents: `
+      import { createRoot } from "react-dom/client";
+      import { MemoryRouter, Routes, Route } from "react-router-dom";
+      import "@/i18n";
+      import { TradeJourneysPage } from "@/management/pages/trade-journeys/TradeJourneysPage";
+      const root = createRoot(document.getElementById("root")!); (window as any).__unmount = () => root.unmount(); root.render(<MemoryRouter initialEntries={["/management/trade-journeys?tenant_id=t1"]}><Routes><Route path="/management/trade-journeys" element={<TradeJourneysPage/>}/></Routes></MemoryRouter>);` },
+    alias: { "@": path.join(root, "src") },
+    define: { "import.meta.env": JSON.stringify({ MODE: "production", VITE_BFF_MODE: "live", VITE_BFF_BASE_URL: bffBase }), "process.env.NODE_ENV": '"production"' },
+    loader: { ".css": "empty", ".svg": "dataurl", ".png": "dataurl" },
+    plugins: [{ name: "lifecycle-fixture", setup(b) {
+      b.onResolve({ filter: /^@\/lib\/auth\/AuthProvider$/u }, () => ({ path: "auth-stub", namespace: "stub" }));
+      b.onLoad({ filter: /.*/u, namespace: "stub" }, () => ({ contents: "export const useAuth = () => ({ bffSession: null, session: null, user: null, loading: false });", loader: "js", resolveDir: root }));
+      if (pageSource) b.onLoad({ filter: /TradeJourneysPage\.tsx$/u }, (a) => a.path.endsWith(PAGE) ? { contents: pageSource, loader: "tsx", resolveDir: path.dirname(path.join(root, PAGE)) } : undefined);
+    } }],
+  });
+  return out.outputFiles[0].text;
+}
+
+type Listed = { res: http.ServerResponse; url: string; closedEarly: boolean };
+async function lifecycleHarness(pageRev?: string) {
+  const tls = { key: readFileSync(join(dir, "k.pem")), cert: readFileSync(join(dir, "c.pem")) };
+  const lists: Listed[] = [];
+  let polls = 0;
+  let feBase = "";
+  const lcors = () => ({ "access-control-allow-origin": feBase, "access-control-allow-credentials": "true", "access-control-allow-headers": "authorization,content-type,accept,last-event-id,x-request-id,x-tenant-id,x-bff-api-version,x-correlation-id,x-idempotency-key,x-actor-id,x-role,x-persona-id,x-environment" });
+  const lifecycleBff = https.createServer(tls, (req, res) => {
+    if (req.method === "OPTIONS") return void res.writeHead(204, { ...lcors(), "access-control-allow-methods": "GET,POST,OPTIONS" }).end();
+    if (req.url?.startsWith("/bff/management/trade-journeys/events")) {
+      polls++;
+      return void res.writeHead(200, { ...lcors(), "content-type": "text/event-stream" })
+        .end(`id: ${polls}\nevent: snapshot_refetch_required\ndata: {"revision":${polls},"snapshot_refetch":true}\n\n`);
+    }
+    if (req.url?.startsWith("/bff/management/trade-journeys?")) {
+      const entry: Listed = { res, url: req.url, closedEarly: false };
+      res.on("close", () => { if (!res.writableEnded) entry.closedEarly = true; });
+      lists.push(entry); return;
+    }
+    res.writeHead(404, { ...lcors(), "content-type": "application/json" }).end("{}");
+  });
+  const bffBase = `https://127.0.0.1:${await listen(lifecycleBff)}`;
+  const script = await bundleList(bffBase, pageRev);
+  const lifecycleFe = http.createServer((_req, res) => res.writeHead(200, { "content-type": "text/html" })
+    .end(`<!doctype html><div id="root"></div><script>${script.replaceAll("</script", "<\\/script")}</script>`));
+  feBase = `http://127.0.0.1:${await listen(lifecycleFe)}`;
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const transport = await installPinnedBffBearer(context, { token: TOKEN, feBase, bffBase, env: { PANTHEON_AUTH_PIN_BFF_ORIGIN: bffBase } });
+  const page = await context.newPage();
+  await transport.attachPage(page);
+  await page.clock.install();
+  await page.goto(feBase);
+  const row = { journey_id: "lifecycle-1", environment: "paper", status: "completed", current_stage: "reconciliation", severity: "info", flags: {} };
+  const ok = (l: Listed) => l.res.writeHead(200, { ...lcors(), "content-type": "application/json" }).end(JSON.stringify({
+    data: { items: [row] }, page_info: { total: 1, page_size: 25 },
+    meta: { snapshot_at: new Date().toISOString(), read_state: "formal", freshness: { materializer_revision: 1, rebuild_status: "ready", source_watermarks: {} } } }));
+  const fail = (l: Listed) => l.res.writeHead(500, { ...lcors(), "content-type": "application/json" }).end(JSON.stringify({ error: "lifecycle fixture HTTP 500" }));
+  const pollAgain = async () => { const n = polls; await page.clock.runFor(15_000); await expect.poll(() => polls).toBeGreaterThan(n); };
+  const close = async () => { await context.close(); lifecycleBff.closeAllConnections(); lifecycleBff.close(); lifecycleFe.close(); };
+  return { lists, page, ok, fail, pollAgain, polls: () => polls, close };
+}
+
+test.describe("actual Trade Journeys read lifecycle in Chromium", () => {
+  // Current source passes; the recorded predecessor revisions fail the scenario each one broke.
+  const PRE_FIX = "ebbeaf8b9"; // invalidation aborted the pending same-scope read
+  const PRE_CORRECTION = "86ccf42a3"; // invalidation replacement cleared a real failure
+
+  for (const [label, rev, passes] of [["current source", undefined, true], ["pre-fix revision", PRE_FIX, false]] as const) {
+    test(`${label}: invalidation burst while the initial read is pending does not abort or restart it`, async () => {
+      const h = await lifecycleHarness(rev);
+      try {
+        await expect.poll(() => h.lists.length).toBeGreaterThanOrEqual(1);
+        await expect.poll(() => h.polls()).toBeGreaterThanOrEqual(1); // mount poll invalidates while pending
+        await h.pollAgain(); await h.pollAgain(); // burst
+        await h.page.waitForTimeout(200);
+        if (!passes) { expect(h.lists[0].closedEarly).toBe(true); return; } // old page aborted its pending read
+        expect(h.lists).toHaveLength(1);
+        expect(h.lists[0].closedEarly).toBe(false);
+        h.ok(h.lists[0]);
+        await expect(h.page.getByText("lifecycle-1")).toBeVisible();
+        await expect.poll(() => h.lists.length).toBe(2); // one coalesced refetch
+        h.ok(h.lists[1]);
+        await h.page.waitForTimeout(300);
+        expect(h.lists).toHaveLength(2);
+      } finally { await h.close(); }
+    });
+  }
+
+  for (const [label, rev, passes] of [["current source", undefined, true], ["pre-correction revision", PRE_CORRECTION, false]] as const) {
+    test(`${label}: a failed current read stays visible while its replacement never completes`, async () => {
+      const h = await lifecycleHarness(rev);
+      try {
+        await expect.poll(() => h.lists.length).toBe(1);
+        await expect.poll(() => h.polls()).toBeGreaterThanOrEqual(1);
+        await h.page.waitForTimeout(100);
+        h.fail(h.lists[0]);
+        await expect.poll(() => h.lists.length).toBe(2); // replacement launched and left unfinished
+        await h.page.waitForTimeout(300);
+        const alert = h.page.getByRole("alert");
+        if (!passes) { await expect(alert).toHaveCount(0); return; }
+        await expect(alert).toBeVisible();
+        expect(h.lists[1].closedEarly).toBe(false);
+        // Only a valid completed current-scope response clears the retained failure.
+        h.ok(h.lists[1]);
+        await expect(h.page.getByText("lifecycle-1")).toBeVisible();
+        await expect(alert).toHaveCount(0);
+      } finally { await h.close(); }
+    });
+  }
+
+  const PRE_IDLE = "ad0f46572"; // idle invalidation after a failed replacement cleared the retained failure
+  for (const [label, rev, passes] of [["current source", undefined, true], ["pre-idle-fix revision", PRE_IDLE, false]] as const) {
+    test(`${label}: idle invalidation after a failed replacement retains the failure until valid completion`, async () => {
+      const h = await lifecycleHarness(rev);
+      try {
+        await expect.poll(() => h.lists.length).toBe(1);
+        await expect.poll(() => h.polls()).toBeGreaterThanOrEqual(1);
+        await h.page.waitForTimeout(100);
+        h.ok(h.lists[0]);
+        await expect.poll(() => h.lists.length).toBe(2);
+        h.fail(h.lists[1]);
+        const alert = h.page.getByRole("alert");
+        await expect(alert).toBeVisible();
+        await h.page.waitForTimeout(100);
+        await h.pollAgain();
+        await expect.poll(() => h.lists.length).toBe(3);
+        await h.page.waitForTimeout(200);
+        if (!passes) { await expect(alert).toHaveCount(0); return; }
+        await expect(alert).toBeVisible();
+        h.ok(h.lists[2]);
+        await expect(alert).toHaveCount(0);
+      } finally { await h.close(); }
+    });
+  }
+
+  test("a scope change and unmount still abort the pending read", async () => {
+    const h = await lifecycleHarness();
+    try {
+      await expect.poll(() => h.lists.length).toBe(1);
+      await h.page.locator("select").first().selectOption("live");
+      await expect.poll(() => h.lists.length).toBe(2);
+      expect(h.lists[1].url).toContain("environment=live");
+      await expect.poll(() => h.lists[0].closedEarly).toBe(true);
+      expect(h.lists[1].closedEarly).toBe(false);
+      await h.page.evaluate(() => (window as unknown as { __unmount: () => void }).__unmount()); // unmount
+      await expect.poll(() => h.lists[1].closedEarly).toBe(true);
+    } finally { await h.close(); }
+  });
 });
