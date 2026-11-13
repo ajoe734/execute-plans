@@ -742,7 +742,7 @@ for (const invalidLiveId of [false, true]) {
       const draining = new Promise<void>((resolve) => { entered = resolve; });
       const transport = { ...c.transport, async settle() { entered(); await c.transport.settle(); } };
       const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
-      const start = source.indexOf("  await transport.closeBrowser(browser);", source.indexOf("const liveIdResults ="));
+      const start = source.indexOf("  let transportFailed = false;", source.indexOf("const liveIdResults ="));
       expect(start).toBeGreaterThan(0);
       const close = source.slice(start, source.indexOf('\n  console.log("[accept-management-hosted-production] running session/RBAC', start));
       const outcome = vm.runInNewContext(`(async () => {${close}})()`, { transport, browser: probeBrowser })

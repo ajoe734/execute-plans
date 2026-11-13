@@ -43,6 +43,10 @@ transport health alone cannot establish that required data arrived.
 - JSON reports include safe termination records and per-route data results;
   Markdown identifies data failures. A healthy transport does not override a
   failed route/detail/discovery data check or its nonzero process exit.
+- Closure/transport health failures also retain the completed route results in
+  that same JSON/Markdown report with sanitized transport errors, `pass=false`
+  and exit code 1. Ops' actual 6a51 hosted diagnostic exposed this lost-output
+  path; its genuine continued `trade-journeys` abort is still a failure.
 
 ## Verification boundary
 
@@ -52,7 +56,9 @@ command/event delivery is controlled. The preserved old crawler demonstrates
 false acceptance of auth/loading/session-only/error states. New positive cases
 wait for real fixture data and a delayed redirect. Local full-caller cases run
 all 95 baseline routes and 15 discovered details, plus deliberate route, detail
-and discovery negatives through the original main/report/exit-code path.
+and discovery negatives through the original main/report/exit-code path. A
+native continued `trade-journeys` abort now verifies both failing report formats,
+all 110 route records, retained failed-page evidence and nonzero exit status.
 
 All generated HTML/API/load-gate inputs are explicitly local test fixtures.
 They establish harness behavior, not hosted product, provider, load, financial,
