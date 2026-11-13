@@ -1,0 +1,54 @@
+{
+  "task_id": "FE-AGORA-LEARNING-SURFACES-20261112",
+  "kind": "source_implementation_evidence",
+  "owner": "Claude2",
+  "assigned_reviewer": "Codex",
+  "independent_review": "pending",
+  "design": "docs/04/pantheon_persona_cycle_reconnect_2026-11-12/SD_PERSONA_CYCLE_RECONNECT_2026-11-12.md#67-restored-agora-learning-surfaces-c7 (pantheon repo)",
+  "hosted_behavior_claimed": false,
+  "real_browser_check": "not performed in this task; owned by the acceptance task",
+  "files": {
+    "client": "src/lib/bff-v1/agora/learning.ts",
+    "paths": "src/lib/bff-v1/paths.ts (agoraCommittee*, agoraMemory*, agoraPersonaLab, agoraHumanEvidence*)",
+    "pages": "src/agora/pages/learning/{CommitteePage,MemoryReviewPage,PersonaLabPage,FeedbackPage}.tsx",
+    "routes": "src/App.tsx, src/routes/agora.tsx, src/agora/TradingDeskLayout.tsx (/agora/committee|memory|persona-lab|feedback)",
+    "i18n": "src/i18n/locales/{en-US,zh-TW}.ts (agora.learning.*)"
+  },
+  "acceptance_evidence": {
+    "1_pages_use_restored_bff_routes": [
+      "src/agora/pages/learning/learning.pages.test.tsx drives each page through the production client against payloads shaped like the restored routers (committee/owner.envelope, AgoraEnvelope, human-evidence observe)",
+      "src/agora/TradingDeskLayout.test.tsx (four learning tabs registered)"
+    ],
+    "2_unavailable_never_fabricated": [
+      "learning.pages.test.tsx: 'shows an empty owner as unavailable with the recorded reason' and 'surfaces the owner's failure reason'; shadow not recorded; persona id required renders no read",
+      "src/lib/bff-v1/agora/learning.test.ts: 200 status=unavailable, malformed payload -> invalid_owner_response, live 503 detail.reason kept (client.ts ownerReasonFrom)"
+    ],
+    "3_receipts_and_recorded_effect": [
+      "committee publish shows the owner-confirmed published memo",
+      "memory quarantine shows review_state=quarantined and sends an Idempotency-Key",
+      "undo shows rollback receipt and the refreshed change log entry (rolled_back); never-again shows owner negative-experience receipt and the recorded experience on the entry",
+      "owner refusal on accept shows unavailable with reason and no receipt"
+    ],
+    "4_component_tests": [
+      "15 page tests + 3 client tests; npx vitest run src/agora src/lib/bff-v1 src/i18n src/routes all pass; tsc -p tsconfig.app.json clean"
+    ]
+  },
+  "known_limits": [
+    "Real-browser verification of each page is left to the acceptance task; tests here use the BFF client mock resolver with real-shaped payloads, not a live BFF.",
+    "Persona id is operator-entered (?personaId=); no persona list route exists in the restored BFF, so none is invented.",
+    "Patch and skill drafts take an operator-authored JSON body; accept requires an operator-entered adoption reference. Nothing is prefilled.",
+    "Memory entry quarantine is not offered; the owner supports only lesson-candidate quarantine.",
+    "client.ts now preserves detail.reason from fail-closed owner responses in BffError.cause (additive)."
+  ],
+  "authority": {
+    "environment": "paper",
+    "model_call_on_trade_path": false,
+    "new_credential_or_route": false
+  },
+  "review_rejection_repair": {
+    "receipts": "useLearningRead keeps same-key data during refresh; PersonaLab no longer remounts panels; Quarantine keeps its receipt once the candidate is quarantined; tests use 50ms-delayed GETs and assert receipts after reload",
+    "feedback_idempotency": "payload (evidence_id, captured_at) and Idempotency-Key frozen per content; edits rotate both; test covers 409 -> retry -> new content",
+    "verification": "npm test src/agora src/lib/bff-v1 src/i18n src/routes: 95 files / 1205 tests passed; typecheck exit 0; eslint exit 0",
+    "pr": "https://github.com/ajoe734/execute-plans/pull/996"
+  }
+}
