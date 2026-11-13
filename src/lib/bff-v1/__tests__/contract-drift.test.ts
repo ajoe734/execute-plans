@@ -5,7 +5,11 @@ import path from "node:path";
 import { paths } from "../paths";
 import { normalizeAlphaFactoryCard, normalizeAlphaFactoryEnvelope } from "../alphaFactory";
 import { normalizeEvolutionRun } from "../evolution";
-import { adaptPortfolioHoldingRows, adaptPortfolioHoldingsMonitor } from "../management";
+import {
+  adaptPerformanceAttributionResult,
+  adaptPortfolioHoldingRows,
+  adaptPortfolioHoldingsMonitor,
+} from "../management";
 import { queryKeys } from "../queryKeys";
 import { ERROR_CODES } from "@/lib/v4/errorCodes";
 import {
@@ -513,5 +517,139 @@ describe("Evolution run outcome fields (BFF_API_CONTRACT.md retrain run outcome)
     expect(rows?.[1]?.multiplier).toBeUndefined();
     expect(rows?.[1]?.marginReserved).toBeUndefined();
     expect(rows?.[1]?.reasonCode).toBeUndefined();
+  });
+
+  it("covers optional performance attribution summary.instrument_learning and summary.instrument_breakdown fields and tolerates their absence (FE-ATTRIBUTION-INSTRUMENT-LEARNING-20261110)", () => {
+    const withSummary = adaptPerformanceAttributionResult({
+      data: {
+        period: "latest",
+        summary: {
+          period: "latest",
+          requested_period: "latest",
+          period_windowed: false,
+          instrument_learning: {
+            direction_hit_rate: 0.75,
+            direction_hit_count: 3,
+            direction_graded_count: 4,
+            instrument_regret: 42.5,
+            instrument_regret_graded_count: 4,
+            margin_use: 0.174,
+            decision_count: 4,
+            decisions: [
+              {
+                decision_id: "rt-1:dec-1",
+                chosen_instrument_id: "ssf:SRF:202611",
+                best_instrument_id: "ssf:SRF:202611",
+                direction_hit: true,
+                instrument_regret: 0,
+                margin_use: 0.174,
+                chosen_pnl: 1200,
+              },
+            ],
+          },
+          instrument_breakdown: [
+            {
+              instrument_key: "ssf:SRF:202611",
+              instrument_id: "ssf:SRF:202611",
+              symbol: "0050.TWSE",
+              instrument_kind: "stock_future",
+              contract_month: "202611",
+              multiplier: 1000,
+              margin_reserved: 17400,
+              holding_count: 1,
+              market_value: null,
+              total_notional: null,
+              total_pnl: 0,
+              unrealized_pnl: null,
+              realized_pnl: 0,
+            },
+          ],
+        },
+        items: [
+          {
+            dimension: "persona",
+            dimension_key: "persona-1",
+            label: "Persona 1",
+            period: "latest",
+            metrics: { total_pnl: 1200 },
+          },
+        ],
+      },
+      meta: {
+        period: {
+          requested: "latest",
+          applied: "latest",
+          windowed: false,
+          basis: "latest_runtime_telemetry_snapshot",
+        },
+      },
+    });
+
+    expect(withSummary.rows).toHaveLength(1);
+    expect(withSummary.summary?.instrument_learning).toEqual({
+      direction_hit_rate: 0.75,
+      direction_hit_count: 3,
+      direction_graded_count: 4,
+      instrument_regret: 42.5,
+      instrument_regret_graded_count: 4,
+      margin_use: 0.174,
+      decision_count: 4,
+      decisions: [
+        {
+          decision_id: "rt-1:dec-1",
+          chosen_instrument_id: "ssf:SRF:202611",
+          best_instrument_id: "ssf:SRF:202611",
+          direction_hit: true,
+          instrument_regret: 0,
+          margin_use: 0.174,
+          chosen_pnl: 1200,
+        },
+      ],
+    });
+    expect(withSummary.summary?.instrument_breakdown).toEqual([
+      {
+        instrument_key: "ssf:SRF:202611",
+        instrument_id: "ssf:SRF:202611",
+        symbol: "0050.TWSE",
+        instrument_kind: "stock_future",
+        contract_month: "202611",
+        multiplier: 1000,
+        margin_reserved: 17400,
+        holding_count: 1,
+        market_value: null,
+        total_notional: null,
+        total_pnl: 0,
+        unrealized_pnl: null,
+        realized_pnl: 0,
+      },
+    ]);
+
+    const withoutSummary = adaptPerformanceAttributionResult({
+      data: {
+        period: "latest",
+        summary: { period: "latest", requested_period: "latest", period_windowed: false },
+        items: [
+          {
+            dimension: "persona",
+            dimension_key: "persona-1",
+            label: "Persona 1",
+            period: "latest",
+            metrics: { total_pnl: 1200 },
+          },
+        ],
+      },
+      meta: {
+        period: {
+          requested: "latest",
+          applied: "latest",
+          windowed: false,
+          basis: "latest_runtime_telemetry_snapshot",
+        },
+      },
+    });
+
+    expect(withoutSummary.rows).toHaveLength(1);
+    expect(withoutSummary.summary).toBeUndefined();
+    expect(Object.keys(withoutSummary)).toEqual(["rows", "period"]);
   });
 });

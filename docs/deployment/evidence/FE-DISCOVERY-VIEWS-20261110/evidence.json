@@ -1,0 +1,31 @@
+{
+  "taskId": "FE-DISCOVERY-VIEWS-20261110",
+  "owner": "Claude",
+  "reviewer": "Antigravity",
+  "status": "review",
+  "modifiedSurfaces": [
+    "src/lib/bff-v1/discovery.ts",
+    "src/management/components/discovery/DiscoveryPanels.tsx",
+    "src/management/pages/ResearchDetail.tsx",
+    "src/management/pages/phase2/AlphaFactoryBoard.tsx",
+    "src/management/pages/EvolutionDetail.tsx",
+    "src/management/components/detail/EvolutionCandidatesTab.tsx",
+    "src/management/pages/StrategyDetail.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceDetailDrawer.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts"
+  ],
+  "fieldNames": "Built against BFF PR #7159 (BFF-DISCOVERY-READ-SURFACES-20261110): hypothesis_card.cited_spans[].source_record, metrics.in_sample/out_of_sample, lineage.source_records, attribution.text, discovery block, lineage_summary.health.pause_reasons, lineage_summary.attribution, data.templates[].evaluation.",
+  "absentBehaviour": "Every field renders a dash when absent; works before and after the BFF PR merges.",
+  "knownGaps": [
+    "No page consumes /bff/management/strategy-seeds today; hypothesis cards render on the research detail, strategy detail, evolution program and candidate views when the record carries them.",
+    "Source-record links point at /management/evidence/:id (BFF href /bff/management/evidence/{id} mapped to the UI route).",
+    "Alpha factory cards show a compact dash instead of the metrics table when no sample metrics are supplied, preserving the existing no-Sharpe-when-unreported contract.",
+    "No dedicated DataSourceDetailDrawer or EvolutionDetail page-level test; those render the shared panels covered by DiscoveryPanels.test.tsx."
+  ],
+  "verification": {
+    "vitest": "npx vitest run src/management src/lib/bff-v1 src/i18n: 138 files, 1436 tests passed",
+    "typecheck": "npm run typecheck: clean",
+    "eslint": "clean on new files"
+  }
+}

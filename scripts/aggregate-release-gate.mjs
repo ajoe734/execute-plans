@@ -68,6 +68,9 @@ const STATUS_WEIGHT = {
   pass: 0,
   skip: 1,
   warn: 2,
+  // A hosted probe that genuinely failed/was missing but is only advisory
+  // pre-switch (see HOSTED_FE_HARD_GATE). Never a pass; never a bare "warn".
+  advisory_fail: 2.5,
   missing: 3,
   fail: 4,
 };
@@ -122,7 +125,7 @@ const HOSTED_FE_HARD_GATE = hostedHardGateEnabled();
 
 function hostedStatus(status) {
   if (!HOSTED_FE_HARD_GATE && ["fail", "missing"].includes(status))
-    return "warn";
+    return "advisory_fail";
   return status;
 }
 
@@ -214,6 +217,7 @@ function escapeMd(value) {
 }
 
 function statusLabel(status) {
+  if (status === "advisory_fail") return "ADVISORY-FAIL";
   return String(status || "missing").toUpperCase();
 }
 
@@ -849,7 +853,54 @@ function analyzeMgmtHostedAccept(stepOutcomes) {
   };
 }
 
-function buildGate8(mgmtHostedAccept) {
+// Raw step outcomes for hosted probes that previously ran but were never read
+// by the aggregate (their failure was invisible). A forced-success step
+// (continue-on-error) is judged by its real outcome, never by job conclusion.
+function hostedStepChecks(stepOutcomes) {
+  const rows = [
+    ["route_load", "Hosted route-load readiness baseline step passed.", ".lovable/audits/route-load-baseline.log"],
+    ["mgmt_load_gate", "Release load gate manifest step passed.", ".lovable/audits/release-load-gate.log"],
+    ["mgmt_hosted_accept", "Hosted management acceptance step passed (needs genuine short-lived auth).", ".lovable/audits/management-hosted-acceptance.log"],
+    ["e2e", "Hosted desktop Playwright step passed.", ".lovable/audits/playwright-e2e.log"],
+  ];
+  return rows.map(([key, label, evidence]) => {
+    const check = requiredStepCheck(stepOutcomes, key, label, evidence, GATE_OWNERS[8]);
+    // Applicable required authenticated probes are never advisory: a failed,
+    // timed-out or auth-missing step blocks candidate publication.
+    const status = check.status;
+    return { ...check, status, owner: status === "pass" ? "" : GATE_OWNERS[8] };
+  });
+}
+
+// Hosted F12 owner readback comes from the hosted desktop run only; the
+// loopback fixture lane (@approval-local) is never hosted owner evidence.
+function hostedF12Check() {
+  const file = latestAuditFile([/^playwright-desktop-results\.json$/]);
+  const label = "F12 hosted authenticated approval owner readback passed.";
+  if (!file) {
+    return makeCheck(label, "missing", {
+      owner: GATE_OWNERS[8],
+      note: "playwright-desktop-results.json missing",
+    });
+  }
+  const specs = analyzePlaywright(file).specs.filter(
+    (spec) => /12-approvals/.test(spec.file) && /authenticated approval owner readback/i.test(spec.title),
+  );
+  const raw = !specs.length ? "missing" : specs.every((s) => s.status === "pass") ? "pass" : specs.some((s) => s.status === "fail") ? "fail" : specs.some((s) => s.status === "skip") ? "fail" : "missing";
+  const status = raw;
+  return makeCheck(label, status, {
+    owner: status === "pass" ? "" : GATE_OWNERS[8],
+    evidence: evidencePath(file),
+    note: specs.length ? `hosted specs: ${specs.map((s) => s.status).join(",")}` : "hosted F12 owner readback spec not found in desktop results",
+  });
+}
+
+function buildGate8(mgmtHostedAccept, stepOutcomes) {
+  const extra = [...hostedStepChecks(stepOutcomes), hostedF12Check()];
+  return [...buildGate8Core(mgmtHostedAccept), ...extra];
+}
+
+function buildGate8Core(mgmtHostedAccept) {
   if (!mgmtHostedAccept.exists) {
     const status = hostedStatus(mgmtHostedAccept.missingStatus);
     return [
@@ -1448,8 +1499,9 @@ function buildGate4(hosted) {
   ];
 }
 
-function analyzePlaywright() {
+function analyzePlaywright(explicitFile = "") {
   const jsonFile =
+    explicitFile ||
     latestAuditFile([/^playwright-results\.json$/]) ||
     path.join(AUDIT_DIR, "playwright-results.json");
   const report = readJson(jsonFile);
@@ -1899,13 +1951,22 @@ function main() {
     4: buildGate4(hosted),
     5: buildGate5(playwright),
     6: buildGate6(playwright),
-    8: buildGate8(mgmtHostedAccept),
+    8: buildGate8(mgmtHostedAccept, stepOutcomes),
   };
   gates[7] = buildGate7(gates);
 
   autoTickChecklist(gates);
 
   const overall = worstStatus(Object.values(gates).map(gateStatus));
+  const advisoryFailures = Object.entries(gates).flatMap(([gateNo, checks]) =>
+    checks
+      .filter((check) => check.status === "advisory_fail")
+      .map((check) => ({ gate: gateNo, label: check.label, note: check.note, evidence: check.evidence })),
+  );
+  // "overall" can be a non-blocking pre-switch result; readiness is only
+  // "ready" when no hosted probe genuinely failed or was missing.
+  const releaseReadiness =
+    overall === "pass" && advisoryFailures.length === 0 ? "ready" : overall === "fail" || overall === "missing" ? "blocked" : "limited";
   const generatedAt = new Date().toISOString();
   const markdown = [
     "<!-- pantheon-release-gate-summary -->",
@@ -1913,6 +1974,7 @@ function main() {
     "",
     `Generated: ${generatedAt}`,
     `Overall: ${statusLabel(overall)}`,
+    `Release readiness: ${releaseReadiness.toUpperCase()}${advisoryFailures.length ? ` (${advisoryFailures.length} hosted probe failure(s) advisory pre-switch, NOT passing)` : ""}`,
     RUN_URL ? `Run: ${RUN_URL}` : "",
     "",
     renderSummary(gates),
@@ -1928,6 +1990,8 @@ function main() {
   const json = {
     generatedAt,
     overall,
+    releaseReadiness,
+    advisoryFailures,
     auditDir: rel(AUDIT_DIR),
     runUrl: RUN_URL,
     checklistOut: CHECKLIST_TEMPLATE_PATH ? rel(CHECKLIST_OUT_PATH) : "",
