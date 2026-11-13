@@ -181,6 +181,73 @@ export interface PersonaStrategyPoolView {
   openDemands: PoolDemandRecord[] | null;
 }
 
+/** Owner-shaped cycle/memory/memo/harness read (BFF-PERSONA-CYCLE-VIEWS-20261112). Every section is null when unavailable. */
+export interface PersonaCycleHealth {
+  status: "running" | "completed" | "failed" | "unobserved" | "unavailable" | string;
+  last_packet_id: string | null;
+  stage: string | null;
+  failure_reason: string | null;
+  updated_at?: string | null;
+  harness_version?: number | null;
+  risk_status?: string | null;
+}
+export interface PersonaCyclePacket {
+  packet_id: string;
+  stage?: string | null;
+  updated_at?: string | null;
+  phase?: string | null;
+  failure_reason?: string | null;
+  harness_version?: number | null;
+}
+export interface PersonaMemoryEntry {
+  memory_id: string;
+  memory_type?: string | null;
+  written_at?: string | null;
+  source_event_id?: string | null;
+  summary?: string | null;
+}
+export interface PersonaConsultationMemo {
+  memo_id: string;
+  request_id?: string | null;
+  status?: string | null;
+  summary?: string | null;
+  recommendation?: string | null;
+  created_at?: string | null;
+  evidence_refs?: string[] | null;
+}
+export interface PersonaHarnessVersionRow {
+  schema_version?: number | string | null;
+  persona_id?: string;
+  version: number;
+  parent_version?: number | null;
+  patch_id?: string | null;
+  created_at?: string | null;
+  created_by?: string | null;
+  content_digest?: string | null;
+}
+export interface PersonaHarnessExperience {
+  memory_id: string;
+  source_event_id?: string | null;
+  written_at?: string | null;
+  summary?: string | null;
+  experience?: {
+    cue?: unknown;
+    lesson?: unknown;
+    outcome?: unknown;
+    confidence?: number | null;
+    evidence_refs?: string[] | null;
+    harness_version?: number | null;
+    proposal_ids?: string[] | null;
+  };
+}
+export interface PersonaCycleView {
+  cycle: { health: PersonaCycleHealth; packets: PersonaCyclePacket[] } | null;
+  memorySummary: { returned: number; limit: number; entries: PersonaMemoryEntry[] } | null;
+  consultationMemos: PersonaConsultationMemo[] | null;
+  harness: { active_version: number; versions: PersonaHarnessVersionRow[] } | null;
+  harnessExperiences: PersonaHarnessExperience[] | null;
+}
+
 export interface PersonaManagementEnvelope {
   data?: {
     persona?: Record<string, unknown> & {
@@ -206,6 +273,7 @@ export interface PersonaManagementEnvelope {
     activeIncidents?: Array<Record<string, unknown>>;
     latestTelemetry?: Record<string, unknown> | null;
     strategyPool?: PersonaStrategyPoolView | null;
+    personaCycle?: PersonaCycleView | null;
     health?: {
       status?: "healthy" | "degraded" | "critical" | "unknown";
       reasons?: string[];
