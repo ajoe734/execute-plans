@@ -1190,6 +1190,10 @@ jobs:
           set -o pipefail
           npm run validate:mgmt-live:deep 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-live-deep-validation.log"
 
+      - name: Prepare official Ubuntu APT transport
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh
+
       - name: Install Playwright
         id: install_playwright
         continue-on-error: true
@@ -1652,6 +1656,10 @@ jobs:
 
       - name: Install trusted proof dependencies
         run: npm ci
+
+      - name: Prepare official Ubuntu APT transport
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_OS,RUNNER_ARCH bash scripts/prepare-ubuntu-ci-apt.sh
 
       - name: Install trusted proof browser
         run: npx playwright install chromium --with-deps
