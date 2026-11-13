@@ -1,0 +1,34 @@
+{
+  "task": "FE-PERSONA-CYCLE-VIEWS-20261112",
+  "owner": "Claude2",
+  "reviewer": "Codex",
+  "branch": "task/FE-PERSONA-CYCLE-VIEWS-20261112",
+  "prerequisites": [
+    {"task": "BFF-PERSONA-CYCLE-VIEWS-20261112", "pr": 7320, "status": "done"},
+    {"task": "FE-PERSONA-POOL-VIEWS-20261112", "status": "done"}
+  ],
+  "outcome": "Source/local qualification complete; ready for independent review. Real-browser page check is owned by the separate acceptance task and is not claimed here.",
+  "owned_layer": "Persona detail 'Daily Cycle' tab reading data.personaCycle and Management persona-fleet 'Cycle health' column reading persona_cycle_health; typed owner shapes in src/lib/bff-v1/personas.ts and management.ts",
+  "not_changing": ["BFF", "owners", "paper/live transitions", "no synthetic packets, memory, memos, harness versions or health (none derived client-side)"],
+  "files": [
+    "src/lib/bff-v1/personas.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/management/components/persona/PersonaCyclePanel.tsx",
+    "src/management/components/persona/PersonaCyclePanel.test.tsx",
+    "src/management/pages/PersonaDetail.tsx",
+    "src/management/pages/PersonaDetail.test.ts",
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/PersonaFleetPage.test.tsx"
+  ],
+  "acceptance_mapping": {
+    "1": "Cycle packets (stage, phase, failure reason, harness version), memory summary, consultation memos, harness versions and harness experiences rendered from personaCycle",
+    "2": "Fleet rows adapt BFF persona_cycle_health and render status/stage/failure reason per persona",
+    "3": "Null section or non-ok meta.surfaces status renders 無法讀取 with owner reason; fleet status 'unavailable' renders 無法讀取; no rows are fabricated",
+    "4": "Panel and fleet tests use BFF-shaped payloads (fleet through the real adapter); PersonaDetail entry-point test opens the tab. Real browser check: pending acceptance task"
+  },
+  "verification": {
+    "vitest": "src/management + src/lib/bff-v1: 141 files, 1451 tests passed",
+    "tsc": "tsc -p tsconfig.app.json --noEmit clean",
+    "eslint": "0 errors on changed source files (2 pre-existing warnings in PersonaDetail.tsx)"
+  }
+}

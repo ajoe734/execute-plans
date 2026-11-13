@@ -610,4 +610,47 @@ describe("PersonaDetail", () => {
       expect(screen.getByTestId("pool-persona-state").textContent).toBe("運行中");
     });
   });
+  describe("daily cycle tab (FE-PERSONA-CYCLE-VIEWS-20261112)", () => {
+    const persona: Persona = {
+      id: "persona-cycle", name: "Cycle persona", owner: "operator", updatedAt: "2026-11-13T00:00:00Z",
+      state: "approved", risk: "low", archetype: "quant", routedStrategies: 0, successRate: 0,
+    };
+    const ok = { status: "ok" };
+    const open = async () => {
+      render(createElement(MemoryRouter, { initialEntries: ["/management/personas/persona-cycle"] },
+        createElement(Routes, null,
+          createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }))));
+      const tab = await screen.findByRole("tab", { name: /每日循環|Daily Cycle/i });
+      fireEvent.pointerDown(tab); fireEvent.mouseDown(tab); fireEvent.pointerUp(tab); fireEvent.mouseUp(tab); fireEvent.click(tab);
+    };
+
+    it("renders cycle packets, memory, memos, harness and experiences from the BFF read; unavailable sections stay unavailable", async () => {
+      vi.mocked(getPersona).mockResolvedValue(persona);
+      vi.mocked(getPersonaManagement).mockResolvedValue({
+        data: { persona: { id: "persona-cycle" }, personaCycle: {
+          cycle: { health: { status: "failed", last_packet_id: "pkt-2", stage: "failed", failure_reason: "risk_veto" },
+            packets: [
+              { packet_id: "pkt-2", stage: "failed", updated_at: "2026-11-13T01:00:00Z", phase: "terminal", failure_reason: "risk_veto", harness_version: 2 },
+              { packet_id: "pkt-1", stage: "closed", updated_at: "2026-11-12T01:00:00Z", phase: "terminal", failure_reason: null, harness_version: 1 }] },
+          memorySummary: { returned: 1, limit: 100, entries: [{ memory_id: "mem-1", memory_type: "episodic", written_at: "2026-11-12T02:00:00Z", source_event_id: "ev-1", summary: "learned a thing" }] },
+          consultationMemos: null,
+          harness: { active_version: 2, versions: [
+            { schema_version: 1, persona_id: "persona-cycle", version: 1, parent_version: null, patch_id: null, created_at: "2026-11-01T00:00:00Z", created_by: "operator", content_digest: "d1" },
+            { schema_version: 1, persona_id: "persona-cycle", version: 2, parent_version: 1, patch_id: "patch-9", created_at: "2026-11-10T00:00:00Z", created_by: "review", content_digest: "d2" }] },
+          harnessExperiences: [{ memory_id: "mem-x", source_event_id: "ev-9", written_at: "2026-11-12T03:00:00Z", summary: "exp",
+            experience: { cue: "gap", lesson: "size down", outcome: "improved", confidence: 0.7, evidence_refs: [], harness_version: 2, proposal_ids: [] } }],
+        } },
+        meta: { surfaces: { persona_cycles: ok, persona_memory_summary: ok,
+          persona_consultation_memos: { status: "unavailable", reason: "no_consultation_memos" },
+          persona_harness: ok, harness_experiences: ok } },
+      });
+      await open();
+      expect(await screen.findByTestId("cycle-packet-pkt-2")).toBeInTheDocument();
+      expect(screen.getByTestId("cycle-failure-pkt-2").textContent).toContain("risk_veto");
+      expect(screen.getByTestId("cycle-memory").textContent).toContain("learned a thing");
+      expect(screen.getByTestId("cycle-memos-unavailable").textContent).toContain("no_consultation_memos");
+      expect(screen.getByTestId("cycle-harness-v2").textContent).toContain("patch-9");
+      expect(screen.getByTestId("cycle-experiences").textContent).toContain("size down");
+    });
+  });
 });

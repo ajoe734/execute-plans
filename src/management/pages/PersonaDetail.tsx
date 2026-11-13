@@ -39,6 +39,7 @@ import { PersonaEvaluationsTab } from "../components/detail/PersonaEvaluationsTa
 import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHistoryTab";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaStrategyPoolPanel } from "../components/persona/PersonaStrategyPoolPanel";
+import { PersonaCyclePanel } from "../components/persona/PersonaCyclePanel";
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
@@ -453,6 +454,19 @@ export const PersonaDetail = () => {
             content: (
               <Section>
                 <PersonaStrategyPoolPanel
+                  management={management}
+                  managementUnavailable={
+                    managementState === "error" || (managementState === "ready" && !management?.data)
+                  }
+                />
+              </Section>
+            ),
+          },
+          {
+            value: "dailyCycle", label: t("persona.cycle.tab", { defaultValue: "每日循環" }),
+            content: (
+              <Section>
+                <PersonaCyclePanel
                   management={management}
                   managementUnavailable={
                     managementState === "error" || (managementState === "ready" && !management?.data)
