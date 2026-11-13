@@ -1,0 +1,28 @@
+{
+  "task": "FE-PINNED-BFF-B523-COUNTEREXAMPLE-20261113",
+  "counterexample": {
+    "root_run": 43332115634,
+    "frontend_run": 43335791094,
+    "artifact": 13998717064,
+    "source": "b5235ef35b9d89bbd260d6ac4a3d98aed2f8c19d",
+    "failures": [
+      "lint: e2e/hosted-bff-streaming-transport.spec.ts 756:113 no-empty-pattern",
+      "management acceptance: CDP continueRequest Invalid InterceptionId (helper:256, consumer:587) after the 95-route crawl"
+    ],
+    "unknowns": "Only the first 5 error strings were retained; total count, exact request ids and historical ordering are unknown and not reconstructed."
+  },
+  "fixes": {
+    "lint": "test.info() replaces the empty fixture pattern; real TestInfo semantics kept, no lint disable.",
+    "helper": "scripts/lib/pinned-browser-bff-bearer.mjs: the Performance.getMetrics clock sample is queued directly behind Fetch.continueRequest on the ordered CDP session (previously issued before it). Chromium handles the sample after the command, so a rejected command's cancellation necessarily precedes the sample, however late either message is scheduled; the earlier pre-command sample could not prove that (review of cd23597b5). The sample is not taken after the rejection is delivered, because a late-delivered rejection would then let a later live navigation excuse a live invalid id. Unchanged: cancellation must be Chromium-timestamped <= sample and navigation/detach/same-document caused; no blanket InvalidID suppression, no retry/timeout inflation."
+  },
+  "local_verification": {
+    "reproduction": "Real-Chromium tests 'reads cancelled by successive navigations settle healthy when sample and command are scheduled late' and '...when only the command is scheduled late' (reviewer's schedule: command delayed 200ms, sample not delayed; the session wrapper keeps CDP message order). The command-only variant fails on the pre-command-sample helper with Invalid InterceptionId and passes with the fix.",
+    "commands": [
+      "npm run lint -> 0 errors, 89 warnings",
+      "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium -> 40 passed (existing opposite-case regressions retained, incl. live invalid id with late-delivered rejection)",
+      "npx vitest run src/test/strict-browser-auth-source-contract.test.ts -> 7 passed"
+    ],
+    "caveat": "The late-scheduling race is an imposed local schedule, not proof of the hosted ordering. This is not hosted 95-route/detail acceptance."
+  },
+  "unchanged": "Original full 95-route/detail gate and four-role 20-warm 13 full-raw acceptance remain; Root01a15322 keeps compensation and release ownership. No hosted claim."
+}
