@@ -46,7 +46,11 @@ transport health alone cannot establish that required data arrived.
 - Closure/transport health failures also retain the completed route results in
   that same JSON/Markdown report with sanitized transport errors, `pass=false`
   and exit code 1. Ops' actual 6a51 hosted diagnostic exposed this lost-output
-  path; its genuine continued `trade-journeys` abort is still a failure.
+  path; a locally generated forced-continued `trade-journeys` abort reproduces the
+  lost-report symptom (not a recovered historical cause; the historical branch
+  is UNKNOWN) and is still a failure. The verified actual d301 report emitted
+  JSON/MD with exit 1: 102 attempts = 95 baseline + 7 live IDs (4 datafail,
+  1 ok, 97 navfail); the local fixture remains 110 = 95 + 15.
 
 ## Verification boundary
 
