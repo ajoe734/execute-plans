@@ -88,7 +88,7 @@ test.beforeAll(async () => {
       if (canonical) return void res.writeHead(302, { location: canonical }).end();
       const links = BASELINE_ROUTES.filter((r: { kind: string }) => r.kind === "nav")
         .map((r: { path: string }) => `<a href="${r.path}">${r.path}</a>`).join("");
-      return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}</body>`);
+      return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}<script>new EventSource("${bffOrigin}/sse"); void fetch("${bffOrigin}/finite").catch(() => {});</script></body>`);
     }
     res.writeHead(200, { "content-type": "text/html" }).end("<html><body>fe</body></html>");
   });
@@ -1231,7 +1231,7 @@ test("actual 95-route caller handles a new interception after drain through enti
   const create = context.newCDPSession.bind(context);
   let session!: CDPSession;
   let nativeSend!: CDPSession["send"];
-  let heldId = "", heldNetworkId = "";
+  let heldId = "", heldNetworkId = "", closing = false;
   let reached!: () => void, release!: () => void;
   const paused = new Promise<void>((r) => { reached = r; });
   const dispatch = new Promise<void>((r) => { release = r; });
@@ -1240,7 +1240,7 @@ test("actual 95-route caller handles a new interception after drain through enti
     session = await create(page);
     nativeSend = session.send.bind(session);
     session.on("Fetch.requestPaused", (e) => {
-      if (e.request.url === `${bffOrigin}/held`) { heldId = e.requestId; heldNetworkId = e.networkId; trace.push("paused after drain"); reached(); }
+      if (e.request.url === `${bffOrigin}/held`) { heldId = e.requestId; heldNetworkId = e.networkId; trace.push(closing ? "paused after close drain" : "paused after drain"); reached(); }
     });
     session.on("Network.loadingFailed", (e) => { if (e.requestId === heldNetworkId) trace.push(`cancelled:${e.canceled === true}`); });
     session.send = (async (method: string, params: { requestId?: string }) => {
@@ -1257,6 +1257,19 @@ test("actual 95-route caller handles a new interception after drain through enti
   const transport = await installPinnedBffBearer(context, { token: TOKEN, tenantId: "tenant-local", feBase: feOrigin, bffBase: bffOrigin, env: env() });
   const page = await context.newPage();
   await transport.attachPage(page);
+  const closeBrowser = probeBrowser.close.bind(probeBrowser);
+  let lateCloseRequest = false;
+  probeBrowser.close = async (...args) => {
+    if (!page.isClosed()) {
+      closing = true;
+      const request = page.waitForEvent("request", { predicate: (r) => r.url() === `${bffOrigin}/held` });
+      await page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await request;
+      await nativeSend("Performance.getMetrics");
+      lateCloseRequest = true;
+    }
+    return closeBrowser(...args);
+  };
   const goto = page.goto.bind(page);
   let imposed = false;
   page.goto = async (...args) => {
@@ -1300,7 +1313,10 @@ return { results, liveIdResults, liveIdResolution }; })`, {
     expect(result.liveIdResults).toHaveLength(result.liveIdResolution.length);
     expect(result.liveIdResults.every((r: { status: string }) => r.status === "ok")).toBe(true);
     expect(imposed).toBe(true);
+    expect(lateCloseRequest).toBe(true);
+    expect(trace).toContain("paused after close drain");
     expect(trace).toContain("cancelled:true");
+    expect(bffSeen.filter((r) => r.path === "/sse").length).toBeGreaterThanOrEqual(95);
     expect(trace.some((e) => e.startsWith("native rejection:"))).toBe(false);
     transport.assertHealthy();
     const reads = bffSeen.filter((r) => r.path.startsWith("/bff/"));
@@ -1309,6 +1325,35 @@ return { results, liveIdResults, liveIdResolution }; })`, {
     console.log(JSON.stringify({ localActualCaller: true, baseline: result.results.length, details: result.liveIdResults.length, trace, transportErrors: transport.errors.length }));
   } finally {
     release(); managementFixture = false;
-    await probeBrowser.close(); await transport.settle();
+    await closeBrowser(); await transport.settle();
+    console.log(JSON.stringify({ localCallerTrace: trace, transportErrors: transport.errors }));
   }
+});
+
+// A new-document request queued during the same transition is still live at
+// release. Corrupt its actual CDP id and retain the native protocol failure;
+// neither the previous document replacement nor later closure can excuse it.
+test("actual caller preserves a genuine invalid id on a queued new-document request", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, true);
+  const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+  const start = source.indexOf("async function gotoRouteWithRetry(");
+  const navigate = vm.runInNewContext(source.slice(start, source.indexOf("\nasync function crawlRoute(", start)) + "\ngotoRouteWithRetry", { ROUTE_TIMEOUT_MS: 5000 });
+  const goto = c.page.goto.bind(c.page);
+  c.page.goto = async (...args) => {
+    const response = await goto(...args);
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    return response;
+  };
+  try {
+    expect(await navigate(c.page, `${feOrigin}/new-document`, c.transport)).toBeNull();
+    await c.paused;
+    c.release();
+    await c.transport.settle();
+    expect(c.receipt.canceled).toBe(false);
+    expect(c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    const before = c.page.url();
+    await expect(navigate(c.page, `${feOrigin}/later`, c.transport)).rejects.toThrow(/Invalid InterceptionId/);
+    expect(c.page.url()).toBe(before);
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
 });

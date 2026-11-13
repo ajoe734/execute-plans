@@ -61,7 +61,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       // Arm before draining: renderer requests can arrive after an empty drain.
       // Keep new subrequests paused until the replacement document commits (or
       // browser closure completes). The top-level Document must still proceed.
-      let held = null;
+      let held = null, mainFrameId;
       holds.set(page, () => {
         if (held) throw new Error("Pinned BFF page lifecycle already held");
         const queue = held = [];
@@ -156,6 +156,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         flush();
       });
       session.on("Page.frameNavigated", ({ frame }) => {
+        if (!frame.parentId) mainFrameId = frame.id;
         frameNavs.set(frame.id, (frameNavs.get(frame.id) || 0) + 1);
         loaders.set(frame.id, frame.loaderId);
         // The committed navigation and any it superseded are over; a later one is still in flight.
@@ -261,12 +262,13 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           };
           track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
         };
-        if (held && !(event.resourceType === "Document" && !parents.has(event.frameId))) held.push(resume);
+        if (held && !(event.resourceType === "Document" && event.frameId === mainFrameId)) held.push(resume);
         else resume();
       });
       await session.send("Network.enable");
       await session.send("Page.enable");
       await session.send("Performance.enable");
+      mainFrameId = (await session.send("Page.getFrameTree"))?.frameTree?.frame?.id;
       await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
     })();
     pages.set(page, ready);
