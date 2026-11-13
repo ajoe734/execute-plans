@@ -175,7 +175,10 @@ async function resolveExistingFile(root, candidate) {
 }
 
 function shouldUseSpaFallback(decodedPath, acceptHeader) {
-  if (path.posix.extname(decodedPath)) return false;
+  // A route parameter may contain dots (including real strategy ids). Only
+  // asset locations, not an arbitrary route suffix, identify missing files.
+  if (decodedPath === "/assets" || decodedPath.startsWith("/assets/")) return false;
+  if (path.posix.dirname(decodedPath) === "/" && MIME_TYPES.has(path.posix.extname(decodedPath))) return false;
   const accept = String(acceptHeader || "").toLowerCase();
   return !accept || accept.includes("text/html") || accept.includes("*/*");
 }
