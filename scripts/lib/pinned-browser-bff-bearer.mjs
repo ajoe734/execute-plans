@@ -42,7 +42,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   const problem = pinnedTargetProblem({ feBase, bffBase, env });
   if (problem || !token) throw new Error(`Refusing to release BFF credential: ${problem || "no token supplied"}`);
   const bffOrigin = originOf(bffBase), bearer = `Bearer ${token}`;
-  const errors = [], pages = new WeakMap(), pending = new Set(), finalizers = new Set();
+  const errors = [], pages = new WeakMap(), holds = new WeakMap(), pending = new Set(), finalizers = new Set();
   let closed = false;
   context.on("close", () => { closed = true; });
   const record = (error, page, label) => {
@@ -58,6 +58,21 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     const ready = (async () => {
       const session = await context.newCDPSession(page);
       const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set(), parents = new Map(), detaching = new Set();
+      // Arm before draining: renderer requests can arrive after an empty drain.
+      // Keep new subrequests paused until the replacement document commits (or
+      // browser closure completes). The top-level Document must still proceed.
+      let held = null, mainFrameId;
+      holds.set(page, () => {
+        if (held) throw new Error("Pinned BFF page lifecycle already held");
+        const queue = held = [];
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          held = null;
+          for (const resume of queue) resume(true);
+        };
+      });
       // Per-URL tally of aborts judged natively (one per CDP request record) vs seen by Playwright.
       const nativeAborted = new Map(), pwAborted = new Map(), frameNavs = new Map();
       // One causal reading of a cancelled request, shared by the ERR_ABORTED and the
@@ -141,6 +156,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         flush();
       });
       session.on("Page.frameNavigated", ({ frame }) => {
+        if (!frame.parentId) mainFrameId = frame.id;
         frameNavs.set(frame.id, (frameNavs.get(frame.id) || 0) + 1);
         loaders.set(frame.id, frame.loaderId);
         // The committed navigation and any it superseded are over; a later one is still in flight.
@@ -199,45 +215,60 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           clean.push(["authorization", bearer]);
           if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
-        // Await the browser's sample before dispatching continueRequest. Its
-        // Timestamp therefore predates the actual command rejection, regardless
-        // of command scheduling or delayed delivery of the rejection to Node.
-        // Cancellation after this lower bound is ambiguous: CDP exposes no failure
-        // timestamp. Fail closed even if it was legitimate; the maintained caller
-        // drains/checks outstanding commands before navigating or closing.
-        const before = request ? session.send("Performance.getMetrics").then(
-          ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
-        const continueRequest = (sampledBeforeCommand) => session.send("Fetch.continueRequest", { requestId: event.requestId,
-          headers: clean.map(([name, value]) => ({ name, value: String(value) }))
-        }).catch(async (error) => {
-          // The network id binds Chromium's cancellation to this interception,
-          // and the cancellation must be caused by a navigation (document
-          // replacement, same-document navigation or frame detach). Lifecycle
-          // events can be queued behind the command rejection, so wait for them,
-          // but only accept a cancellation Chromium timestamped no later than the
-          // pre-command sample: an invalid id on a live request, followed by later
-          // navigation or teardown, stays a protocol failure, whenever the error
-          // is delivered. Closure alone never proves anything afterwards.
-          const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
-          if (invalidId && request && typeof sampledBeforeCommand === "number") {
-            const cancelled = () => request.canceled && request.canceledAt <= sampledBeforeCommand;
-            const proven = () => cancelled() && excused(request);
-            // The cancellation fact may be queued behind this rejection: give it the
-            // existing bounded wait. Once it has arrived, only the replacing commit can
-            // still be outstanding, and that is awaited causally, never by timer.
-            const pendingCommit = () => cancelled() && request.navigationLoader && request.navigationLoader !== request.loaderId;
-            for (let waited = 0; waited < 1000 && !proven() && !pendingCommit(); waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
-            if (proven()) return;
-            if (pendingCommit()) { awaiting.add({ ok: proven, fail: () => record(error, page, "CDP continueRequest") }); return; }
-          }
-          record(error, page, "CDP continueRequest");
-          await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
-        });
-        track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
+        const resume = (deferred = false) => {
+          // A queued request on a closed target cannot be continued. No command
+          // was issued for it; errors from commands already dispatched stay errors.
+          if (deferred && (closed || page.isClosed())) { interceptions.delete(request); return; }
+          // Await the browser's sample before dispatching continueRequest. Its
+          // Timestamp therefore predates the actual command rejection, regardless
+          // of command scheduling or delayed delivery of the rejection to Node.
+          // Cancellation after this lower bound is ambiguous: CDP exposes no failure
+          // timestamp. Fail closed even if it was legitimate; the maintained caller
+          // drains/checks outstanding commands before navigating or closing.
+          const before = request ? session.send("Performance.getMetrics").then(
+            ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
+          const continueRequest = (sampledBeforeCommand) => {
+            // This queued interception was never dispatched. If its exact native
+            // record already proves navigation cancellation, retire it without
+            // issuing a command for an obsolete id. Live/unknown requests proceed
+            // through the unchanged conservative error judgment below.
+            if (deferred && request?.canceled && excused(request)) return;
+            return session.send("Fetch.continueRequest", { requestId: event.requestId,
+            headers: clean.map(([name, value]) => ({ name, value: String(value) }))
+          }).catch(async (error) => {
+            // The network id binds Chromium's cancellation to this interception,
+            // and the cancellation must be caused by a navigation (document
+            // replacement, same-document navigation or frame detach). Lifecycle
+            // events can be queued behind the command rejection, so wait for them,
+            // but only accept a cancellation Chromium timestamped no later than the
+            // pre-command sample: an invalid id on a live request, followed by later
+            // navigation or teardown, stays a protocol failure, whenever the error
+            // is delivered. Closure alone never proves anything afterwards.
+            const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
+            if (invalidId && request && typeof sampledBeforeCommand === "number") {
+              const cancelled = () => request.canceled && request.canceledAt <= sampledBeforeCommand;
+              const proven = () => cancelled() && excused(request);
+              // The cancellation fact may be queued behind this rejection: give it the
+              // existing bounded wait. Once it has arrived, only the replacing commit can
+              // still be outstanding, and that is awaited causally, never by timer.
+              const pendingCommit = () => cancelled() && request.navigationLoader && request.navigationLoader !== request.loaderId;
+              for (let waited = 0; waited < 1000 && !proven() && !pendingCommit(); waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
+              if (proven()) return;
+              if (pendingCommit()) { awaiting.add({ ok: proven, fail: () => record(error, page, "CDP continueRequest") }); return; }
+            }
+            record(error, page, "CDP continueRequest");
+            await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
+          });
+          };
+          track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
+        };
+        if (held && !(event.resourceType === "Document" && event.frameId === mainFrameId)) held.push(resume);
+        else resume();
       });
       await session.send("Network.enable");
       await session.send("Page.enable");
       await session.send("Performance.enable");
+      mainFrameId = (await session.send("Page.getFrameTree"))?.frameTree?.frame?.id;
       await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
     })();
     pages.set(page, ready);
@@ -249,6 +280,35 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   context.on("page", (page) => { attachPage(page); });
   await Promise.all(context.pages().map(attachPage));
   return { errors, attachPage,
+    async navigate(page, targetUrl, { timeout }) {
+      await attachPage(page);
+      const release = holds.get(page)();
+      try {
+        await this.settle();
+        this.assertHealthy();
+        const started = Date.now();
+        let error = null;
+        try { await page.goto(targetUrl, { waitUntil: "commit", timeout }); }
+        catch (err) { error = err; }
+        finally { release(); }
+        // Release new-document subrequests at commit, before waiting for DOM.
+        // Both waits share the original navigation timeout budget.
+        if (!error) try { await page.waitForLoadState("domcontentloaded", { timeout: Math.max(1, timeout - (Date.now() - started)) }); }
+        catch (err) { error = err; }
+        return error;
+      } finally { release(); }
+    },
+    async closeBrowser(browser) {
+      const releases = [];
+      try {
+        for (const page of context.pages()) { await attachPage(page); releases.push(holds.get(page)()); }
+        await this.settle();
+        this.assertHealthy();
+      } finally {
+        try { await browser.close(); }
+        finally { for (const release of releases) release(); }
+      }
+    },
     async settle() {
       for (;;) {
         while (pending.size) await Promise.all([...pending]);

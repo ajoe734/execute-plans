@@ -173,17 +173,11 @@ function isBffUrl(url) {
 async function gotoRouteWithRetry(page, targetUrl, transport) {
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    // Drain interception commands, not response bodies (SSE stays open), before
-    // this caller cancels the current document's requests with a navigation.
-    await transport.settle();
-    transport.assertHealthy();
-    try {
-      await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS });
-      return null;
-    } catch (err) {
-      lastError = err;
-      await page.waitForTimeout(750).catch(() => {});
-    }
+    // The transport arms its request hold before draining, so renderer work
+    // arriving after the drain cannot race this document replacement.
+    lastError = await transport.navigate(page, targetUrl, { timeout: ROUTE_TIMEOUT_MS });
+    if (!lastError) return null;
+    await page.waitForTimeout(750).catch(() => {});
   }
   return lastError;
 }
@@ -309,9 +303,7 @@ async function crawlRoute(page, route, { source, transport }) {
 }
 
 async function discoverLiveNav(page, transport) {
-  await transport.settle();
-  transport.assertHealthy();
-  await page.goto(`${FE_BASE}/management/cockpit`, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS }).catch(() => {});
+  await transport.navigate(page, `${FE_BASE}/management/cockpit`, { timeout: ROUTE_TIMEOUT_MS });
   await page.waitForTimeout(1500);
   const hrefs = await page
     .evaluate(() => {
@@ -588,12 +580,7 @@ async function main() {
     liveIdResults.push(result);
   }
 
-  try {
-    await transport.settle();
-    transport.assertHealthy();
-  } finally {
-    await browser.close();
-  }
+  await transport.closeBrowser(browser);
   await transport.settle();
   transport.assertHealthy();
 

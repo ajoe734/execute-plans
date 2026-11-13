@@ -1,0 +1,141 @@
+{
+  "task": "FE-PINNED-BFF-9A-COUNTEREXAMPLE-20261113",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "outcome": "Source/local repair validated; exact-head independent review, current required CI, canonical integration and owner DONE remain required. No hosted acceptance or deployment pass is claimed.",
+  "base_sha": "2065f486c44bd809e88a9c797e5b02d49ab0b386",
+  "branch": "task/FE-PINNED-BFF-9A-COUNTEREXAMPLE-20261113",
+  "verified_source_sha256": {
+    "scripts/lib/pinned-browser-bff-bearer.mjs": "9c4d114c48d8caa2dfe3e7dd7be017aab9e83d844df45bb354d213546649af03",
+    "scripts/accept-management-hosted-production.mjs": "3c5659a4f1b23ad0605c1739bd86e8f13e6d77f8201893bf388d5e13e1e0fcb9",
+    "e2e/hosted-bff-streaming-transport.spec.ts": "988a9495455b2f51895bfced0776643a8c7e83880ab66e0d21a31bdf88ef4545",
+    "src/test/strict-browser-auth-source-contract.test.ts": "63881c79996c3822c75b0f332434a103fde3e1b739a9fd92a639abf921cedfdb"
+  },
+  "counterexample": {
+    "root_run": 43362468534,
+    "frontend_run": 43365960962,
+    "frontend_job": 131690326297,
+    "frontend_sha": "9a4551b11fd0ddc070e49c771cde09435f01b642",
+    "backend_sha": "652d8d3c0e9014ae546c0bcc5abf6d188bcfe2e4",
+    "artifact_id": 14010404363,
+    "artifact_zip_sha256": "fbaf2f7b84ed468a9a4617d59780369f6644d65c0c5c28e82f3c09c7b8906bab",
+    "log_entry": "current-run/management-hosted-acceptance.log",
+    "log_sha256": "fe92fe183b3cf369c69c5eaca6847d48fc3374d96e89d0e8eb6cce358e576cd6",
+    "digest_verification": "Verified local official ZIP and only the granted log entry against both hashes.",
+    "observed": "Advertised95-route crawl and entity discovery, then genuine InvalidID at helper259/caller593. No complete hosted report. FE aggregate failed; backend/publicversion/Agora restart success does not convert FE failure to pass.",
+    "unknown": "Historical failing request ID, native cancellation/error causal order and total failure count remain UNKNOWN. First-five error strings cannot reconstruct them.",
+    "archived_delivery": "PR994 approved85151fc2b/merge9a and FE-PINNED-BFF-B523-COUNTEREXAMPLE-20261113 remain intact; this is the canonical terminal-task follow-up, not a replacement approval or gate."
+  },
+  "local_causal_regression": {
+    "entry": "Execute maintained discovery, crawlRoute/gotoRouteWithRetry, resolveLiveIdRoutes, and the full existing main discovery/crawl/detail/close block in real Chromium against the existing local HTTP/HTTPS fixture. BASELINE_ROUTES is the existing recorded95-route baseline; every entity list is served over real local HTTPS and read through a Playwright APIRequestContext adapter to fetchJson.",
+    "imposed_schedule": "At the first entity-derived detail navigation, execute a real old-document fetch after the caller drain, await its native pause and a real browser clock round trip, then navigate while delaying only actual continue dispatch. Delivered9a samples before cancellation and natively rejects its now-invalid interception ID. This locally imposed schedule does not reconstruct historical timing.",
+    "corrected_result": {
+      "baseline_routes": 95,
+      "entity_derived_detail_routes": 15,
+      "transport_errors": 0,
+      "every_route_sse": "Native open SSE remains authenticated; at least95 SSE requests are asserted.",
+      "trace": [
+        "paused after drain",
+        "navigation returned",
+        "cancelled:true",
+        "paused after close drain"
+      ]
+    },
+    "late_close": "Impose another real renderer fetch after the final close drain. It stays queued until browser closure, so no continuation is dispatched on a closed target. Issued-command failures remain observable.",
+    "negative": "Real queued new-document request remains live at release. Dispatch an actually invalid CDP request id, retain native InvalidID, verify no cancellation proof, and verify subsequent actual caller navigation is blocked.",
+    "scope_limit": "Runs the real95/discovery/detail caller lifecycle with local fixture HTML/data, not the complete hosted product CLI/report, role raw acceptance or protected financial/W1 aggregate. No synthetic acceptance manifest or replacement release gate."
+  },
+  "repair": {
+    "helper": "Arm a per-page subrequest hold before draining existing continuation work. Permit only the native frame-tree top-level Document through the hold. Release new-document subrequests at navigation commit; retire an undispatched obsolete request only with its own existing proven native cancellation, or after actual target closure. Both navigation phases share the original timeout budget.",
+    "caller": "Discovery, every route retry and detail route use transport.navigate. Final close uses transport.closeBrowser to arm holds before settling, closes in finally and releases queued work afterwards; caller retains its post-close settle/assertHealthy.",
+    "unchanged": "Conservative pre-command time lower bound and every issued-command InvalidID decision are unchanged. Cancellation after the sample, missing/ambiguous evidence, real continue errors, wrong-frame/live aborts and delayed live errors still fail. No new sleeps/timeouts/retries, disabling interception/auth, blanket InvalidID ignore, synthetic success or aggregate changes.",
+    "auth": "Exact BFF origin, redirect-hop bearer/tenant removal, tenant selection and existing session/RBAC behavior remain. No tokens/raw secret headers are logged or stored in this evidence.",
+    "lint": "Already-correct test.info/TestInfo fixture retained; no lint suppression."
+  },
+  "verification": [
+    {
+      "command": "timeout 150s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"actual 95-route\" --output=/tmp/fe9a-red-results --reporter=list",
+      "exit": 1,
+      "result": "Initial fixture setup failure: VM lacked AbortSignal, so entity resolution produced zero detail results; not a product regression proof.",
+      "local_log": "/tmp/fe9a-red.log",
+      "log_sha256": "2475b29ee42b2f62de9d339e5ad169d7d01b427e370ddaf32dc331757910df16"
+    },
+    {
+      "command": "timeout 150s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"actual 95-route\" --output=/tmp/fe9a-red-v2-results --reporter=list",
+      "exit": 1,
+      "result": "Meaningful delivered9a red: all 95 baseline routes followed by entity discovery; actual native Invalid InterceptionId reaches final assertHealthy (helper259). No fabricated error or protocol-success relabel.",
+      "local_log": "/tmp/fe9a-red-v2.log",
+      "log_sha256": "3b9bd0d4d9092772b7d4f7d4a775263dd34b7943a65945ae9f31f287a8f3f72e"
+    },
+    {
+      "command": "timeout 150s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"actual 95-route|actual .*drains|actual retry|actual browser close|cancellation after the pre-command\" --output=/tmp/fe9a-green-focused-results --reporter=list",
+      "exit": 0,
+      "result": "11 passed, including actual caller full95 and 15 entity-derived details; intermediate correction.",
+      "local_log": "/tmp/fe9a-green-focused.log",
+      "log_sha256": "a6c01ec6bf7e3b033f23b2556396e771ac3c0ffcbdf19d5232538cd7e2cec15f"
+    },
+    {
+      "command": "timeout 170s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"actual 95-route|queued new-document\" --output=/tmp/fe9a-lifecycle-v2-results --reporter=list",
+      "exit": 1,
+      "result": "Full95/15-detail/SSE/late-close positive passed. Negative correctly observed native live InvalidID, then failed on Playwright rejects.toThrow with the VM cross-realm promise; replaced with explicit rejection capture and checked its error text. Not a completed passing batch.",
+      "local_log": "/tmp/fe9a-lifecycle-v2.log",
+      "log_sha256": "d19eb62c2bb0162db12525482fab01ba867bc2ab1e40e4586b0fbe162d3fba64"
+    },
+    {
+      "command": "timeout 30s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --grep \"queued new-document\" --output=/tmp/fe9a-live-negative-results --reporter=list",
+      "exit": 0,
+      "result": "1 passed: a real native wrong-id failure on a queued live new-document request remains an error, blocks later caller navigation, and cannot be excused by previous document replacement.",
+      "local_log": "/tmp/fe9a-live-negative.log",
+      "log_sha256": "bd1b836e8dbe12c2a37a3b32a2217c0db5602d63f26452aafd4b755d7a705a84"
+    },
+    {
+      "command": "timeout 430s env PANTHEON_FE_BASE_URL=http://127.0.0.1:1 PLAYWRIGHT_JSON_OUTPUT_NAME=/tmp/fe9a-full-chromium.json node_modules/.bin/playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --output=/tmp/fe9a-full-chromium-results --reporter=list,json",
+      "exit": 0,
+      "result": "53 passed (3.8m), no skips/retries/failures. All original51 opposite cases retained; two actual caller regressions added.",
+      "local_log": "/tmp/fe9a-full-chromium.log",
+      "log_sha256": "f9060e2618861ebbcc25d6fc16df9974fb58f984bb1124a359041121dc0b00e5"
+    },
+    {
+      "command": "timeout 60s node_modules/.bin/vitest run src/test/strict-browser-auth-source-contract.test.ts",
+      "exit": 0,
+      "result": "7 passed. Existing mocked initialization expectation includes the real Page.getFrameTree command; genuine continue error and redaction assertions retained.",
+      "local_log": "/tmp/fe9a-final-strict-auth.log",
+      "log_sha256": "39a8fdbdfbe24552a6f0f59cbd79b64429e0a1b98f3f2b7f223aac656eea2215"
+    },
+    {
+      "command": "timeout 90s node_modules/.bin/vitest run src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/public-build-auth-contract.test.ts",
+      "exit": 0,
+      "result": "121 passed across3 related auth/tenant/public-build policy files.",
+      "local_log": "/tmp/fe9a-related-auth.log",
+      "log_sha256": "92657e49875566b38adbbde7a5f25bb78837b51bbd51d3350860986a83c6be9d"
+    },
+    {
+      "command": "timeout 90s npm run lint",
+      "exit": 0,
+      "result": "0 errors,92 warnings already present in composed dev. Earlier pre-compose lint had89 warnings.",
+      "local_log": "/tmp/fe9a-final-lint.log",
+      "log_sha256": "4a341edd7589ed06ea99fb771ffb0931968220ff9339b359355dbfb40630daf2"
+    },
+    {
+      "command": "timeout 30s node_modules/.bin/eslint e2e/hosted-bff-streaming-transport.spec.ts src/test/strict-browser-auth-source-contract.test.ts",
+      "exit": 0,
+      "result": "0 errors and0 warnings in changed TypeScript files.",
+      "local_log": "/tmp/fe9a-scoped-lint.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "static_validation": {
+    "node_syntax": "Both modified mjs files passed node --check.",
+    "diff_check": "git diff --check passed.",
+    "trailers": "Command-runtime check_commit_trailers.py --range origin/dev..HEAD --skip-merge passed for anchor commits; final trailer/scope check repeats before push.",
+    "generated_files": "Repository generated-files guard passed for the four changed source/test paths; repeat with evidence path before push."
+  },
+  "review_delivery": {
+    "mode": "review_before_merge",
+    "merge_method": "MERGE",
+    "auto_merge": false,
+    "assigned_reviewer": "Codex2",
+    "binding": "Freeze this committed manifest with the exact pushed PR/head via governed handoff. No reviewer approval is inferred from these author checks. Only canonical supervisor integrator may merge."
+  },
+  "publisher_boundary": "Source/local work only. No VM/SSH/provider/model/secrets/business/data/service/deployment actions or workflow dispatch/restart were performed. Existing sole hosted publisher retains compensation and later exact current-dev FE/BFF release, protected full95/detail and fourrole20warm13fullraw/financial/W1 acceptance. No unchanged9a hosted rerun; Pattern/original9aeb/all49 CLOSED and separate StageProd/time/frozenpair unchanged."
+}

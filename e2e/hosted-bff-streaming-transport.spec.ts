@@ -8,6 +8,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
+// @ts-expect-error plain ESM recorded route baseline
+import { BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath } from "../scripts/lib/management-routes.mjs";
 import { expect, test, chromium, type Browser, type CDPSession } from "@playwright/test";
 // @ts-expect-error plain ESM script helper
 import { installPinnedBffBearer } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
@@ -22,6 +24,7 @@ let foreign: https.Server;
 let fe: http.Server;
 let browser: Browser;
 let flips = 0;
+let managementFixture = false;
 let bffOrigin = "";
 let foreignOrigin = "";
 let feOrigin = "";
@@ -74,12 +77,19 @@ test.beforeAll(async () => {
     } else if (req.url === "/redirect" || req.url === "/sse-redirect") {
       res.writeHead(302, { ...cors, location: `${foreignOrigin}/landed` }).end();
     } else {
-      res.writeHead(200, { ...cors, "content-type": "application/json" }).end(JSON.stringify({ ready: true }));
+      res.writeHead(200, { ...cors, "content-type": "application/json" }).end(JSON.stringify(req.url?.startsWith("/bff/") ? { items: [{ id: "local-live-id" }] } : { ready: true }));
     }
   });
   fe = http.createServer((req, res) => {
     // /stall: HTTP 204 is a real Document navigation that fails (ERR_ABORTED) and never commits.
     if (req.url === "/stall") return void res.writeHead(204).end();
+    if (managementFixture) {
+      const canonical = expectedCanonicalPath((req.url || "").split("?")[0]);
+      if (canonical) return void res.writeHead(302, { location: canonical }).end();
+      const links = BASELINE_ROUTES.filter((r: { kind: string }) => r.kind === "nav")
+        .map((r: { path: string }) => `<a href="${r.path}">${r.path}</a>`).join("");
+      return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}<script>new EventSource("${bffOrigin}/sse"); void fetch("${bffOrigin}/finite").catch(() => {});</script></body>`);
+    }
     res.writeHead(200, { "content-type": "text/html" }).end("<html><body>fe</body></html>");
   });
   bffOrigin = `https://127.0.0.1:${await listen(bff)}`;
@@ -545,7 +555,7 @@ for (const invalidLiveId of [false, true]) {
       const draining = new Promise<void>((resolve) => { entered = resolve; });
       const transport = { ...c.transport, async settle() { entered(); await c.transport.settle(); } };
       const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
-      const start = source.indexOf("  try {\n    await transport.settle();", source.indexOf("const liveIdResults ="));
+      const start = source.indexOf("  await transport.closeBrowser(browser);", source.indexOf("const liveIdResults ="));
       expect(start).toBeGreaterThan(0);
       const close = source.slice(start, source.indexOf('\n  console.log("[accept-management-hosted-production] running session/RBAC', start));
       const outcome = vm.runInNewContext(`(async () => {${close}})()`, { transport, browser: probeBrowser })
@@ -1208,3 +1218,143 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
 });
 }
 }
+
+// Execute the maintained caller's whole discovery -> 95 baseline crawl -> real
+// local entity-list resolution -> detail crawl -> browser-close block. Fixture
+// HTML/data is local protocol coverage, never a hosted acceptance pass. Impose
+// a renderer read immediately AFTER its drain, using only native CDP results.
+test("actual 95-route caller handles a new interception after drain through entity discovery and detail closure", async () => {
+  test.setTimeout(120_000);
+  managementFixture = true;
+  const probeBrowser = await chromium.launch();
+  const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
+  const create = context.newCDPSession.bind(context);
+  let session!: CDPSession;
+  let nativeSend!: CDPSession["send"];
+  let heldId = "", heldNetworkId = "", closing = false;
+  let reached!: () => void, release!: () => void;
+  const paused = new Promise<void>((r) => { reached = r; });
+  const dispatch = new Promise<void>((r) => { release = r; });
+  const trace: string[] = [];
+  context.newCDPSession = async (page) => {
+    session = await create(page);
+    nativeSend = session.send.bind(session);
+    session.on("Fetch.requestPaused", (e) => {
+      if (e.request.url === `${bffOrigin}/held`) { heldId = e.requestId; heldNetworkId = e.networkId; trace.push(closing ? "paused after close drain" : "paused after drain"); reached(); }
+    });
+    session.on("Network.loadingFailed", (e) => { if (e.requestId === heldNetworkId) trace.push(`cancelled:${e.canceled === true}`); });
+    session.send = (async (method: string, params: { requestId?: string }) => {
+      if (method === "Fetch.continueRequest" && params.requestId === heldId) {
+        trace.push("continue entered");
+        await dispatch;
+        try { return await nativeSend(method, params as never); }
+        catch (e) { trace.push(`native rejection:${String(e).includes("Invalid InterceptionId")}`); throw e; }
+      }
+      return nativeSend(method as Parameters<CDPSession["send"]>[0], params);
+    }) as CDPSession["send"];
+    return session;
+  };
+  const transport = await installPinnedBffBearer(context, { token: TOKEN, tenantId: "tenant-local", feBase: feOrigin, bffBase: bffOrigin, env: env() });
+  const page = await context.newPage();
+  await transport.attachPage(page);
+  const closeBrowser = probeBrowser.close.bind(probeBrowser);
+  let lateCloseRequest = false;
+  probeBrowser.close = async (...args) => {
+    if (!page.isClosed()) {
+      closing = true;
+      const request = page.waitForEvent("request", { predicate: (r) => r.url() === `${bffOrigin}/held` });
+      await page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await request;
+      await nativeSend("Performance.getMetrics");
+      lateCloseRequest = true;
+    }
+    return closeBrowser(...args);
+  };
+  const goto = page.goto.bind(page);
+  let imposed = false;
+  page.goto = async (...args) => {
+    // Last fixture-id route -> first live-id detail is the original caller's
+    // discovery/crawl/detail boundary. Run JS in the still-live old document.
+    if (!imposed && args[0].endsWith("/management/strategies/local-live-id")) {
+      imposed = true;
+      await page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await paused;
+      // Native round trip lets the old helper's pre-command sample complete;
+      // it supplies no fabricated lifecycle fact or continuation result.
+      await nativeSend("Performance.getMetrics");
+      try { return await goto(...args); }
+      finally { trace.push("navigation returned"); release(); }
+    }
+    return goto(...args);
+  };
+  const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+  const functions = source.slice(source.indexOf("const CORS_PATTERN ="), source.indexOf("function latestManifestIn("));
+  const start = source.indexOf('  console.log(`[accept-management-hosted-production] discovering');
+  const end = source.indexOf('  console.log("[accept-management-hosted-production] running session/RBAC check', start);
+  const run = vm.runInNewContext(`${functions}
+(async () => {${source.slice(start, end)}
+return { results, liveIdResults, liveIdResolution }; })`, {
+    page, transport, browser: probeBrowser, console, URL, Map, Set, AbortSignal,
+    FE_BASE: feOrigin, BFF_BASE: bffOrigin, BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath,
+    ROUTE_TIMEOUT_MS: 5000, SETTLE_TIMEOUT_MS: 4000, BEARER_TOKEN: TOKEN, TENANT_ID: "tenant-local",
+    bearerAuthorization: (token: string) => `Bearer ${token}`, RETRYABLE_HTTP_STATUS: new Set(), sleep: () => Promise.resolve(),
+    // Real HTTPS requests against the same existing local BFF fixture. No
+    // replacement data, errors, success assertions or aggregate gate inputs.
+    fetch: async (url: string, options: { headers: Record<string, string> }) => {
+      const response = await context.request.get(url, { headers: options.headers });
+      return { status: response.status(), text: () => response.text() };
+    },
+  });
+  try {
+    const result = await run();
+    expect(result.results).toHaveLength(95);
+    expect(result.results.every((r: { status: string }) => r.status === "ok")).toBe(true);
+    expect(result.liveIdResolution.length).toBeGreaterThan(10);
+    expect(result.liveIdResults).toHaveLength(result.liveIdResolution.length);
+    expect(result.liveIdResults.every((r: { status: string }) => r.status === "ok")).toBe(true);
+    expect(imposed).toBe(true);
+    expect(lateCloseRequest).toBe(true);
+    expect(trace).toContain("paused after close drain");
+    expect(trace).toContain("cancelled:true");
+    expect(bffSeen.filter((r) => r.path === "/sse").length).toBeGreaterThanOrEqual(95);
+    expect(trace.some((e) => e.startsWith("native rejection:"))).toBe(false);
+    transport.assertHealthy();
+    const reads = bffSeen.filter((r) => r.path.startsWith("/bff/"));
+    expect(reads.length).toBeGreaterThan(10);
+    expect(reads.every((r) => r.authorization === `Bearer ${TOKEN}` && r.tenant === "tenant-local")).toBe(true);
+    console.log(JSON.stringify({ localActualCaller: true, baseline: result.results.length, details: result.liveIdResults.length, trace, transportErrors: transport.errors.length }));
+  } finally {
+    release(); managementFixture = false;
+    await closeBrowser(); await transport.settle();
+    console.log(JSON.stringify({ localCallerTrace: trace, transportErrors: transport.errors }));
+  }
+});
+
+// A new-document request queued during the same transition is still live at
+// release. Corrupt its actual CDP id and retain the native protocol failure;
+// neither the previous document replacement nor later closure can excuse it.
+test("actual caller preserves a genuine invalid id on a queued new-document request", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, true);
+  const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+  const start = source.indexOf("async function gotoRouteWithRetry(");
+  const navigate = vm.runInNewContext(source.slice(start, source.indexOf("\nasync function crawlRoute(", start)) + "\ngotoRouteWithRetry", { ROUTE_TIMEOUT_MS: 5000 });
+  const goto = c.page.goto.bind(c.page);
+  c.page.goto = async (...args) => {
+    const response = await goto(...args);
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    return response;
+  };
+  try {
+    expect(await navigate(c.page, `${feOrigin}/new-document`, c.transport)).toBeNull();
+    await c.paused;
+    c.release();
+    await c.transport.settle();
+    expect(c.receipt.canceled).toBe(false);
+    expect(c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    const before = c.page.url();
+    const failure = await navigate(c.page, `${feOrigin}/later`, c.transport).then(() => undefined, (error: unknown) => error);
+    expect(String(failure)).toContain("Invalid InterceptionId");
+    expect(c.page.url()).toBe(before);
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
