@@ -6,9 +6,10 @@ import type { LearningRead } from "@/lib/bff-v1/agora/learning";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 /** `null` while loading, otherwise the owner result. Never defaults to data. */
-export function useLearningRead<T>(load: (() => Promise<LearningRead<T>>) | null, key: string) {
+export function useLearningRead<T>(load: (() => Promise<LearningRead<T>>) | null, key: string, refresh = 0) {
   const [result, setResult] = useState<LearningRead<T> | null>(null);
   const [tick, setTick] = useState(0);
+  const keyRef = useRef(key);
   const loadRef = useRef(load);
   loadRef.current = load;
   useEffect(() => {
@@ -18,14 +19,19 @@ export function useLearningRead<T>(load: (() => Promise<LearningRead<T>>) | null
       return;
     }
     let live = true;
-    setResult(null);
+    // Only a different subject clears the view; a refresh keeps the current
+    // data mounted (so local action receipts survive) until the new read lands.
+    if (keyRef.current !== key) {
+      keyRef.current = key;
+      setResult(null);
+    }
     void fn().then((value) => {
       if (live) setResult(value);
     });
     return () => {
       live = false;
     };
-  }, [key, tick]);
+  }, [key, tick, refresh]);
   const reload = useCallback(() => setTick((n) => n + 1), []);
   return { result, reload };
 }

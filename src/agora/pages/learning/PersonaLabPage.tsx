@@ -83,9 +83,9 @@ function PatchActions({ personaId, patchId, onDone }: { personaId: string; patch
   );
 }
 
-function PatchesPanel({ personaId }: { personaId: string }) {
+function PatchesPanel({ personaId, revision }: { personaId: string; revision: number }) {
   const { t } = useTranslation();
-  const { result, reload } = useLearningRead(() => getHarness(personaId), `harness:${personaId}`);
+  const { result, reload } = useLearningRead(() => getHarness(personaId), `harness:${personaId}`, revision);
   return (
     <ReadBoundary result={result}>
       {(state) => {
@@ -244,9 +244,9 @@ function ChangeEntry({ personaId, entry, onDone }: { personaId: string; entry: C
   );
 }
 
-function ChangeLogPanel({ personaId }: { personaId: string }) {
+function ChangeLogPanel({ personaId, revision }: { personaId: string; revision: number }) {
   const { t } = useTranslation();
-  const { result, reload } = useLearningRead(() => getChangeLog(personaId), `changelog:${personaId}`);
+  const { result, reload } = useLearningRead(() => getChangeLog(personaId), `changelog:${personaId}`, revision);
   return (
     <ReadBoundary result={result}>
       {(log) => log.entries.length === 0
@@ -274,13 +274,13 @@ export function PersonaLabPage() {
       <PersonaIdField personaId={personaId} onChange={setPersonaId} />
       <WriteGateNote reason={write.reason} />
       {!personaId ? <p className="text-sm text-muted-foreground" data-testid="learning-persona-required">{t("agora.learning.persona.required")}</p> : (
-        <div key={`${personaId}:${revision}`} className="space-y-6">
+        <div key={personaId} className="space-y-6">
           <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.drafts")}</h2><DraftPanel personaId={personaId} skill={false} onDone={bump} /></section>
           <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.skillCoaching")}</h2><DraftPanel personaId={personaId} skill onDone={bump} /></section>
-          <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.patches")}</h2><PatchesPanel personaId={personaId} /></section>
+          <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.patches")}</h2><PatchesPanel personaId={personaId} revision={revision} /></section>
           <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.evaluation")}</h2><EvaluationPanel personaId={personaId} /></section>
           <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.shadow")}</h2><ShadowPanel personaId={personaId} /></section>
-          <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.changeLog")}</h2><ChangeLogPanel personaId={personaId} /></section>
+          <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.changeLog")}</h2><ChangeLogPanel personaId={personaId} revision={revision} /></section>
         </div>
       )}
     </PageShell>

@@ -9,7 +9,7 @@ import {
   useLearningRead, useLearningWriteAccess, usePersonaIdParam, type ActionOutcome,
 } from "./shared";
 
-function Quarantine({ candidate, onDone }: { candidate: LessonCandidate; onDone: () => void }) {
+function Quarantine({ candidate, quarantined, onDone }: { candidate: LessonCandidate; quarantined: boolean; onDone: () => void }) {
   const { t } = useTranslation();
   const write = useLearningWriteAccess();
   const [reason, setReason] = useState("");
@@ -23,6 +23,8 @@ function Quarantine({ candidate, onDone }: { candidate: LessonCandidate; onDone:
       onDone();
     } else setOutcome({ kind: "unavailable", reason: res.reason });
   };
+  // After the refresh marks the candidate quarantined, the form goes away but the receipt stays.
+  if (quarantined) return <OutcomeView outcome={outcome} />;
   return (
     <form onSubmit={submit} className="mt-2 flex flex-wrap items-end gap-2">
       <label className="text-xs">{t("agora.learning.memory.reason")}
@@ -82,7 +84,7 @@ export function MemoryReviewPage() {
                   <li key={c.lesson_candidate_id} className="rounded border border-border p-2" data-testid={`candidate-${c.lesson_candidate_id}`}>
                     <code>{c.lesson_candidate_id}</code> · {c.review_state ?? t("agora.learning.notReported")}
                     {c.proposed_change ? <p>{c.proposed_change}</p> : null}
-                    {c.review_state !== "quarantined" ? <Quarantine candidate={c} onDone={reload} /> : null}
+                    <Quarantine candidate={c} quarantined={c.review_state === "quarantined"} onDone={reload} />
                   </li>
                 ))}
               </ul>

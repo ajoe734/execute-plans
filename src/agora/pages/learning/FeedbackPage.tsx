@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -24,24 +24,33 @@ function EvidenceForm({ kind, field, personaId, onDone }: { kind: HumanEvidenceK
   const [text, setText] = useState("");
   const [consent, setConsent] = useState(false);
   const [outcome, setOutcome] = useState<ActionOutcome | null>(null);
-  // One key per form attempt; a retry of the same content stays idempotent.
-  const [evidenceId] = useState(() => `ev-${idempotencyKey()}`);
-  const [key] = useState(() => idempotencyKey());
+  // A submission freezes its full payload (evidence_id, captured_at) and
+  // Idempotency-Key. Re-sending identical content (a retry, even after a
+  // lost response) replays that exact request; any edit rotates both ids.
+  const attempt = useRef<{ signature: string; key: string; payload: Parameters<typeof submitHumanEvidence>[1] } | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const res = await submitHumanEvidence(kind, {
-      evidence_id: evidenceId,
-      persona_id: personaId,
-      subject_ref: subject.trim(),
-      content: { [field]: text.trim() },
-      source_refs: [],
-      captured_at: new Date().toISOString(),
-      consent_granted: consent,
-      learning_eligible: true,
-      retention_days: 30,
-      environment_ceiling: "paper",
-    }, key);
+    const signature = JSON.stringify([personaId, subject.trim(), text.trim(), consent]);
+    if (!attempt.current || attempt.current.signature !== signature) {
+      attempt.current = {
+        signature,
+        key: idempotencyKey(),
+        payload: {
+          evidence_id: `ev-${idempotencyKey()}`,
+          persona_id: personaId,
+          subject_ref: subject.trim(),
+          content: { [field]: text.trim() },
+          source_refs: [],
+          captured_at: new Date().toISOString(),
+          consent_granted: consent,
+          learning_eligible: true,
+          retention_days: 30,
+          environment_ceiling: "paper",
+        },
+      };
+    }
+    const res = await submitHumanEvidence(kind, attempt.current.payload, attempt.current.key);
     if (res.state === "ok") {
       setOutcome({ kind: "receipt", title: t("agora.learning.feedback.receipt"), value: res.data });
       onDone();

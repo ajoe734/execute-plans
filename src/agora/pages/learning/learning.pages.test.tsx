@@ -29,8 +29,10 @@ beforeEach(() => {
   setMockResolver((method, path) => {
     const hit = routes.find((r) => r.method === method && r.path === path);
     if (!hit) return undefined;
-    return (req) => {
+    return async (req) => {
       calls.push({ method, path, body: req.body, headers: req.headers });
+      // Real reads are not instant: a refresh must not tear down mounted receipts.
+      if (method === "GET") await new Promise((resolve) => setTimeout(resolve, 50));
       return hit.handler(req);
     };
   });
@@ -114,6 +116,8 @@ describe("memory review page", () => {
     fireEvent.change(within(candidate).getByLabelText(/Audit receipt|稽核回條/), { target: { value: "aud-1" } });
     fireEvent.click(within(candidate).getByRole("button", { name: /Quarantine|隔離/ }));
     await waitFor(() => expect(screen.getByTestId("learning-receipt").textContent).toContain('"review_state": "quarantined"'));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(screen.getByTestId("learning-receipt").textContent).toContain('"review_state": "quarantined"');
     const post = calls.find((c) => c.method === "POST");
     expect(post?.body).toEqual({ reason: "stale", audit_receipt_id: "aud-1", kind: "lesson_candidate" });
     expect(post?.headers["Idempotency-Key"]).toBeTruthy();
@@ -174,6 +178,8 @@ describe("persona lab page", () => {
     fireEvent.change(within(entry).getByRole("textbox"), { target: { value: "worse fills" } });
     fireEvent.click(within(entry).getByRole("button", { name: /Confirm|確認/ }));
     await waitFor(() => expect(screen.getByTestId("change-patch-2").textContent).toContain("rolled_back"));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(screen.getByTestId("change-patch-2").textContent).toContain("rolled_back");
     expect(screen.getByTestId("change-patch-2").textContent).toContain('"rolled_back_patch_id": "patch-2"');
     expect(calls.find((c) => c.path.endsWith("/undo"))?.body).toEqual({ reason: "worse fills" });
   });
@@ -189,7 +195,9 @@ describe("persona lab page", () => {
     fireEvent.click(within(entry).getByRole("button", { name: /Confirm|確認/ }));
     expect(await screen.findByTestId("effect-experience-patch-2")).toBeTruthy();
     expect(screen.getByTestId("effect-experience-patch-2").textContent).toContain("chases gaps");
+    await new Promise((resolve) => setTimeout(resolve, 150));
     expect(screen.getByTestId("change-patch-2").textContent).toContain("ne-1");
+    expect(screen.getByTestId("effect-experience-patch-2").textContent).toContain("chases gaps");
   });
 
   it("an owner refusal on accept is shown as unavailable with the reason, not as success", async () => {
@@ -255,7 +263,7 @@ describe("feedback page", () => {
     const post = calls.find((c) => c.method === "POST");
     expect(post?.headers["Idempotency-Key"]).toBeTruthy();
     expect(post?.body).toMatchObject({ persona_id: "p1", subject_ref: "trade:42", content: { note: "entry was late" }, consent_granted: true, environment_ceiling: "paper" });
-    expect(screen.getByTestId("feedback-observed").textContent).toContain("no_new_human_evidence");
+    await waitFor(() => expect(screen.getByTestId("feedback-observed").textContent).toContain("no_new_human_evidence"));
   });
 
   it("surfaces consent refusal from the owner without a receipt", async () => {
@@ -269,5 +277,39 @@ describe("feedback page", () => {
     fireEvent.click(within(form).getByRole("button"));
     expect((await within(form).findByTestId("learning-unavailable")).textContent).toContain("agora_evidence_durable_owner_unconfigured");
     expect(await screen.findByText(/ev-1/)).toBeTruthy();
+  });
+
+  async function fillNote(form: HTMLElement, subject: string, content: string) {
+    fireEvent.change(within(form).getByLabelText(/Subject reference|對象參照/), { target: { value: subject } });
+    fireEvent.change(within(form).getByLabelText(/^(Content|內容)/), { target: { value: content } });
+    if (!(within(form).getByRole("checkbox") as HTMLInputElement).checked) fireEvent.click(within(form).getByRole("checkbox"));
+  }
+
+  it("retries replay the exact frozen payload and key; edited content rotates both ids", async () => {
+    on("GET", "/bff/agora/personas/p1/human-evidence", { status: "ok", items: [], total: 0 });
+    let n = 0;
+    // First attempt: owner answers 409 (digest conflict shape), then 201 on retry.
+    on("POST", "/bff/agora/notes", () => (++n === 1
+      ? { kind: "error", error: makeBffError({ code: "UNKNOWN_ERROR", cause: "evidence_idempotency_conflict" }) }
+      : json({ status: "created", idempotent: false, data: { evidence_id: "ev-x" } }, 201)));
+    renderAt(<FeedbackPage />, "/?personaId=p1");
+    const form = await screen.findByTestId("feedback-form-notes");
+    await fillNote(form, "trade:42", "entry was late");
+    fireEvent.click(within(form).getByRole("button"));
+    expect((await within(form).findByTestId("learning-unavailable")).textContent).toContain("evidence_idempotency_conflict");
+    await new Promise((resolve) => setTimeout(resolve, 25)); // clock moves between attempts
+    fireEvent.click(within(form).getByRole("button"));
+    await within(form).findByTestId("learning-receipt");
+    const [a, b] = calls.filter((c) => c.method === "POST");
+    expect(b.headers["Idempotency-Key"]).toBe(a.headers["Idempotency-Key"]);
+    expect(b.body).toEqual(a.body);
+
+    await fillNote(form, "trade:42", "entry was very late");
+    fireEvent.click(within(form).getByRole("button"));
+    await waitFor(() => expect(calls.filter((c) => c.method === "POST")).toHaveLength(3));
+    const c3 = calls.filter((c) => c.method === "POST")[2];
+    expect(c3.headers["Idempotency-Key"]).not.toBe(a.headers["Idempotency-Key"]);
+    expect((c3.body as { evidence_id: string }).evidence_id).not.toBe((a.body as { evidence_id: string }).evidence_id);
+    expect((c3.body as { content: unknown }).content).toEqual({ note: "entry was very late" });
   });
 });
