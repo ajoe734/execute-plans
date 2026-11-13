@@ -1,0 +1,83 @@
+{
+  "task": "FE-HOSTED-PROBE-CANCELLED-INTERCEPTION-20261112",
+  "owner": "Codex",
+  "reviewer": "Claude",
+  "base_head": "814cd3541b3833615c8acd3e5c2bf65511da7736",
+  "scope": "Source-only existing shared CDP helper repair and isolated sentinel Chromium fixtures. No hosted credentials, hosted acceptance, dev probes, VM access, workflow dispatch, deployment, release retry or rollback.",
+  "validated_blobs": {
+    "scripts/lib/pinned-browser-bff-bearer.mjs": "c4f84c638f2edc28d9454716da822a33a43a7d56",
+    "e2e/hosted-bff-streaming-transport.spec.ts": "9066d3f41fe68c75e73a692d23f6b8f5066f73d9",
+    "src/test/strict-browser-auth-source-contract.test.ts": "d2ba437d3e0b482513d7c9f6a4c7a8b2f9cc9ca7"
+  },
+  "primary_receipt": {
+    "path": "/tmp/pantheon-compat-residual-20261111/root431704-primary-invalid-interception-failure.json",
+    "sha256": "60592eb6885b46bf021d0b649ffe5b257331d12a670becf9d6c35f40f7c5fe64",
+    "root_run": 43170480039,
+    "gate_run": 43172980050,
+    "gate_job": 131030427053,
+    "frontend": "814cd3541b3833615c8acd3e5c2bf65511da7736",
+    "backend": "ffb30d7b9f2e55948bd9e44383af007e950ce1ec",
+    "outcome": "FAIL; two actual Fetch.continueRequest Invalid InterceptionId errors. Route-load, load manifest and desktop F12 passed independently. No accepted pair or private QA."
+  },
+  "diagnosis": {
+    "read_before_edit": [
+      "actual sanitized primary failure",
+      "exact FE814 shared helper",
+      "95-route crawl and live-detail caller reusing one page, then browser.close/settle/assert",
+      "route-load caller close/settle"
+    ],
+    "reproduction": "Execute exact git-show FE814 helper in node:vm. Instrument only CDP command dispatch timing: hold a real paused BFF request, navigate the same page, then dispatch the original continueRequest. Real Network.loadingFailed reports that networkId canceled with ERR_ABORTED, and Page.frameNavigated changes the document loader. Chromium rejects with the exact actual protocol error; no error response is mocked.",
+    "limitation": "Hosted receipt lacks per-request lifecycle ids. Fixture proves this failure mechanism and the narrow classification, not the lifecycle of the two original hosted requests or hosted release readiness."
+  },
+  "repair": {
+    "transport": "Same lightweight native request-stage helper for both callers; no body buffering, precheck GET, new package or product runtime change.",
+    "benign_invalid_id": "Only exact Fetch.continueRequest Invalid InterceptionId with correlated networkId and lifecycle proof: pending interception live at actual page close, or canceled request whose document replacement was already underway at cancellation and actually committed, or canceled request whose frame detached while it was still live. Capture cancellation/close/detach at rejection; later teardown cannot excuse a live protocol error.",
+    "actionable": "Unknown/missing lifecycle stays failure; live abort, abort preceding unrelated navigation, invalid live protocol id, and real network reset remain failures. Retain failRequest fallback and token redaction. Close filtering narrowed to actual target/session closure messages.",
+    "pending": "Continue handler, fallback, lifecycle delay and final cleanup remain tracked by settle; no additional gate/SLA/navigation timeout changes.",
+    "headers": "Immediate authenticated SSE chunks and finite JSON; same-origin auth preserved. Actual foreign finite/SSE and changing-response redirect hops receive neither sentinel bearer nor tenant override."
+  },
+  "exact_base_results": {
+    "attempts_each": 3,
+    "exact_814": "3/3 expected health failures; real continueRequest Invalid InterceptionId each, followed by real failRequest Invalid InterceptionId from old fallback.",
+    "fixed": "3/3 health passes with same real continueRequest rejection, canceled network id and replaced loader. Multiple in-flight SSE/finite navigations and normal context close/settle exercised each attempt."
+  },
+  "validation": [
+    {
+      "command": "npm ci --no-audit --no-fund",
+      "exit": 0,
+      "result": "948 packages installed; lockfile unchanged"
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:9 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --reporter=list",
+      "exit": 0,
+      "result": "14/14, 40.2s; all servers are isolated loopback fixtures. Includes genuine old aa17 HTTP200 SSE buffering failures as expected regressions."
+    },
+    {
+      "command": "npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts",
+      "exit": 0,
+      "result": "46/46 across 3 files"
+    },
+    {
+      "command": "npx eslint scripts/lib/pinned-browser-bff-bearer.mjs e2e/hosted-bff-streaming-transport.spec.ts src/test/strict-browser-auth-source-contract.test.ts",
+      "exit": 0
+    },
+    {
+      "command": "node --check scripts/lib/pinned-browser-bff-bearer.mjs",
+      "exit": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    },
+    {
+      "command": "timeout 180s npm run typecheck",
+      "exit": 0
+    }
+  ],
+  "retained_failed_validation": [
+    {
+      "result": "Initial focused run: 2 failed, 1 passed (exit 1). Harness incorrectly expected only continueRequest error, but predecessor fallback also emitted actual failRequest Invalid InterceptionId. Corrected receipt assertion to distinguish command methods; errors retained in reproduction receipts. No product gate was loosened."
+    }
+  ],
+  "delivery": "Manifest and validated source/test blobs must be committed at frozen PR head; assigned Claude review, required CI, supervisor native integration and owner DONE remain required. Original COMPAT publisher alone resumes full release/private combined acceptance after integration. Prior hosted failure remains FAIL."
+}

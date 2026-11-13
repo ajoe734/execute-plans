@@ -36,6 +36,7 @@ import {
   bearerAuthorization,
   normalizeOptionalBearerToken,
 } from "./lib/bearer-token.mjs";
+import { installPinnedBffBearer, pinnedTargetProblem } from "./lib/pinned-browser-bff-bearer.mjs";
 import { BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS } from "./lib/management-routes.mjs";
 
 // --- argv / env --------------------------------------------------------
@@ -75,24 +76,20 @@ const CLICK_WRITE_CTAS = argv["click-write-ctas"] === "true" || process.env.PANT
 const STRICT_SOURCE_SCAN = process.env.PANTHEON_ACCEPT_STRICT_SOURCE_SCAN === "1";
 const LOAD_GATE_ONLY = argv["load-gate-only"] === "true";
 
-const OPERATOR_ID = process.env.PANTHEON_ACCEPT_OPERATOR_ID || "op-mgmt-gap-006";
-const OPERATOR_ROLES = (process.env.PANTHEON_ACCEPT_OPERATOR_ROLES || "operator,reviewer,approver").split(",").map((r) => r.trim()).filter(Boolean);
-// The hosted dev BFF's stub-auth allows only the `pantheon-dev` tenant (see
-// `/bff/me` -> tenant.allowed_ids). `e2e/helpers/auth.ts`'s DEFAULT_FE_TENANT_ID
-// ("tenant-dev") is a fixture-mock-only value for the CI-safe Playwright specs
-// and 403s against the real hosted BFF.
-const TENANT_ID = process.env.PANTHEON_TENANT_ID || "pantheon-dev";
+// Let the BFF select the authenticated tenant unless the caller explicitly
+// selects one. Apply that same selection to browser and Node read probes.
+const TENANT_ID = (process.env.PANTHEON_TENANT_ID || "").trim();
 const BEARER_TOKEN = normalizeOptionalBearerToken(
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || ""
 );
 
-const AUTH_STORAGE_KEYS = {
-  bearerToken: "pantheon.bff.bearerToken",
-  legacyBearerToken: "pantheon_operator_token",
-  tenantId: "pantheon.bff.tenantId",
-  legacyTenantId: "pantheon_tenant_id",
-  devOidcSession: "pantheon.e2e.devOidcSession",
-};
+// Release-gate credential boundary: a short-lived BFF bearer is released only to
+// the maintained dev BFF origin, and only while the browser target is the
+// maintained dev FE origin or the local exact-candidate preview. The token is
+// attached per-request to that BFF origin; it is never written to browser
+// storage (the retired bearer storage keys
+// are not read by the strict FE and are not recreated here).
+
 const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 function sleep(ms) {
@@ -327,7 +324,7 @@ function authHeaders(token, tenantId) {
   return {
     Accept: "application/json",
     Authorization: bearerAuthorization(token),
-    "X-Tenant-Id": tenantId,
+    ...(tenantId ? { "X-Tenant-Id": tenantId } : {}),
     "X-Request-Id": `mgmt-gap-006-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   };
 }
@@ -537,41 +534,17 @@ async function main() {
     );
   }
 
+  const pinProblem = pinnedTargetProblem({ feBase: FE_BASE, bffBase: BFF_BASE });
+  if (pinProblem) throw new Error(`Refusing to release BFF credential: ${pinProblem}`);
+
   const chromium = await loadChromium();
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 
-  await context.addInitScript(
-    ({ keys, token, roles, operatorId, tenantId }) => {
-      const write = (target) => {
-        if (!target) return;
-        target.setItem(keys.bearerToken, token);
-        target.setItem(keys.legacyBearerToken, token);
-        target.setItem(keys.tenantId, tenantId);
-        target.setItem(keys.legacyTenantId, tenantId);
-        target.setItem(
-          keys.devOidcSession,
-          JSON.stringify({
-            aud: "pantheon-bff",
-            auth_time: Math.floor(Date.now() / 1000),
-            iss: "pantheon-e2e-dev-login",
-            roles,
-            sub: operatorId,
-            tenant_id: tenantId,
-          }),
-        );
-      };
-      try {
-        write(window.sessionStorage);
-        write(window.localStorage);
-      } catch {
-        // storage may be unavailable before a durable origin exists
-      }
-    },
-    { keys: AUTH_STORAGE_KEYS, token: BEARER_TOKEN, roles: OPERATOR_ROLES, operatorId: OPERATOR_ID, tenantId: TENANT_ID },
-  );
+  const transport = await installPinnedBffBearer(context, { token: BEARER_TOKEN, feBase: FE_BASE, bffBase: BFF_BASE, tenantId: TENANT_ID });
 
   const page = await context.newPage();
+  await transport.attachPage(page);
   page.setDefaultTimeout(ROUTE_TIMEOUT_MS);
   page.setDefaultNavigationTimeout(ROUTE_TIMEOUT_MS);
 
@@ -610,6 +583,8 @@ async function main() {
   }
 
   await browser.close();
+  await transport.settle();
+  transport.assertHealthy();
 
   console.log("[accept-management-hosted-production] running session/RBAC check ...");
   const sessionRbac = await sessionRbacCheck();

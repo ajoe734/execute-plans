@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { fail, ok, registerMock } from "../mocks/registry";
 import {
   BffError,
   bffFetch,
@@ -9,11 +10,31 @@ import {
   type CommandResponse,
 } from "../index";
 
+// Local test fixture for the route-neutral envelope fixture (not a production route or mock).
+beforeAll(() => {
+  registerMock("POST", "/bff/__fixture__/strategy/{id}/{action}", (req) => {
+    const body = (req.body ?? {}) as { confirmToken?: string };
+    const action = req.path.split("/").pop() ?? "unknown";
+    const id = req.path.split("/")[4];
+    const cid = req.headers["X-Request-Id"];
+    if (["promote", "rollback"].includes(action) && !body.confirmToken) {
+      return fail({ code: "CONFIRM_TOKEN_REQUIRED", message: "confirm token required",
+        details: { requires_confirm_token: true }, correlationId: cid });
+    }
+    if (action === "rollback") {
+      return fail({ code: "APPROVAL_REQUIRED", message: "second approver required",
+        details: { requires_approval: true, requires_two_man: true, approvalId: `appr_${id}_${action}` },
+        correlationId: cid });
+    }
+    return ok({ actionId: `act_${id}_${action}`, status: "accepted" }, { correlationId: cid });
+  });
+});
+
 describe("bff-v1 envelope shape (Final C.2)", () => {
   it("CommandResponse.data is required and surfaced by mock client", async () => {
     const body = await bffFetch<CommandResponse<{ actionId: string; status: string }>>({
       method: "POST",
-      path: "/bff/strategies/strat_1/actions/start",
+      path: "/bff/__fixture__/strategy/strat_1/start",
       body: {},
     });
     expect(body.ok).toBe(true);
@@ -28,7 +49,7 @@ describe("bff-v1 error envelope (Final C.1 / C.3)", () => {
   it("CONFIRM_TOKEN_REQUIRED → 428 BffError with requires_confirm_token", async () => {
     const result = await bffRequest({
       method: "POST",
-      path: "/bff/strategies/strat_1/actions/promote",
+      path: "/bff/__fixture__/strategy/strat_1/promote",
       body: {},
     });
     expect(result.ok).toBe(false);
@@ -44,7 +65,7 @@ describe("bff-v1 error envelope (Final C.1 / C.3)", () => {
   it("APPROVAL_REQUIRED for two-man action carries approvalId", async () => {
     const result = await bffRequest({
       method: "POST",
-      path: "/bff/strategies/strat_9/actions/rollback",
+      path: "/bff/__fixture__/strategy/strat_9/rollback",
       body: { confirmToken: "tkn_x" },
     });
     expect(result.ok).toBe(false);
@@ -73,14 +94,10 @@ describe("bff-v1 path builders", () => {
   it("encodes ids and exposes canonical endpoint surface (Final OpenAPI 2026-05-07)", () => {
     expect(paths.strategies()).toBe("/bff/strategies");
     expect(paths.strategy("a/b")).toBe("/bff/strategies/a%2Fb");
-    expect(paths.strategyAction("s1", "promote")).toBe("/bff/strategies/s1/actions/promote");
-    expect(paths.action("strategy", "s1", "promote")).toBe("/bff/actions/strategy/s1/promote");
     expect(paths.me()).toBe("/bff/me");
-    expect(paths.sessionMe()).toBe("/bff/me");
     expect(paths.authRefresh()).toBe("/bff/auth/refresh");
     expect(paths.logout()).toBe("/bff/logout");
     expect(paths.approvalDecide("ap_1")).toBe("/bff/approvals/ap_1/decide");
-    expect(paths.approvalDecision("ap_1")).toBe("/bff/approvals/ap_1/decide");
     expect(paths.mcpServerImportTools("srv_1")).toBe("/bff/mcp-servers/srv_1/import-tools");
     expect(paths.sse()).toBe("/bff/events/stream");
     expect(paths.loopInventoryList()).toBe("/bff/v5/loop-inventory");
