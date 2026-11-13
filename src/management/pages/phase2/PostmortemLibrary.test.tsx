@@ -374,4 +374,33 @@ describe("PostmortemLibraryPage", () => {
     });
     expect(screen.getByText(/Complete root cause analysis/)).toBeInTheDocument();
   });
+
+  it("issues the list read on first render under a production build (real transport, only fetch stubbed)", async () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    const fetchStub = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: [],
+          page_info: { total: 0, page_size: 50, next_page_token: null },
+          meta: { total: 0, surfaces: { postmortems: { status: "ok", source: "service_client" } } },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    try {
+      renderLibrary();
+      await waitFor(() => {
+        const urls = fetchStub.mock.calls.map((call) => String((call as unknown[])[0]));
+        expect(urls.some((url) => url.includes("/api/v1/postmortems"))).toBe(true);
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
 });

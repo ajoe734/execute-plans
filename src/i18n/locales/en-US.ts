@@ -3932,6 +3932,7 @@ export default {
         allFilteredHint: "No personas match current filters. Switch data scope or show retired personas.",
       },
     },
+    strategy: { detailNotFound: "Strategy {{id}} was not found." },
     inbox: {
       title: "Human Inbox",
       subtitleFmt: "{{count}} kinds · required role + consequences shown up front · deep links to the page that fixes it.",
@@ -3953,6 +3954,8 @@ export default {
       loadingDetail: "Loading inbox item…",
       detailUnavailableTitle: "Inbox item unavailable",
       detailUnavailableBody: "Live details for this item are unavailable right now. Return to the inbox and open it again.",
+      detailNotFoundTitle: "Inbox item not found",
+      detailNotFoundBody: "Inbox item {{id}} was not found. It may have been resolved or archived.",
       evidenceCountFmt: "View {{count}} evidence refs",
       focusLoadingPersonaFmt: "Loading inbox items for {{persona}}…",
       focusedPersonaFmt: "Focused persona: {{persona}} · {{count}} matching inbox item(s)",

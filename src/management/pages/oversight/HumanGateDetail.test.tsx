@@ -154,6 +154,36 @@ describe("HumanGateDetailPage", () => {
     expect(screen.queryByText("Live detail payload unavailable.")).not.toBeInTheDocument();
   });
 
+  it("renders an explicit 找不到 state when the BFF answers 404 and keeps the load failure state for 5xx and network errors", async () => {
+    await i18n.changeLanguage("zh-TW");
+    try {
+      mocks.useV5Live.mockReturnValue({
+        data: undefined,
+        loading: false,
+        error: Object.assign(new Error("HTTP 404"), { status: 404 }),
+        refresh: vi.fn(),
+      });
+      const notFound = renderDetail("abc-404");
+      expect(screen.getByRole("heading", { name: "找不到收件匣項目" })).toBeInTheDocument();
+      expect(screen.getByText(/找不到收件匣項目 abc-404/)).toBeInTheDocument();
+      expect(screen.queryByText("無法載入收件匣項目")).not.toBeInTheDocument();
+      notFound.unmount();
+
+      for (const error of [
+        Object.assign(new Error("HTTP 503"), { status: 503 }),
+        new TypeError("Failed to fetch"),
+      ]) {
+        mocks.useV5Live.mockReturnValue({ data: undefined, loading: false, error, refresh: vi.fn() });
+        const failed = renderDetail("abc-500");
+        expect(screen.getByRole("heading", { name: "無法載入收件匣項目" })).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "找不到收件匣項目" })).not.toBeInTheDocument();
+        failed.unmount();
+      }
+    } finally {
+      await i18n.changeLanguage("en-US");
+    }
+  });
+
   it("renders readiness blockers as non-decidable blockers with evidence and a management link", () => {
     mocks.useV5Live.mockReturnValue({
       data: readinessBlockerDetail(),
