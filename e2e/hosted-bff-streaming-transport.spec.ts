@@ -2,17 +2,19 @@
 // Real Chromium + real HTTPS servers; not hosted product acceptance.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import path from "node:path";
 import vm from "node:vm";
 // @ts-expect-error plain ESM recorded route baseline
 import { BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath } from "../scripts/lib/management-routes.mjs";
-import { expect, test, chromium, type Browser, type CDPSession } from "@playwright/test";
+import { expect, test, chromium, request, type Browser, type CDPSession } from "@playwright/test";
 // @ts-expect-error plain ESM script helper
-import { installPinnedBffBearer } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
+import { installPinnedBffBearer, pinnedTargetProblem } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
 
 const TOKEN = "stream-test-token";
 type Seen = { path: string; authorization?: string; tenant?: string };
@@ -51,6 +53,9 @@ test.beforeAll(async () => {
   });
   bff = https.createServer(tls, (req, res) => {
     record(bffSeen, req);
+    if (managementFixture && req.url?.startsWith("/bff/") && req.headers.authorization !== `Bearer ${TOKEN}`) {
+      return void res.writeHead(401, { ...cors, "content-type": "application/json" }).end("{}");
+    }
     if (req.url === "/sse" || req.url === "/baseline-sse") {
       res.writeHead(200, { ...cors, "content-type": "text/event-stream", "cache-control": "no-cache" });
       res.write("data: hello\n\n");
@@ -1219,8 +1224,9 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
 }
 }
 
-// Execute the maintained caller's whole discovery -> 95 baseline crawl -> real
-// local entity-list resolution -> detail crawl -> browser-close block. Fixture
+// Execute the maintained caller's full main(), including the JSON/Markdown
+// report after discovery -> 95 baseline -> local entity resolution -> details.
+// All server data and the load-gate input are generated local fixtures. Fixture
 // HTML/data is local protocol coverage, never a hosted acceptance pass. Impose
 // a renderer read immediately AFTER its drain, using only native CDP results.
 test("actual 95-route caller handles a new interception after drain through entity discovery and detail closure", async () => {
@@ -1288,25 +1294,54 @@ test("actual 95-route caller handles a new interception after drain through enti
     return goto(...args);
   };
   const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
-  const functions = source.slice(source.indexOf("const CORS_PATTERN ="), source.indexOf("function latestManifestIn("));
-  const start = source.indexOf('  console.log(`[accept-management-hosted-production] discovering');
-  const end = source.indexOf('  console.log("[accept-management-hosted-production] running session/RBAC check', start);
-  const run = vm.runInNewContext(`${functions}
-(async () => {${source.slice(start, end)}
-return { results, liveIdResults, liveIdResolution }; })`, {
-    page, transport, browser: probeBrowser, console, URL, Map, Set, AbortSignal,
+  const fixtureLoadGate = join(dir, "generated-local-load-gate.json");
+  writeFileSync(fixtureLoadGate, JSON.stringify({ fixture: true, result: { pass: true, overall: "pass" } }));
+  // Supply only the fixture browser/context and environment to the unchanged
+  // main body. Its real crawl, auth checks, gate aggregation and report writes run.
+  const newContext = probeBrowser.newContext.bind(probeBrowser);
+  const newPage = context.newPage.bind(context);
+  probeBrowser.newContext = async () => context;
+  context.newPage = async () => page;
+  const fixtureProcess = { exitCode: 0, cwd: () => process.cwd() };
+  // The original caller performs Node reads after browser closure; this real
+  // HTTPS client must likewise outlive the browser context.
+  const api = await request.newContext({ ignoreHTTPSErrors: true });
+  const run = vm.runInNewContext(`${source.slice(source.indexOf("function nowStamp()"), source.indexOf("async function loadChromium()"))}
+${source.slice(source.indexOf("const CORS_PATTERN ="), source.lastIndexOf("\nmain();"))}
+main`, {
+    fs, path, execFileSync, console, URL, Map, Set, AbortSignal, process: fixtureProcess,
+    loadChromium: async () => ({ launch: async () => probeBrowser }),
+    installPinnedBffBearer: async () => transport,
+    pinnedTargetProblem: (opts: object) => pinnedTargetProblem({ ...opts, env: env() }),
     FE_BASE: feOrigin, BFF_BASE: bffOrigin, BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath,
+    LOAD_GATE_ONLY: false, LOAD_GATE_MANIFEST: fixtureLoadGate, LOAD_BASELINE_DIR: dir,
+    OUT_DIR: join(dir, "generated-local-report"), SRC_SCAN_DIR: dir, STRICT_SOURCE_SCAN: true, CLICK_WRITE_CTAS: false,
     ROUTE_TIMEOUT_MS: 5000, SETTLE_TIMEOUT_MS: 4000, BEARER_TOKEN: TOKEN, TENANT_ID: "tenant-local",
     bearerAuthorization: (token: string) => `Bearer ${token}`, RETRYABLE_HTTP_STATUS: new Set(), sleep: () => Promise.resolve(),
     // Real HTTPS requests against the same existing local BFF fixture. No
     // replacement data, errors, success assertions or aggregate gate inputs.
     fetch: async (url: string, options: { headers: Record<string, string> }) => {
-      const response = await context.request.get(url, { headers: options.headers });
+      const response = await api.get(url, { headers: options.headers });
       return { status: response.status(), text: () => response.text() };
     },
   });
   try {
-    const result = await run();
+    await run();
+    const stamp = new Date().toISOString().slice(0, 10);
+    const jsonPath = join(dir, "generated-local-report", `management-hosted-acceptance-${stamp}.json`);
+    const mdPath = jsonPath.replace(/\.json$/, ".md");
+    const report = JSON.parse(readFileSync(jsonPath, "utf8"));
+    const result = { results: report.routes.filter((r: { source: string }) => r.source === "baseline-or-live-nav"),
+      liveIdResults: report.routes.filter((r: { source: string }) => r.source.startsWith("live-id:")),
+      liveIdResolution: report.liveIdResolution };
+    expect(fixtureProcess.exitCode).toBe(0);
+    expect(report.result).toMatchObject({ pass: true, overall: "pass", failures: [], missing: [] });
+    expect(report.routeCounts.baseline).toBe(95);
+    expect(report.routeCounts.crawled).toBe(95 + result.liveIdResults.length);
+    expect(report.sessionRbac.overall).toBe("pass");
+    expect(readFileSync(mdPath, "utf8")).toContain("Overall: **pass** (pass=true)");
+    await test.info().attach("generated-local-management-report.json", { path: jsonPath, contentType: "application/json" });
+    await test.info().attach("generated-local-management-report.md", { path: mdPath, contentType: "text/markdown" });
     expect(result.results).toHaveLength(95);
     expect(result.results.every((r: { status: string }) => r.status === "ok")).toBe(true);
     expect(result.liveIdResolution.length).toBeGreaterThan(10);
@@ -1319,11 +1354,16 @@ return { results, liveIdResults, liveIdResolution }; })`, {
     expect(bffSeen.filter((r) => r.path === "/sse").length).toBeGreaterThanOrEqual(95);
     expect(trace.some((e) => e.startsWith("native rejection:"))).toBe(false);
     transport.assertHealthy();
-    const reads = bffSeen.filter((r) => r.path.startsWith("/bff/"));
+    const invalidReads = bffSeen.filter((r) => r.authorization === "Bearer op-bogus-session:none");
+    expect(invalidReads.map((r) => r.path)).toEqual(["/bff/me", "/bff/management/shell-summary"]);
+    const reads = bffSeen.filter((r) => r.path.startsWith("/bff/") && r.authorization !== "Bearer op-bogus-session:none");
     expect(reads.length).toBeGreaterThan(10);
     expect(reads.every((r) => r.authorization === `Bearer ${TOKEN}` && r.tenant === "tenant-local")).toBe(true);
     console.log(JSON.stringify({ localActualCaller: true, baseline: result.results.length, details: result.liveIdResults.length, trace, transportErrors: transport.errors.length }));
   } finally {
+    probeBrowser.newContext = newContext;
+    context.newPage = newPage;
+    await api.dispose();
     release(); managementFixture = false;
     await closeBrowser(); await transport.settle();
     console.log(JSON.stringify({ localCallerTrace: trace, transportErrors: transport.errors }));

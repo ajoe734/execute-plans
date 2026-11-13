@@ -110,7 +110,8 @@ describe("pinned native transport error propagation", () => {
     expect(transport.errors.join()).not.toMatch(/query-secret|cookie-secret|header-secret|\?private/);
     const detail = JSON.parse(transport.errors[0].match(/CDP continueRequest (\{.*\}):/)![1]);
     expect(detail).toMatchObject({ interceptionId: "one", networkId: null,
-      path: "/bff/events/stream", pausePhase: "active", issuePhase: "active",
+      origin: "https://api.dev.mvl-cap.tw", path: "/bff/events/stream",
+      pausePhase: "active", issuePhase: "active",
       rejectionPhase: "active", queued: false, issued: true, bound: false,
       sampledBeforeIssue: null, canceled: false });
   });
