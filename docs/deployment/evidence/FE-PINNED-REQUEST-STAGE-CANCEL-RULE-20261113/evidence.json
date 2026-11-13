@@ -29,12 +29,14 @@
   "source_anchors": [
     "cc395e94c",
     "2466718b7",
-    "265008099"
+    "265008099",
+    "d3011594f",
+    "73c25ff52"
   ],
   "verified_source_blobs": {
     "scripts/lib/pinned-browser-bff-bearer.mjs": "3fea4f061bf3dbdcbbfe0c6c63dc1f82a548ae5c",
-    "scripts/accept-management-hosted-production.mjs": "8e9b8107a335d39d7b8166ad4c30e6a5ca0acd7d",
-    "e2e/hosted-bff-streaming-transport.spec.ts": "7369507d59c356a77263ba9bfed2ad3d0ee97464",
+    "scripts/accept-management-hosted-production.mjs": "c58926ffe7ef0a6632027449844fa4bd9126b66c",
+    "e2e/hosted-bff-streaming-transport.spec.ts": "174c30d124149b34e33c13268d22f7e9e6741891",
     "src/test/strict-browser-auth-source-contract.test.ts": "d45ca62e01c29ffed17e8d415064594d7672e616"
   },
   "verification": [
@@ -92,84 +94,13 @@
       "terminal_output_collected": true
     }
   ],
-  "validation_composition": "The 68-case native batch began before the last route-loading sentinel/new labeled-loading test edit. Final 12-case original-crawler batch verifies that final data-check edit, including a loading sentinel with successful background API data; transport source was unchanged. Final-source counts are69 native tests and6 full-caller tests; overlap between listed batches is intentional, not added as independent coverage.",
+  "validation_composition": "Earlier batches above are historical source qualification. The failure_report_revision below reruns all 76 final-source Chromium cases and all 214 auth/policy tests after the actual lost-report fix; no counts are added across overlapping batches.",
   "generated_local_reports": [
-    {
-      "classification": "Generated local fixture only; not hosted acceptance",
-      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-2a432-ure-discovery-data-failure--chromium/attachments/generated-local-management-negative-report-json-6d13f8a9eca6032b63ee6a52534fd50155e42eb9.json",
-      "sha256": "136d6595729929fae004453104f19bdd3ea4d909c93203ac9bd580ff0fbb81dd",
-      "crawled": 109,
-      "live_id_details": 14,
-      "pass": false,
-      "failed_routes": [],
-      "discovery_error_endpoints": [
-        "/bff/strategies"
-      ],
-      "terminated_before_send_phases": [
-        "close"
-      ]
-    },
-    {
-      "classification": "Generated local fixture only; not hosted acceptance",
-      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-737eb-closure-route-data-failure--chromium/attachments/generated-local-management-negative-report-json-a8df4b05711411c897eb9d3fd7f595c7d281803b.json",
-      "sha256": "e5698882327113c4e70ec225d73281894aa7cbd1c61d1d2b87b95cabb715a6c1",
-      "crawled": 110,
-      "live_id_details": 15,
-      "pass": false,
-      "failed_routes": [
-        "/management/risk",
-        "/management/risk-center"
-      ],
-      "discovery_error_endpoints": [],
-      "terminated_before_send_phases": [
-        "navigation",
-        "close"
-      ]
-    },
-    {
-      "classification": "Generated local fixture only; not hosted acceptance",
-      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-d52da-losure-detail-data-failure--chromium/attachments/generated-local-management-negative-report-json-a63473f82bca1b83d862631d01d373f5feaa6cd4.json",
-      "sha256": "1b35ff249668255c541e83a4789a0299fc150410aa2c67fe008919286cedddda",
-      "crawled": 110,
-      "live_id_details": 15,
-      "pass": false,
-      "failed_routes": [
-        "/management/strategies/local-live-id"
-      ],
-      "discovery_error_endpoints": [],
-      "terminated_before_send_phases": [
-        "navigation",
-        "close"
-      ]
-    },
-    {
-      "classification": "Generated local fixture only; not hosted acceptance",
-      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-eb50e-tail-closure-pinned-origin--chromium/attachments/generated-local-management-report-json-669b48afd128892059cc00e9bf7815cc89892885.json",
-      "sha256": "62f608d19a4864508b13e9755c64efa8d89f21d2ef565c535313af5a8329ac9c",
-      "crawled": 110,
-      "live_id_details": 15,
-      "pass": true,
-      "failed_routes": [],
-      "discovery_error_endpoints": [],
-      "terminated_before_send_phases": [
-        "navigation",
-        "close"
-      ]
-    },
-    {
-      "classification": "Generated local fixture only; not hosted acceptance",
-      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-f765b-il-closure-after-drain-BFF--chromium/attachments/generated-local-management-report-json-9b36f56eb1f8829bd67c966042ce8102487428c4.json",
-      "sha256": "55371270092770f407cc9b5691551407222055125625f5b6312168cced179857",
-      "crawled": 110,
-      "live_id_details": 15,
-      "pass": true,
-      "failed_routes": [],
-      "discovery_error_endpoints": [],
-      "terminated_before_send_phases": [
-        "navigation",
-        "close"
-      ]
-    }
+    {"classification": "Generated local fixture only; not hosted acceptance", "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-2a432-ure-discovery-data-failure--chromium/attachments/generated-local-management-negative-report-json-6d13f8a9eca6032b63ee6a52534fd50155e42eb9.json", "sha256": "136d6595729929fae004453104f19bdd3ea4d909c93203ac9bd580ff0fbb81dd", "crawled": 109, "live_id_details": 14, "pass": false, "failed_routes": [], "discovery_error_endpoints": ["/bff/strategies"], "terminated_before_send_phases": ["close"]},
+    {"classification": "Generated local fixture only; not hosted acceptance", "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-737eb-closure-route-data-failure--chromium/attachments/generated-local-management-negative-report-json-a8df4b05711411c897eb9d3fd7f595c7d281803b.json", "sha256": "e5698882327113c4e70ec225d73281894aa7cbd1c61d1d2b87b95cabb715a6c1", "crawled": 110, "live_id_details": 15, "pass": false, "failed_routes": ["/management/risk", "/management/risk-center"], "discovery_error_endpoints": [], "terminated_before_send_phases": ["navigation", "close"]},
+    {"classification": "Generated local fixture only; not hosted acceptance", "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-d52da-losure-detail-data-failure--chromium/attachments/generated-local-management-negative-report-json-a63473f82bca1b83d862631d01d373f5feaa6cd4.json", "sha256": "1b35ff249668255c541e83a4789a0299fc150410aa2c67fe008919286cedddda", "crawled": 110, "live_id_details": 15, "pass": false, "failed_routes": ["/management/strategies/local-live-id"], "discovery_error_endpoints": [], "terminated_before_send_phases": ["navigation", "close"]},
+    {"classification": "Generated local fixture only; not hosted acceptance", "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-eb50e-tail-closure-pinned-origin--chromium/attachments/generated-local-management-report-json-669b48afd128892059cc00e9bf7815cc89892885.json", "sha256": "62f608d19a4864508b13e9755c64efa8d89f21d2ef565c535313af5a8329ac9c", "crawled": 110, "live_id_details": 15, "pass": true, "failed_routes": [], "discovery_error_endpoints": [], "terminated_before_send_phases": ["navigation", "close"]},
+    {"classification": "Generated local fixture only; not hosted acceptance", "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-f765b-il-closure-after-drain-BFF--chromium/attachments/generated-local-management-report-json-9b36f56eb1f8829bd67c966042ce8102487428c4.json", "sha256": "55371270092770f407cc9b5691551407222055125625f5b6312168cced179857", "crawled": 110, "live_id_details": 15, "pass": true, "failed_routes": [], "discovery_error_endpoints": [], "terminated_before_send_phases": ["navigation", "close"]}
   ],
   "negative_semantics": {
     "pre_send": "Wrong-id and delayed-command InvalidID counterexamples now follow the adopted Request-stage rule. Health is not evidence that required data arrived. No BFF server receives the deliberately navigation/close-cancelled /held request.",
@@ -200,13 +131,39 @@
       "log": "/tmp/fe-cancel-caller-debug.log",
       "exit": 1,
       "reason": "Diagnosed same fixture-only governance-policies mapping; no production data failure waived."
+    },
+    {
+      "log": "/tmp/fe-cancel-report-full.log",
+      "sha256": "db2d7cbcf8e3a882ed87ce7fb7bdd6896b74b32b81ef956c81b5de5cb31338e5",
+      "exit": 1,
+      "reason": "74 passed, 2 existing close-block extraction tests failed at source.indexOf after caller block changed. Updated only extraction anchor; final full batch rerun."
     }
   ],
   "report_summary_contract": "All five reports: baseline95, live navigation48, no missing/new navigation, session/RBAC pass. Negative reports fail the required route/detail data check. Full reports including safe termination IDs/stages/reasons remain at the paths above, referenced by SHA-256; bulk output is not committed.",
   "evidence_revision": {
     "rejected_head": "6a51d61c4626e9658d1e0886d760f8538595c6a6",
     "reason": "Codex2 rejected only the evidence-file added-line budget (415 > 400). Replace repeated report payloads with concise results and the existing digest references.",
-    "source_change": "None; all four verified_source_blobs are unchanged from the rejected head.",
-    "prior_independent_verification": "Canonical Codex2 review records final-source 75 Chromium and 214 auth/policy tests passed with terminal exit0; no additional functional defect found in local qualification. Fresh review remains required for the revised manifest."
+    "source_change": "Historical a54072c evidence-only revision preserved all four 6a51 source blobs. The subsequent actual lost-report fix changes only original caller and scoped Chromium tests; current source blobs are recorded above.",
+    "prior_independent_verification": "Canonical Codex2 review records final-source 75 Chromium and 214 auth/policy tests passed with terminal exit0; no additional functional defect found in local qualification. Fresh review remains required for the revised manifest. That prior approval does not cover the subsequent actual lost-report fix."
+  },
+  "failure_report_revision": {
+    "source_anchor": "d3011594f",
+    "trigger": "Sole Ops actual immutable6a51 original-CLI diagnostic observed continued GET /bff/management/trade-journeys net::ERR_ABORTED, child exit1 and no JSON/Markdown reports. This source task neither reruns nor overrides hosted acceptance.",
+    "diagnostic_path": "/tmp/pantheon-root01a15322-resume-20261111/actual-6a51-admin-original-CLI-hosted-readonly-diagnostic-20261113.json",
+    "diagnostic_sha256": "650da3d6cef445668b20d529e8266f1db1b3cccbfd4b2d1a5bf878b95c7417d2",
+    "change": "Catch closure/health rejection only to finish the existing report, retain helper-sanitized errors and completed route records, and include transport failure in the existing result/pass and exit-code verdict. No new gate, timeout, transport or credential/classification change.",
+    "before_regression": {"log": "/tmp/fe-cancel-failed-report-before.log", "sha256": "7565e6d09a5d626ea33b134ca238e7b93c2ff6caef6d1d0e1913f8e637fa2bac", "exit": 1, "result": "New real Chromium continued trade-journeys abort fails at closeBrowser before report emission, matching the actual counterexample."},
+    "focused_regression": {"log": "/tmp/fe-cancel-failed-report-after.log", "sha256": "68be7e81d177100e2c9612ea74889001d476b28dc817d7489d10324609ec5e6a", "exit": 0, "result": "2 passed: continued BFF abort and native foreign CDP error both retain failing JSON/Markdown and process exit1."},
+    "chromium": {"command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:49999 timeout 300 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-cancel-report-full-final", "log": "/tmp/fe-cancel-report-full-final.log", "sha256": "edf0166909744163a895243a2f6ba9cd59aeb399ce9bfa5153b9755878d13b28", "exit": 0, "result": "76 passed; all native transport/protection/data/caller cases, including the new actual-failure-output regression."},
+    "auth_policy": {"command": "timeout 90 npm test -- src/test/strict-browser-auth-source-contract.test.ts src/test/hosted-browser-release-policy.test.ts src/test/public-build-auth-contract.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-auth-truth.test.ts", "log": "/tmp/fe-cancel-report-auth.log", "sha256": "d96be322aaab1bda6224dccb057fa9583b5ba26073942165ceaf9f6ddabfd1c9", "exit": 0, "result": "214 passed across5 files."},
+    "static_checks": "ESLint scoped test, node --check original caller and helper, git diff --check: terminal exit0.",
+    "terminal_output_collected": true,
+    "generated_local_reports": [
+      {"path": "/tmp/fe-cancel-report-full-final/hosted-bff-streaming-trans-cfae5--continued-request-failure--chromium/attachments/generated-local-transport-failure-report-json-b54863903778d9fff8bdf50b9143923bda53eb7a.json", "sha256": "6d9ba1be6b9db83e8e18a286fc18ec7caeee99e7b43a1043cc309d43bc0c9c62", "crawled": 110, "passed": false, "transport_error_count": 1, "continued_trade_journeys_abort": true},
+      {"path": "/tmp/fe-cancel-report-full-final/hosted-bff-streaming-trans-cfae5--continued-request-failure--chromium/attachments/generated-local-transport-failure-report-md-43b7776637122a583ec93c76a72f50236501889d.md", "sha256": "aae649414ad8a1eb8d7d85fde81201036d13f7a038f32313bc52bc0e3bedc5dc"},
+      {"path": "/tmp/fe-cancel-report-full-final/hosted-bff-streaming-trans-fe7c7-osure-wildcard-predecessor--chromium/attachments/generated-local-transport-failure-report-json-a6a3c8eda672a0256b6cba4d7d6933375be19f26.json", "sha256": "e0b8fa415a7ffc7d76b8831a8e9ee6c0d7994c8329624965e01571e151a936cd", "crawled": 110, "passed": false, "transport_error_count": 1, "continued_trade_journeys_abort": false},
+      {"path": "/tmp/fe-cancel-report-full-final/hosted-bff-streaming-trans-fe7c7-osure-wildcard-predecessor--chromium/attachments/generated-local-transport-failure-report-md-e576399e4ef045ce5110591103f71f36c825cc03.md", "sha256": "3f8af2f4ceadb7971d45aa61efce724af672279d7469226400c493508235006e"}
+    ],
+    "authority": "Fresh Codex2 exact-head independent review and current-head CI required. Supervisor integrator owns merge; sole Ops owner retains actual hosted acceptance and publication authority."
   }
 }
