@@ -98,286 +98,76 @@
       "classification": "Generated local fixture only; not hosted acceptance",
       "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-2a432-ure-discovery-data-failure--chromium/attachments/generated-local-management-negative-report-json-6d13f8a9eca6032b63ee6a52534fd50155e42eb9.json",
       "sha256": "136d6595729929fae004453104f19bdd3ea4d909c93203ac9bd580ff0fbb81dd",
-      "route_counts": {
-        "baseline": 95,
-        "liveNavDiscovered": 48,
-        "liveNavNewlyFound": [],
-        "baselineNavMissingFromLive": [],
-        "crawled": 109,
-        "liveIdDetailRoutesCrawled": 14
-      },
-      "result": {
-        "pass": false,
-        "overall": "fail",
-        "failures": [
-          "Every route and detail resolves auth/loading and completes its data checks."
-        ],
-        "warnings": [],
-        "missing": []
-      },
-      "session_rbac": "pass",
+      "crawled": 109,
+      "live_id_details": 14,
+      "pass": false,
       "failed_routes": [],
-      "discovery_errors": [
-        {
-          "entity": "strategies",
-          "endpoint": "/bff/strategies",
-          "status": 200,
-          "error": "non-200 or invalid list data",
-          "liveId": null
-        }
+      "discovery_error_endpoints": [
+        "/bff/strategies"
       ],
-      "terminated_before_send": [
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-332.0",
-          "networkId": "11677.332",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "close",
-          "phase": "close",
-          "reason": "target_closed_before_continuation"
-        }
+      "terminated_before_send_phases": [
+        "close"
       ]
     },
     {
       "classification": "Generated local fixture only; not hosted acceptance",
       "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-737eb-closure-route-data-failure--chromium/attachments/generated-local-management-negative-report-json-a8df4b05711411c897eb9d3fd7f595c7d281803b.json",
       "sha256": "e5698882327113c4e70ec225d73281894aa7cbd1c61d1d2b87b95cabb715a6c1",
-      "route_counts": {
-        "baseline": 95,
-        "liveNavDiscovered": 48,
-        "liveNavNewlyFound": [],
-        "baselineNavMissingFromLive": [],
-        "crawled": 110,
-        "liveIdDetailRoutesCrawled": 15
-      },
-      "result": {
-        "pass": false,
-        "overall": "fail",
-        "failures": [
-          "Every route and detail resolves auth/loading and completes its data checks."
-        ],
-        "warnings": [],
-        "missing": []
-      },
-      "session_rbac": "pass",
+      "crawled": 110,
+      "live_id_details": 15,
+      "pass": false,
       "failed_routes": [
-        {
-          "path": "/management/risk",
-          "data_check": {
-            "pass": false,
-            "reasons": [
-              "no_completed_route_data",
-              "api_data_failure"
-            ],
-            "reads": [
-              {
-                "path": "/bff/acceptance-data",
-                "status": 503,
-                "complete": true,
-                "valid": false
-              }
-            ]
-          }
-        },
-        {
-          "path": "/management/risk-center",
-          "data_check": {
-            "pass": false,
-            "reasons": [
-              "no_completed_route_data",
-              "api_data_failure"
-            ],
-            "reads": [
-              {
-                "path": "/bff/acceptance-data",
-                "status": 503,
-                "complete": true,
-                "valid": false
-              }
-            ]
-          }
-        }
+        "/management/risk",
+        "/management/risk-center"
       ],
-      "discovery_errors": [],
-      "terminated_before_send": [
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-289.0",
-          "networkId": "11252.289",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "navigation",
-          "phase": "active",
-          "reason": "cancelled_before_continuation"
-        },
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-336.0",
-          "networkId": "11252.336",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "close",
-          "phase": "close",
-          "reason": "target_closed_before_continuation"
-        }
+      "discovery_error_endpoints": [],
+      "terminated_before_send_phases": [
+        "navigation",
+        "close"
       ]
     },
     {
       "classification": "Generated local fixture only; not hosted acceptance",
       "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-d52da-losure-detail-data-failure--chromium/attachments/generated-local-management-negative-report-json-a63473f82bca1b83d862631d01d373f5feaa6cd4.json",
       "sha256": "1b35ff249668255c541e83a4789a0299fc150410aa2c67fe008919286cedddda",
-      "route_counts": {
-        "baseline": 95,
-        "liveNavDiscovered": 48,
-        "liveNavNewlyFound": [],
-        "baselineNavMissingFromLive": [],
-        "crawled": 110,
-        "liveIdDetailRoutesCrawled": 15
-      },
-      "result": {
-        "pass": false,
-        "overall": "fail",
-        "failures": [
-          "Every route and detail resolves auth/loading and completes its data checks."
-        ],
-        "warnings": [],
-        "missing": []
-      },
-      "session_rbac": "pass",
+      "crawled": 110,
+      "live_id_details": 15,
+      "pass": false,
       "failed_routes": [
-        {
-          "path": "/management/strategies/local-live-id",
-          "data_check": {
-            "pass": false,
-            "reasons": [
-              "no_completed_route_data",
-              "api_data_failure",
-              "entity_detail_data_missing"
-            ],
-            "reads": [
-              {
-                "path": "/bff/acceptance-data",
-                "status": 503,
-                "complete": true,
-                "valid": false
-              }
-            ]
-          }
-        }
+        "/management/strategies/local-live-id"
       ],
-      "discovery_errors": [],
-      "terminated_before_send": [
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-289.0",
-          "networkId": "11391.289",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "navigation",
-          "phase": "active",
-          "reason": "cancelled_before_continuation"
-        },
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-336.0",
-          "networkId": "11391.336",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "close",
-          "phase": "close",
-          "reason": "target_closed_before_continuation"
-        }
+      "discovery_error_endpoints": [],
+      "terminated_before_send_phases": [
+        "navigation",
+        "close"
       ]
     },
     {
       "classification": "Generated local fixture only; not hosted acceptance",
       "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-eb50e-tail-closure-pinned-origin--chromium/attachments/generated-local-management-report-json-669b48afd128892059cc00e9bf7815cc89892885.json",
       "sha256": "62f608d19a4864508b13e9755c64efa8d89f21d2ef565c535313af5a8329ac9c",
-      "route_counts": {
-        "baseline": 95,
-        "liveNavDiscovered": 48,
-        "liveNavNewlyFound": [],
-        "baselineNavMissingFromLive": [],
-        "crawled": 110,
-        "liveIdDetailRoutesCrawled": 15
-      },
-      "result": {
-        "pass": true,
-        "overall": "pass",
-        "failures": [],
-        "warnings": [],
-        "missing": []
-      },
-      "session_rbac": "pass",
+      "crawled": 110,
+      "live_id_details": 15,
+      "pass": true,
       "failed_routes": [],
-      "discovery_errors": [],
-      "terminated_before_send": [
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-289.0",
-          "networkId": "11111.289",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "navigation",
-          "phase": "active",
-          "reason": "cancelled_before_continuation"
-        },
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-336.0",
-          "networkId": "11111.336",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "close",
-          "phase": "close",
-          "reason": "target_closed_before_continuation"
-        }
+      "discovery_error_endpoints": [],
+      "terminated_before_send_phases": [
+        "navigation",
+        "close"
       ]
     },
     {
       "classification": "Generated local fixture only; not hosted acceptance",
       "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-f765b-il-closure-after-drain-BFF--chromium/attachments/generated-local-management-report-json-9b36f56eb1f8829bd67c966042ce8102487428c4.json",
       "sha256": "55371270092770f407cc9b5691551407222055125625f5b6312168cced179857",
-      "route_counts": {
-        "baseline": 95,
-        "liveNavDiscovered": 48,
-        "liveNavNewlyFound": [],
-        "baselineNavMissingFromLive": [],
-        "crawled": 110,
-        "liveIdDetailRoutesCrawled": 15
-      },
-      "result": {
-        "pass": true,
-        "overall": "pass",
-        "failures": [],
-        "warnings": [],
-        "missing": []
-      },
-      "session_rbac": "pass",
+      "crawled": 110,
+      "live_id_details": 15,
+      "pass": true,
       "failed_routes": [],
-      "discovery_errors": [],
-      "terminated_before_send": [
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-289.0",
-          "networkId": "10336.289",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "navigation",
-          "phase": "active",
-          "reason": "cancelled_before_continuation"
-        },
-        {
-          "outcome": "terminated_before_send",
-          "interceptionId": "interception-job-335.0",
-          "networkId": "10336.335",
-          "path": "/held",
-          "requestStage": "Request",
-          "pausePhase": "close",
-          "phase": "close",
-          "reason": "target_closed_before_continuation"
-        }
+      "discovery_error_endpoints": [],
+      "terminated_before_send_phases": [
+        "navigation",
+        "close"
       ]
     }
   ],
@@ -411,5 +201,12 @@
       "exit": 1,
       "reason": "Diagnosed same fixture-only governance-policies mapping; no production data failure waived."
     }
-  ]
+  ],
+  "report_summary_contract": "All five reports: baseline95, live navigation48, no missing/new navigation, session/RBAC pass. Negative reports fail the required route/detail data check. Full reports including safe termination IDs/stages/reasons remain at the paths above, referenced by SHA-256; bulk output is not committed.",
+  "evidence_revision": {
+    "rejected_head": "6a51d61c4626e9658d1e0886d760f8538595c6a6",
+    "reason": "Codex2 rejected only the evidence-file added-line budget (415 > 400). Replace repeated report payloads with concise results and the existing digest references.",
+    "source_change": "None; all four verified_source_blobs are unchanged from the rejected head.",
+    "prior_independent_verification": "Canonical Codex2 review records final-source 75 Chromium and 214 auth/policy tests passed with terminal exit0; no additional functional defect found in local qualification. Fresh review remains required for the revised manifest."
+  }
 }
