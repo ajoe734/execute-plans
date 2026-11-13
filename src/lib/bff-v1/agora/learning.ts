@@ -5,6 +5,7 @@
 import { bffFetch } from "../client";
 import { BffError } from "../errors";
 import { paths } from "../paths";
+import type { CaseFileView } from "../caseFile";
 
 export type LearningRead<T> =
   | { state: "ok"; data: T; owner?: string }
@@ -59,6 +60,8 @@ export interface CommitteeMemo {
   recommendation?: string;
   created_at?: string;
   published_at?: string | null;
+  /** Case file the memo was decided on (BFF-DECISION-CASE-FILE-VIEWS-20261113); absent/null when not returned. */
+  case_file_view?: CaseFileView | null;
   [key: string]: unknown;
 }
 

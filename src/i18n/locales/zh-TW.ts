@@ -1129,6 +1129,15 @@ export default {
       alert_escalation: "告警升級 → 事件",
     },
   },
+  caseFile: {
+    title: "決策卷宗", unavailable: "無法讀取", reasonNotRecorded: "未記錄原因",
+    retrieval: "檢索模式", source: "出處", groupReason: "原因", truncated: "已截斷",
+    unavailableParts: "不可用部分", privateWithheld: "已隱去 {{count}} 筆私有記憶",
+    uncited: "未引用卷宗條目", unresolved: "卷宗無此條目", unresolvedHint: "此引用不在這份卷宗內",
+    decisions: "決定與引用", contributions: "貢獻與主張引用", rejected: "被退回的意見",
+    rejectionReason: "退回原因", noneApplicable: "無適用條目原因", loading: "讀取卷宗中…",
+    open: "檢視卷宗", close: "收合卷宗",
+  },
   committee: {
     subtitle: "多 Persona 結構化討論。Session 可產生 memo，作為治理證據。",
     create: "新增 Session", empty: "尚無 Session。可由 Signal、Alert 或研究筆記建立。",

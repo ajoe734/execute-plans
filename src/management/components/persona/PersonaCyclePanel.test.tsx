@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { setMockResolver } from "@/lib/bff-v1/client";
+import { packetView } from "@/management/components/case-file/__tests__/fixtures";
 import { PersonaCyclePanel } from "./PersonaCyclePanel";
 import type { PersonaManagementEnvelope } from "@/lib/bff-v1/personas";
 
@@ -58,5 +60,27 @@ describe("PersonaCyclePanel", () => {
     unmount();
     render(<PersonaCyclePanel management={full} managementUnavailable />);
     expect(screen.getByTestId("cycle-unavailable-all")).toBeInTheDocument();
+  });
+
+  it("loads a packet's case file on demand through the packet detail read", async () => {
+    setMockResolver((method, path) =>
+      method === "GET" && path === "/bff/ooda/packets/p1"
+        ? async () => ({ kind: "json" as const, status: 200, body: { data: { packet_id: "p1", case_file_view: packetView } } })
+        : undefined);
+    render(<PersonaCyclePanel management={full} />);
+    fireEvent.click(screen.getByTestId("cycle-casefile-toggle-p1"));
+    const view = await screen.findByTestId("cycle-casefile-p1");
+    expect(view.textContent).toContain("BTC funding flipped negative");
+    expect(screen.getByTestId("cycle-casefile-p1-decision-0-cite-facts:1")).toBeInTheDocument();
+  });
+
+  it("shows the recorded reason when the packet has no case file", async () => {
+    setMockResolver((method, path) =>
+      method === "GET" && path === "/bff/ooda/packets/p1"
+        ? async () => ({ kind: "json" as const, status: 200, body: { data: { case_file_view: { status: "unavailable", reason: "case_file_unavailable:owner_unconfigured", case_file: null } } } })
+        : undefined);
+    render(<PersonaCyclePanel management={full} />);
+    fireEvent.click(screen.getByTestId("cycle-casefile-toggle-p1"));
+    expect((await screen.findByTestId("cycle-casefile-p1-unavailable-reason")).textContent).toContain("case_file_unavailable:owner_unconfigured");
   });
 });
