@@ -281,6 +281,32 @@ describe("Trade Journeys workbench", () => {
       calls[0].reject(new Error("HTTP 500"));
       expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 500");
     });
+
+    it("keeps a failed current read visible while the invalidation replacement is pending, and after it fails", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      invalidate();
+      calls[0].reject(new Error("HTTP 500"));
+      await waitFor(() => expect(calls).toHaveLength(2));
+      expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+      await new Promise(r => setTimeout(r, 20));
+      expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+      calls[1].reject(new Error("HTTP 502"));
+      expect(await screen.findByText("HTTP 502")).toBeInTheDocument();
+    });
+
+    it("clears the retained failure only after a valid completed replacement", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      invalidate();
+      calls[0].reject(new Error("HTTP 500"));
+      await waitFor(() => expect(calls).toHaveLength(2));
+      calls[1].resolve();
+      expect(await screen.findByText("happy-1")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    });
   });
 
   it("inherits the authenticated BFF session tenant on bare list navigation across list, events, row links, and resolve", async () => {

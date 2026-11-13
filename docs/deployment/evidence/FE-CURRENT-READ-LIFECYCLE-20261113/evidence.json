@@ -3,8 +3,21 @@
   "scope": "source-only; not hosted acceptance; original full acceptance remains failing until sole-ops publication and re-run",
   "diagnostic_sha256": "30120e2e80fe1a504504dcc404f4b8df590d9cdb73ff4b16241dd79ea56f6e5e",
   "causal_finding": "In the same document, the /trade-journeys/events poll finished (headers+finished at 1794606565330); 4ms later the initial list GET (waiting ~2.2s) got fetch signal_abort and was re-issued. The page effect depended on [query, liveRevision], so a gap/snapshot-refetch invalidation aborted the pending same-scope read and restarted its clock. Transport did not misreport; the abort was caller-originated.",
-  "fix": "TradeJourneysPage: invalidation no longer aborts a pending same-scope read; bursts coalesce into one refetch after it settles. Scope (query/tenant/environment) change and unmount still abort. Failed reads still surface as errors.",
-  "not_changed": ["crawler/acceptance script", "transport", "ERR_ABORTED handling", "timeouts and budgets"],
+  "fix": "TradeJourneysPage: invalidation no longer aborts a pending same-scope read; bursts coalesce into one refetch after it settles. A queued replacement read does not clear a retained failure; only a valid completed current-scope response does. Scope (query/tenant/environment) change and unmount still abort.",
+  "not_changed": [
+    "crawler/acceptance script",
+    "transport",
+    "ERR_ABORTED handling",
+    "timeouts and budgets"
+  ],
   "residual": "The replacement read was still unfinished at the 4s route deadline in the sample (slow old BFF); the crawler correctly keeps that a failure. Whether the list now completes within 4s on the hosted BFF is unproven until the sole-ops exact-pair publication and full acceptance.",
-  "tests": "TradeJourneysPage.test.tsx 'live invalidation vs pending reads' (jsdom, not real Chromium): 1 new test fails on old code, passes on new; trade-journeys suites 27/27 pass; tsc clean."
+  "tests": "jsdom TradeJourneysPage.test.tsx 'live invalidation vs pending reads' (failed->pending/failed/succeeding replacement added; fails on 86ccf42a3). Real Chromium (e2e/hosted-bff-streaming-transport.spec.ts 'actual Trade Journeys read lifecycle'): the actual page, listTradeJourneys/bffFetch caller, events poller and pinned-bearer helper bundled from source against a local HTTPS BFF; current source passes burst-while-pending, failed-then-never-completing replacement, replacement-success-clears, scope-change and unmount aborts; ebbeaf8b9 fails burst (pending read aborted) and 86ccf42a3 fails failure retention. Full spec 82/82, tsc clean. Local fixtures only, not hosted acceptance.",
+  "external_ops_evidence": {
+    "note": "Separately labelled Ops diagnostics, not source tests and not in the allowlist: old build shows same-document initial-read signal abort + ERR_ABORTED with unfinished replacement; PR1008 build shows both finite GETs completed 200 and zero initial-signal aborts for Trade Journeys. No full95/financial/new-pair claim.",
+    "files": [
+      "/tmp/pantheon-root01a15322-resume-20261111/actual-1007-bounded-causal-readonly-diagnostic-20261113.json",
+      "/tmp/pantheon-root01a15322-resume-20261111/actual-pr1008-bounded-causal-readonly-diagnostic-20261113.json"
+    ]
+  },
+  "data_reads_incomplete_investigation": "Performance/rankings/cockpit datafail were examined only through the Ops diagnostics: the crawler attribution and readiness rules are unchanged (no weakening, no ignored ERR_ABORTED, original 20s/4s budgets kept). Unfinished required current reads and unexplained after-send errors remain failures; no causal evidence in this task's artifacts proves them old-document/background work, so no relaxation was made. They remain open for ops re-run on the exact pair."
 }

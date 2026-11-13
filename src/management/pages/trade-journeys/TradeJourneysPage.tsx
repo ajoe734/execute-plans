@@ -80,12 +80,15 @@ export function TradeJourneysPage() {
   useEffect(() => {
     const c = new AbortController();
     let inflight = false, dirty = false;
-    const load = () => {
-      inflight = true; dirty = false; setError("");
+    const load = (replacement = false) => {
+      inflight = true; dirty = false;
+      // A failed read stays visible while its queued replacement is pending or failing;
+      // only a valid completed current-scope response clears it.
+      if (!replacement) setError("");
       listTradeJourneys(query, c.signal)
-        .then(result => { if (!c.signal.aborted) setPayload(result); })
+        .then(result => { if (!c.signal.aborted) { setPayload(result); setError(""); } })
         .catch(e => { if (e?.name !== "AbortError" && !c.signal.aborted) setError(e.message); })
-        .finally(() => { inflight = false; if (dirty && !c.signal.aborted) load(); });
+        .finally(() => { inflight = false; if (dirty && !c.signal.aborted) load(true); });
     };
     refreshList.current = () => { if (inflight) dirty = true; else load(); };
     load();
