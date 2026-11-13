@@ -62,9 +62,15 @@ test.beforeAll(async () => {
     if (managementFixture && req.url?.startsWith("/bff/") && req.headers.authorization !== `Bearer ${TOKEN}`) {
       return void res.writeHead(401, { ...cors, "content-type": "application/json" }).end("{}");
     }
+    if (managementFixtureFailure === "discovery" && req.url === "/bff/strategies") {
+      return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end('{"error":"fixture discovery failure"}');
+    }
     if (req.url?.startsWith("/bff/acceptance-data")) {
       const mode = new URL(req.url, bffOrigin).searchParams.get("mode");
       if (mode === "api-error" || mode === "not-found") return void res.writeHead(mode === "not-found" ? 404 : 503, { ...cors, "content-type": "application/json" }).end('{"error":"fixture"}');
+      if (mode === "pending-json") {
+        res.writeHead(200, { ...cors, "content-type": "application/json" }); res.write("{"); openSse.add(res); return;
+      }
       if (mode === "bad-json") return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end("incomplete{");
       return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end(mode === "error-envelope" ? '{"error":"fixture"}' : '{"items":[{"id":"local-route-data"}]}');
     }
@@ -128,7 +134,7 @@ test.beforeAll(async () => {
       const entityRoute = BASELINE_ROUTES.find((r) => r.entity && r.path === pathname) ||
         BASELINE_ROUTES.find((r) => r.entity && pathname.endsWith("/local-live-id") && r.path.slice(0, r.path.lastIndexOf("/")) === pathname.slice(0, pathname.lastIndexOf("/")));
       const dataPath = pathname === managementFixtureFailure ? "/bff/acceptance-data?mode=api-error"
-        : entityRoute ? `${ENTITY_LIST_ENDPOINTS[entityRoute.entity]}/${pathname.split("/").pop()}` : "/bff/fixture-data";
+        : entityRoute && ENTITY_LIST_ENDPOINTS[entityRoute.entity] ? `${ENTITY_LIST_ENDPOINTS[entityRoute.entity]}/${pathname.split("/").pop()}` : "/bff/fixture-data";
       const links = BASELINE_ROUTES.filter((r: { kind: string }) => r.kind === "nav")
         .map((r: { path: string }) => `<a href="${r.path}">${r.path}</a>`).join("");
       return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}<script>new EventSource("${bffOrigin}/sse"); void fetch("${bffOrigin}${dataPath}").catch(() => {});</script></body>`);
@@ -388,7 +394,7 @@ test("browser close records a late Request-stage pause retired before continuati
 // data. These fixtures prove harness behavior, never hosted product readiness.
 const crawlSource = () => readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
 
-for (const mode of ["ready", "redirect", "auth-stuck", "loading-stuck", "session-only", "api-error", "bad-json", "error-envelope", "not-found", "undefined-detail"]) {
+for (const mode of ["ready", "redirect", "auth-stuck", "loading-stuck", "session-only", "api-error", "bad-json", "pending-json", "error-envelope", "not-found", "undefined-detail"]) {
   test(`original route data check waits for auth/lazy/redirect and rejects unresolved data: ${mode}`, async () => {
     const c = await open();
     const routePath = `/acceptance-case?mode=${mode}`;
@@ -1409,11 +1415,11 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
 // All server data and the load-gate input are generated local fixtures. Fixture
 // HTML/data is local protocol coverage, never a hosted acceptance pass. Impose
 // a renderer read immediately AFTER its drain, using only native CDP results.
-for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin", "route data failure", "detail data failure"] as const) {
+for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin", "route data failure", "detail data failure", "discovery data failure"] as const) {
 test(`actual 95-route caller handles a new interception after drain through entity discovery and detail closure (${scopeCase})`, async () => {
   test.setTimeout(120_000);
   managementFixture = true;
-  managementFixtureFailure = scopeCase === "route data failure" ? "/management/risk" : scopeCase === "detail data failure" ? "/management/strategies/local-live-id" : "";
+  managementFixtureFailure = scopeCase === "route data failure" ? "/management/risk" : scopeCase === "detail data failure" ? "/management/strategies/local-live-id" : scopeCase === "discovery data failure" ? "discovery" : "";
   const probeBrowser = await chromium.launch();
   const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
@@ -1566,7 +1572,9 @@ main`, {
       expect(fixtureProcess.exitCode).toBe(1);
       expect(report.result.pass).toBe(false);
       expect(report.result.failures).toContain("Every route and detail resolves auth/loading and completes its data checks.");
-      expect(report.routes).toContainEqual(expect.objectContaining({ path: managementFixtureFailure, status: "datafail", dataCheck: expect.objectContaining({ pass: false }) }));
+      if (managementFixtureFailure === "discovery") {
+        expect(report.liveIdResolution).toContainEqual(expect.objectContaining({ entity: "strategies", error: "non-200 or invalid list data", liveId: null }));
+      } else expect(report.routes).toContainEqual(expect.objectContaining({ path: managementFixtureFailure, status: "datafail", dataCheck: expect.objectContaining({ pass: false }) }));
       transport.assertHealthy();
       expectTerminated(transport);
       await test.info().attach("generated-local-management-negative-report.json", { path: jsonPath, contentType: "application/json" });

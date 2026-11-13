@@ -232,6 +232,7 @@ async function crawlRoute(page, route, { source, transport }) {
   let navError = "";
   let finalUrl = "";
   let bodyText = "";
+  let dataReasons = ["navigation_incomplete"];
 
   try {
     const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport);
@@ -266,9 +267,18 @@ async function crawlRoute(page, route, { source, transport }) {
         ? `${ENTITY_LIST_ENDPOINTS[route.entity]}/${route.path.split("?")[0].split("/").pop()}` : null;
       const entityDataReady = !expectedDataPath || validReads.some((read) => read.path === expectedDataPath);
       const apiFailure = responses.some((response) => response.status >= 400 && !(response.status === 404 && honestNotFound));
-      ready = snapshot.path === expectedPath && !snapshot.login && !snapshot.busy && !loading && !dataError &&
-        snapshot.content.trim().length > 15 && validReads.length > 0 && failedReads.length === 0 &&
-        !apiFailure && entityDataReady && dataReads.length === routeRequests.size && dataReads.every((read) => read.complete);
+      dataReasons = [
+        snapshot.path !== expectedPath && "route_or_redirect_unresolved",
+        snapshot.login && "auth_unresolved",
+        (snapshot.busy || loading) && "loading_unresolved",
+        dataError && "rendered_data_error",
+        snapshot.content.trim().length <= 15 && "content_incomplete",
+        validReads.length === 0 && "no_completed_route_data",
+        (failedReads.length > 0 || apiFailure) && "api_data_failure",
+        !entityDataReady && "entity_detail_data_missing",
+        (dataReads.length !== routeRequests.size || dataReads.some((read) => !read.complete)) && "data_reads_incomplete",
+      ].filter(Boolean);
+      ready = dataReasons.length === 0;
       if (ready || Date.now() >= deadline) break;
       await page.waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
     } while (true);
@@ -334,7 +344,7 @@ async function crawlRoute(page, route, { source, transport }) {
     finalUrl,
     alias,
     controls,
-    dataCheck: { pass: status === "ok", reads: dataReads },
+    dataCheck: { pass: status === "ok", reasons: dataReasons, reads: dataReads },
     bffRequestCount: requests.length,
     bffResponseCount: responses.length,
     bffFailedCount: failedRequests.length,
@@ -423,13 +433,15 @@ async function resolveLiveIdRoutes() {
   for (const [entity, fixturePath] of entities) {
     const endpoint = ENTITY_LIST_ENDPOINTS[entity];
     const { status, body, error } = await fetchJson(`${BFF_BASE}${endpoint}`, authHeaders(BEARER_TOKEN, TENANT_ID));
-    if (status !== 200 || !body) {
-      results.push({ entity, endpoint, status, error: error || "non-200 or unparseable body", liveId: null });
+    const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data;
+    if (status !== 200 || !body || body.error || body.ok === false || body.success === false || !Array.isArray(items)) {
+      results.push({ entity, endpoint, status, error: error || "non-200 or invalid list data", liveId: null });
       continue;
     }
     const liveId = firstLiveId(body);
     if (!liveId) {
-      results.push({ entity, endpoint, status, liveId: null, note: "no live id resolvable (empty list)" });
+      results.push({ entity, endpoint, status, liveId: null,
+        ...(items.length === 0 ? { note: "no live id resolvable (empty list)" } : { error: "nonempty list has no resolvable id" }) });
       continue;
     }
     const segments = fixturePath.split("/");
@@ -645,6 +657,7 @@ async function main() {
   const allResults = [...results, ...liveIdResults];
   const crashRoutes = allResults.filter((r) => r.status === "crash" || r.status === "blank" || r.status === "navfail");
   const dataFailRoutes = allResults.filter((r) => !r.dataCheck.pass);
+  const liveIdDataFailures = liveIdResolution.filter((r) => r.error);
   const aliasFailRoutes = allResults.filter((r) => r.alias?.directRenderFail);
   const detailHonestyFailRoutes = allResults.filter((r) => r.detailHonestyViolations.length > 0);
   const seedFallbackArmedRoutes = allResults.filter((r) => r.mockFindings.some((m) => m.id === "seed_fallback_armed"));
@@ -666,7 +679,7 @@ async function main() {
 
   const gateChecks = [
     { label: "No route crashes, is blank, or fails to navigate.", status: crashRoutes.length === 0 ? "pass" : "fail", note: `count:${crashRoutes.length}` },
-    { label: "Every route and detail resolves auth/loading and completes its data checks.", status: dataFailRoutes.length === 0 ? "pass" : "fail", note: `count:${dataFailRoutes.length}` },
+    { label: "Every route and detail resolves auth/loading and completes its data checks.", status: dataFailRoutes.length === 0 && liveIdDataFailures.length === 0 ? "pass" : "fail", note: `routes:${dataFailRoutes.length}; discovery:${liveIdDataFailures.length}` },
     { label: "No known alias direct-renders instead of redirecting to its canonical path.", status: aliasFailRoutes.length === 0 ? "pass" : "fail", note: `count:${aliasFailRoutes.length}` },
     { label: "No detail route shows raw undefined/NaN/Invalid Date.", status: detailHonestyFailRoutes.length === 0 ? "pass" : "fail", note: `count:${detailHonestyFailRoutes.length}` },
     { label: "No route claims seed fallback armed in strict-live mode.", status: seedFallbackArmedRoutes.length === 0 ? "pass" : "fail", note: `count:${seedFallbackArmedRoutes.length}` },
@@ -752,6 +765,13 @@ async function main() {
     `## Failing / crashed / blank routes`,
     ``,
     crashRoutes.length ? crashRoutes.map((r) => `- \`${r.path}\` -> status=${r.status} error="${r.navError}"`).join("\n") : "None",
+    ``,
+    `## Route and detail data failures`,
+    ``,
+    dataFailRoutes.length || liveIdDataFailures.length ? [
+      ...dataFailRoutes.map((r) => `- \`${r.path}\`: ${r.dataCheck.reasons.join(", ")}`),
+      ...liveIdDataFailures.map((r) => `- entity discovery \`${r.entity}\`: status ${r.status}, invalid or missing list data`),
+    ].join("\n") : "None",
     ``,
     `## Alias direct-render failures`,
     ``,

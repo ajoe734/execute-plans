@@ -45,8 +45,9 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   const errors = [], terminatedBeforeSend = [], pages = new WeakMap(), holds = new WeakMap(), pending = new Set(), finalizers = new Set();
   let closed = false;
   context.on("close", () => { closed = true; });
-  const record = (error, page, label) => {
-    if ((closed || page.isClosed()) && /Target page, context or browser has been closed|Target closed|Session closed/u.test(String(error))) return;
+  const record = (error, _page, label) => {
+    // Only the explicit Request-stage pre-send rule below may waive a CDP
+    // continuation error. Closure must not hide a different command failure.
     errors.push(`${label}: ${String(error?.message || error).split(token).join("[REDACTED]")}`);
   };
   const track = (promise) => {
@@ -77,9 +78,9 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       });
       // Per-URL tally of aborts judged natively (one per CDP request record) vs seen by Playwright.
       const nativeAborted = new Map(), pwAborted = new Map(), frameNavs = new Map();
-      // One causal reading of a cancelled request, shared by the ERR_ABORTED and the
-      // Invalid InterceptionId judgments. A navigation that was already replacing this
-      // request's document at the failure instant is excused once the frame commits it.
+      // Causal judgment for ERR_ABORTED after successful continuation. A
+      // navigation already replacing this request's document at failure time
+      // is excused once the frame commits it.
       // That commit can trail the cancellation by an arbitrary time under load, so an
       // unresolved judgment waits for the commit event (no timer) and is settled by
       // asking the browser at settle(); it is never excused by anything else.

@@ -119,14 +119,15 @@ describe("pinned native transport error propagation", () => {
     { name: "Request-stage exact BFF invalid id", path: "https://api.dev.mvl-cap.tw/bff/data?secret=query", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Invalid InterceptionId.", terminated: true },
     { name: "response-stage invalid id", path: "https://api.dev.mvl-cap.tw/bff/data", responseStatusCode: 200, error: "Protocol error (Fetch.continueRequest): Invalid InterceptionId.", terminated: false },
     { name: "foreign invalid id", path: "https://foreign.invalid/bff/data", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Invalid InterceptionId.", terminated: false },
+    { name: "other CDP error after closure", closed: true, path: "https://api.dev.mvl-cap.tw/bff/data", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Target closed", terminated: false },
     { name: "other CDP error", path: "https://api.dev.mvl-cap.tw/bff/data", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Invalid parameters", terminated: false },
-  ])("applies the pre-send rule only to $name", async ({ path, responseStatusCode, error, terminated }) => {
+  ])("applies the pre-send rule only to $name", async ({ path, responseStatusCode, error, terminated, closed }) => {
     const { EventEmitter } = await import("node:events");
     const { installPinnedBffBearer } = await import("../../scripts/lib/pinned-browser-bff-bearer.mjs");
     const session = Object.assign(new EventEmitter(), { send: async (method: string) => {
       if (method === "Fetch.continueRequest") throw new Error(error);
     } });
-    const page = Object.assign(new EventEmitter(), { isClosed: () => false });
+    const page = Object.assign(new EventEmitter(), { isClosed: () => closed === true });
     const context = Object.assign(new EventEmitter(), { pages: () => [page], newCDPSession: async () => session });
     const transport = await installPinnedBffBearer(context, { token: "secret-test-token", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
     session.emit("Fetch.requestPaused", { requestId: "opaque-id", responseStatusCode, request: {
