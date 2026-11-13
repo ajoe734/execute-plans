@@ -147,4 +147,29 @@ describe("pinned native transport error propagation", () => {
     expect(JSON.stringify(transport.terminatedBeforeSend)).not.toMatch(/query|cookie-secret|header-secret|secret-test-token/);
   });
 
+  it("keeps a retained transport failure failing without blocking later navigations, and resolves canonical list ids", async () => {
+    const { EventEmitter } = await import("node:events");
+    const { installPinnedBffBearer } = await import("../../scripts/lib/pinned-browser-bff-bearer.mjs");
+    const session = Object.assign(new EventEmitter(), { send: async (method: string) => {
+      if (method === "Fetch.continueRequest") throw new Error("Protocol error (Fetch.continueRequest): Invalid parameters");
+    } });
+    const gotos: string[] = [];
+    const page = Object.assign(new EventEmitter(), { isClosed: () => false,
+      goto: async (url: string) => { gotos.push(url); },
+      waitForLoadState: async () => {} });
+    const context = Object.assign(new EventEmitter(), { pages: () => [page], newCDPSession: async () => session });
+    const transport = await installPinnedBffBearer(context, { token: "secret-test-token", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
+    session.emit("Fetch.requestPaused", { requestId: "x", request: { url: "https://api.dev.mvl-cap.tw/bff/data", headers: {} } });
+    await transport.settle();
+    expect(transport.errors).toHaveLength(1);
+    // Old behavior: navigate() threw the retained error and never called goto.
+    expect(await transport.navigate(page, "http://127.0.0.1:4173/management/risk", { timeout: 1000 })).toBeNull();
+    expect(gotos).toEqual(["http://127.0.0.1:4173/management/risk"]);
+    expect(() => transport.assertHealthy()).toThrow(/Invalid parameters/);
+
+    const script = readFileSync(resolve(process.cwd(), "scripts/accept-management-hosted-production.mjs"), "utf8");
+    expect(script).toContain('evolution: ["id", "program_id", "programId", "evolution_program_id"]');
+    expect(script).toContain('deployments: ["id", "plan_id", "planId", "deployment_id"]');
+  });
+
 });

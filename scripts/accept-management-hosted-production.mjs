@@ -414,12 +414,20 @@ async function fetchJson(url, headers, timeoutMs = 15_000, attempts = 4) {
   return { status: 0, body: null, error: lastErr, attempts };
 }
 
-function firstLiveId(body) {
+// Canonical list-DTO id fields per entity, mirroring the frontend normalizers
+// (evolution.ts normalizeEvolutionProgram, domainReads.ts normalizeDeploymentFields).
+const GENERIC_ID_KEYS = ["id", "itemId", "entityId", "refId", "ref_id", "strategyId", "personaId"];
+const ENTITY_ID_KEYS = {
+  evolution: ["id", "program_id", "programId", "evolution_program_id"],
+  deployments: ["id", "plan_id", "planId", "deployment_id"],
+};
+
+function firstLiveId(body, entity) {
   const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data || [];
   if (!Array.isArray(items) || items.length === 0) return null;
   const first = items[0];
-  for (const key of ["id", "itemId", "entityId", "refId", "ref_id", "strategyId", "personaId"]) {
-    if (first && typeof first[key] === "string") return first[key];
+  for (const key of ENTITY_ID_KEYS[entity] || GENERIC_ID_KEYS) {
+    if (first && typeof first[key] === "string" && first[key]) return first[key];
   }
   return null;
 }
@@ -440,7 +448,7 @@ async function resolveLiveIdRoutes() {
       results.push({ entity, endpoint, status, error: error || "non-200 or invalid list data", liveId: null });
       continue;
     }
-    const liveId = firstLiveId(body);
+    const liveId = firstLiveId(body, entity);
     if (!liveId) {
       results.push({ entity, endpoint, status, liveId: null,
         ...(items.length === 0 ? { note: "no live id resolvable (empty list)" } : { error: "nonempty list has no resolvable id" }) });

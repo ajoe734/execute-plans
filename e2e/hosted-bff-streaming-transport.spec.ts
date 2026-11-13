@@ -28,6 +28,7 @@ let browser: Browser;
 let flips = 0;
 let managementFixture = false;
 let managementFixtureFailure = "";
+let canonicalIdSchemas = false;
 let bffOrigin = "";
 let foreignOrigin = "";
 let feOrigin = "";
@@ -73,6 +74,12 @@ test.beforeAll(async () => {
       }
       if (mode === "bad-json") return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end("incomplete{");
       return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end(mode === "error-envelope" ? '{"error":"fixture"}' : '{"items":[{"id":"local-route-data"}]}');
+    }
+    // Real canonical list DTO schemas: evolution programs carry program_id and
+    // deployment plans carry plan_id (no top-level `id`), as on the hosted BFF.
+    if (canonicalIdSchemas && (req.url === "/bff/evolution-programs" || req.url === "/bff/deployments")) {
+      const item = req.url === "/bff/evolution-programs" ? { program_id: "local-live-id" } : { plan_id: "local-live-id" };
+      return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end(JSON.stringify({ items: [item] }));
     }
     if (req.url === "/sse" || req.url === "/baseline-sse") {
       res.writeHead(200, { ...cors, "content-type": "text/event-stream", "cache-control": "no-cache" });
@@ -1422,10 +1429,11 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
 // All server data and the load-gate input are generated local fixtures. Fixture
 // HTML/data is local protocol coverage, never a hosted acceptance pass. Impose
 // a renderer read immediately AFTER its drain, using only native CDP results.
-for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin", "route data failure", "detail data failure", "discovery data failure", "continued request failure"] as const) {
+for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin", "route data failure", "detail data failure", "discovery data failure", "continued request failure", "canonical id schemas"] as const) {
 test(`actual 95-route caller handles a new interception after drain through entity discovery and detail closure (${scopeCase})`, async () => {
   test.setTimeout(120_000);
   managementFixture = true;
+  canonicalIdSchemas = scopeCase === "canonical id schemas";
   managementFixtureFailure = scopeCase === "route data failure" ? "/management/risk" : scopeCase === "detail data failure" ? "/management/strategies/local-live-id" : scopeCase === "discovery data failure" ? "discovery" : scopeCase === "continued request failure" ? "continued" : "";
   const probeBrowser = await chromium.launch();
   const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
@@ -1582,7 +1590,17 @@ main`, {
       if (scopeCase === "continued request failure") {
         expect(() => transport.assertHealthy()).toThrow(/GET \/bff\/management\/trade-journeys: net::ERR_ABORTED/);
         expect(report.routes).toContainEqual(expect.objectContaining({ path: "/management/trade-journeys", status: "datafail", bffFailed: expect.arrayContaining([expect.objectContaining({ failure: "net::ERR_ABORTED" })]) }));
-        expect(report.routes.some((r: { status: string; navError: string }) => r.status === "navfail" && r.navError.includes("trade-journeys"))).toBe(true);
+        // The first genuine failure is retained in the aggregate, but it must not
+        // stop later routes from being navigated (old: every later route was a
+        // navfail with empty finalUrl and zero requests).
+        const tj = report.routes.findIndex((r: { path: string }) => r.path === "/management/trade-journeys");
+        expect(tj).toBeGreaterThanOrEqual(0);
+        const later = report.routes.slice(tj + 1);
+        expect(later.length).toBeGreaterThan(90);
+        expect(later.some((r: { navError: string }) => r.navError.includes("Pinned BFF transport failures"))).toBe(false);
+        expect(later.every((r: { finalUrl: string }) => r.finalUrl !== "")).toBe(true);
+        expect(later.filter((r: { status: string }) => r.status === "ok").length).toBeGreaterThan(80);
+        expect(report.routes.filter((r: { source: string }) => r.source.startsWith("live-id:")).every((r: { status: string; finalUrl: string }) => r.status === "ok" && r.finalUrl !== "")).toBe(true);
         expect(md).toContain("GET /bff/management/trade-journeys: net::ERR_ABORTED");
         expect(report.pinnedTransport.terminatedBeforeSend).toContainEqual(expect.objectContaining({ phase: "close", outcome: "terminated_before_send" }));
         expect(bffSeen).toContainEqual(expect.objectContaining({ path: "/bff/management/trade-journeys", authorization: `Bearer ${TOKEN}`, tenant: "tenant-local" }));
@@ -1615,6 +1633,12 @@ main`, {
     expect(result.results).toHaveLength(95);
     expect(result.results.every((r: { status: string }) => r.status === "ok")).toBe(true);
     expect(result.liveIdResolution.length).toBeGreaterThan(10);
+    if (scopeCase === "canonical id schemas") {
+      for (const entity of ["evolution", "deployments"]) {
+        expect(result.liveIdResolution).toContainEqual(expect.objectContaining({ entity, liveId: "local-live-id", status: 200 }));
+        expect(result.liveIdResults).toContainEqual(expect.objectContaining({ path: expect.stringMatching(new RegExp(`/management/${entity}/local-live-id$`)), status: "ok" }));
+      }
+    }
     expect(result.liveIdResults).toHaveLength(result.liveIdResolution.length);
     expect(result.liveIdResults.every((r: { status: string }) => r.status === "ok")).toBe(true);
     expect(imposed).toBe(true);
@@ -1634,7 +1658,7 @@ main`, {
     probeBrowser.newContext = newContext;
     context.newPage = newPage;
     await api.dispose();
-    release(); releaseForeign(); managementFixture = false; managementFixtureFailure = "";
+    release(); releaseForeign(); managementFixture = false; canonicalIdSchemas = false; managementFixtureFailure = "";
     await closeBrowser(); await transport.settle();
     console.log(JSON.stringify({ localCallerTrace: trace, transportErrors: transport.errors }));
   }
