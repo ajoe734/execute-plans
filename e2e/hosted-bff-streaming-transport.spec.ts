@@ -116,10 +116,11 @@ test.beforeAll(async () => {
         const main = document.querySelector("main");
         await fetch("${bffOrigin}/bff/me");
         if (${JSON.stringify(mode)} !== "auth-stuck") {
-          main.innerHTML = "<h1>Pantheon Management</h1><p>Loading…</p>";
+          main.innerHTML = '<div data-testid="route-chunk-loading" role="status">Loading Management shell...</div>';
+          if (${JSON.stringify(mode)} === "lazy-stuck-with-background-data") await fetch("${bffOrigin}/bff/acceptance-data?mode=ready");
           // A real async module/route boundary later than the old 400ms snapshot.
           await new Promise(r => setTimeout(r, 600));
-          if (${JSON.stringify(mode)} !== "loading-stuck") {
+          if (!["loading-stuck", "lazy-stuck-with-background-data"].includes(${JSON.stringify(mode)})) {
             if (${JSON.stringify(mode)} === "redirect") history.replaceState({}, "", "/management/cockpit");
             if (${JSON.stringify(mode)} !== "session-only") await fetch("${bffOrigin}/bff/acceptance-data?mode=${mode}").catch(() => {});
             main.textContent = ${JSON.stringify(mode)} === "not-found" ? "Requested fixture detail was not found" : ${JSON.stringify(mode)} === "undefined-detail" ? "Route detail has undefined data" : "Route loaded with finite management data";
@@ -394,7 +395,7 @@ test("browser close records a late Request-stage pause retired before continuati
 // data. These fixtures prove harness behavior, never hosted product readiness.
 const crawlSource = () => readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
 
-for (const mode of ["ready", "redirect", "auth-stuck", "loading-stuck", "session-only", "api-error", "bad-json", "pending-json", "error-envelope", "not-found", "undefined-detail"]) {
+for (const mode of ["ready", "redirect", "auth-stuck", "loading-stuck", "lazy-stuck-with-background-data", "session-only", "api-error", "bad-json", "pending-json", "error-envelope", "not-found", "undefined-detail"]) {
   test(`original route data check waits for auth/lazy/redirect and rejects unresolved data: ${mode}`, async () => {
     const c = await open();
     const routePath = `/acceptance-case?mode=${mode}`;

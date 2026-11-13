@@ -1,0 +1,415 @@
+{
+  "task": "FE-PINNED-REQUEST-STAGE-CANCEL-RULE-20261113",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "branch": "task/FE-PINNED-REQUEST-STAGE-CANCEL-RULE-20261113",
+  "base_sha": "1eb30047180782f510acc5040381ece58b7edd3e",
+  "prerequisite": {
+    "task": "FE-PINNED-BFF-3F07-COUNTEREXAMPLE-20261113",
+    "pr": 998,
+    "status": "done"
+  },
+  "outcome": "Source/local qualification complete; ready for independent review. No hosted acceptance, deployment, independent approval, merge or DONE claimed.",
+  "operator_decision": {
+    "at": "2026-11-13 approximately 07:40Z",
+    "source": "governed task state / operator decision copied in dispatch packet",
+    "question": "dev 部署已經 13 小時失敗、修了 8 輪，每次都卡在前端驗收的同一個瀏覽器錯誤（請求在送出前被瀏覽器取消）。部署負責人的規則是「來源不明就算失敗」，所以每次只能修一個特例。要不要由你決定改規則：這種「送出前就被取消」的錯誤一律記錄但不算失敗，成敗改由每頁的資料檢查判斷（權杖保護完全不變）？",
+    "answer": "改規則（建議）",
+    "rationale": "Fetch.requestPaused at Request stage holds the request before sending. Invalid InterceptionId on continuation means that command could not send the paused request. This handler is the only place its BFF bearer is added. Therefore record terminated_before_send without requiring a navigation/timestamp proof; actual route/detail data remains necessary.",
+    "supersedes": "Prior conservative active/ambiguous InvalidID rule only for Request-stage BFF pauses; no historical missing trace is reconstructed."
+  },
+  "owned_layer": "Pinned probe Request-stage cancellation and original management caller data readiness/report/exit verdict, plus scoped regressions and evidence.",
+  "unchanged_layers": [
+    "Exact BFF-origin Fetch Request pattern from PR998",
+    "Bearer/tenant/header/origin/redirect/cookie protections",
+    "Product auth and BFF behavior",
+    "Native single transport, existing retry/time budgets",
+    "Sole hosted owner deployment and actual hosted acceptance authority"
+  ],
+  "source_anchors": [
+    "cc395e94c",
+    "2466718b7",
+    "265008099"
+  ],
+  "verified_source_blobs": {
+    "scripts/lib/pinned-browser-bff-bearer.mjs": "3fea4f061bf3dbdcbbfe0c6c63dc1f82a548ae5c",
+    "scripts/accept-management-hosted-production.mjs": "8e9b8107a335d39d7b8166ad4c30e6a5ca0acd7d",
+    "e2e/hosted-bff-streaming-transport.spec.ts": "7369507d59c356a77263ba9bfed2ad3d0ee97464",
+    "src/test/strict-browser-auth-source-contract.test.ts": "d45ca62e01c29ffed17e8d415064594d7672e616"
+  },
+  "verification": [
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:49999 timeout 300 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-cancel-native-qualified --grep-invert 'actual 95-route'",
+      "exit": 0,
+      "result": "68 passed; native origin/tenant/redirect/cookie/header/CORS/SSE protections, all earlier timing counterexamples under adopted stage rule, actual continued failures, navigation/close before send",
+      "log": "/tmp/fe-cancel-native-qualified.log",
+      "log_sha256": "687207728c5f57b85bc6da5b1103b074cc166e4bc05c74b26ffa61444bd8e35e",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:49999 timeout 210 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-cancel-caller-complete --grep 'actual 95-route'",
+      "exit": 0,
+      "result": "6 passed; two full95+15 positive reports, wildcard predecessor native non-BFF failure, route/detail/discovery data negatives fail report and process despite healthy transport",
+      "log": "/tmp/fe-cancel-caller-complete.log",
+      "log_sha256": "40a4d8e6814de3123520d78938d3f618478d401003af1b2e3038e9a086abdbdd",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:49999 timeout 75 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-cancel-loading-final --grep 'original route data check'",
+      "exit": 0,
+      "result": "12 passed on final data-check source: auth, labeled route-chunk loading even with background data, delayed redirect, session-only, HTTP error, malformed/pending/error JSON, live-id 404, undefined detail",
+      "log": "/tmp/fe-cancel-loading-final.log",
+      "log_sha256": "85f19a47402d08cbf772ebde0761f8f4b97e04da5ae5e269a9c5056a187489c0",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "timeout 90 npm test -- src/test/strict-browser-auth-source-contract.test.ts src/test/hosted-browser-release-policy.test.ts src/test/public-build-auth-contract.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-auth-truth.test.ts",
+      "exit": 0,
+      "result": "213 passed across5 files; before the additional closure-specific strict-auth unit case",
+      "log": "/tmp/fe-cancel-auth-final.log",
+      "log_sha256": "5b4ac14c5e67dda73ed3d6e5af5eb3b36db3e25a3db5756bd33c7075ea4ce43e",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "npx vitest run src/test/strict-browser-auth-source-contract.test.ts --maxWorkers=2",
+      "exit": 0,
+      "result": "12 passed including final non-InvalidID closure error negative; only exact-origin Request-stage InvalidID is waived",
+      "log": "/tmp/fe-cancel-strict-final.log",
+      "log_sha256": "a76ac90f512364e38a583bc8dde95561d8c09f01aee3a8a559424ea84536113d",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "timeout 40 npx eslint e2e/hosted-bff-streaming-transport.spec.ts src/test/strict-browser-auth-source-contract.test.ts",
+      "exit": 0,
+      "result": "passed without errors or warnings",
+      "log": "/tmp/fe-cancel-eslint-final-source.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "node --check scripts/lib/pinned-browser-bff-bearer.mjs; node --check scripts/accept-management-hosted-production.mjs; git diff --check",
+      "exit": 0,
+      "terminal_output_collected": true
+    }
+  ],
+  "validation_composition": "The 68-case native batch began before the last route-loading sentinel/new labeled-loading test edit. Final 12-case original-crawler batch verifies that final data-check edit, including a loading sentinel with successful background API data; transport source was unchanged. Final-source counts are69 native tests and6 full-caller tests; overlap between listed batches is intentional, not added as independent coverage.",
+  "generated_local_reports": [
+    {
+      "classification": "Generated local fixture only; not hosted acceptance",
+      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-2a432-ure-discovery-data-failure--chromium/attachments/generated-local-management-negative-report-json-6d13f8a9eca6032b63ee6a52534fd50155e42eb9.json",
+      "sha256": "136d6595729929fae004453104f19bdd3ea4d909c93203ac9bd580ff0fbb81dd",
+      "route_counts": {
+        "baseline": 95,
+        "liveNavDiscovered": 48,
+        "liveNavNewlyFound": [],
+        "baselineNavMissingFromLive": [],
+        "crawled": 109,
+        "liveIdDetailRoutesCrawled": 14
+      },
+      "result": {
+        "pass": false,
+        "overall": "fail",
+        "failures": [
+          "Every route and detail resolves auth/loading and completes its data checks."
+        ],
+        "warnings": [],
+        "missing": []
+      },
+      "session_rbac": "pass",
+      "failed_routes": [],
+      "discovery_errors": [
+        {
+          "entity": "strategies",
+          "endpoint": "/bff/strategies",
+          "status": 200,
+          "error": "non-200 or invalid list data",
+          "liveId": null
+        }
+      ],
+      "terminated_before_send": [
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-332.0",
+          "networkId": "11677.332",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "close",
+          "phase": "close",
+          "reason": "target_closed_before_continuation"
+        }
+      ]
+    },
+    {
+      "classification": "Generated local fixture only; not hosted acceptance",
+      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-737eb-closure-route-data-failure--chromium/attachments/generated-local-management-negative-report-json-a8df4b05711411c897eb9d3fd7f595c7d281803b.json",
+      "sha256": "e5698882327113c4e70ec225d73281894aa7cbd1c61d1d2b87b95cabb715a6c1",
+      "route_counts": {
+        "baseline": 95,
+        "liveNavDiscovered": 48,
+        "liveNavNewlyFound": [],
+        "baselineNavMissingFromLive": [],
+        "crawled": 110,
+        "liveIdDetailRoutesCrawled": 15
+      },
+      "result": {
+        "pass": false,
+        "overall": "fail",
+        "failures": [
+          "Every route and detail resolves auth/loading and completes its data checks."
+        ],
+        "warnings": [],
+        "missing": []
+      },
+      "session_rbac": "pass",
+      "failed_routes": [
+        {
+          "path": "/management/risk",
+          "data_check": {
+            "pass": false,
+            "reasons": [
+              "no_completed_route_data",
+              "api_data_failure"
+            ],
+            "reads": [
+              {
+                "path": "/bff/acceptance-data",
+                "status": 503,
+                "complete": true,
+                "valid": false
+              }
+            ]
+          }
+        },
+        {
+          "path": "/management/risk-center",
+          "data_check": {
+            "pass": false,
+            "reasons": [
+              "no_completed_route_data",
+              "api_data_failure"
+            ],
+            "reads": [
+              {
+                "path": "/bff/acceptance-data",
+                "status": 503,
+                "complete": true,
+                "valid": false
+              }
+            ]
+          }
+        }
+      ],
+      "discovery_errors": [],
+      "terminated_before_send": [
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-289.0",
+          "networkId": "11252.289",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "navigation",
+          "phase": "active",
+          "reason": "cancelled_before_continuation"
+        },
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-336.0",
+          "networkId": "11252.336",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "close",
+          "phase": "close",
+          "reason": "target_closed_before_continuation"
+        }
+      ]
+    },
+    {
+      "classification": "Generated local fixture only; not hosted acceptance",
+      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-d52da-losure-detail-data-failure--chromium/attachments/generated-local-management-negative-report-json-a63473f82bca1b83d862631d01d373f5feaa6cd4.json",
+      "sha256": "1b35ff249668255c541e83a4789a0299fc150410aa2c67fe008919286cedddda",
+      "route_counts": {
+        "baseline": 95,
+        "liveNavDiscovered": 48,
+        "liveNavNewlyFound": [],
+        "baselineNavMissingFromLive": [],
+        "crawled": 110,
+        "liveIdDetailRoutesCrawled": 15
+      },
+      "result": {
+        "pass": false,
+        "overall": "fail",
+        "failures": [
+          "Every route and detail resolves auth/loading and completes its data checks."
+        ],
+        "warnings": [],
+        "missing": []
+      },
+      "session_rbac": "pass",
+      "failed_routes": [
+        {
+          "path": "/management/strategies/local-live-id",
+          "data_check": {
+            "pass": false,
+            "reasons": [
+              "no_completed_route_data",
+              "api_data_failure",
+              "entity_detail_data_missing"
+            ],
+            "reads": [
+              {
+                "path": "/bff/acceptance-data",
+                "status": 503,
+                "complete": true,
+                "valid": false
+              }
+            ]
+          }
+        }
+      ],
+      "discovery_errors": [],
+      "terminated_before_send": [
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-289.0",
+          "networkId": "11391.289",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "navigation",
+          "phase": "active",
+          "reason": "cancelled_before_continuation"
+        },
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-336.0",
+          "networkId": "11391.336",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "close",
+          "phase": "close",
+          "reason": "target_closed_before_continuation"
+        }
+      ]
+    },
+    {
+      "classification": "Generated local fixture only; not hosted acceptance",
+      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-eb50e-tail-closure-pinned-origin--chromium/attachments/generated-local-management-report-json-669b48afd128892059cc00e9bf7815cc89892885.json",
+      "sha256": "62f608d19a4864508b13e9755c64efa8d89f21d2ef565c535313af5a8329ac9c",
+      "route_counts": {
+        "baseline": 95,
+        "liveNavDiscovered": 48,
+        "liveNavNewlyFound": [],
+        "baselineNavMissingFromLive": [],
+        "crawled": 110,
+        "liveIdDetailRoutesCrawled": 15
+      },
+      "result": {
+        "pass": true,
+        "overall": "pass",
+        "failures": [],
+        "warnings": [],
+        "missing": []
+      },
+      "session_rbac": "pass",
+      "failed_routes": [],
+      "discovery_errors": [],
+      "terminated_before_send": [
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-289.0",
+          "networkId": "11111.289",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "navigation",
+          "phase": "active",
+          "reason": "cancelled_before_continuation"
+        },
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-336.0",
+          "networkId": "11111.336",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "close",
+          "phase": "close",
+          "reason": "target_closed_before_continuation"
+        }
+      ]
+    },
+    {
+      "classification": "Generated local fixture only; not hosted acceptance",
+      "path": "/tmp/fe-cancel-caller-complete/hosted-bff-streaming-trans-f765b-il-closure-after-drain-BFF--chromium/attachments/generated-local-management-report-json-9b36f56eb1f8829bd67c966042ce8102487428c4.json",
+      "sha256": "55371270092770f407cc9b5691551407222055125625f5b6312168cced179857",
+      "route_counts": {
+        "baseline": 95,
+        "liveNavDiscovered": 48,
+        "liveNavNewlyFound": [],
+        "baselineNavMissingFromLive": [],
+        "crawled": 110,
+        "liveIdDetailRoutesCrawled": 15
+      },
+      "result": {
+        "pass": true,
+        "overall": "pass",
+        "failures": [],
+        "warnings": [],
+        "missing": []
+      },
+      "session_rbac": "pass",
+      "failed_routes": [],
+      "discovery_errors": [],
+      "terminated_before_send": [
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-289.0",
+          "networkId": "10336.289",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "navigation",
+          "phase": "active",
+          "reason": "cancelled_before_continuation"
+        },
+        {
+          "outcome": "terminated_before_send",
+          "interceptionId": "interception-job-335.0",
+          "networkId": "10336.335",
+          "path": "/held",
+          "requestStage": "Request",
+          "pausePhase": "close",
+          "phase": "close",
+          "reason": "target_closed_before_continuation"
+        }
+      ]
+    }
+  ],
+  "negative_semantics": {
+    "pre_send": "Wrong-id and delayed-command InvalidID counterexamples now follow the adopted Request-stage rule. Health is not evidence that required data arrived. No BFF server receives the deliberately navigation/close-cancelled /held request.",
+    "continued": "Real /reset reaches HTTPS server with the pinned bearer and fails health. Live continued abort/overlap and genuine denied CORS remain failures. Other CDP failures, response-stage InvalidID and foreign InvalidID fail; closure cannot waive other errors.",
+    "data": "95 baseline routes remain. Real local main emits report.pass=false and process.exitCode=1 for route, live-detail and discovery errors while transport remains healthy and termination records remain present. Explicitly generated local HTML/API/load-gate inputs are never hosted readiness evidence."
+  },
+  "limitations": [
+    "No hosted browser/BFF gate or VM/workflow/deployment action performed by this source task. Sole hosted owner must validate actual hosted role/data/load/financial behavior.",
+    "A route requires completed finite BFF data beyond session/readiness/shell responses. Entity-tagged details require their matching endpoint. This harness qualification is not a schema/business-correctness proof for every product page."
+  ],
+  "nonpassing_development_batches": [
+    {
+      "log": "/tmp/fe-cancel-playwright-first.log",
+      "exit": 124,
+      "reason": "Development batch spanned source/fixture edits, exposed fixture endpoint mismatch and reached outer bound; not counted as passed."
+    },
+    {
+      "log": "/tmp/fe-cancel-readiness.log",
+      "exit": 1,
+      "reason": "Initial fixture used a short Loading label; corrected to actual labeled route chunk fallback. Superseded by final12-case batch."
+    },
+    {
+      "log": "/tmp/fe-cancel-caller-final.log",
+      "exit": 1,
+      "reason": "2 local positive fixtures failed: governance-policies has no mapped entity list endpoint; fixture URL corrected. Superseded by final6-case batch."
+    },
+    {
+      "log": "/tmp/fe-cancel-caller-debug.log",
+      "exit": 1,
+      "reason": "Diagnosed same fixture-only governance-policies mapping; no production data failure waived."
+    }
+  ]
+}

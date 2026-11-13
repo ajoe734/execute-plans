@@ -248,7 +248,9 @@ async function crawlRoute(page, route, { source, transport }) {
         return {
           path: window.location.pathname, finalUrl: window.location.pathname + window.location.search,
           body: document.body?.innerText || "", content: content?.innerText || "",
-          busy: Boolean(content?.querySelector('[aria-busy="true"], [data-state="loading"]')),
+          busy: Boolean(document.querySelector('[data-testid="route-chunk-loading"]') ||
+            content?.matches('[aria-busy="true"], [data-state="loading"]') ||
+            content?.querySelector('[aria-busy="true"], [data-state="loading"]')),
           login: Boolean(document.querySelector('input[type="password"]')),
         };
       });
