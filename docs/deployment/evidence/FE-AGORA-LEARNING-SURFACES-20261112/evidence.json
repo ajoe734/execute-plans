@@ -40,5 +40,15 @@
     "Memory entry quarantine is not offered; the owner supports only lesson-candidate quarantine.",
     "client.ts now preserves detail.reason from fail-closed owner responses in BffError.cause (additive)."
   ],
-  "authority": { "environment": "paper", "model_call_on_trade_path": false, "new_credential_or_route": false }
+  "authority": {
+    "environment": "paper",
+    "model_call_on_trade_path": false,
+    "new_credential_or_route": false
+  },
+  "review_rejection_repair": {
+    "receipts": "useLearningRead keeps same-key data during refresh; PersonaLab no longer remounts panels; Quarantine keeps its receipt once the candidate is quarantined; tests use 50ms-delayed GETs and assert receipts after reload",
+    "feedback_idempotency": "payload (evidence_id, captured_at) and Idempotency-Key frozen per content; edits rotate both; test covers 409 -> retry -> new content",
+    "verification": "npm test src/agora src/lib/bff-v1 src/i18n src/routes: 95 files / 1205 tests passed; typecheck exit 0; eslint exit 0",
+    "pr": "https://github.com/ajoe734/execute-plans/pull/996"
+  }
 }
