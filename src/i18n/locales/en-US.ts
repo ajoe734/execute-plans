@@ -1147,6 +1147,15 @@ export default {
       alert_escalation: "Alert escalation → incident",
     },
   },
+  caseFile: {
+    title: "Decision case file", unavailable: "Unavailable", reasonNotRecorded: "no reason recorded",
+    retrieval: "Retrieval mode", source: "Source", groupReason: "Reason", truncated: "Truncated",
+    unavailableParts: "Unavailable parts", privateWithheld: "{{count}} private memory item(s) withheld",
+    uncited: "No case-file item cited", unresolved: "not in case file", unresolvedHint: "This citation is not in the case file",
+    decisions: "Decisions and citations", contributions: "Contributions and claim citations", rejected: "Rejected contributions",
+    rejectionReason: "Rejection reason", noneApplicable: "None-applicable reason", loading: "Loading case file…",
+    open: "View case file", close: "Hide case file",
+  },
   committee: {
     subtitle: "Multi-persona structured deliberation. Sessions produce memos that can become governance evidence.",
     create: "New session", empty: "No sessions yet. Create one from a signal, alert, or research note.",
