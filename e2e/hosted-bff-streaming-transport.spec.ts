@@ -231,8 +231,8 @@ const INTERCEPTION_BASE = "82ff528625f3ca4ad7c3e607ee7cfa7d465ea444";
 // lateLifecycle holds, in order, delivery of real Chromium Network/Page events to the
 // helper's listeners once the held request is paused, until 80ms after the real continueRequest rejection, i.e.
 // a locally imposed queued-event ordering (hosted causation is unproven). Nothing is synthesized.
-async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, delayRejection = false, holdCommit = false, lateSample = false) {
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, delayRejection = false, holdCommit = false, lateSample = false, sampleBeforeHold = false, probeBrowser = browser) {
+  const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
   let release!: () => void;
   let reached!: () => void;
@@ -321,7 +321,7 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
       // A CDP session is ordered: a sample issued while the held command is still
       // undelivered waits behind it. A sample issued before the command is held
       // too. This is an imposed local schedule, not a hosted trace.
-      if (samplingHeld) { heldSample = false; reached(); await dispatch; }
+      if (samplingHeld) { heldSample = false; if (!sampleBeforeHold) { reached(); await dispatch; } }
       try {
         const result = await send(method as Parameters<CDPSession["send"]>[0], params);
         if (method === "Performance.getMetrics" && held) note("Performance.getMetrics", {
@@ -432,6 +432,25 @@ test(`live invalid id then same-request navigation stays actionable when its rea
 });
 }
 
+test("cancellation after the pre-command sample fails closed when genuine dispatch is delayed", async () => {
+  const c = await controlledInterception(installPinnedBffBearer, false, false, false, false, false, true);
+  try {
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused; // sample has completed, but the genuine command has not dispatched
+    await c.page.goto(`${feOrigin}/after-sample`);
+    await expect.poll(() => c.receipt.canceled).toBe(true);
+    c.release();
+    await c.transport.settle();
+    const sample = c.receipt.lifecycle.find((e) => e.event === "Performance.getMetrics" && e.heldSample)!;
+    const cancel = c.receipt.lifecycle.find((e) => e.event === "Network.loadingFailed")!;
+    expect(cancel.timestamp as number).toBeGreaterThan(sample.timestamp as number);
+    expect(c.receipt.order).toEqual(["continueRequest rejected"]);
+    // CDP supplies no failure timestamp inside this interval. Even a legitimate
+    // cancellation is a transport failure when its order cannot be proven.
+    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
 // Execute the actual caller's navigation functions, using the existing real
 // Chromium/HTTPS fixture. No page.route/context.route or replacement transport.
 for (const entry of ["gotoRouteWithRetry", "discoverLiveNav"] as const) {
@@ -476,6 +495,72 @@ for (const entry of ["gotoRouteWithRetry", "discoverLiveNav"] as const) {
       } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
     });
   }
+}
+
+test("actual retry drains new work after a real HTTP 204 navigation failure with open SSE", async () => {
+  const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+  const start = source.indexOf("async function gotoRouteWithRetry(");
+  const navigate = vm.runInNewContext(source.slice(start, source.indexOf("\nasync function crawlRoute(", start)) + "\ngotoRouteWithRetry", { ROUTE_TIMEOUT_MS: 5000 });
+  const c = await controlledInterception();
+  try {
+    expect(await startSse(c.page, `${bffOrigin}/sse`)).toBe("hello");
+    const goto = c.page.goto.bind(c.page);
+    let attempts = 0, settles = 0, entered!: () => void;
+    const retryDrain = new Promise<void>((resolve) => { entered = resolve; });
+    c.page.goto = async (...args) => {
+      attempts++;
+      try { return await goto(...args); }
+      catch (error) {
+        if (attempts === 1) await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+        throw error; // the actual Chromium 204 error, never synthesized
+      }
+    };
+    const transport = { ...c.transport, async settle() {
+      if (++settles === 2) entered();
+      await c.transport.settle();
+    } };
+    const outcome = navigate(c.page, `${feOrigin}/stall`, transport);
+    await c.paused;
+    await retryDrain;
+    expect(attempts).toBe(1);
+    expect(c.page.url()).toBe(`${feOrigin}/`);
+    c.release();
+    expect(String(await outcome)).toContain("ERR_ABORTED");
+    expect(attempts).toBe(2);
+    expect(c.receipt.errors).toEqual([]);
+    await c.transport.settle();
+    c.transport.assertHealthy();
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
+for (const invalidLiveId of [false, true]) {
+  test(`actual browser close drains outstanding work (${invalidLiveId ? "live failure" : "open SSE"})`, async () => {
+    const probeBrowser = await chromium.launch();
+    const c = await controlledInterception(installPinnedBffBearer, invalidLiveId, false, true, false, true, false, probeBrowser);
+    try {
+      expect(await startSse(c.page, `${bffOrigin}/sse`)).toBe("hello");
+      await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+      await c.paused;
+      let entered!: () => void;
+      const draining = new Promise<void>((resolve) => { entered = resolve; });
+      const transport = { ...c.transport, async settle() { entered(); await c.transport.settle(); } };
+      const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+      const start = source.indexOf("  try {\n    await transport.settle();", source.indexOf("const liveIdResults ="));
+      expect(start).toBeGreaterThan(0);
+      const close = source.slice(start, source.indexOf('\n  console.log("[accept-management-hosted-production] running session/RBAC', start));
+      const outcome = vm.runInNewContext(`(async () => {${close}})()`, { transport, browser: probeBrowser })
+        .then(() => undefined, (error: unknown) => error);
+      await draining;
+      expect(probeBrowser.isConnected()).toBe(true);
+      c.release();
+      if (invalidLiveId) await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+      c.releaseRejection();
+      const failure = await outcome;
+      expect(probeBrowser.isConnected()).toBe(false);
+      if (invalidLiveId) expect(String(failure)).toContain("Invalid InterceptionId");
+      else { expect(failure).toBeUndefined(); c.transport.assertHealthy(); }
+    } finally { c.release(); c.releaseRejection(); await probeBrowser.close(); await c.transport.settle(); }
+  });
 }
 
 for (const teardown of ["context close", "unrelated navigation"] as const) {
@@ -1076,9 +1161,11 @@ test("a read cancelled by a real navigation still settles healthy after an earli
 // late. Keep these imposed schedules: a cancellation after the pre-command sample
 // has no proven order relative to the native failure and must fail closed (source
 // criterion 2 addendum, 2026-11-13). Actual caller prevention is tested separately.
+for (const useCaller of [false, true]) {
 for (const delaySample of [true, false]) {
-test(`reads cancelled by successive navigations settle healthy when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+test(`${useCaller ? "actual caller drains loaded reads and open SSE before successive navigations" : "reads cancelled by successive navigations settle healthy"} when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
+  const probeBrowser = useCaller ? await chromium.launch() : browser;
+  const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session), held = new Set<string>();
@@ -1097,16 +1184,27 @@ test(`reads cancelled by successive navigations settle healthy when ${delaySampl
   const transport = await installPinnedBffBearer(context, { token: TOKEN, feBase: feOrigin, bffBase: bffOrigin, env: env() });
   const page = await context.newPage();
   await transport.attachPage(page);
+  const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+  const start = source.indexOf("async function gotoRouteWithRetry(");
+  const navigate = vm.runInNewContext(source.slice(start, source.indexOf("\nasync function crawlRoute(", start)) + "\ngotoRouteWithRetry", { ROUTE_TIMEOUT_MS: 5000 });
   try {
-    for (let route = 0; route < 12; route++) {
-      await page.goto(`${feOrigin}/route-${route}`);
+    for (let route = 0; route < (useCaller ? 3 : 12); route++) {
+      if (useCaller) expect(await navigate(page, `${feOrigin}/route-${route}`, transport)).toBeNull();
+      else await page.goto(`${feOrigin}/route-${route}`);
+      if (useCaller) expect(await startSse(page, `${bffOrigin}/sse`)).toBe("hello");
       await page.evaluate((u) => { for (let k = 0; k < 6; k++) void fetch(`${u}/read-${k}`).catch(() => {}); }, bffOrigin);
       await page.waitForTimeout(20);
     }
-    await page.goto(`${feOrigin}/route-end`);
+    if (useCaller) expect(await navigate(page, `${feOrigin}/route-end`, transport)).toBeNull();
+    else await page.goto(`${feOrigin}/route-end`);
     await page.waitForTimeout(600);
     await transport.settle();
     transport.assertHealthy();
-  } finally { await context.close(); await transport.settle(); }
+    if (useCaller) {
+      expect(bffSeen.filter((r) => r.path.startsWith("/read-")).length).toBe(18);
+      expect(bffSeen.filter((r) => r.path === "/sse")).toHaveLength(3);
+    }
+  } finally { await context.close(); await transport.settle(); if (useCaller) await probeBrowser.close(); }
 });
+}
 }
