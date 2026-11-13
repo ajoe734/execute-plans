@@ -199,14 +199,16 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           clean.push(["authorization", bearer]);
           if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
-        // Await the browser's sample before dispatching continueRequest. Its
-        // Timestamp therefore predates the actual command rejection, regardless
-        // of command scheduling or delayed delivery of the rejection to Node.
+        // Sample the browser clock and dispatch continueRequest back to back: the
+        // sample is not awaited before the command, so a busy renderer cannot widen
+        // the window in which a real navigation cancellation falls between the two.
+        // The sample is only consulted if the command is rejected.
         const before = request ? session.send("Performance.getMetrics").then(
           ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
-        const continueRequest = (rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
+        const continueRequest = () => session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
+          const rejectedAt = await before;
           // The network id binds Chromium's cancellation to this interception,
           // and the cancellation must be caused by a navigation (document
           // replacement, same-document navigation or frame detach). Lifecycle
@@ -230,7 +232,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
         });
-        track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
+        track(continueRequest().finally(() => interceptions.delete(request)));
       });
       await session.send("Network.enable");
       await session.send("Page.enable");

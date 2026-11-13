@@ -531,7 +531,9 @@ test("exact 82ff queued cancellation fails; maintained transport proves the obso
           const canceledAt = c.receipt.lifecycle.find((e) => e.event === "Network.loadingFailed")?.timestamp as number;
           const sampledAt = c.receipt.lifecycle.find((e) => e.event === "Performance.getMetrics")?.timestamp as number;
           expect(canceledAt).toBeLessThanOrEqual(sampledAt);
-          expect(events.indexOf("Performance.getMetrics")).toBeLessThan(events.indexOf("Fetch.continueRequest dispatched"));
+          // The sample is requested before the command and no longer awaited by it, so only its
+          // timestamp (not its reply order) bounds the cancellation.
+          expect(events).toContain("Performance.getMetrics");
         }
         expect(c.receipt.errors.filter((e) => e.includes("(Fetch.continueRequest)"))).toEqual([expect.stringMatching(/Protocol error \(Fetch.continueRequest\): Invalid InterceptionId\./)]);
         if (name === "exact-82ff") expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
@@ -753,7 +755,8 @@ test("the helper's own record of a navigation cancellation may trail Playwright'
 // Chromium produces must trace to a Network.loadingFailed(canceled) of the same network id that a
 // started navigation of that frame precedes, and the helper must judge the run healthy.
 // PANTHEON_CRAWL_TRACE=<file> writes the trace. It does not prove the hosted ordering.
-test("crawl lifecycle trace: every cancelled read traces to a replacing navigation and settles healthy", async ({}, testInfo) => {
+test("crawl lifecycle trace: every cancelled read traces to a replacing navigation and settles healthy", async () => {
+  const testInfo = test.info(); // real TestInfo; an empty fixture pattern is a lint error
   test.setTimeout(180_000);
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
@@ -1013,4 +1016,37 @@ test("a read cancelled by a real navigation still settles healthy after an earli
     await c.transport.settle();
     c.transport.assertHealthy();
   } finally { await c.context.close(); await c.transport.settle(); }
+});
+
+// A busy renderer or loaded runner schedules the clock sample and the command late.
+// Both are held for the same real interval, so Chromium's navigation cancellations land
+// while commands are still in flight: the sample must not be able to predate them.
+test("reads cancelled by successive navigations settle healthy when sample and command are scheduled late", async () => {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const create = context.newCDPSession.bind(context);
+  context.newCDPSession = async (page) => {
+    const session = await create(page), send = session.send.bind(session), held = new Set<string>();
+    session.on("Fetch.requestPaused", (e) => { if (e.request.url.startsWith(`${bffOrigin}/read-`)) held.add(e.requestId); });
+    session.send = (async (method: string, params: { requestId?: string }) => {
+      if (method === "Performance.getMetrics" || (method === "Fetch.continueRequest" && held.has(params.requestId!))) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      return send(method as Parameters<CDPSession["send"]>[0], params);
+    }) as CDPSession["send"];
+    return session;
+  };
+  const transport = await installPinnedBffBearer(context, { token: TOKEN, feBase: feOrigin, bffBase: bffOrigin, env: env() });
+  const page = await context.newPage();
+  await transport.attachPage(page);
+  try {
+    for (let route = 0; route < 12; route++) {
+      await page.goto(`${feOrigin}/route-${route}`);
+      await page.evaluate((u) => { for (let k = 0; k < 6; k++) void fetch(`${u}/read-${k}`).catch(() => {}); }, bffOrigin);
+      await page.waitForTimeout(20);
+    }
+    await page.goto(`${feOrigin}/route-end`);
+    await page.waitForTimeout(600);
+    await transport.settle();
+    transport.assertHealthy();
+  } finally { await context.close(); await transport.settle(); }
 });
