@@ -580,4 +580,34 @@ describe("PersonaDetail", () => {
       expect(screen.queryByText(/5\/5 · persona-be19a1fac471247f2b2a/)).not.toBeInTheDocument();
     });
   });
+  describe("strategy pool tab (FE-PERSONA-POOL-VIEWS-20261112)", () => {
+    const persona: Persona = {
+      id: "persona-pool", name: "Pool persona", owner: "operator", updatedAt: "2026-11-13T00:00:00Z",
+      state: "approved", risk: "low", archetype: "quant", routedStrategies: 0, successRate: 0,
+    };
+    const open = async () => {
+      render(createElement(MemoryRouter, { initialEntries: ["/management/personas/persona-pool"] },
+        createElement(Routes, null,
+          createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }))));
+      const tab = await screen.findByRole("tab", { name: /策略池|Strategy Pool/i });
+      fireEvent.pointerDown(tab); fireEvent.mouseDown(tab); fireEvent.pointerUp(tab); fireEvent.mouseUp(tab); fireEvent.click(tab);
+    };
+
+    it("renders pool members from the BFF persona detail read", async () => {
+      vi.mocked(getPersona).mockResolvedValue(persona);
+      vi.mocked(getPersonaManagement).mockResolvedValue({
+        data: { persona: { id: "persona-pool", lifecycle_state: "paper_running" }, strategyPool: {
+          current: { tenant_id: "t", persona_id: "persona-pool", pool_version: 2, digest: "d2", members: [
+            { artifact_ref: "artifact-momentum", checksum: "sha256:" + "a".repeat(64), stage: "active", risk_weight: 0.4, baseline_ref: "approved-gate-baseline" }] },
+          versions: [], memberVirtualBooks: [], health: null, cycles: [], openDemands: [] } },
+        meta: { surfaces: { strategy_pool: { status: "ok" }, strategy_pool_versions: { status: "ok" },
+          member_virtual_books: { status: "ok" }, pool_health: { status: "unavailable", reason: "latest_cycle_observation_missing" },
+          autonomy_cycles: { status: "ok" }, open_demands: { status: "ok" } } },
+      });
+      await open();
+      expect(await screen.findByTestId("pool-member-artifact-momentum")).toBeInTheDocument();
+      expect(screen.getByTestId("pool-health-unavailable").textContent).toContain("latest_cycle_observation_missing");
+      expect(screen.getByTestId("pool-persona-state").textContent).toBe("運行中");
+    });
+  });
 });

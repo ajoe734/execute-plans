@@ -1,0 +1,28 @@
+{
+  "task": "FE-PERSONA-POOL-VIEWS-20261112",
+  "owner": "Claude",
+  "reviewer": "Codex2",
+  "branch": "task/FE-PERSONA-POOL-VIEWS-20261112",
+  "prerequisite": {"task": "BFF-PERSONA-POOL-VIEWS-20261112", "pr": 7317, "status": "done"},
+  "outcome": "Source/local qualification complete; ready for independent review. Real-browser page check is owned by the separate acceptance task and is not claimed here.",
+  "owned_layer": "Persona detail 'Strategy Pool' tab reading data.strategyPool from the existing BFF persona-management read; typed owner shapes in src/lib/bff-v1/personas.ts",
+  "not_changing": ["BFF", "owners", "paper/live transitions", "market data, members or baselines (none synthesised)"],
+  "files": [
+    "src/lib/bff-v1/personas.ts",
+    "src/management/components/persona/PersonaStrategyPoolPanel.tsx",
+    "src/management/components/persona/PersonaStrategyPoolPanel.test.tsx",
+    "src/management/pages/PersonaDetail.tsx",
+    "src/management/pages/PersonaDetail.test.ts"
+  ],
+  "acceptance_mapping": {
+    "1": "members with stage/weight/net return/Sharpe/drawdown/baseline comparison, health measures, cycles and open demands rendered from strategyPool",
+    "2": "removed members listed in pool version history with removal_reason; persona lifecycle shown as running (運行中) for paper_running/running",
+    "3": "null section or non-ok meta.surfaces status renders 無法讀取 with owner reason; unavailable member books show no numbers; empty lists are distinguished from unavailable",
+    "4": "component tests use payloads shaped like BFF PersonaPoolViewsPort output (BFF_API_CONTRACT.md); PersonaDetail entry-point test opens the tab. Real browser check: pending acceptance task"
+  },
+  "verification": {
+    "vitest": "PersonaStrategyPoolPanel.test.tsx (5) + PersonaDetail.test.ts (17) passed",
+    "tsc": "tsc -p tsconfig.app.json --noEmit clean",
+    "eslint": "clean on new/changed source files"
+  }
+}
