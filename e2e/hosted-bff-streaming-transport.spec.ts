@@ -231,7 +231,7 @@ const INTERCEPTION_BASE = "82ff528625f3ca4ad7c3e607ee7cfa7d465ea444";
 // lateLifecycle holds, in order, delivery of real Chromium Network/Page events to the
 // helper's listeners once the held request is paused, until 80ms after the real continueRequest rejection, i.e.
 // a locally imposed queued-event ordering (hosted causation is unproven). Nothing is synthesized.
-async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, delayRejection = false, holdCommit = false) {
+async function controlledInterception(install = installPinnedBffBearer, invalidLiveId = false, lateLifecycle = false, delayRejection = false, holdCommit = false, lateSample = false) {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
   let release!: () => void;
@@ -305,6 +305,9 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
     await send("Network.enable");
     await send("Page.enable");
     session.send = (async (method: string, params: { requestId?: string }) => {
+      // Retain the independent reviewer's counterexample: the real command
+      // rejects while live, then navigation cancels it before the clock sample.
+      if (lateSample && method === "Performance.getMetrics" && held) await rejectionGate;
       if (method === "Fetch.continueRequest" && params.requestId === held) {
         heldSample = false; commandHeld = true;
         reached();
@@ -409,8 +412,9 @@ test("same-document navigation cancelling a held request settles healthy", async
   }
 });
 
-test("live invalid id then same-request navigation stays actionable when its real rejection is delivered late", async () => {
-  const c = await controlledInterception(installPinnedBffBearer, true, false, true);
+for (const lateSample of [false, true]) {
+test(`live invalid id then same-request navigation stays actionable when its real rejection is delivered late${lateSample ? " and the sample is late" : ""}`, async () => {
+  const c = await controlledInterception(installPinnedBffBearer, true, false, true, false, lateSample);
   try {
     await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
     await c.paused;
@@ -425,6 +429,53 @@ test("live invalid id then same-request navigation stays actionable when its rea
     console.log(JSON.stringify({ scenario: "live-invalid-delayed-rejection", ...c.receipt, expectedHealth: "fail" }));
   } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
 });
+}
+
+// Execute the actual caller's navigation functions, using the existing real
+// Chromium/HTTPS fixture. No page.route/context.route or replacement transport.
+for (const entry of ["gotoRouteWithRetry", "discoverLiveNav"] as const) {
+  for (const invalidLiveId of [false, true]) {
+    test(`actual ${entry} drains interceptions before navigation (${invalidLiveId ? "live failure" : "open SSE"})`, async () => {
+      const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+      const start = source.indexOf(`async function ${entry}(`);
+      const end = source.indexOf(entry === "gotoRouteWithRetry" ? "\nasync function crawlRoute(" : "\nfunction authHeaders(", start);
+      const navigate = vm.runInNewContext(source.slice(start, end) + `\n${entry}`, {
+        FE_BASE: feOrigin, ROUTE_TIMEOUT_MS: 5000,
+      });
+      const c = await controlledInterception(installPinnedBffBearer, invalidLiveId, false, true, false, true);
+      try {
+        expect(await startSse(c.page, `${bffOrigin}/sse`)).toBe("hello");
+        await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+        await c.paused;
+        let entered!: () => void;
+        const settling = new Promise<void>((resolve) => { entered = resolve; });
+        const transport = { ...c.transport, async settle() { entered(); await c.transport.settle(); } };
+        const outcome = (entry === "gotoRouteWithRetry"
+          ? navigate(c.page, `${feOrigin}/actual-detail`, transport)
+          : navigate(c.page, transport)).then(() => undefined, (error: unknown) => error);
+        await settling;
+        expect(c.page.url()).toBe(`${feOrigin}/`);
+        c.release();
+        if (invalidLiveId) {
+          await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
+          expect(c.receipt.canceled).toBe(false);
+        }
+        c.releaseRejection();
+        const failure = await outcome;
+        if (invalidLiveId) {
+          expect(String(failure)).toContain("Invalid InterceptionId");
+          expect(c.page.url()).toBe(`${feOrigin}/`);
+        } else {
+          expect(failure).toBeUndefined();
+          expect(c.receipt.errors).toEqual([]);
+          expect(c.page.url()).toBe(`${feOrigin}/${entry === "gotoRouteWithRetry" ? "actual-detail" : "management/cockpit"}`);
+          await c.transport.settle();
+          c.transport.assertHealthy();
+        }
+      } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
+    });
+  }
+}
 
 for (const teardown of ["context close", "unrelated navigation"] as const) {
   test(`live invalid id is not excused by ${teardown} before settle`, async () => {
