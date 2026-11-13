@@ -1,0 +1,10 @@
+{
+  "task": "FE-CURRENT-READ-LIFECYCLE-20261113",
+  "scope": "source-only; not hosted acceptance; original full acceptance remains failing until sole-ops publication and re-run",
+  "diagnostic_sha256": "30120e2e80fe1a504504dcc404f4b8df590d9cdb73ff4b16241dd79ea56f6e5e",
+  "causal_finding": "In the same document, the /trade-journeys/events poll finished (headers+finished at 1794606565330); 4ms later the initial list GET (waiting ~2.2s) got fetch signal_abort and was re-issued. The page effect depended on [query, liveRevision], so a gap/snapshot-refetch invalidation aborted the pending same-scope read and restarted its clock. Transport did not misreport; the abort was caller-originated.",
+  "fix": "TradeJourneysPage: invalidation no longer aborts a pending same-scope read; bursts coalesce into one refetch after it settles. Scope (query/tenant/environment) change and unmount still abort. Failed reads still surface as errors.",
+  "not_changed": ["crawler/acceptance script", "transport", "ERR_ABORTED handling", "timeouts and budgets"],
+  "residual": "The replacement read was still unfinished at the 4s route deadline in the sample (slow old BFF); the crawler correctly keeps that a failure. Whether the list now completes within 4s on the hosted BFF is unproven until the sole-ops exact-pair publication and full acceptance.",
+  "tests": "TradeJourneysPage.test.tsx 'live invalidation vs pending reads' (jsdom, not real Chromium): 1 new test fails on old code, passes on new; trade-journeys suites 27/27 pass; tsc clean."
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDashed, ExternalLink, Search } from "lucide-react";
 import { useT } from "@/platform/hooks";
@@ -72,7 +72,26 @@ export function TradeJourneysPage() {
   const goNext = () => { const token = payload?.page_info.next_page_token; if (!token) return; const next = new URLSearchParams(params); next.set("page_token", token); next.set("cursor_history", JSON.stringify([...cursorHistory, params.get("page_token") || ""])); setParams(next); };
   const goPrevious = () => { if (!cursorHistory.length) return; const history = cursorHistory.slice(0, -1); const token = cursorHistory[cursorHistory.length - 1]; const next = new URLSearchParams(params); if (token) next.set("page_token", token); else next.delete("page_token"); if (history.length) next.set("cursor_history", JSON.stringify(history)); else next.delete("cursor_history"); setParams(next); };
   const query = useMemo(() => ({ tenant_id: tenant, environment, q: params.get("q") || undefined, status: params.get("status") || undefined, attention: params.get("view") || undefined, persona_id: personaFocus, strategy_id: strategyFocus, decision_id: decisionFocus, order_id: orderFocus, broker_order_id: brokerOrderFocus, page_token: params.get("page_token") || undefined, page_size: 25, sort: "updated_at_desc" }), [params, tenant, environment, personaFocus, strategyFocus, decisionFocus, orderFocus, brokerOrderFocus]);
-  useEffect(() => { const c = new AbortController(); setError(""); listTradeJourneys(query, c.signal).then(setPayload).catch(e => { if (e?.name !== "AbortError") setError(e.message); }); return () => c.abort(); }, [query, liveRevision]);
+  // Live invalidation must not abort a same-scope read that is still pending:
+  // that restarted its clock on every invalidation and starved slow reads.
+  // Invalidations coalesce into one refetch after the in-flight read settles;
+  // a scope (query/tenant/environment) change or unmount still aborts.
+  const refreshList = useRef<() => void>(() => {});
+  useEffect(() => {
+    const c = new AbortController();
+    let inflight = false, dirty = false;
+    const load = () => {
+      inflight = true; dirty = false; setError("");
+      listTradeJourneys(query, c.signal)
+        .then(result => { if (!c.signal.aborted) setPayload(result); })
+        .catch(e => { if (e?.name !== "AbortError" && !c.signal.aborted) setError(e.message); })
+        .finally(() => { inflight = false; if (dirty && !c.signal.aborted) load(); });
+    };
+    refreshList.current = () => { if (inflight) dirty = true; else load(); };
+    load();
+    return () => { c.abort(); refreshList.current = () => {}; };
+  }, [query]);
+  useEffect(() => { if (liveRevision) refreshList.current(); }, [liveRevision]);
   useEffect(() => subscribeTradeJourneys({ tenant_id: tenant, environment }, { onInvalidate: () => setLiveRevision(value => value + 1), onState: setLiveState }).close, [tenant, environment]);
   const resolve = async () => { const q = params.get("resolve")?.trim(); if (!q) return; setResolving(true); setError(""); try { const { data } = await resolveTradeJourney({ q, tenant_id: tenant, environment }); if (data.journey_ids.length === 1) { const id = data.journey_ids[0]; navigate(`/management/trade-journeys/${encodeURIComponent(id)}?${detailContext}`); } else if (data.ambiguous || data.journey_ids.length > 1) setError(t("tradeJourneys.resolveErrors.ambiguous", { ids: data.journey_ids.join(", ") })); else setError(t("tradeJourneys.resolveErrors.noMatch")); } catch (e) { setError((e as Error).message); } finally { setResolving(false); } };
   const stageName = (stage?: string | null) => stage ? t(`tradeJourneys.stages.${stage}`, { defaultValue: stage.replaceAll("_", " ") }) : "";
