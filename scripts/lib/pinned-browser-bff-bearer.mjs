@@ -202,9 +202,12 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // Await the browser's sample before dispatching continueRequest. Its
         // Timestamp therefore predates the actual command rejection, regardless
         // of command scheduling or delayed delivery of the rejection to Node.
+        // Cancellation after this lower bound is ambiguous: CDP exposes no failure
+        // timestamp. Fail closed even if it was legitimate; the maintained caller
+        // drains/checks outstanding commands before navigating or closing.
         const before = request ? session.send("Performance.getMetrics").then(
           ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
-        const continueRequest = (rejectedAt) => session.send("Fetch.continueRequest", { requestId: event.requestId,
+        const continueRequest = (sampledBeforeCommand) => session.send("Fetch.continueRequest", { requestId: event.requestId,
           headers: clean.map(([name, value]) => ({ name, value: String(value) }))
         }).catch(async (error) => {
           // The network id binds Chromium's cancellation to this interception,
@@ -216,8 +219,8 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           // navigation or teardown, stays a protocol failure, whenever the error
           // is delivered. Closure alone never proves anything afterwards.
           const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
-          if (invalidId && request && typeof rejectedAt === "number") {
-            const cancelled = () => request.canceled && request.canceledAt <= rejectedAt;
+          if (invalidId && request && typeof sampledBeforeCommand === "number") {
+            const cancelled = () => request.canceled && request.canceledAt <= sampledBeforeCommand;
             const proven = () => cancelled() && excused(request);
             // The cancellation fact may be queued behind this rejection: give it the
             // existing bounded wait. Once it has arrived, only the replacing commit can

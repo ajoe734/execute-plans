@@ -170,9 +170,13 @@ function isBffUrl(url) {
   }
 }
 
-async function gotoRouteWithRetry(page, targetUrl) {
+async function gotoRouteWithRetry(page, targetUrl, transport) {
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
+    // Drain interception commands, not response bodies (SSE stays open), before
+    // this caller cancels the current document's requests with a navigation.
+    await transport.settle();
+    transport.assertHealthy();
     try {
       await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS });
       return null;
@@ -184,7 +188,7 @@ async function gotoRouteWithRetry(page, targetUrl) {
   return lastError;
 }
 
-async function crawlRoute(page, route, { source }) {
+async function crawlRoute(page, route, { source, transport }) {
   const requests = [];
   const responses = [];
   const failedRequests = [];
@@ -219,7 +223,7 @@ async function crawlRoute(page, route, { source }) {
   let bodyText = "";
 
   try {
-    const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl);
+    const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport);
     if (navErrorMaybe) throw navErrorMaybe;
     await page
       .waitForFunction(() => (document.body?.innerText || "").trim().length > 15, undefined, { timeout: SETTLE_TIMEOUT_MS })
@@ -304,7 +308,9 @@ async function crawlRoute(page, route, { source }) {
   };
 }
 
-async function discoverLiveNav(page) {
+async function discoverLiveNav(page, transport) {
+  await transport.settle();
+  transport.assertHealthy();
   await page.goto(`${FE_BASE}/management/cockpit`, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS }).catch(() => {});
   await page.waitForTimeout(1500);
   const hrefs = await page
@@ -549,7 +555,7 @@ async function main() {
   page.setDefaultNavigationTimeout(ROUTE_TIMEOUT_MS);
 
   console.log(`[accept-management-hosted-production] discovering live nav at ${FE_BASE}/management/cockpit ...`);
-  const liveNavHrefs = await discoverLiveNav(page);
+  const liveNavHrefs = await discoverLiveNav(page, transport);
 
   const routeMap = new Map();
   for (const route of BASELINE_ROUTES) routeMap.set(route.path, { path: route.path, kind: route.kind });
@@ -569,7 +575,7 @@ async function main() {
 
   const results = [];
   for (const route of routes) {
-    const result = await crawlRoute(page, route, { source: "baseline-or-live-nav" });
+    const result = await crawlRoute(page, route, { source: "baseline-or-live-nav", transport });
     results.push(result);
   }
 
@@ -578,11 +584,16 @@ async function main() {
   const liveIdResults = [];
   for (const resolved of liveIdResolution) {
     if (!resolved.routePath) continue;
-    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail" }, { source: `live-id:${resolved.entity}` });
+    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail" }, { source: `live-id:${resolved.entity}`, transport });
     liveIdResults.push(result);
   }
 
-  await browser.close();
+  try {
+    await transport.settle();
+    transport.assertHealthy();
+  } finally {
+    await browser.close();
+  }
   await transport.settle();
   transport.assertHealthy();
 
