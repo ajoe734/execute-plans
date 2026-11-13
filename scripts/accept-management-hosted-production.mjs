@@ -643,9 +643,13 @@ async function main() {
     liveIdResults.push(result);
   }
 
-  await transport.closeBrowser(browser);
-  await transport.settle();
-  transport.assertHealthy();
+  // Preserve the completed crawl even when closure/health fails. The helper
+  // closes in finally; retain its sanitized errors, never arbitrary raw errors.
+  let transportFailed = false;
+  try { await transport.closeBrowser(browser); }
+  catch { transportFailed = true; }
+  try { await transport.settle(); transport.assertHealthy(); }
+  catch { transportFailed = true; }
 
   console.log("[accept-management-hosted-production] running session/RBAC check ...");
   const sessionRbac = await sessionRbacCheck();
@@ -697,7 +701,7 @@ async function main() {
     },
   ];
 
-  const hardFail = gateChecks.some((c) => c.status === "fail");
+  const hardFail = transportFailed || gateChecks.some((c) => c.status === "fail");
   const overall = hardFail ? "fail" : gateChecks.some((c) => c.status === "warn") ? "warn" : gateChecks.some((c) => c.status === "missing") ? "missing" : "pass";
   const pass = !hardFail;
 
@@ -723,11 +727,11 @@ async function main() {
     loadGate,
     sourceScan: { ...sourceScan, findings: sourceScan.findings.slice(0, 200) },
     gateChecks,
-    pinnedTransport: { terminatedBeforeSend: transport.terminatedBeforeSend },
+    pinnedTransport: { pass: !transportFailed, errors: transport.errors, terminatedBeforeSend: transport.terminatedBeforeSend },
     result: {
       pass,
       overall,
-      failures: gateChecks.filter((c) => c.status === "fail").map((c) => c.label),
+      failures: [...(transportFailed ? ["Pinned BFF transport failed."] : []), ...gateChecks.filter((c) => c.status === "fail").map((c) => c.label)],
       warnings: gateChecks.filter((c) => c.status === "warn").map((c) => c.label),
       missing: gateChecks.filter((c) => c.status === "missing").map((c) => c.label),
     },
@@ -763,6 +767,9 @@ async function main() {
     `| Status | Check | Note |`,
     `|---|---|---|`,
     ...gateChecks.map((c) => `| ${c.status} | ${c.label} | ${c.note} |`),
+    ``,
+    `Pinned BFF transport: **${transportFailed ? "fail" : "pass"}**`,
+    ...transport.errors.map((error) => `- ${error}`),
     ``,
     `## Failing / crashed / blank routes`,
     ``,

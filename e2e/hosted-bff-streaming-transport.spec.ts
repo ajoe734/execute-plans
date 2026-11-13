@@ -91,7 +91,7 @@ test.beforeAll(async () => {
       }
     } else if (req.url === "/same-redirect") {
       res.writeHead(302, { ...cors, location: `${bffOrigin}/sse` }).end();
-    } else if (req.url === "/pending") {
+    } else if (req.url === "/pending" || req.url === "/bff/management/trade-journeys") {
       res.writeHead(200, { ...cors, "content-type": "application/json" });
       res.write("{");
       openSse.add(res);
@@ -134,11 +134,17 @@ test.beforeAll(async () => {
       const pathname = (req.url || "").split("?")[0];
       const entityRoute = BASELINE_ROUTES.find((r) => r.entity && r.path === pathname) ||
         BASELINE_ROUTES.find((r) => r.entity && pathname.endsWith("/local-live-id") && r.path.slice(0, r.path.lastIndexOf("/")) === pathname.slice(0, pathname.lastIndexOf("/")));
-      const dataPath = pathname === managementFixtureFailure ? "/bff/acceptance-data?mode=api-error"
+      const abortContinued = managementFixtureFailure === "continued" && pathname === "/management/trade-journeys";
+      const dataPath = abortContinued ? "/bff/management/trade-journeys" : pathname === managementFixtureFailure ? "/bff/acceptance-data?mode=api-error"
         : entityRoute && ENTITY_LIST_ENDPOINTS[entityRoute.entity] ? `${ENTITY_LIST_ENDPOINTS[entityRoute.entity]}/${pathname.split("/").pop()}` : "/bff/fixture-data";
       const links = BASELINE_ROUTES.filter((r: { kind: string }) => r.kind === "nav")
         .map((r: { path: string }) => `<a href="${r.path}">${r.path}</a>`).join("");
-      return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}<script>new EventSource("${bffOrigin}/sse"); void fetch("${bffOrigin}${dataPath}").catch(() => {});</script></body>`);
+      return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}<script>new EventSource("${bffOrigin}/sse");
+        const controller = new AbortController();
+        void fetch("${bffOrigin}${dataPath}", { signal: controller.signal }).then(r => {
+          if (${abortContinued}) controller.abort(); // after real response headers, before navigation/close
+          return r.text();
+        }).catch(() => {});</script></body>`);
     }
     res.writeHead(200, { "content-type": "text/html" }).end("<html><body>fe</body></html>");
   });
@@ -1416,11 +1422,11 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
 // All server data and the load-gate input are generated local fixtures. Fixture
 // HTML/data is local protocol coverage, never a hosted acceptance pass. Impose
 // a renderer read immediately AFTER its drain, using only native CDP results.
-for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin", "route data failure", "detail data failure", "discovery data failure"] as const) {
+for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin", "route data failure", "detail data failure", "discovery data failure", "continued request failure"] as const) {
 test(`actual 95-route caller handles a new interception after drain through entity discovery and detail closure (${scopeCase})`, async () => {
   test.setTimeout(120_000);
   managementFixture = true;
-  managementFixtureFailure = scopeCase === "route data failure" ? "/management/risk" : scopeCase === "detail data failure" ? "/management/strategies/local-live-id" : scopeCase === "discovery data failure" ? "discovery" : "";
+  managementFixtureFailure = scopeCase === "route data failure" ? "/management/risk" : scopeCase === "detail data failure" ? "/management/strategies/local-live-id" : scopeCase === "discovery data failure" ? "discovery" : scopeCase === "continued request failure" ? "continued" : "";
   const probeBrowser = await chromium.launch();
   const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
@@ -1550,18 +1556,13 @@ main`, {
     },
   });
   try {
+    await run();
     if (scopeCase === "wildcard predecessor") {
-      const failure = await run().then(() => undefined, (error: unknown) => error);
-      expect(String(failure)).toContain("Invalid InterceptionId");
       expect(foreignContinues).toBe(1);
       expect(trace).toContain("foreign native rejection:true");
       expect(transport.errors.some((e: string) => e.includes('"path":"/unrelated-pending"') && e.includes('"issued":true'))).toBe(true);
-      expect(fs.existsSync(join(reportDir, `management-hosted-acceptance-${new Date().toISOString().slice(0, 10)}.json`))).toBe(false);
       console.log(JSON.stringify({ generatedScopeCounterexample: true, scopeCase, foreignContinues, trace, errors: transport.errors }));
-      return;
-    }
-    await run();
-    expect(foreignContinues).toBe(0);
+    } else expect(foreignContinues).toBe(0);
     const stamp = new Date().toISOString().slice(0, 10);
     const jsonPath = join(reportDir, `management-hosted-acceptance-${stamp}.json`);
     const mdPath = jsonPath.replace(/\.json$/, ".md");
@@ -1569,6 +1570,28 @@ main`, {
     const result = { results: report.routes.filter((r: { source: string }) => r.source === "baseline-or-live-nav"),
       liveIdResults: report.routes.filter((r: { source: string }) => r.source.startsWith("live-id:")),
       liveIdResolution: report.liveIdResolution };
+    if (scopeCase === "continued request failure" || scopeCase === "wildcard predecessor") {
+      expect(fixtureProcess.exitCode).toBe(1);
+      expect(report.result).toMatchObject({ pass: false, overall: "fail" });
+      expect(report.result.failures).toContain("Pinned BFF transport failed.");
+      expect(report.pinnedTransport).toMatchObject({ pass: false, errors: transport.errors });
+      expect(report.routeCounts).toMatchObject({ baseline: 95, crawled: 110, liveIdDetailRoutesCrawled: 15 });
+      const md = readFileSync(mdPath, "utf8");
+      expect(md).toContain("Overall: **fail** (pass=false)");
+      expect(md).toContain("Pinned BFF transport: **fail**");
+      if (scopeCase === "continued request failure") {
+        expect(() => transport.assertHealthy()).toThrow(/GET \/bff\/management\/trade-journeys: net::ERR_ABORTED/);
+        expect(report.routes).toContainEqual(expect.objectContaining({ path: "/management/trade-journeys", status: "datafail", bffFailed: expect.arrayContaining([expect.objectContaining({ failure: "net::ERR_ABORTED" })]) }));
+        expect(report.routes.some((r: { status: string; navError: string }) => r.status === "navfail" && r.navError.includes("trade-journeys"))).toBe(true);
+        expect(md).toContain("GET /bff/management/trade-journeys: net::ERR_ABORTED");
+        expect(report.pinnedTransport.terminatedBeforeSend).toContainEqual(expect.objectContaining({ phase: "close", outcome: "terminated_before_send" }));
+        expect(bffSeen).toContainEqual(expect.objectContaining({ path: "/bff/management/trade-journeys", authorization: `Bearer ${TOKEN}`, tenant: "tenant-local" }));
+      }
+      expect(JSON.stringify(report.pinnedTransport)).not.toMatch(/stream-test-token|Bearer|Cookie|\?/iu);
+      await test.info().attach("generated-local-transport-failure-report.json", { path: jsonPath, contentType: "application/json" });
+      await test.info().attach("generated-local-transport-failure-report.md", { path: mdPath, contentType: "text/markdown" });
+      return;
+    }
     if (managementFixtureFailure) {
       expect(fixtureProcess.exitCode).toBe(1);
       expect(report.result.pass).toBe(false);
