@@ -436,6 +436,18 @@ export interface ManagementPersonaFleetRow {
   classificationConfirmed?: boolean;
   classificationSource?: { purpose?: string; dataScope?: string };
   archived?: boolean;
+  /** Controller-record cycle health from the BFF (BFF-PERSONA-CYCLE-VIEWS-20261112); never derived client-side. */
+  personaCycleHealth?: ManagementPersonaCycleHealth;
+}
+
+export interface ManagementPersonaCycleHealth {
+  status: string;
+  lastPacketId?: string;
+  stage?: string;
+  failureReason?: string;
+  updatedAt?: string;
+  harnessVersion?: number;
+  riskStatus?: string;
 }
 
 export type ManagementPersonaFleetPurpose = "trading" | "advisory_assistant" | "unknown";
@@ -2725,6 +2737,22 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
       }
       : undefined,
     archived: typeof value.archived === "boolean" ? value.archived : undefined,
+    personaCycleHealth: adaptPersonaCycleHealth(value.persona_cycle_health ?? value.personaCycleHealth),
+  };
+}
+
+function adaptPersonaCycleHealth(raw: unknown): ManagementPersonaCycleHealth | undefined {
+  if (!isObject(raw)) return undefined;
+  const status = asOptionalString(raw.status);
+  if (!status) return undefined;
+  return {
+    status,
+    lastPacketId: asOptionalString(raw.last_packet_id ?? raw.lastPacketId),
+    stage: asOptionalString(raw.stage),
+    failureReason: asOptionalString(raw.failure_reason ?? raw.failureReason),
+    updatedAt: asOptionalString(raw.updated_at ?? raw.updatedAt),
+    harnessVersion: optionalFiniteNumber(raw.harness_version ?? raw.harnessVersion),
+    riskStatus: asOptionalString(raw.risk_status ?? raw.riskStatus),
   };
 }
 
