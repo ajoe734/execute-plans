@@ -90,7 +90,7 @@ export function TradeJourneysPage() {
         .catch(e => { if (e?.name !== "AbortError" && !c.signal.aborted) setError(e.message); })
         .finally(() => { inflight = false; if (dirty && !c.signal.aborted) load(true); });
     };
-    refreshList.current = () => { if (inflight) dirty = true; else load(); };
+    refreshList.current = () => { if (inflight) dirty = true; else load(true); };
     load();
     return () => { c.abort(); refreshList.current = () => {}; };
   }, [query]);

@@ -1815,6 +1815,31 @@ test.describe("actual Trade Journeys read lifecycle in Chromium", () => {
     });
   }
 
+  const PRE_IDLE = "ad0f46572"; // idle invalidation after a failed replacement cleared the retained failure
+  for (const [label, rev, passes] of [["current source", undefined, true], ["pre-idle-fix revision", PRE_IDLE, false]] as const) {
+    test(`${label}: idle invalidation after a failed replacement retains the failure until valid completion`, async () => {
+      const h = await lifecycleHarness(rev);
+      try {
+        await expect.poll(() => h.lists.length).toBe(1);
+        await expect.poll(() => h.polls()).toBeGreaterThanOrEqual(1);
+        await h.page.waitForTimeout(100);
+        h.ok(h.lists[0]);
+        await expect.poll(() => h.lists.length).toBe(2);
+        h.fail(h.lists[1]);
+        const alert = h.page.getByRole("alert");
+        await expect(alert).toBeVisible();
+        await h.page.waitForTimeout(100);
+        await h.pollAgain();
+        await expect.poll(() => h.lists.length).toBe(3);
+        await h.page.waitForTimeout(200);
+        if (!passes) { await expect(alert).toHaveCount(0); return; }
+        await expect(alert).toBeVisible();
+        h.ok(h.lists[2]);
+        await expect(alert).toHaveCount(0);
+      } finally { await h.close(); }
+    });
+  }
+
   test("a scope change and unmount still abort the pending read", async () => {
     const h = await lifecycleHarness();
     try {

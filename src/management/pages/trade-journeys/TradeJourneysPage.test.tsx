@@ -296,6 +296,23 @@ describe("Trade Journeys workbench", () => {
       expect(await screen.findByText("HTTP 502")).toBeInTheDocument();
     });
 
+    it("keeps a failure visible when a later idle invalidation starts another read, until it completes", async () => {
+      const calls = deferredList();
+      renderList();
+      await waitFor(() => expect(calls).toHaveLength(1));
+      calls[0].resolve();
+      await screen.findByText("happy-1");
+      invalidate();
+      await waitFor(() => expect(calls).toHaveLength(2));
+      calls[1].reject(new Error("HTTP 500"));
+      expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 500");
+      invalidate();
+      await waitFor(() => expect(calls).toHaveLength(3));
+      expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+      calls[2].resolve();
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    });
+
     it("clears the retained failure only after a valid completed replacement", async () => {
       const calls = deferredList();
       renderList();
