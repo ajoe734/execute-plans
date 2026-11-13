@@ -305,9 +305,11 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
     await send("Network.enable");
     await send("Page.enable");
     session.send = (async (method: string, params: { requestId?: string }) => {
-      // Retain the independent reviewer's counterexample: the real command
-      // rejects while live, then navigation cancels it before the clock sample.
-      if (lateSample && method === "Performance.getMetrics" && held) await rejectionGate;
+      const samplingHeld = method === "Performance.getMetrics" && (heldSample || commandHeld);
+      // Retain the independent reviewer's post-command-sample counterexample.
+      // A pre-command helper sample cannot follow that command; unrelated new
+      // navigation samples must not be held behind the old rejection.
+      if (lateSample && method === "Performance.getMetrics" && commandHeld) await rejectionGate;
       if (method === "Fetch.continueRequest" && params.requestId === held) {
         heldSample = false; commandHeld = true;
         reached();
@@ -319,12 +321,11 @@ async function controlledInterception(install = installPinnedBffBearer, invalidL
       // A CDP session is ordered: a sample issued while the held command is still
       // undelivered waits behind it. A sample issued before the command is held
       // too. This is an imposed local schedule, not a hosted trace.
-      const samplingHeld = method === "Performance.getMetrics" && (heldSample || commandHeld);
       if (samplingHeld) { heldSample = false; reached(); await dispatch; }
       try {
         const result = await send(method as Parameters<CDPSession["send"]>[0], params);
         if (method === "Performance.getMetrics" && held) note("Performance.getMetrics", {
-          timestamp: (result as { metrics: { name: string; value: number }[] }).metrics.find((m) => m.name === "Timestamp")?.value,
+          heldSample: samplingHeld, timestamp: (result as { metrics: { name: string; value: number }[] }).metrics.find((m) => m.name === "Timestamp")?.value,
         });
         return result;
       }
@@ -582,10 +583,10 @@ test("exact 82ff queued cancellation fails; maintained transport proves the obso
         expect(events.indexOf("Fetch.continueRequest rejected")).toBeLessThan(events.indexOf("helper receives Network.loadingFailed"));
         if (name === "fixed") {
           const canceledAt = c.receipt.lifecycle.find((e) => e.event === "Network.loadingFailed")?.timestamp as number;
-          const sampledAt = c.receipt.lifecycle.find((e) => e.event === "Performance.getMetrics")?.timestamp as number;
+          const sampledAt = c.receipt.lifecycle.find((e) => e.event === "Performance.getMetrics" && e.heldSample)?.timestamp as number;
           expect(canceledAt).toBeLessThanOrEqual(sampledAt);
-          // The sample is queued directly behind the command on the ordered session, so it
-          // bounds the rejection from above whatever delays the command.
+          // This imposed schedule cancels before the pre-command sample, which
+          // proves cancellation preceded dispatch even with delayed event delivery.
           expect(events).toContain("Performance.getMetrics");
         }
         expect(c.receipt.errors.filter((e) => e.includes("(Fetch.continueRequest)"))).toEqual([expect.stringMatching(/Protocol error \(Fetch.continueRequest\): Invalid InterceptionId\./)]);
@@ -1072,8 +1073,9 @@ test("a read cancelled by a real navigation still settles healthy after an earli
 });
 
 // A busy renderer or loaded runner schedules the command (and possibly the clock sample)
-// late, so Chromium's navigation cancellations land while commands are in flight. The
-// sample is taken only after a rejection, so it can never predate the cancellation.
+// late. Keep these imposed schedules: a cancellation after the pre-command sample
+// has no proven order relative to the native failure and must fail closed (source
+// criterion 2 addendum, 2026-11-13). Actual caller prevention is tested separately.
 for (const delaySample of [true, false]) {
 test(`reads cancelled by successive navigations settle healthy when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });

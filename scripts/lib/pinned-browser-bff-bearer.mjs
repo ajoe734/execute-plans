@@ -199,29 +199,28 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           clean.push(["authorization", bearer]);
           if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
-        // Queue the browser-clock sample directly behind the command on the ordered
-        // CDP session: Chromium handles it only after it has handled the command, so
-        // it bounds the command's rejection from above however late either message is
-        // scheduled, and without waiting for a possibly delayed rejection to be
-        // delivered. It is only consulted if the command is rejected.
-        const command = session.send("Fetch.continueRequest", { requestId: event.requestId,
-          headers: clean.map(([name, value]) => ({ name, value: String(value) }))
-        });
-        const after = request ? session.send("Performance.getMetrics").then(
+        // Await the browser's sample before dispatching continueRequest. Its
+        // Timestamp therefore predates the actual command rejection, regardless
+        // of command scheduling or delayed delivery of the rejection to Node.
+        // Cancellation after this lower bound is ambiguous: CDP exposes no failure
+        // timestamp. Fail closed even if it was legitimate; the maintained caller
+        // drains/checks outstanding commands before navigating or closing.
+        const before = request ? session.send("Performance.getMetrics").then(
           ({ metrics }) => metrics.find((metric) => metric.name === "Timestamp")?.value, () => undefined) : undefined;
-        const continueRequest = () => command.catch(async (error) => {
-          const rejectedAt = await after;
+        const continueRequest = (sampledBeforeCommand) => session.send("Fetch.continueRequest", { requestId: event.requestId,
+          headers: clean.map(([name, value]) => ({ name, value: String(value) }))
+        }).catch(async (error) => {
           // The network id binds Chromium's cancellation to this interception,
           // and the cancellation must be caused by a navigation (document
           // replacement, same-document navigation or frame detach). Lifecycle
           // events can be queued behind the command rejection, so wait for them,
           // but only accept a cancellation Chromium timestamped no later than the
-          // post-command sample: an invalid id on a live request, followed by later
+          // pre-command sample: an invalid id on a live request, followed by later
           // navigation or teardown, stays a protocol failure, whenever the error
           // is delivered. Closure alone never proves anything afterwards.
           const invalidId = /Protocol error \(Fetch\.continueRequest\): Invalid InterceptionId\./u.test(String(error));
-          if (invalidId && request && typeof rejectedAt === "number") {
-            const cancelled = () => request.canceled && request.canceledAt <= rejectedAt;
+          if (invalidId && request && typeof sampledBeforeCommand === "number") {
+            const cancelled = () => request.canceled && request.canceledAt <= sampledBeforeCommand;
             const proven = () => cancelled() && excused(request);
             // The cancellation fact may be queued behind this rejection: give it the
             // existing bounded wait. Once it has arrived, only the replacing commit can
@@ -234,7 +233,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           record(error, page, "CDP continueRequest");
           await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
         });
-        track(continueRequest().finally(() => interceptions.delete(request)));
+        track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
       });
       await session.send("Network.enable");
       await session.send("Page.enable");
