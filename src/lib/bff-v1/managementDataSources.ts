@@ -163,6 +163,9 @@ export interface ManagementDataSourceV2DTO {
     datasets?: string[];
     markets?: string[];
     universe_policy_ref?: string;
+    /** Discovery projection: health incl. pause reasons, data.gov.tw attribution. */
+    health?: Record<string, unknown>;
+    attribution?: { provider?: string; text?: string } | null;
   };
 }
 

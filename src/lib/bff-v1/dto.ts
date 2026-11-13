@@ -632,6 +632,7 @@ export interface EvolutionProgramRunLink {
 export interface EvolutionProgram extends BaseObject {
   program_id?: string;
   programId?: string;
+  discovery?: Record<string, unknown>;
   generation: number;
   population: number;
   bestFitness: number;
@@ -1500,6 +1501,8 @@ export interface AlphaFactoryCard {
   strategy_state?: string | null;
   sharpe?: number | null;
   risk?: RiskLevel | null;
+  /** Raw discovery pass-through (metrics / lineage / attribution / hypothesis_card); read via normalizeDiscovery. */
+  discovery?: Record<string, unknown>;
 }
 
 export interface AlphaFactoryLane {
@@ -1542,6 +1545,8 @@ export interface AlphaFactoryData {
   scaffolded: AlphaFactoryCard[];
   replicated: AlphaFactoryCard[];
   items: AlphaFactoryCard[];
+  /** Raw alpha-template evaluation rows; read via normalizeTemplateEvaluations. */
+  templates?: unknown[];
 }
 
 export interface AlphaFactoryEnvelope {
