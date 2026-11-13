@@ -262,9 +262,13 @@ async function crawlRoute(page, route, { source, transport }) {
       const validReads = dataReads.filter((read) => read.complete &&
         ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
       const failedReads = dataReads.filter((read) => read.complete && !validReads.includes(read));
+      const expectedDataPath = route.entity && ENTITY_LIST_ENDPOINTS[route.entity]
+        ? `${ENTITY_LIST_ENDPOINTS[route.entity]}/${route.path.split("?")[0].split("/").pop()}` : null;
+      const entityDataReady = !expectedDataPath || validReads.some((read) => read.path === expectedDataPath);
+      const apiFailure = responses.some((response) => response.status >= 400 && !(response.status === 404 && honestNotFound));
       ready = snapshot.path === expectedPath && !snapshot.login && !snapshot.busy && !loading && !dataError &&
         snapshot.content.trim().length > 15 && validReads.length > 0 && failedReads.length === 0 &&
-        dataReads.every((read) => read.complete);
+        !apiFailure && entityDataReady && dataReads.length === routeRequests.size && dataReads.every((read) => read.complete);
       if (ready || Date.now() >= deadline) break;
       await page.waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
     } while (true);

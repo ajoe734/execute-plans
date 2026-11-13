@@ -267,7 +267,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
             // This queued interception was never dispatched. If its exact native
             // record already proves navigation cancellation, retire it without
             // issuing a command for an obsolete id. Live/unknown requests proceed
-            // through the unchanged conservative error judgment below.
+            // through the command outcome judgment below.
             if (deferred && request?.canceled && excused(request)) {
               if (pinned && requestStage) terminated("cancelled_before_continuation");
               return;
