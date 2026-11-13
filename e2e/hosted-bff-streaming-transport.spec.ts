@@ -2,20 +2,22 @@
 // Real Chromium + real HTTPS servers; not hosted product acceptance.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import path from "node:path";
 import vm from "node:vm";
 // @ts-expect-error plain ESM recorded route baseline
 import { BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath } from "../scripts/lib/management-routes.mjs";
-import { expect, test, chromium, type Browser, type CDPSession } from "@playwright/test";
+import { expect, test, chromium, request, type Browser, type CDPSession } from "@playwright/test";
 // @ts-expect-error plain ESM script helper
-import { installPinnedBffBearer } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
+import { installPinnedBffBearer, pinnedTargetProblem } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
 
 const TOKEN = "stream-test-token";
-type Seen = { path: string; authorization?: string; tenant?: string };
+type Seen = { path: string; authorization?: string; tenant?: string; cookie?: string; marker?: string };
 const bffSeen: Seen[] = [];
 const foreignSeen: Seen[] = [];
 let dir: string;
@@ -38,6 +40,8 @@ const record = (list: Seen[], req: http.IncomingMessage) =>
     path: req.url || "",
     authorization: req.headers.authorization as string | undefined,
     tenant: req.headers["x-tenant-id"] as string | undefined,
+    cookie: req.headers.cookie,
+    marker: req.headers["x-fixture-marker"] as string | undefined,
   });
 
 test.beforeAll(async () => {
@@ -47,10 +51,16 @@ test.beforeAll(async () => {
   const tls = { key: readFileSync(join(dir, "k.pem")), cert: readFileSync(join(dir, "c.pem")) };
   foreign = https.createServer(tls, (req, res) => {
     record(foreignSeen, req);
+    if (req.url === "/to-bff") return void res.writeHead(302, { ...cors, location: `${bffOrigin}/finite` }).end();
     res.writeHead(200, { ...cors, "content-type": "application/json" }).end("{}");
   });
   bff = https.createServer(tls, (req, res) => {
     record(bffSeen, req);
+    // A real rejected preflight must not be synthesized into a successful one.
+    if (req.url === "/cors-denied" && req.method === "OPTIONS") return void res.writeHead(403).end();
+    if (managementFixture && req.url?.startsWith("/bff/") && req.headers.authorization !== `Bearer ${TOKEN}`) {
+      return void res.writeHead(401, { ...cors, "content-type": "application/json" }).end("{}");
+    }
     if (req.url === "/sse" || req.url === "/baseline-sse") {
       res.writeHead(200, { ...cors, "content-type": "text/event-stream", "cache-control": "no-cache" });
       res.write("data: hello\n\n");
@@ -81,6 +91,10 @@ test.beforeAll(async () => {
     }
   });
   fe = http.createServer((req, res) => {
+    if (req.url === "/unrelated-pending") {
+      res.writeHead(200, { "content-type": "text/plain" }); res.write("pending");
+      openSse.add(res); return;
+    }
     // /stall: HTTP 204 is a real Document navigation that fails (ERR_ABORTED) and never commits.
     if (req.url === "/stall") return void res.writeHead(204).end();
     if (managementFixture) {
@@ -170,6 +184,58 @@ test("a response that turns into a redirect on a later GET never receives the be
   expect(bffSeen.filter((s) => s.path === "/flip")).toHaveLength(2);
   transport.assertHealthy();
   await context.close();
+});
+
+test("only the exact BFF origin is paused; foreign redirects into it receive per-hop auth", async () => {
+  const paused: string[] = [];
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const create = context.newCDPSession.bind(context);
+  context.newCDPSession = async (page) => {
+    const session = await create(page);
+    session.on("Fetch.requestPaused", (e) => paused.push(new URL(e.request.url).origin));
+    return session;
+  };
+  const transport = await installPinnedBffBearer(context, { token: TOKEN, tenantId: "tenant-x", feBase: feOrigin, bffBase: bffOrigin, env: env() });
+  const page = await context.newPage();
+  try {
+    await transport.attachPage(page);
+    await page.goto(feOrigin);
+    await page.evaluate((u) => fetch(u).then((r) => r.text()), `${foreignOrigin}/to-bff`);
+    expect(foreignSeen.find((r) => r.path === "/to-bff")).toMatchObject({ authorization: undefined, tenant: undefined });
+    expect(bffSeen.find((r) => r.path === "/finite")).toMatchObject({ authorization: `Bearer ${TOKEN}`, tenant: "tenant-x" });
+    expect(paused.length).toBeGreaterThan(0);
+    expect(paused.every((origin) => origin === bffOrigin)).toBe(true);
+    await transport.settle(); transport.assertHealthy();
+  } finally { await context.close(); await transport.settle(); }
+});
+
+test("native cookie and unrelated header handling survive BFF-only interception and off-origin redirects", async () => {
+  const c = await open({ tenantId: "tenant-x" });
+  try {
+    // Cookies use browser host/path rules (ports are not cookie boundaries).
+    await c.context.addCookies([{ name: "fixture-session", value: "browser-cookie", url: bffOrigin, secure: true, sameSite: "None" }]);
+    await c.page.evaluate((u) => fetch(u, { credentials: "include", mode: "no-cors", headers: { "x-fixture-marker": "preserved" } }).then(() => {}), `${bffOrigin}/redirect`);
+    await expect.poll(() => foreignSeen.some((r) => r.path === "/landed")).toBe(true);
+    expect(bffSeen.find((r) => r.path === "/redirect")).toMatchObject({ authorization: `Bearer ${TOKEN}`, tenant: "tenant-x", cookie: "fixture-session=browser-cookie" });
+    for (const r of foreignSeen) {
+      expect(r.authorization).toBeUndefined(); expect(r.tenant).toBeUndefined();
+      expect(r.cookie || "").not.toContain(TOKEN);
+    }
+    await c.page.evaluate((u) => fetch(u, { headers: { "x-fixture-marker": "preserved" } }).then((r) => r.text()), `${bffOrigin}/finite`);
+    expect(bffSeen.some((r) => r.path === "/finite" && r.marker === "preserved")).toBe(true);
+    await c.transport.settle(); c.transport.assertHealthy();
+  } finally { await c.context.close(); await c.transport.settle(); }
+});
+
+test("a genuine denied CORS preflight remains a browser and transport failure", async () => {
+  const c = await open();
+  try {
+    const failure = await c.page.evaluate((u) => fetch(u, { method: "PUT", headers: { "x-fixture-marker": "preflight" } }).then(() => "unexpected success", () => "rejected"), `${bffOrigin}/cors-denied`);
+    expect(failure).toBe("rejected");
+    expect(bffSeen.filter((r) => r.path === "/cors-denied")).toHaveLength(1);
+    await c.transport.settle();
+    expect(() => c.transport.assertHealthy()).toThrow(/cors-denied/);
+  } finally { await c.context.close(); await c.transport.settle(); }
 });
 
 test("an unrelated transport failure is surfaced, not swallowed; teardown is not", async () => {
@@ -1173,15 +1239,24 @@ test("a read cancelled by a real navigation still settles healthy after an earli
 // criterion 2 addendum, 2026-11-13). Actual caller prevention is tested separately.
 for (const useCaller of [false, true]) {
 for (const delaySample of [true, false]) {
-test(`${useCaller ? "actual caller drains loaded reads and open SSE before successive navigations" : "reads cancelled by successive navigations settle healthy"} when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
+test(`${useCaller ? "actual caller drains loaded reads and open SSE before successive navigations" : delaySample ? "reads cancelled by successive navigations settle healthy" : "successive navigations retain ambiguous issued read failures"} when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
   const probeBrowser = useCaller ? await chromium.launch() : browser;
   const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
+  let issued!: () => void, releaseCommands!: () => void;
+  const firstIssue = new Promise<void>((r) => { issued = r; });
+  const commandGate = new Promise<void>((r) => { releaseCommands = r; });
   context.newCDPSession = async (page) => {
     const session = await create(page), send = session.send.bind(session), held = new Set<string>();
     let tail: Promise<unknown> = Promise.resolve(); // a CDP session delivers messages in order
     session.on("Fetch.requestPaused", (e) => { if (e.request.url.startsWith(`${bffOrigin}/read-`)) held.add(e.requestId); });
     session.send = (async (method: string, params: { requestId?: string }) => {
+      if (!useCaller && !delaySample && method === "Fetch.continueRequest" && held.has(params.requestId!)) {
+        // The pre-command native sample has already returned. Deliberately
+        // cancel before dispatch so the missing rejection timestamp remains
+        // ambiguous, exactly as required by the existing fail-closed policy.
+        issued(); await commandGate;
+      }
       const late = (delaySample && method === "Performance.getMetrics") || (method === "Fetch.continueRequest" && held.has(params.requestId!));
       const turn = tail;
       const run = turn.then(async () => { if (late) await new Promise((resolve) => setTimeout(resolve, 200)); });
@@ -1201,29 +1276,41 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
     for (let route = 0; route < (useCaller ? 3 : 12); route++) {
       if (useCaller) expect(await navigate(page, `${feOrigin}/route-${route}`, transport)).toBeNull();
       else await page.goto(`${feOrigin}/route-${route}`);
+      if (route > 0) releaseCommands();
       if (useCaller) expect(await startSse(page, `${bffOrigin}/sse`)).toBe("hello");
       await page.evaluate((u) => { for (let k = 0; k < 6; k++) void fetch(`${u}/read-${k}`).catch(() => {}); }, bffOrigin);
+      if (!useCaller && !delaySample && route === 0) await firstIssue;
       await page.waitForTimeout(20);
     }
     if (useCaller) expect(await navigate(page, `${feOrigin}/route-end`, transport)).toBeNull();
     else await page.goto(`${feOrigin}/route-end`);
     await page.waitForTimeout(600);
     await transport.settle();
-    transport.assertHealthy();
+    if (!useCaller && !delaySample) {
+      expect(() => transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      for (const error of transport.errors) {
+        const detail = JSON.parse(error.match(/CDP continueRequest (\{.*\}):/)![1]);
+        expect(detail.issued).toBe(true);
+        expect(detail.canceled).toBe(true);
+        expect(detail.canceledAt).toBeGreaterThan(detail.sampledBeforeIssue);
+      }
+    } else transport.assertHealthy();
     if (useCaller) {
       expect(bffSeen.filter((r) => r.path.startsWith("/read-")).length).toBe(18);
       expect(bffSeen.filter((r) => r.path === "/sse")).toHaveLength(3);
     }
-  } finally { await context.close(); await transport.settle(); if (useCaller) await probeBrowser.close(); }
+  } finally { releaseCommands(); await context.close(); await transport.settle(); if (useCaller) await probeBrowser.close(); }
 });
 }
 }
 
-// Execute the maintained caller's whole discovery -> 95 baseline crawl -> real
-// local entity-list resolution -> detail crawl -> browser-close block. Fixture
+// Execute the maintained caller's full main(), including the JSON/Markdown
+// report after discovery -> 95 baseline -> local entity resolution -> details.
+// All server data and the load-gate input are generated local fixtures. Fixture
 // HTML/data is local protocol coverage, never a hosted acceptance pass. Impose
 // a renderer read immediately AFTER its drain, using only native CDP results.
-test("actual 95-route caller handles a new interception after drain through entity discovery and detail closure", async () => {
+for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin"] as const) {
+test(`actual 95-route caller handles a new interception after drain through entity discovery and detail closure (${scopeCase})`, async () => {
   test.setTimeout(120_000);
   managementFixture = true;
   const probeBrowser = await chromium.launch();
@@ -1236,14 +1323,25 @@ test("actual 95-route caller handles a new interception after drain through enti
   const paused = new Promise<void>((r) => { reached = r; });
   const dispatch = new Promise<void>((r) => { release = r; });
   const trace: string[] = [];
+  let foreignId = "", foreignContinues = 0;
+  let foreignReached!: () => void, releaseForeign!: () => void;
+  const foreignIssued = new Promise<void>((r) => { foreignReached = r; });
+  const foreignDispatch = new Promise<void>((r) => { releaseForeign = r; });
   context.newCDPSession = async (page) => {
     session = await create(page);
     nativeSend = session.send.bind(session);
     session.on("Fetch.requestPaused", (e) => {
       if (e.request.url === `${bffOrigin}/held`) { heldId = e.requestId; heldNetworkId = e.networkId; trace.push(closing ? "paused after close drain" : "paused after drain"); reached(); }
+      if (e.request.url === `${feOrigin}/unrelated-pending`) foreignId = e.requestId;
     });
     session.on("Network.loadingFailed", (e) => { if (e.requestId === heldNetworkId) trace.push(`cancelled:${e.canceled === true}`); });
     session.send = (async (method: string, params: { requestId?: string }) => {
+      if (method === "Fetch.continueRequest" && params.requestId === foreignId) {
+        foreignContinues++; foreignReached();
+        await foreignDispatch;
+        try { return await nativeSend(method, params as never); }
+        catch (e) { trace.push(`foreign native rejection:${String(e).includes("Invalid InterceptionId")}`); throw e; }
+      }
       if (method === "Fetch.continueRequest" && params.requestId === heldId) {
         trace.push("continue entered");
         await dispatch;
@@ -1254,9 +1352,32 @@ test("actual 95-route caller handles a new interception after drain through enti
     }) as CDPSession["send"];
     return session;
   };
-  const transport = await installPinnedBffBearer(context, { token: TOKEN, tenantId: "tenant-local", feBase: feOrigin, bffBase: bffOrigin, env: env() });
+  const predecessorSource = scopeCase === "wildcard predecessor" ? execFileSync("git", ["show", "819363de15b9d36d607201e558239296e8010a36:scripts/lib/pinned-browser-bff-bearer.mjs"], { encoding: "utf8" }) : "";
+  const install = predecessorSource ? vm.runInNewContext(predecessorSource.replaceAll("export ", "") + "\ninstallPinnedBffBearer", { URL, process, setTimeout }) : installPinnedBffBearer;
+  const transport = await install(context, { token: TOKEN, tenantId: "tenant-local", feBase: feOrigin, bffBase: bffOrigin, env: env() });
   const page = await context.newPage();
   await transport.attachPage(page);
+  const transportClose = transport.closeBrowser.bind(transport);
+  transport.closeBrowser = async (target: Browser) => {
+    if (scopeCase !== "after-drain BFF") {
+      // After the entire real caller crawl, impose a delayed continuation of
+      // an unrelated FE read canceled by its renderer. All replies/errors are
+      // native Chromium. This is a generated schedule, NOT the missing trace.
+      const failed = page.waitForEvent("requestfailed", { predicate: (r) => r.url() === `${feOrigin}/unrelated-pending` });
+      await page.evaluate((u) => {
+        const controller = new AbortController();
+        Object.assign(window, { cancelUnrelated: () => controller.abort() });
+        void fetch(u, { signal: controller.signal }).then((r) => r.text()).catch(() => {});
+      }, `${feOrigin}/unrelated-pending`);
+      if (scopeCase === "wildcard predecessor") await foreignIssued;
+      else await nativeSend("Performance.getMetrics");
+      await page.evaluate(() => (window as unknown as { cancelUnrelated: () => void }).cancelUnrelated());
+      await failed;
+      releaseForeign();
+      await transport.settle();
+    }
+    return transportClose(target);
+  };
   const closeBrowser = probeBrowser.close.bind(probeBrowser);
   let lateCloseRequest = false;
   probeBrowser.close = async (...args) => {
@@ -1288,25 +1409,66 @@ test("actual 95-route caller handles a new interception after drain through enti
     return goto(...args);
   };
   const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
-  const functions = source.slice(source.indexOf("const CORS_PATTERN ="), source.indexOf("function latestManifestIn("));
-  const start = source.indexOf('  console.log(`[accept-management-hosted-production] discovering');
-  const end = source.indexOf('  console.log("[accept-management-hosted-production] running session/RBAC check', start);
-  const run = vm.runInNewContext(`${functions}
-(async () => {${source.slice(start, end)}
-return { results, liveIdResults, liveIdResolution }; })`, {
-    page, transport, browser: probeBrowser, console, URL, Map, Set, AbortSignal,
+  const fixtureLoadGate = join(dir, "generated-local-load-gate.json");
+  const reportDir = join(dir, `generated-local-report-${scopeCase.replaceAll(" ", "-")}`);
+  writeFileSync(fixtureLoadGate, JSON.stringify({ fixture: true, result: { pass: true, overall: "pass" } }));
+  // Supply only the fixture browser/context and environment to the unchanged
+  // main body. Its real crawl, auth checks, gate aggregation and report writes run.
+  const newContext = probeBrowser.newContext.bind(probeBrowser);
+  const newPage = context.newPage.bind(context);
+  probeBrowser.newContext = async () => context;
+  context.newPage = async () => page;
+  const fixtureProcess = { exitCode: 0, cwd: () => process.cwd() };
+  // The original caller performs Node reads after browser closure; this real
+  // HTTPS client must likewise outlive the browser context.
+  const api = await request.newContext({ ignoreHTTPSErrors: true });
+  const run = vm.runInNewContext(`${source.slice(source.indexOf("function nowStamp()"), source.indexOf("async function loadChromium()"))}
+${source.slice(source.indexOf("const CORS_PATTERN ="), source.lastIndexOf("\nmain();"))}
+main`, {
+    fs, path, execFileSync, console, URL, Map, Set, AbortSignal, process: fixtureProcess,
+    loadChromium: async () => ({ launch: async () => probeBrowser }),
+    installPinnedBffBearer: async () => transport,
+    pinnedTargetProblem: (opts: object) => pinnedTargetProblem({ ...opts, env: env() }),
     FE_BASE: feOrigin, BFF_BASE: bffOrigin, BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath,
+    LOAD_GATE_ONLY: false, LOAD_GATE_MANIFEST: fixtureLoadGate, LOAD_BASELINE_DIR: dir,
+    OUT_DIR: reportDir, SRC_SCAN_DIR: dir, STRICT_SOURCE_SCAN: true, CLICK_WRITE_CTAS: false,
     ROUTE_TIMEOUT_MS: 5000, SETTLE_TIMEOUT_MS: 4000, BEARER_TOKEN: TOKEN, TENANT_ID: "tenant-local",
     bearerAuthorization: (token: string) => `Bearer ${token}`, RETRYABLE_HTTP_STATUS: new Set(), sleep: () => Promise.resolve(),
     // Real HTTPS requests against the same existing local BFF fixture. No
     // replacement data, errors, success assertions or aggregate gate inputs.
     fetch: async (url: string, options: { headers: Record<string, string> }) => {
-      const response = await context.request.get(url, { headers: options.headers });
+      const response = await api.get(url, { headers: options.headers });
       return { status: response.status(), text: () => response.text() };
     },
   });
   try {
-    const result = await run();
+    if (scopeCase === "wildcard predecessor") {
+      const failure = await run().then(() => undefined, (error: unknown) => error);
+      expect(String(failure)).toContain("Invalid InterceptionId");
+      expect(foreignContinues).toBe(1);
+      expect(trace).toContain("foreign native rejection:true");
+      expect(transport.errors.some((e: string) => e.includes('"path":"/unrelated-pending"') && e.includes('"issued":true'))).toBe(true);
+      expect(fs.existsSync(join(reportDir, `management-hosted-acceptance-${new Date().toISOString().slice(0, 10)}.json`))).toBe(false);
+      console.log(JSON.stringify({ generatedScopeCounterexample: true, scopeCase, foreignContinues, trace, errors: transport.errors }));
+      return;
+    }
+    await run();
+    expect(foreignContinues).toBe(0);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const jsonPath = join(reportDir, `management-hosted-acceptance-${stamp}.json`);
+    const mdPath = jsonPath.replace(/\.json$/, ".md");
+    const report = JSON.parse(readFileSync(jsonPath, "utf8"));
+    const result = { results: report.routes.filter((r: { source: string }) => r.source === "baseline-or-live-nav"),
+      liveIdResults: report.routes.filter((r: { source: string }) => r.source.startsWith("live-id:")),
+      liveIdResolution: report.liveIdResolution };
+    expect(fixtureProcess.exitCode).toBe(0);
+    expect(report.result).toMatchObject({ pass: true, overall: "pass", failures: [], missing: [] });
+    expect(report.routeCounts.baseline).toBe(95);
+    expect(report.routeCounts.crawled).toBe(95 + result.liveIdResults.length);
+    expect(report.sessionRbac.overall).toBe("pass");
+    expect(readFileSync(mdPath, "utf8")).toContain("Overall: **pass** (pass=true)");
+    await test.info().attach("generated-local-management-report.json", { path: jsonPath, contentType: "application/json" });
+    await test.info().attach("generated-local-management-report.md", { path: mdPath, contentType: "text/markdown" });
     expect(result.results).toHaveLength(95);
     expect(result.results.every((r: { status: string }) => r.status === "ok")).toBe(true);
     expect(result.liveIdResolution.length).toBeGreaterThan(10);
@@ -1319,16 +1481,22 @@ return { results, liveIdResults, liveIdResolution }; })`, {
     expect(bffSeen.filter((r) => r.path === "/sse").length).toBeGreaterThanOrEqual(95);
     expect(trace.some((e) => e.startsWith("native rejection:"))).toBe(false);
     transport.assertHealthy();
-    const reads = bffSeen.filter((r) => r.path.startsWith("/bff/"));
+    const invalidReads = bffSeen.filter((r) => r.authorization === "Bearer op-bogus-session:none");
+    expect(invalidReads.map((r) => r.path)).toEqual(["/bff/me", "/bff/management/shell-summary"]);
+    const reads = bffSeen.filter((r) => r.path.startsWith("/bff/") && r.authorization !== "Bearer op-bogus-session:none");
     expect(reads.length).toBeGreaterThan(10);
     expect(reads.every((r) => r.authorization === `Bearer ${TOKEN}` && r.tenant === "tenant-local")).toBe(true);
     console.log(JSON.stringify({ localActualCaller: true, baseline: result.results.length, details: result.liveIdResults.length, trace, transportErrors: transport.errors.length }));
   } finally {
-    release(); managementFixture = false;
+    probeBrowser.newContext = newContext;
+    context.newPage = newPage;
+    await api.dispose();
+    release(); releaseForeign(); managementFixture = false;
     await closeBrowser(); await transport.settle();
     console.log(JSON.stringify({ localCallerTrace: trace, transportErrors: transport.errors }));
   }
 });
+}
 
 // A new-document request queued during the same transition is still live at
 // release. Corrupt its actual CDP id and retain the native protocol failure;
@@ -1352,6 +1520,12 @@ test("actual caller preserves a genuine invalid id on a queued new-document requ
     expect(c.receipt.canceled).toBe(false);
     expect(c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
     expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    const detail = JSON.parse(c.transport.errors.find((e: string) => e.includes("Invalid InterceptionId"))!.match(/CDP continueRequest (\{.*\}):/)![1]);
+    expect(detail).toMatchObject({ path: "/held", pausePhase: "navigation", queued: true,
+      issued: true, bound: true, canceled: false });
+    expect(detail.interceptionId).toBeTruthy();
+    expect(detail.networkId).toBeTruthy();
+    expect(typeof detail.sampledBeforeIssue).toBe("number");
     const before = c.page.url();
     const failure = await navigate(c.page, `${feOrigin}/later`, c.transport).then(() => undefined, (error: unknown) => error);
     expect(String(failure)).toContain("Invalid InterceptionId");

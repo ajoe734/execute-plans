@@ -61,9 +61,10 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       // Arm before draining: renderer requests can arrive after an empty drain.
       // Keep new subrequests paused until the replacement document commits (or
       // browser closure completes). The top-level Document must still proceed.
-      let held = null, mainFrameId;
-      holds.set(page, () => {
+      let held = null, mainFrameId, phase = "active";
+      holds.set(page, (nextPhase) => {
         if (held) throw new Error("Pinned BFF page lifecycle already held");
+        phase = nextPhase;
         const queue = held = [];
         let released = false;
         return () => {
@@ -71,6 +72,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           released = true;
           held = null;
           for (const resume of queue) resume(true);
+          phase = "active";
         };
       });
       // Per-URL tally of aborts judged natively (one per CDP request record) vs seen by Playwright.
@@ -208,6 +210,26 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         if (!request && event.networkId) { request = { unbound: true }; network.set(event.networkId, request); }
         if (request) interceptions.add(request);
         const { url, headers = {} } = event.request;
+        // The actual 3f07 failure retained only four identical protocol strings.
+        // Keep the interception's identity and dispatch boundary with a failure;
+        // never retain headers, cookies, the query, or the full request object.
+        const pausePhase = phase;
+        let issuePhase, rejectionPhase, sampledBeforeIssue;
+        const failureLabel = () => `CDP continueRequest ${JSON.stringify({
+          interceptionId: event.requestId, networkId: event.networkId || null,
+          origin: originOf(url) || "[non-http]", resourceType: event.resourceType ?? null,
+          path: originOf(url) ? new URL(url).pathname : "[non-http]",
+          pausePhase, issuePhase, rejectionPhase, judgmentPhase: phase,
+          queued, issued: issuePhase !== undefined,
+          sampledBeforeIssue: sampledBeforeIssue ?? null,
+          failed: request?.failed === true, canceled: request?.canceled === true,
+          canceledAt: request?.canceledAt ?? null,
+          sameDocument: request?.sameDocument === true, detached: request?.detached === true,
+          replacementCommitted: Boolean(request && committed(request)),
+          bound: Boolean(request && !request.unbound),
+          frameId: request?.frameId ?? null, loaderId: request?.loaderId ?? null,
+          navigationLoader: request?.navigationLoader ?? null,
+        })}`;
         const pinned = originOf(url) === bffOrigin;
         const clean = Object.entries(headers).filter(([name, value]) =>
           !(["authorization", "x-tenant-id"].includes(name.toLowerCase()) && (pinned || value === bearer || name.toLowerCase() === "x-tenant-id")));
@@ -233,9 +255,12 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
             // issuing a command for an obsolete id. Live/unknown requests proceed
             // through the unchanged conservative error judgment below.
             if (deferred && request?.canceled && excused(request)) return;
+            issuePhase = phase;
+            sampledBeforeIssue = sampledBeforeCommand;
             return session.send("Fetch.continueRequest", { requestId: event.requestId,
             headers: clean.map(([name, value]) => ({ name, value: String(value) }))
           }).catch(async (error) => {
+            rejectionPhase = phase;
             // The network id binds Chromium's cancellation to this interception,
             // and the cancellation must be caused by a navigation (document
             // replacement, same-document navigation or frame detach). Lifecycle
@@ -254,22 +279,28 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
               const pendingCommit = () => cancelled() && request.navigationLoader && request.navigationLoader !== request.loaderId;
               for (let waited = 0; waited < 1000 && !proven() && !pendingCommit(); waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
               if (proven()) return;
-              if (pendingCommit()) { awaiting.add({ ok: proven, fail: () => record(error, page, "CDP continueRequest") }); return; }
+              if (pendingCommit()) { awaiting.add({ ok: proven, fail: () => record(error, page, failureLabel()) }); return; }
             }
-            record(error, page, "CDP continueRequest");
+            record(error, page, failureLabel());
             await session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" }).catch(() => {});
           });
           };
           track((before ? before.then(continueRequest) : continueRequest(undefined)).finally(() => interceptions.delete(request)));
         };
-        if (held && !(event.resourceType === "Document" && event.frameId === mainFrameId)) held.push(resume);
+        const queued = Boolean(held && !(event.resourceType === "Document" && event.frameId === mainFrameId));
+        if (queued) held.push(resume);
         else resume();
       });
       await session.send("Network.enable");
       await session.send("Page.enable");
       await session.send("Performance.enable");
       mainFrameId = (await session.send("Page.getFrameTree"))?.frameTree?.frame?.id;
-      await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
+      // Only BFF requests need header overrides. Intercepting FE assets and
+      // unrelated origins creates continuation commands that can race their
+      // independent cancellation. CDP overrides apply to this hop only; the
+      // browser handles foreign redirects without inheriting our bearer/tenant.
+      // Keep the exact origin check above and all issued-command judgments.
+      await session.send("Fetch.enable", { patterns: [{ urlPattern: `${bffOrigin}/*`, requestStage: "Request" }] });
     })();
     pages.set(page, ready);
     // EventEmitter does not consume async rejections. Explicit callers still
@@ -282,7 +313,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
   return { errors, attachPage,
     async navigate(page, targetUrl, { timeout }) {
       await attachPage(page);
-      const release = holds.get(page)();
+      const release = holds.get(page)("navigation");
       try {
         await this.settle();
         this.assertHealthy();
@@ -301,7 +332,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     async closeBrowser(browser) {
       const releases = [];
       try {
-        for (const page of context.pages()) { await attachPage(page); releases.push(holds.get(page)()); }
+        for (const page of context.pages()) { await attachPage(page); releases.push(holds.get(page)("close")); }
         await this.settle();
         this.assertHealthy();
       } finally {
