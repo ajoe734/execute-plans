@@ -2,13 +2,13 @@
   "task": "FE-PINNED-BFF-3F07-COUNTEREXAMPLE-20261113",
   "owner": "Codex",
   "reviewer": "Codex2",
-  "outcome": "BFF-only native interception repair under bounded local qualification. Historical four request identities/order remain UNKNOWN. Not hosted acceptance or DONE.",
+  "outcome": "Source repair locally qualified for independent exact-head review in PR998. Native BFF failure/security/caller semantics retained. Historical four request identities/order remain UNKNOWN; no hosted acceptance, deployment or DONE claimed.",
   "base_sha": "3f07fe7e185299dbce5370d80827c7a1b04e4d41",
   "branch": "task/FE-PINNED-BFF-3F07-COUNTEREXAMPLE-20261113",
-  "source_anchor": "c90928c6c506e6ad6100e1f467b1838d660ed2b4",
+  "source_anchor": "26f47df4775b91a7a9b2c5bdfeaa6f8b28cd4037",
   "verified_source_blobs": {
     "scripts/lib/pinned-browser-bff-bearer.mjs": "b1a33c434c21f9ed6f99071ee9bd79f25e499428",
-    "e2e/hosted-bff-streaming-transport.spec.ts": "aa7629a59153066c492ce173f96bbcd4df6e9809",
+    "e2e/hosted-bff-streaming-transport.spec.ts": "0be092c77b26c6d5ef267d5b51694ad04e9f2071",
     "src/test/strict-browser-auth-source-contract.test.ts": "7660517b500481b0d65c732036d002c9ed5d11c6",
     "scripts/accept-management-hosted-production.mjs": "d15d81aaf22cc441518fadd514087912738ed4f8"
   },
@@ -35,7 +35,8 @@
     "fields": "Interception/network IDs; safe origin and path without query; resource type; phase at pause, send call, rejection delivery and judgment; queued/issued; existing pre-command sample and cancellation timestamps; bound/failed/canceled and existing navigation/detach/frame/loader facts.",
     "semantics": "issued means the helper invoked session.send, not proof of the native browser dispatch instant. Phases describe this helper's explicit navigation/close hold, not a claim that renderer transitions cannot occur. Lifecycle facts are the existing per-request judgment state, not an invented native rejection timestamp.",
     "privacy": "No request/response object, headers, cookies, body, URL credentials, query or bearer is added to diagnostics. Existing token redaction remains. Non-HTTP URL content is omitted.",
-    "unchanged": "No behavioral repair selected. All cancellation proofs, issued/ambiguous InvalidID failures, requestfailed handling, redirects, exact origin/tenant/header/cookie protections, retries, budgets and original caller/gates remain unchanged. No new transport, retry, framework or release path."
+    "unchanged": "No behavioral repair selected. All cancellation proofs, issued/ambiguous InvalidID failures, requestfailed handling, redirects, exact origin/tenant/header/cookie protections, retries, budgets and original caller/gates remain unchanged. No new transport, retry, framework or release path.",
+    "stage": "Historical diagnostic-only work through819363de; the origin-scope change below is the subsequent behavioral repair."
   },
   "local_fixture_qualification": {
     "classification": "Generated local fixtures only; NOT captured original evidence, hosted acceptance, exact historical reproduction or old-fails/new-passes repair proof.",
@@ -60,9 +61,145 @@
     "markdown_report_sha256": "9468203fc1b88f1f027308712ce444e78580d04047bda797e3563404598bd0f6",
     "report_directory": "/tmp/fe-3f07-report-results/hosted-bff-streaming-trans-5eccc-iscovery-and-detail-closure-chromium/attachments",
     "negative": "A genuine native wrong-id failure on a queued live new-document request still fails health and blocks the subsequent original caller navigation. It also asserts nonempty request IDs, bound/queued/issued facts, path and a numeric pre-command sample in diagnostics.",
-    "remaining_cases": "All existing51 Chromium cases retained: delayed responses/commands/events, successive navigation, after-drain renderer requests, detach, SSE, closure, genuine sent-command failures, opposite lifecycle cases, exact origin/tenant/redirect/cookie/header protections."
+    "remaining_cases": "All existing51 Chromium cases retained: delayed responses/commands/events, successive navigation, after-drain renderer requests, detach, SSE, closure, genuine sent-command failures, opposite lifecycle cases, exact origin/tenant/redirect/cookie/header protections.",
+    "stage": "Historical diagnostic qualification before origin-scope repair; current bounded qualification is below."
   },
   "verification": [
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 300 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-3f07-origin-native-final --grep-invert \"actual 95-route\"",
+      "exit": 0,
+      "result": "55 passed; includes all retained lifecycle cases, native wrong-id/ambiguous-issued negatives, actual caller negatives and three new security cases.",
+      "log": "/tmp/fe-3f07-origin-native-final.log",
+      "log_sha256": "0627ebe3f2b84f59b2c0f4433296a47affa0ee6a9e20ed58d1944f03c6ee2f96",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 250 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-3f07-scope-caller-final --grep \"actual 95-route\"",
+      "exit": 0,
+      "result": "3 passed (3.5m); full unchanged main with native Chromium, local generated HTML/data/load gate. Two positive95+15 JSON/MD reports; wildcard819 negative retains actual native non-BFF InvalidID and no report.",
+      "log": "/tmp/fe-3f07-scope-caller-final.log",
+      "log_sha256": "1f5cafbd05a1da89628b2e4eee20792cc6c0354bf52f57284e1cd7afc2d2d518",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "timeout 90 npm test -- src/test/strict-browser-auth-source-contract.test.ts src/test/hosted-browser-release-policy.test.ts src/test/public-build-auth-contract.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-auth-truth.test.ts",
+      "exit": 0,
+      "result": "209 passed across5 files, including7 strictauth.",
+      "log": "/tmp/fe-3f07-scope-auth.log",
+      "log_sha256": "016813f9e2bff2a9a19db373a6012fea2f8baa05f0a1f96b71a4a1485f6db08e",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 60 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-3f07-origin-security-final --grep \"only the exact BFF|native cookie|genuine denied CORS|cross-origin redirect|response that turns\"",
+      "exit": 0,
+      "result": "5 passed; native origin, redirect, cookie/header and genuine CORS-negative coverage.",
+      "log": "/tmp/fe-3f07-origin-security-final.log",
+      "log_sha256": "8d722a29952fa3660818ed970d8719e147e59e6e679d1ca3b0f3f985dcf2a31c",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 90 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --output=/tmp/fe-3f07-issued-policy --grep \"scheduled late|actual caller preserves a genuine\"",
+      "exit": 0,
+      "result": "5 passed (1.0m); deterministic ambiguous-issued negative plus unchanged maintained caller positives and actual wrong-id negative.",
+      "log": "/tmp/fe-3f07-issued-policy.log",
+      "log_sha256": "5d30cc97601fece1d0682a593883710ffc795cab051c57a6427cba7639fabd9a",
+      "terminal_output_collected": true
+    },
+    {
+      "command": "node --check scripts/lib/pinned-browser-bff-bearer.mjs && timeout 45 npx eslint e2e/hosted-bff-streaming-transport.spec.ts src/test/strict-browser-auth-source-contract.test.ts && git diff --check",
+      "exit": 0,
+      "result": "Syntax, focused eslint and whitespace passed; terminal output collected."
+    }
+  ],
+  "incomplete_or_failed_batches": [
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 220 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line",
+      "exit": 124,
+      "result": "Initial frozen-source batch timed out during test52's full95 crawl. NOT PASS. Replaced by the two terminal bounded batches above; no application timeout was increased.",
+      "log": "/tmp/fe-3f07-baseline.log"
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 140 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --grep 'actual 95-route|actual caller preserves a genuine'",
+      "exits": [
+        1,
+        1
+      ],
+      "result": "Intermediate report-test adapters failed. First main used a different page from the imposed lifecycle fixture. Both used context.request after browser closure, yielding status0 RBAC. The second also encountered default-output artifact interference during failure reporting. Corrected fixture page binding, gave HTTP reads their own client, and used isolated output directories. No failed batch counts as pass.",
+      "logs": [
+        "/tmp/fe-3f07-report.log",
+        "/tmp/fe-3f07-report-fixed.log"
+      ]
+    },
+    {
+      "log": "/tmp/fe-3f07-origin-security.log",
+      "log_sha256": "ba1f79fed1185c9b610aee18b7605569fc209f54ca16f4c64304914ba3d87343",
+      "exit": 1,
+      "result": "First cookie fixture defaulted to SameSite=Lax across HTTP->HTTPS; cookie absent. Corrected fixture to explicit SameSite=None; no production change.",
+      "counts_as_pass": false
+    },
+    {
+      "log": "/tmp/fe-3f07-origin-security-fixed.log",
+      "log_sha256": "a18e62d465183e6ac1566774857b1129d32e49013ca9f0aa41d0d588e4726af3",
+      "exit": 1,
+      "result": "Header assertion selected native OPTIONS instead of actual GET. Corrected assertion to find the actual preserved header.",
+      "counts_as_pass": false
+    },
+    {
+      "log": "/tmp/fe-3f07-scope-caller.log",
+      "log_sha256": "f40456b779bac34401570a5b7c968297131aa4bf9f5ceb94f99d15ca43b58814",
+      "exit": 1,
+      "result": "Old-source cross-VM Promise/Error was incompatible with rejects.toThrow matcher. Collected outcome explicitly and asserted its error string. Also isolated per-case report directories. New-source positive passed in this failed batch; batch is NOT PASS.",
+      "counts_as_pass": false
+    },
+    {
+      "log": "/tmp/fe-3f07-origin-native-all.log",
+      "log_sha256": "eca338af4cf7076b4121b96ee63791db73c28390b40ada5a30e64f9a32957183",
+      "exit": 1,
+      "result": "54 passed/1 failed. Direct-navigation command-only-delay fixture expected unconditional health despite a real issued cancellation after its sample. Corrected to deterministic fail-closed negative as explained above; no error waiver or production judgment change.",
+      "counts_as_pass": false
+    }
+  ],
+  "next_required_input": {
+    "state": "fulfilled_by_original_sole_Ops",
+    "receipt": "/tmp/pantheon-root01a15322-resume-20261111/actual-819-admin-original-CLI-readonly-diagnostic-20261113.json",
+    "next": "Assigned Codex2 independent exact-head review of same PR998 and this frozen manifest, required CI and canonical integration; owner closes only after exact approval and merge. No extra historical observation gate."
+  },
+  "protected_boundaries": "Original full95/details/aggregate-before-switch, supplementary4role20warm13raw/privatebaseline/performance/auth and exact-pair rollback remain. No financial5AC, W1-W4, Persona/pool/Loops/intraday or separateStageProd acceptance claimed. Pattern/original9aeb/all49 remain CLOSED. No source-author VM/SSH/provider/model/secrets/product/business/service/deployment operations or workflow dispatch. No new gate/grant/auth framework.",
+  "review_delivery": {
+    "state": "ready_for_independent_source_review",
+    "assigned_reviewer": "Codex2",
+    "pr": 998,
+    "independent_review": "pending; canonical handoff binds this committed manifest to exact PR head",
+    "auto_merge": false,
+    "integration": "not_claimed",
+    "hosted_deployment": "not_performed_or_claimed"
+  },
+  "prior_diagnostic_outcome": "Diagnostic source qualified locally; actual residual NOT repaired or accepted. Await a new observation from the existing sole hosted owner before selecting a behavioral repair. Not ready for acceptance review, integration or DONE.",
+  "ops_observation": {
+    "receipt": "/tmp/pantheon-root01a15322-resume-20261111/actual-819-admin-original-CLI-readonly-diagnostic-20261113.json",
+    "receipt_sha256": "d2b04cb8612befa30ea8ea99093ddb6ab35f54bf20c7d94cdaff0c87c26b6602",
+    "json_report": "/tmp/pantheon-root01a15322-resume-20261111/original-CLI-819-actual-readonly-diagnostic-20261113/management-hosted-acceptance-2026-11-13.json",
+    "json_report_sha256": "997a83309100e56f2ad82e0a5c7d7b51c725c2bafaffa8f925e3eb0f9c24555b",
+    "read": "Read actual receipt, JSON and Markdown report plus stdout, and original official ZIP/log; no hosted operation performed by source author.",
+    "result": "NO_REPRO on restored Bee/acf pair with frozen3f07 app and helper819. 95 baseline +7 actual entity detail routes, transport_error_context=[], reports emitted. Login/me200; logout200 then me401; before/after pair stable.",
+    "limits": "CLI exit1; actual result FAIL has18 alias direct-render failures, missing load-gate input and23 soft source-scan warnings. Not pair acceptance, performance or repair PASS. No reconstruction of missing historical IDs/order."
+  },
+  "repair_evaluation": {
+    "mechanism": "Fetch.enable changes one wildcard pattern to the exact HTTPS BFF origin plus /*. Same native CDP helper/caller, existing header cleaning and lifecycle judgments; no replacement transport or error suppression.",
+    "why": "Only requests requiring BFF auth need continuation/header commands. Native FE/unrelated requests need no such command and can be canceled independently. This prevents those extra commands rather than waiving their failures.",
+    "redirect_contract": "Matching installed CDP types state header overrides do not extend to later redirect hops. Native foreign->BFF and BFF->foreign finite/SSE/changed-response tests verify per-hop behavior; no global extraHTTPHeaders exists in the helper/original caller.",
+    "retained": "All BFF active/ambiguous issued-command negatives, failure records/failRequest, exact-origin check, tenant/header cleaning, Network/Page observation, real CORS and SSE, timeouts and full original caller remain.",
+    "new_tests": "Three native security tests plus wildcard819 vs changed helper full original main95+15/report comparison. Delayed unrelated FE continuation canceled by its renderer uses real native replies/errors. Generated local schedule only; no historical RCA claim.",
+    "qualification": "58 native Chromium tests passed in two terminal bounded batches (55+3), no skips/retries;209 auth/source/policy tests passed including7 strict-auth. Original caller unchanged. Two positive full95+15 JSON/MD reports emitted; exact wildcard819 source rejects with a genuine native non-BFF InvalidID after full crawl and emits no report.",
+    "contract_boundary": "Only exact BFF-origin requests are now paused. Foreign requests use native browser headers/cookies; this helper is not a sanitizer for arbitrary preexisting global secret headers. The two maintained callers supply no global bearer/tenant headers and the token stays in Node; CDP overrides are per hop. Native BFF->foreign and foreign->BFF redirects, real preflight denial, cookies, unrelated headers and SSE are verified. Independent reviewer must assess this scope boundary.",
+    "issued_policy_fixture_correction": {
+      "observation": "The initial55-test batch displayed five /read-* InvalidIDs in the direct-navigation command-only-delay positive fixture. Diagnostics proved issued=true, bound=true and canceledAt>sampledBeforeIssue. That is required fail-closed behavior, not a new cancellation proof.",
+      "change": "Retain this existing case as a deterministic negative by holding continuation after its native pre-command sample until real navigation cancels it. Assert unhealthy and that every retained error was issued and canceled after the sample. Both maintained caller positive variants, delayed-sample positive and genuine wrong-id negatives remain. No production judgment or timeout was modified.",
+      "focused_result": "5 scheduled-late/caller-negative tests passed; full55 suite then passed."
+    }
+  },
+  "diagnostic_source_anchor": "c90928c6c506e6ad6100e1f467b1838d660ed2b4",
+  "diagnostic_verification": [
     {
       "command": "timeout 240 npm ci --no-audit --no-fund",
       "exit": 0,
@@ -108,55 +245,58 @@
       "result": "Syntax and whitespace checks passed."
     }
   ],
-  "incomplete_or_failed_batches": [
+  "origin_scope_generated_reports": [
     {
-      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 220 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line",
-      "exit": 124,
-      "result": "Initial frozen-source batch timed out during test52's full95 crawl. NOT PASS. Replaced by the two terminal bounded batches above; no application timeout was increased.",
-      "log": "/tmp/fe-3f07-baseline.log"
+      "path": "/tmp/fe-3f07-scope-caller-final/hosted-bff-streaming-trans-eb50e-tail-closure-pinned-origin--chromium/attachments/generated-local-management-report-json-bb991ead606475ea119f5324668e5ccf0058036a.json",
+      "sha256": "a41ce2c9e939c1ddf3d105a9e0d62807b19cef5858be8df841ffd263171816d1",
+      "classification": "Generated local fixture; not original captured trace or hosted acceptance.",
+      "route_counts": {
+        "baseline": 95,
+        "liveNavDiscovered": 48,
+        "liveNavNewlyFound": [],
+        "baselineNavMissingFromLive": [],
+        "crawled": 110,
+        "liveIdDetailRoutesCrawled": 15
+      },
+      "result": {
+        "pass": true,
+        "overall": "pass",
+        "failures": [],
+        "warnings": [],
+        "missing": []
+      },
+      "session_rbac": "pass"
     },
     {
-      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 timeout 140 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium --reporter=line --grep 'actual 95-route|actual caller preserves a genuine'",
-      "exits": [
-        1,
-        1
-      ],
-      "result": "Intermediate report-test adapters failed. First main used a different page from the imposed lifecycle fixture. Both used context.request after browser closure, yielding status0 RBAC. The second also encountered default-output artifact interference during failure reporting. Corrected fixture page binding, gave HTTP reads their own client, and used isolated output directories. No failed batch counts as pass.",
-      "logs": [
-        "/tmp/fe-3f07-report.log",
-        "/tmp/fe-3f07-report-fixed.log"
-      ]
+      "path": "/tmp/fe-3f07-scope-caller-final/hosted-bff-streaming-trans-eb50e-tail-closure-pinned-origin--chromium/attachments/generated-local-management-report-md-360dd9dd15df776fd37824a80db1861e75a64bed.md",
+      "sha256": "6c3ec5847ed7be8117ecee67a146ca09e0cf24d9d131f86c674f1c9ba37106cb",
+      "classification": "Generated local fixture; not original captured trace or hosted acceptance."
+    },
+    {
+      "path": "/tmp/fe-3f07-scope-caller-final/hosted-bff-streaming-trans-f765b-il-closure-after-drain-BFF--chromium/attachments/generated-local-management-report-json-960b0e254e8dbc72fc12d22e148171ae5e5fb2f8.json",
+      "sha256": "9f41679815c305e5bf32e1812d982c606b4818ccaca1978795740559e18f645b",
+      "classification": "Generated local fixture; not original captured trace or hosted acceptance.",
+      "route_counts": {
+        "baseline": 95,
+        "liveNavDiscovered": 48,
+        "liveNavNewlyFound": [],
+        "baselineNavMissingFromLive": [],
+        "crawled": 110,
+        "liveIdDetailRoutesCrawled": 15
+      },
+      "result": {
+        "pass": true,
+        "overall": "pass",
+        "failures": [],
+        "warnings": [],
+        "missing": []
+      },
+      "session_rbac": "pass"
+    },
+    {
+      "path": "/tmp/fe-3f07-scope-caller-final/hosted-bff-streaming-trans-f765b-il-closure-after-drain-BFF--chromium/attachments/generated-local-management-report-md-a627b15b06a56827d80d53e112d7e7f66d594942.md",
+      "sha256": "1e39a3519446903e3bb283479370fdda804a9bd4e3d90636430c2eb9ae9dbe22",
+      "classification": "Generated local fixture; not original captured trace or hosted acceptance."
     }
-  ],
-  "next_required_input": {
-    "state": "fulfilled_by_original_sole_Ops",
-    "receipt": "/tmp/pantheon-root01a15322-resume-20261111/actual-819-admin-original-CLI-readonly-diagnostic-20261113.json",
-    "next": "Continue source qualification and obtain assigned Codex2 independent exact-head review through same PR998. Missing historical trace is not a new operator proof gate."
-  },
-  "protected_boundaries": "Original full95/details/aggregate-before-switch, supplementary4role20warm13raw/privatebaseline/performance/auth and exact-pair rollback remain. No financial5AC, W1-W4, Persona/pool/Loops/intraday or separateStageProd acceptance claimed. Pattern/original9aeb/all49 remain CLOSED. No source-author VM/SSH/provider/model/secrets/product/business/service/deployment operations or workflow dispatch. No new gate/grant/auth framework.",
-  "review_delivery": {
-    "state": "local_qualification_in_progress",
-    "assigned_reviewer": "Codex2",
-    "pr": 998,
-    "independent_review": "not_yet_requested",
-    "auto_merge": false
-  },
-  "prior_diagnostic_outcome": "Diagnostic source qualified locally; actual residual NOT repaired or accepted. Await a new observation from the existing sole hosted owner before selecting a behavioral repair. Not ready for acceptance review, integration or DONE.",
-  "ops_observation": {
-    "receipt": "/tmp/pantheon-root01a15322-resume-20261111/actual-819-admin-original-CLI-readonly-diagnostic-20261113.json",
-    "receipt_sha256": "d2b04cb8612befa30ea8ea99093ddb6ab35f54bf20c7d94cdaff0c87c26b6602",
-    "json_report": "/tmp/pantheon-root01a15322-resume-20261111/original-CLI-819-actual-readonly-diagnostic-20261113/management-hosted-acceptance-2026-11-13.json",
-    "json_report_sha256": "997a83309100e56f2ad82e0a5c7d7b51c725c2bafaffa8f925e3eb0f9c24555b",
-    "read": "Read actual receipt, JSON and Markdown report plus stdout, and original official ZIP/log; no hosted operation performed by source author.",
-    "result": "NO_REPRO on restored Bee/acf pair with frozen3f07 app and helper819. 95 baseline +7 actual entity detail routes, transport_error_context=[], reports emitted. Login/me200; logout200 then me401; before/after pair stable.",
-    "limits": "CLI exit1; actual result FAIL has18 alias direct-render failures, missing load-gate input and23 soft source-scan warnings. Not pair acceptance, performance or repair PASS. No reconstruction of missing historical IDs/order."
-  },
-  "repair_evaluation": {
-    "mechanism": "Fetch.enable changes one wildcard pattern to the exact HTTPS BFF origin plus /*. Same native CDP helper/caller, existing header cleaning and lifecycle judgments; no replacement transport or error suppression.",
-    "why": "Only requests requiring BFF auth need continuation/header commands. Native FE/unrelated requests need no such command and can be canceled independently. This prevents those extra commands rather than waiving their failures.",
-    "redirect_contract": "Matching installed CDP types state header overrides do not extend to later redirect hops. Native foreign->BFF and BFF->foreign finite/SSE/changed-response tests verify per-hop behavior; no global extraHTTPHeaders exists in the helper/original caller.",
-    "retained": "All BFF active/ambiguous issued-command negatives, failure records/failRequest, exact-origin check, tenant/header cleaning, Network/Page observation, real CORS and SSE, timeouts and full original caller remain.",
-    "new_tests": "Three native security tests plus wildcard819 vs changed helper full original main95+15/report comparison. Delayed unrelated FE continuation canceled by its renderer uses real native replies/errors. Generated local schedule only; no historical RCA claim.",
-    "qualification": "209 auth/source/policy tests and5 focused Chromium tests terminal exit0. Full native and3 full-caller cases still running at anchor; no pending batch counted as PASS."
-  }
+  ]
 }
