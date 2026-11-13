@@ -161,8 +161,8 @@ function textFindings(text) {
 }
 
 function isBffUrl(url) {
-  if (!url.startsWith(BFF_BASE)) return false;
   try {
+    if (new URL(url).origin !== new URL(BFF_BASE).origin) return false;
     const pathname = new URL(url).pathname;
     return pathname.startsWith("/bff/") || ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname);
   } catch {
@@ -187,14 +187,31 @@ async function crawlRoute(page, route, { source, transport }) {
   const responses = [];
   const failedRequests = [];
   const consoleErrors = [];
+  const routeRequests = new Set();
+  const dataReads = [];
+  const isDataUrl = (url) => {
+    const pathname = new URL(url).pathname;
+    return isBffUrl(url) && pathname.startsWith("/bff/") &&
+      !["/bff/me", "/bff/auth/readiness", "/bff/management/shell-summary"].includes(pathname) &&
+      !/\/(?:stream|events)(?:\/|$)/u.test(pathname);
+  };
 
   const onRequest = (req) => {
     const url = req.url();
     if (isBffUrl(url)) requests.push({ method: req.method(), url });
+    if (isDataUrl(url) && req.method() === "GET") routeRequests.add(req);
   };
   const onResponse = (res) => {
     const url = res.url();
     if (isBffUrl(url)) responses.push({ status: res.status(), method: res.request().method(), url });
+    if (!routeRequests.has(res.request())) return;
+    const read = { path: new URL(url).pathname, status: res.status(), complete: false, valid: false };
+    dataReads.push(read);
+    // Do not keep response bodies or credentials. A response header alone does
+    // not establish that finite route data arrived; open streams are excluded.
+    void res.json().then((body) => {
+      read.valid = body !== null && typeof body === "object" && !body.error && body.ok !== false && body.success !== false;
+    }, () => {}).finally(() => { read.complete = true; });
   };
   const onRequestFailed = (req) => {
     const url = req.url();
@@ -215,16 +232,59 @@ async function crawlRoute(page, route, { source, transport }) {
   let navError = "";
   let finalUrl = "";
   let bodyText = "";
+  let dataReasons = ["navigation_incomplete"];
 
   try {
     const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport);
     if (navErrorMaybe) throw navErrorMaybe;
-    await page
-      .waitForFunction(() => (document.body?.innerText || "").trim().length > 15, undefined, { timeout: SETTLE_TIMEOUT_MS })
-      .catch(() => {});
-    await page.waitForTimeout(400);
-    finalUrl = await page.evaluate(() => window.location.pathname + window.location.search);
-    bodyText = (await page.locator("body").innerText().catch(() => "")) || "";
+    // Reuse the existing settle budget for auth, lazy-route resolution,
+    // redirects and finite data. A long loading message is never readiness.
+    const deadline = Date.now() + SETTLE_TIMEOUT_MS;
+    const expectedPath = expectedCanonicalPath(requestedPathname) || requestedPathname;
+    let ready = false;
+    do {
+      const snapshot = await page.evaluate(() => {
+        const content = document.querySelector("main") || document.body;
+        return {
+          path: window.location.pathname, finalUrl: window.location.pathname + window.location.search,
+          body: document.body?.innerText || "", content: content?.innerText || "",
+          busy: Boolean(document.querySelector('[data-testid="route-chunk-loading"]') ||
+            content?.matches('[aria-busy="true"], [data-state="loading"]') ||
+            content?.querySelector('[aria-busy="true"], [data-state="loading"]')),
+          login: Boolean(document.querySelector('input[type="password"]')),
+        };
+      });
+      finalUrl = snapshot.finalUrl;
+      bodyText = snapshot.body;
+      const loading = /(?:^|\n)\s*(?:Loading(?:\s*[.…]+)?|Verifying (?:Pantheon session|Agora access)[.…]*|(?:正在)?載入(?:中)?[.…]*|資料載入中[.…]*)\s*(?:$|\n)/iu.test(snapshot.content);
+      const dataError = /(?:^|\n)\s*(?:Failed to (?:load|fetch)|Unable to load|載入失敗|無法載入|資料讀取失敗)/iu.test(snapshot.content);
+      // Historical fixture ids may honestly render not-found. Live-id details
+      // must return real data; a 404 there is a failure.
+      const honestNotFound = route.kind === "detail-or-alias" && source === "baseline-or-live-nav" &&
+        /not found|找不到|不存在/iu.test(snapshot.content);
+      const validReads = dataReads.filter((read) => read.complete &&
+        ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
+      const failedReads = dataReads.filter((read) => read.complete && !validReads.includes(read));
+      const expectedDataPath = route.entity && ENTITY_LIST_ENDPOINTS[route.entity]
+        ? `${ENTITY_LIST_ENDPOINTS[route.entity]}/${route.path.split("?")[0].split("/").pop()}` : null;
+      const entityDataReady = !expectedDataPath || validReads.some((read) => read.path === expectedDataPath);
+      const apiFailure = responses.some((response) => response.status >= 400 && !(response.status === 404 && honestNotFound));
+      dataReasons = [
+        snapshot.path !== expectedPath && "route_or_redirect_unresolved",
+        snapshot.login && "auth_unresolved",
+        (snapshot.busy || loading) && "loading_unresolved",
+        dataError && "rendered_data_error",
+        snapshot.content.trim().length <= 15 && "content_incomplete",
+        validReads.length === 0 && "no_completed_route_data",
+        (failedReads.length > 0 || apiFailure) && "api_data_failure",
+        !entityDataReady && "entity_detail_data_missing",
+        (dataReads.length !== routeRequests.size || dataReads.some((read) => !read.complete)) && "data_reads_incomplete",
+      ].filter(Boolean);
+      ready = dataReasons.length === 0;
+      if (ready || Date.now() >= deadline) break;
+      await page.waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
+    } while (true);
+    if (!ready) status = "datafail";
     if (bodyText.includes("畫面渲染失敗")) status = "crash";
     else if (bodyText.trim().length < 15) status = "blank";
   } catch (err) {
@@ -286,6 +346,7 @@ async function crawlRoute(page, route, { source, transport }) {
     finalUrl,
     alias,
     controls,
+    dataCheck: { pass: status === "ok", reasons: dataReasons, reads: dataReads },
     bffRequestCount: requests.length,
     bffResponseCount: responses.length,
     bffFailedCount: failedRequests.length,
@@ -374,13 +435,15 @@ async function resolveLiveIdRoutes() {
   for (const [entity, fixturePath] of entities) {
     const endpoint = ENTITY_LIST_ENDPOINTS[entity];
     const { status, body, error } = await fetchJson(`${BFF_BASE}${endpoint}`, authHeaders(BEARER_TOKEN, TENANT_ID));
-    if (status !== 200 || !body) {
-      results.push({ entity, endpoint, status, error: error || "non-200 or unparseable body", liveId: null });
+    const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data;
+    if (status !== 200 || !body || body.error || body.ok === false || body.success === false || !Array.isArray(items)) {
+      results.push({ entity, endpoint, status, error: error || "non-200 or invalid list data", liveId: null });
       continue;
     }
     const liveId = firstLiveId(body);
     if (!liveId) {
-      results.push({ entity, endpoint, status, liveId: null, note: "no live id resolvable (empty list)" });
+      results.push({ entity, endpoint, status, liveId: null,
+        ...(items.length === 0 ? { note: "no live id resolvable (empty list)" } : { error: "nonempty list has no resolvable id" }) });
       continue;
     }
     const segments = fixturePath.split("/");
@@ -576,13 +639,17 @@ async function main() {
   const liveIdResults = [];
   for (const resolved of liveIdResolution) {
     if (!resolved.routePath) continue;
-    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail" }, { source: `live-id:${resolved.entity}`, transport });
+    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail", entity: resolved.entity }, { source: `live-id:${resolved.entity}`, transport });
     liveIdResults.push(result);
   }
 
-  await transport.closeBrowser(browser);
-  await transport.settle();
-  transport.assertHealthy();
+  // Preserve the completed crawl even when closure/health fails. The helper
+  // closes in finally; retain its sanitized errors, never arbitrary raw errors.
+  let transportFailed = false;
+  try { await transport.closeBrowser(browser); }
+  catch { transportFailed = true; }
+  try { await transport.settle(); transport.assertHealthy(); }
+  catch { transportFailed = true; }
 
   console.log("[accept-management-hosted-production] running session/RBAC check ...");
   const sessionRbac = await sessionRbacCheck();
@@ -595,6 +662,8 @@ async function main() {
 
   const allResults = [...results, ...liveIdResults];
   const crashRoutes = allResults.filter((r) => r.status === "crash" || r.status === "blank" || r.status === "navfail");
+  const dataFailRoutes = allResults.filter((r) => !r.dataCheck.pass);
+  const liveIdDataFailures = liveIdResolution.filter((r) => r.error);
   const aliasFailRoutes = allResults.filter((r) => r.alias?.directRenderFail);
   const detailHonestyFailRoutes = allResults.filter((r) => r.detailHonestyViolations.length > 0);
   const seedFallbackArmedRoutes = allResults.filter((r) => r.mockFindings.some((m) => m.id === "seed_fallback_armed"));
@@ -616,6 +685,7 @@ async function main() {
 
   const gateChecks = [
     { label: "No route crashes, is blank, or fails to navigate.", status: crashRoutes.length === 0 ? "pass" : "fail", note: `count:${crashRoutes.length}` },
+    { label: "Every route and detail resolves auth/loading and completes its data checks.", status: dataFailRoutes.length === 0 && liveIdDataFailures.length === 0 ? "pass" : "fail", note: `routes:${dataFailRoutes.length}; discovery:${liveIdDataFailures.length}` },
     { label: "No known alias direct-renders instead of redirecting to its canonical path.", status: aliasFailRoutes.length === 0 ? "pass" : "fail", note: `count:${aliasFailRoutes.length}` },
     { label: "No detail route shows raw undefined/NaN/Invalid Date.", status: detailHonestyFailRoutes.length === 0 ? "pass" : "fail", note: `count:${detailHonestyFailRoutes.length}` },
     { label: "No route claims seed fallback armed in strict-live mode.", status: seedFallbackArmedRoutes.length === 0 ? "pass" : "fail", note: `count:${seedFallbackArmedRoutes.length}` },
@@ -631,7 +701,7 @@ async function main() {
     },
   ];
 
-  const hardFail = gateChecks.some((c) => c.status === "fail");
+  const hardFail = transportFailed || gateChecks.some((c) => c.status === "fail");
   const overall = hardFail ? "fail" : gateChecks.some((c) => c.status === "warn") ? "warn" : gateChecks.some((c) => c.status === "missing") ? "missing" : "pass";
   const pass = !hardFail;
 
@@ -657,10 +727,11 @@ async function main() {
     loadGate,
     sourceScan: { ...sourceScan, findings: sourceScan.findings.slice(0, 200) },
     gateChecks,
+    pinnedTransport: { pass: !transportFailed, errors: transport.errors, terminatedBeforeSend: transport.terminatedBeforeSend },
     result: {
       pass,
       overall,
-      failures: gateChecks.filter((c) => c.status === "fail").map((c) => c.label),
+      failures: [...(transportFailed ? ["Pinned BFF transport failed."] : []), ...gateChecks.filter((c) => c.status === "fail").map((c) => c.label)],
       warnings: gateChecks.filter((c) => c.status === "warn").map((c) => c.label),
       missing: gateChecks.filter((c) => c.status === "missing").map((c) => c.label),
     },
@@ -697,9 +768,19 @@ async function main() {
     `|---|---|---|`,
     ...gateChecks.map((c) => `| ${c.status} | ${c.label} | ${c.note} |`),
     ``,
+    `Pinned BFF transport: **${transportFailed ? "fail" : "pass"}**`,
+    ...transport.errors.map((error) => `- ${error}`),
+    ``,
     `## Failing / crashed / blank routes`,
     ``,
     crashRoutes.length ? crashRoutes.map((r) => `- \`${r.path}\` -> status=${r.status} error="${r.navError}"`).join("\n") : "None",
+    ``,
+    `## Route and detail data failures`,
+    ``,
+    dataFailRoutes.length || liveIdDataFailures.length ? [
+      ...dataFailRoutes.map((r) => `- \`${r.path}\`: ${r.dataCheck.reasons.join(", ")}`),
+      ...liveIdDataFailures.map((r) => `- entity discovery \`${r.entity}\`: status ${r.status}, invalid or missing list data`),
+    ].join("\n") : "None",
     ``,
     `## Alias direct-render failures`,
     ``,

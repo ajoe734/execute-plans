@@ -27,6 +27,7 @@ let fe: http.Server;
 let browser: Browser;
 let flips = 0;
 let managementFixture = false;
+let managementFixtureFailure = "";
 let bffOrigin = "";
 let foreignOrigin = "";
 let feOrigin = "";
@@ -61,6 +62,18 @@ test.beforeAll(async () => {
     if (managementFixture && req.url?.startsWith("/bff/") && req.headers.authorization !== `Bearer ${TOKEN}`) {
       return void res.writeHead(401, { ...cors, "content-type": "application/json" }).end("{}");
     }
+    if (managementFixtureFailure === "discovery" && req.url === "/bff/strategies") {
+      return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end('{"error":"fixture discovery failure"}');
+    }
+    if (req.url?.startsWith("/bff/acceptance-data")) {
+      const mode = new URL(req.url, bffOrigin).searchParams.get("mode");
+      if (mode === "api-error" || mode === "not-found") return void res.writeHead(mode === "not-found" ? 404 : 503, { ...cors, "content-type": "application/json" }).end('{"error":"fixture"}');
+      if (mode === "pending-json") {
+        res.writeHead(200, { ...cors, "content-type": "application/json" }); res.write("{"); openSse.add(res); return;
+      }
+      if (mode === "bad-json") return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end("incomplete{");
+      return void res.writeHead(200, { ...cors, "content-type": "application/json" }).end(mode === "error-envelope" ? '{"error":"fixture"}' : '{"items":[{"id":"local-route-data"}]}');
+    }
     if (req.url === "/sse" || req.url === "/baseline-sse") {
       res.writeHead(200, { ...cors, "content-type": "text/event-stream", "cache-control": "no-cache" });
       res.write("data: hello\n\n");
@@ -78,7 +91,7 @@ test.beforeAll(async () => {
       }
     } else if (req.url === "/same-redirect") {
       res.writeHead(302, { ...cors, location: `${bffOrigin}/sse` }).end();
-    } else if (req.url === "/pending") {
+    } else if (req.url === "/pending" || req.url === "/bff/management/trade-journeys") {
       res.writeHead(200, { ...cors, "content-type": "application/json" });
       res.write("{");
       openSse.add(res);
@@ -97,12 +110,41 @@ test.beforeAll(async () => {
     }
     // /stall: HTTP 204 is a real Document navigation that fails (ERR_ABORTED) and never commits.
     if (req.url === "/stall") return void res.writeHead(204).end();
+    if (req.url?.startsWith("/acceptance-case")) {
+      const mode = new URL(req.url, feOrigin).searchParams.get("mode") || "ready";
+      return void res.writeHead(200, { "content-type": "text/html" }).end(`<main>Verifying Pantheon session…</main><script type="module">
+        const main = document.querySelector("main");
+        await fetch("${bffOrigin}/bff/me");
+        if (${JSON.stringify(mode)} !== "auth-stuck") {
+          main.innerHTML = '<div data-testid="route-chunk-loading" role="status">Loading Management shell...</div>';
+          if (${JSON.stringify(mode)} === "lazy-stuck-with-background-data") await fetch("${bffOrigin}/bff/acceptance-data?mode=ready");
+          // A real async module/route boundary later than the old 400ms snapshot.
+          await new Promise(r => setTimeout(r, 600));
+          if (!["loading-stuck", "lazy-stuck-with-background-data"].includes(${JSON.stringify(mode)})) {
+            if (${JSON.stringify(mode)} === "redirect") history.replaceState({}, "", "/management/cockpit");
+            if (${JSON.stringify(mode)} !== "session-only") await fetch("${bffOrigin}/bff/acceptance-data?mode=${mode}").catch(() => {});
+            main.textContent = ${JSON.stringify(mode)} === "not-found" ? "Requested fixture detail was not found" : ${JSON.stringify(mode)} === "undefined-detail" ? "Route detail has undefined data" : "Route loaded with finite management data";
+          }
+        }
+      </script>`);
+    }
     if (managementFixture) {
       const canonical = expectedCanonicalPath((req.url || "").split("?")[0]);
       if (canonical) return void res.writeHead(302, { location: canonical }).end();
+      const pathname = (req.url || "").split("?")[0];
+      const entityRoute = BASELINE_ROUTES.find((r) => r.entity && r.path === pathname) ||
+        BASELINE_ROUTES.find((r) => r.entity && pathname.endsWith("/local-live-id") && r.path.slice(0, r.path.lastIndexOf("/")) === pathname.slice(0, pathname.lastIndexOf("/")));
+      const abortContinued = managementFixtureFailure === "continued" && pathname === "/management/trade-journeys";
+      const dataPath = abortContinued ? "/bff/management/trade-journeys" : pathname === managementFixtureFailure ? "/bff/acceptance-data?mode=api-error"
+        : entityRoute && ENTITY_LIST_ENDPOINTS[entityRoute.entity] ? `${ENTITY_LIST_ENDPOINTS[entityRoute.entity]}/${pathname.split("/").pop()}` : "/bff/fixture-data";
       const links = BASELINE_ROUTES.filter((r: { kind: string }) => r.kind === "nav")
         .map((r: { path: string }) => `<a href="${r.path}">${r.path}</a>`).join("");
-      return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}<script>new EventSource("${bffOrigin}/sse"); void fetch("${bffOrigin}/finite").catch(() => {});</script></body>`);
+      return void res.writeHead(200, { "content-type": "text/html" }).end(`<body>Recorded management route fixture ${links}<script>new EventSource("${bffOrigin}/sse");
+        const controller = new AbortController();
+        void fetch("${bffOrigin}${dataPath}", { signal: controller.signal }).then(r => {
+          if (${abortContinued}) controller.abort(); // after real response headers, before navigation/close
+          return r.text();
+        }).catch(() => {});</script></body>`);
     }
     res.writeHead(200, { "content-type": "text/html" }).end("<html><body>fe</body></html>");
   });
@@ -130,6 +172,17 @@ async function open(opts: { tenantId?: string } = {}) {
   await page.goto(feOrigin);
   return { context, page, errors, transport };
 }
+// The operator rule deliberately supersedes timing-based InvalidID failures,
+// including the old wrong-id counterexamples: route data must catch missing data.
+function expectTerminated(transport: Awaited<ReturnType<typeof installPinnedBffBearer>>, path = "/held") {
+  transport.assertHealthy();
+  expect(transport.terminatedBeforeSend).toContainEqual(expect.objectContaining({
+    outcome: "terminated_before_send", path, requestStage: "Request",
+    interceptionId: expect.any(String), phase: expect.any(String),
+  }));
+  expect(JSON.stringify(transport.terminatedBeforeSend)).not.toMatch(/stream-test-token|Bearer|Cookie|\?/iu);
+}
+
 const startSse = (page: import("@playwright/test").Page, url: string) =>
   page.evaluate((u) => new Promise<string>((resolve) => {
     const es = new EventSource(u);
@@ -243,6 +296,8 @@ test("an unrelated transport failure is surfaced, not swallowed; teardown is not
   await page.evaluate((u) => fetch(u).then(() => "ok", () => "failed"), `${bffOrigin}/reset`);
   await transport.settle();
   expect(() => transport.assertHealthy()).toThrow(/\/reset/);
+  expect(bffSeen).toContainEqual(expect.objectContaining({ path: "/reset", authorization: `Bearer ${TOKEN}` }));
+  expect(transport.terminatedBeforeSend).toEqual([]);
   const clean = await open();
   await startSse(clean.page, `${bffOrigin}/sse`);
   await clean.context.close();
@@ -302,6 +357,78 @@ test("SSE network failures propagate to the probe transport", async () => {
 });
 
 const INTERCEPTION_BASE = "82ff528625f3ca4ad7c3e607ee7cfa7d465ea444";
+test("navigation cancellation before continuation records a path and request id without sending", async () => {
+  const c = await controlledInterception();
+  try {
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    await c.page.goto(`${feOrigin}/after-cancel`);
+    c.release();
+    await c.transport.settle();
+    expectTerminated(c.transport);
+    expect(c.transport.terminatedBeforeSend).toContainEqual(expect.objectContaining({ reason: "invalid_interception_id" }));
+    expect(bffSeen.some((r) => r.path === "/held")).toBe(false);
+  } finally { c.release(); await c.context.close(); await c.transport.settle(); }
+});
+
+test("browser close records a late Request-stage pause retired before continuation", async () => {
+  const probeBrowser = await chromium.launch();
+  const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
+  const transport = await installPinnedBffBearer(context, { token: TOKEN, feBase: feOrigin, bffBase: bffOrigin, env: env() });
+  const page = await context.newPage();
+  await transport.attachPage(page);
+  await page.goto(feOrigin);
+  const close = probeBrowser.close.bind(probeBrowser);
+  probeBrowser.close = async () => {
+    const paused = page.waitForEvent("request", { predicate: (r) => r.url() === `${bffOrigin}/held` });
+    await page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await paused;
+    // Real browser round trip ensures the helper has received its pause.
+    const observer = await context.newCDPSession(page);
+    await observer.send("Performance.getMetrics");
+    await close();
+  };
+  try {
+    await transport.closeBrowser(probeBrowser);
+    await transport.settle();
+    expectTerminated(transport);
+    expect(transport.terminatedBeforeSend).toContainEqual(expect.objectContaining({ phase: "close", reason: "target_closed_before_continuation" }));
+    expect(bffSeen.some((r) => r.path === "/held")).toBe(false);
+  } finally { await close(); await transport.settle(); }
+});
+
+// Invoke the original crawl function with real Chromium and local finite HTTPS
+// data. These fixtures prove harness behavior, never hosted product readiness.
+const crawlSource = () => readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
+
+for (const mode of ["ready", "redirect", "auth-stuck", "loading-stuck", "lazy-stuck-with-background-data", "session-only", "api-error", "bad-json", "pending-json", "error-envelope", "not-found", "undefined-detail"]) {
+  test(`original route data check waits for auth/lazy/redirect and rejects unresolved data: ${mode}`, async () => {
+    const c = await open();
+    const routePath = `/acceptance-case?mode=${mode}`;
+    // For this local redirect case bind the same canonical rule used by aliases.
+    const canonical = (p: string) => mode === "redirect" && p === "/acceptance-case" ? "/management/cockpit" : expectedCanonicalPath(p);
+    const load = (source: string) => vm.runInNewContext(source.slice(source.indexOf("const CORS_PATTERN ="), source.indexOf("\nfunction authHeaders(")) + "\ncrawlRoute", {
+      URL, console, FE_BASE: feOrigin, BFF_BASE: bffOrigin, expectedCanonicalPath: canonical, ENTITY_LIST_ENDPOINTS,
+      ROUTE_TIMEOUT_MS: 5000, SETTLE_TIMEOUT_MS: 1500,
+    });
+    try {
+      const predecessor = execFileSync("git", ["show", "1eb30047180782f510acc5040381ece58b7edd3e:scripts/accept-management-hosted-production.mjs"], { encoding: "utf8" });
+      const old = await load(predecessor)(c.page, { path: routePath, kind: "live-id-detail" }, { source: "live-id:fixture", transport: c.transport });
+      // The old verdict accepted a >15-character auth/loading snapshot.
+      expect(old.status).toBe("ok");
+      expect(old.dataCheck).toBeUndefined();
+      if (["auth-stuck", "loading-stuck", "session-only"].includes(mode)) expect(old.bffEndpoints).toEqual(["GET /bff/me"]);
+      const result = await load(crawlSource())(c.page, { path: routePath, kind: "live-id-detail" }, { source: "live-id:fixture", transport: c.transport });
+      const success = ["ready", "redirect", "undefined-detail"].includes(mode);
+      expect(result.status).toBe(success ? "ok" : "datafail");
+      expect(result.dataCheck.pass).toBe(success);
+      if (mode === "redirect") expect(result.alias.redirected).toBe(true);
+      if (mode === "undefined-detail") expect(result.detailHonestyViolations).toEqual(["raw_undefined"]);
+      if (success) expect(result.dataCheck.reads.some((r: { valid: boolean }) => r.valid)).toBe(true);
+    } finally { await c.context.close(); await c.transport.settle(); }
+  });
+}
+
 // Delay only dispatch of a real CDP command, never synthesize its result/error.
 // This makes the narrow Chromium navigation race reproducible without sleeps.
 // lateLifecycle holds, in order, delivery of real Chromium Network/Page events to the
@@ -445,7 +572,7 @@ test("queued cancellation lifecycle arriving after Invalid InterceptionId reject
   }
 });
 
-test("late lifecycle does not excuse live abort or invalid live protocol id", async () => {
+test("Request-stage InvalidID is recorded even with late lifecycle or a wrong-id counterexample", async () => {
   for (const cause of ["live abort then navigation", "invalid live protocol id"] as const) {
     const c = await controlledInterception(installPinnedBffBearer, cause === "invalid live protocol id", true);
     try {
@@ -461,7 +588,7 @@ test("late lifecycle does not excuse live abort or invalid live protocol id", as
       }
       c.release();
       await c.transport.settle();
-      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      expectTerminated(c.transport);
     } finally { c.release(); await c.context.close(); await c.transport.settle(); }
   }
 });
@@ -490,7 +617,7 @@ test("same-document navigation cancelling a held request settles healthy", async
 });
 
 for (const lateSample of [false, true]) {
-test(`live invalid id then same-request navigation stays actionable when its real rejection is delivered late${lateSample ? " and the sample is late" : ""}`, async () => {
+test(`Request-stage invalid id then same-request navigation stays a recorded nonfailure when its real rejection is delivered late${lateSample ? " and the sample is late" : ""}`, async () => {
   const c = await controlledInterception(installPinnedBffBearer, true, false, true, false, lateSample);
   try {
     await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
@@ -502,13 +629,13 @@ test(`live invalid id then same-request navigation stays actionable when its rea
     await expect.poll(() => c.receipt.canceled).toBe(true);
     c.releaseRejection();
     await c.transport.settle();
-    console.log(JSON.stringify({ scenario: "live-invalid-delayed-rejection", lateSample, ...c.receipt, transportErrors: c.transport.errors, expectedHealth: "fail" }));
-    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    console.log(JSON.stringify({ scenario: "live-invalid-delayed-rejection", lateSample, ...c.receipt, transportErrors: c.transport.errors, expectedHealth: "recorded nonfailure" }));
+    expectTerminated(c.transport);
   } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
 });
 }
 
-test("cancellation after the pre-command sample fails closed when genuine dispatch is delayed", async () => {
+test("cancellation after the pre-command sample is recorded when genuine dispatch is delayed", async () => {
   const c = await controlledInterception(installPinnedBffBearer, false, false, false, false, false, true);
   try {
     await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
@@ -521,9 +648,8 @@ test("cancellation after the pre-command sample fails closed when genuine dispat
     const cancel = c.receipt.lifecycle.find((e) => e.event === "Network.loadingFailed")!;
     expect(cancel.timestamp as number).toBeGreaterThan(sample.timestamp as number);
     expect(c.receipt.order).toEqual(["continueRequest rejected"]);
-    // CDP supplies no failure timestamp inside this interval. Even a legitimate
-    // cancellation is a transport failure when its order cannot be proven.
-    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    // No timing proof is needed: this Request-stage command could not send it.
+    expectTerminated(c.transport);
   } finally { c.release(); await c.context.close(); await c.transport.settle(); }
 });
 
@@ -531,7 +657,7 @@ test("cancellation after the pre-command sample fails closed when genuine dispat
 // Chromium/HTTPS fixture. No page.route/context.route or replacement transport.
 for (const entry of ["gotoRouteWithRetry", "discoverLiveNav"] as const) {
   for (const invalidLiveId of [false, true]) {
-    test(`actual ${entry} drains interceptions before navigation (${invalidLiveId ? "live failure" : "open SSE"})`, async () => {
+    test(`actual ${entry} drains interceptions before navigation (${invalidLiveId ? "pre-send InvalidID" : "open SSE"})`, async () => {
       const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
       const start = source.indexOf(`async function ${entry}(`);
       const end = source.indexOf(entry === "gotoRouteWithRetry" ? "\nasync function crawlRoute(" : "\nfunction authHeaders(", start);
@@ -558,16 +684,11 @@ for (const entry of ["gotoRouteWithRetry", "discoverLiveNav"] as const) {
         }
         c.releaseRejection();
         const failure = await outcome;
-        if (invalidLiveId) {
-          expect(String(failure)).toContain("Invalid InterceptionId");
-          expect(c.page.url()).toBe(`${feOrigin}/`);
-        } else {
-          expect(failure).toBeUndefined();
-          expect(c.receipt.errors).toEqual([]);
-          expect(c.page.url()).toBe(`${feOrigin}/${entry === "gotoRouteWithRetry" ? "actual-detail" : "management/cockpit"}`);
-          await c.transport.settle();
-          c.transport.assertHealthy();
-        }
+        expect(failure).toBeUndefined();
+        expect(c.page.url()).toBe(`${feOrigin}/${entry === "gotoRouteWithRetry" ? "actual-detail" : "management/cockpit"}`);
+        await c.transport.settle();
+        if (invalidLiveId) expectTerminated(c.transport);
+        else { expect(c.receipt.errors).toEqual([]); c.transport.assertHealthy(); }
       } finally { c.release(); c.releaseRejection(); await c.context.close(); await c.transport.settle(); }
     });
   }
@@ -610,7 +731,7 @@ test("actual retry drains new work after a real HTTP 204 navigation failure with
 });
 
 for (const invalidLiveId of [false, true]) {
-  test(`actual browser close drains outstanding work (${invalidLiveId ? "live failure" : "open SSE"})`, async () => {
+  test(`actual browser close drains outstanding work (${invalidLiveId ? "pre-send InvalidID" : "open SSE"})`, async () => {
     const probeBrowser = await chromium.launch();
     const c = await controlledInterception(installPinnedBffBearer, invalidLiveId, false, true, false, true, false, probeBrowser);
     try {
@@ -621,7 +742,7 @@ for (const invalidLiveId of [false, true]) {
       const draining = new Promise<void>((resolve) => { entered = resolve; });
       const transport = { ...c.transport, async settle() { entered(); await c.transport.settle(); } };
       const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
-      const start = source.indexOf("  await transport.closeBrowser(browser);", source.indexOf("const liveIdResults ="));
+      const start = source.indexOf("  let transportFailed = false;", source.indexOf("const liveIdResults ="));
       expect(start).toBeGreaterThan(0);
       const close = source.slice(start, source.indexOf('\n  console.log("[accept-management-hosted-production] running session/RBAC', start));
       const outcome = vm.runInNewContext(`(async () => {${close}})()`, { transport, browser: probeBrowser })
@@ -633,14 +754,15 @@ for (const invalidLiveId of [false, true]) {
       c.releaseRejection();
       const failure = await outcome;
       expect(probeBrowser.isConnected()).toBe(false);
-      if (invalidLiveId) expect(String(failure)).toContain("Invalid InterceptionId");
-      else { expect(failure).toBeUndefined(); c.transport.assertHealthy(); }
+      expect(failure).toBeUndefined();
+      if (invalidLiveId) expectTerminated(c.transport);
+      else c.transport.assertHealthy();
     } finally { c.release(); c.releaseRejection(); await probeBrowser.close(); await c.transport.settle(); }
   });
 }
 
 for (const teardown of ["context close", "unrelated navigation"] as const) {
-  test(`live invalid id is not excused by ${teardown} before settle`, async () => {
+  test(`Request-stage invalid id remains recorded after ${teardown} before settle`, async () => {
     for (let attempt = 0; attempt < 3; attempt++) {
       const c = await controlledInterception(installPinnedBffBearer, true);
       try {
@@ -651,7 +773,7 @@ for (const teardown of ["context close", "unrelated navigation"] as const) {
         if (teardown === "context close") await c.context.close();
         else await c.page.goto(`${feOrigin}/unrelated-navigation`);
         await c.transport.settle();
-        expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+        expectTerminated(c.transport);
       } finally { c.release(); await c.context.close(); await c.transport.settle(); }
     }
   });
@@ -687,7 +809,7 @@ test("iframe removal cancelling a held interception settles healthy", async () =
   }
 });
 
-test("live abort then later iframe removal stays actionable", async () => {
+test("paused abort then later iframe removal is recorded before send", async () => {
   const c = await controlledInterception();
   try {
     const frame = await frameFetch(c, true);
@@ -697,11 +819,11 @@ test("live abort then later iframe removal stays actionable", async () => {
     await expect.poll(() => c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
     await c.page.evaluate(() => document.querySelector("iframe")!.remove());
     await c.transport.settle();
-    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    expectTerminated(c.transport);
   } finally { c.release(); await c.context.close(); await c.transport.settle(); }
 });
 
-test("observed live abort then immediate iframe removal before sample stays actionable", async () => {
+test("observed paused abort then immediate iframe removal is recorded before send", async () => {
   for (let attempt = 0; attempt < 3; attempt++) {
     const c = await controlledInterception();
     try {
@@ -714,8 +836,8 @@ test("observed live abort then immediate iframe removal before sample stays acti
       await c.page.evaluate(() => document.querySelector("iframe")!.remove());
       c.release();
       await c.transport.settle();
-      expect(c.transport.errors.some((e) => e.includes("ERR_ABORTED"))).toBe(true);
-      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      expect(c.transport.errors.some((e) => e.includes("ERR_ABORTED"))).toBe(false);
+      expectTerminated(c.transport);
     } finally { c.release(); await c.context.close(); await c.transport.settle(); }
   }
 });
@@ -763,7 +885,7 @@ test("exact 82ff queued cancellation fails; maintained transport proves the obso
 });
 
 for (const cause of ["live abort", "live abort then navigation", "invalid live protocol id"] as const) {
-  test(`${cause} keeps the same real Invalid InterceptionId actionable`, async () => {
+  test(`${cause} records the same real Request-stage Invalid InterceptionId without failure`, async () => {
     const c = await controlledInterception(installPinnedBffBearer, cause === "invalid live protocol id");
     try {
       await c.page.evaluate((u) => {
@@ -781,10 +903,10 @@ for (const cause of ["live abort", "live abort then navigation", "invalid live p
       await c.transport.settle();
       expect(c.receipt.replaced).toBe(cause === "live abort then navigation");
       expect(c.receipt.errors.filter((e) => e.includes("(Fetch.continueRequest)"))).toEqual([expect.stringMatching(/Invalid InterceptionId/)]);
-      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      expectTerminated(c.transport);
       await c.context.close();
       await c.transport.settle();
-      expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+      expectTerminated(c.transport);
     } finally { c.release(); await c.context.close(); await c.transport.settle(); }
   });
 }
@@ -828,7 +950,7 @@ test("a cancellation proven for a request whose pause preceded its Network.reque
   }
 });
 
-test("pause-before-network ordering still reports a live invalid protocol id", async () => {
+test("pause-before-network ordering still records a Request-stage invalid id", async () => {
   const c = await controlledInterception(pauseBeforeNetwork, true);
   try {
     pauseFirst = true;
@@ -836,7 +958,7 @@ test("pause-before-network ordering still reports a live invalid protocol id", a
     await c.paused;
     c.release();
     await c.transport.settle();
-    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    expectTerminated(c.transport);
   } finally { pauseFirst = false; c.release(); await c.context.close(); await c.transport.settle(); }
 });
 
@@ -918,7 +1040,7 @@ test("Invalid InterceptionId for a request cancelled by a navigation is proven h
   } finally { c.release(); c.releaseCommit(); await c.context.close(); await c.transport.settle(); }
 });
 
-test("a late navigation commit cannot excuse a live invalid protocol id", async () => {
+test("a late navigation commit is not required to record a Request-stage invalid id", async () => {
   const c = await controlledInterception(installPinnedBffBearer, true, false, false, true);
   try {
     await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
@@ -929,7 +1051,7 @@ test("a late navigation commit cannot excuse a live invalid protocol id", async 
     await expect.poll(() => c.receipt.canceled).toBe(true);
     c.releaseCommit();
     await c.transport.settle();
-    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    expectTerminated(c.transport);
   } finally { c.release(); c.releaseCommit(); await c.context.close(); await c.transport.settle(); }
 });
 
@@ -1207,7 +1329,7 @@ test("a failed (HTTP 204) navigation does not excuse a live abort before a later
   } finally { await c.context.close(); await c.transport.settle(); }
 });
 
-test("a failed navigation does not excuse a live invalid id before a later unrelated navigation", async () => {
+test("a failed navigation does not change the pre-send invalid-id rule", async () => {
   const c = await controlledInterception(installPinnedBffBearer, true);
   try {
     expect(await failedNavigation(c.page)).toMatch(/ERR_ABORTED/);
@@ -1217,7 +1339,7 @@ test("a failed navigation does not excuse a live invalid id before a later unrel
     await expect.poll(() => c.receipt.errors.length).toBeGreaterThan(0);
     await c.page.goto(`${feOrigin}/unrelated-navigation`);
     await c.transport.settle();
-    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
+    expectTerminated(c.transport);
   } finally { c.release(); await c.context.close(); await c.transport.settle(); }
 });
 
@@ -1233,13 +1355,11 @@ test("a read cancelled by a real navigation still settles healthy after an earli
   } finally { await c.context.close(); await c.transport.settle(); }
 });
 
-// A busy renderer or loaded runner schedules the command (and possibly the clock sample)
-// late. Keep these imposed schedules: a cancellation after the pre-command sample
-// has no proven order relative to the native failure and must fail closed (source
-// criterion 2 addendum, 2026-11-13). Actual caller prevention is tested separately.
+// Preserve loaded-runner schedules from the previous timing rule. All Request-
+// stage InvalidID cancellations are now recorded regardless of sample ordering.
 for (const useCaller of [false, true]) {
 for (const delaySample of [true, false]) {
-test(`${useCaller ? "actual caller drains loaded reads and open SSE before successive navigations" : delaySample ? "reads cancelled by successive navigations settle healthy" : "successive navigations retain ambiguous issued read failures"} when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
+test(`${useCaller ? "actual caller drains loaded reads and open SSE before successive navigations" : delaySample ? "reads cancelled by successive navigations settle healthy" : "successive navigations record pre-send read terminations"} when ${delaySample ? "sample and command are" : "only the command is"} scheduled late`, async () => {
   const probeBrowser = useCaller ? await chromium.launch() : browser;
   const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
@@ -1286,15 +1406,8 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
     else await page.goto(`${feOrigin}/route-end`);
     await page.waitForTimeout(600);
     await transport.settle();
-    if (!useCaller && !delaySample) {
-      expect(() => transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
-      for (const error of transport.errors) {
-        const detail = JSON.parse(error.match(/CDP continueRequest (\{.*\}):/)![1]);
-        expect(detail.issued).toBe(true);
-        expect(detail.canceled).toBe(true);
-        expect(detail.canceledAt).toBeGreaterThan(detail.sampledBeforeIssue);
-      }
-    } else transport.assertHealthy();
+    transport.assertHealthy();
+    if (!useCaller && !delaySample) expectTerminated(transport, "/read-0");
     if (useCaller) {
       expect(bffSeen.filter((r) => r.path.startsWith("/read-")).length).toBe(18);
       expect(bffSeen.filter((r) => r.path === "/sse")).toHaveLength(3);
@@ -1309,10 +1422,11 @@ test(`${useCaller ? "actual caller drains loaded reads and open SSE before succe
 // All server data and the load-gate input are generated local fixtures. Fixture
 // HTML/data is local protocol coverage, never a hosted acceptance pass. Impose
 // a renderer read immediately AFTER its drain, using only native CDP results.
-for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin"] as const) {
+for (const scopeCase of ["after-drain BFF", "wildcard predecessor", "pinned origin", "route data failure", "detail data failure", "discovery data failure", "continued request failure"] as const) {
 test(`actual 95-route caller handles a new interception after drain through entity discovery and detail closure (${scopeCase})`, async () => {
   test.setTimeout(120_000);
   managementFixture = true;
+  managementFixtureFailure = scopeCase === "route data failure" ? "/management/risk" : scopeCase === "detail data failure" ? "/management/strategies/local-live-id" : scopeCase === "discovery data failure" ? "discovery" : scopeCase === "continued request failure" ? "continued" : "";
   const probeBrowser = await chromium.launch();
   const context = await probeBrowser.newContext({ ignoreHTTPSErrors: true });
   const create = context.newCDPSession.bind(context);
@@ -1442,18 +1556,13 @@ main`, {
     },
   });
   try {
+    await run();
     if (scopeCase === "wildcard predecessor") {
-      const failure = await run().then(() => undefined, (error: unknown) => error);
-      expect(String(failure)).toContain("Invalid InterceptionId");
       expect(foreignContinues).toBe(1);
       expect(trace).toContain("foreign native rejection:true");
       expect(transport.errors.some((e: string) => e.includes('"path":"/unrelated-pending"') && e.includes('"issued":true'))).toBe(true);
-      expect(fs.existsSync(join(reportDir, `management-hosted-acceptance-${new Date().toISOString().slice(0, 10)}.json`))).toBe(false);
       console.log(JSON.stringify({ generatedScopeCounterexample: true, scopeCase, foreignContinues, trace, errors: transport.errors }));
-      return;
-    }
-    await run();
-    expect(foreignContinues).toBe(0);
+    } else expect(foreignContinues).toBe(0);
     const stamp = new Date().toISOString().slice(0, 10);
     const jsonPath = join(reportDir, `management-hosted-acceptance-${stamp}.json`);
     const mdPath = jsonPath.replace(/\.json$/, ".md");
@@ -1461,6 +1570,40 @@ main`, {
     const result = { results: report.routes.filter((r: { source: string }) => r.source === "baseline-or-live-nav"),
       liveIdResults: report.routes.filter((r: { source: string }) => r.source.startsWith("live-id:")),
       liveIdResolution: report.liveIdResolution };
+    if (scopeCase === "continued request failure" || scopeCase === "wildcard predecessor") {
+      expect(fixtureProcess.exitCode).toBe(1);
+      expect(report.result).toMatchObject({ pass: false, overall: "fail" });
+      expect(report.result.failures).toContain("Pinned BFF transport failed.");
+      expect(report.pinnedTransport).toMatchObject({ pass: false, errors: transport.errors });
+      expect(report.routeCounts).toMatchObject({ baseline: 95, crawled: 110, liveIdDetailRoutesCrawled: 15 });
+      const md = readFileSync(mdPath, "utf8");
+      expect(md).toContain("Overall: **fail** (pass=false)");
+      expect(md).toContain("Pinned BFF transport: **fail**");
+      if (scopeCase === "continued request failure") {
+        expect(() => transport.assertHealthy()).toThrow(/GET \/bff\/management\/trade-journeys: net::ERR_ABORTED/);
+        expect(report.routes).toContainEqual(expect.objectContaining({ path: "/management/trade-journeys", status: "datafail", bffFailed: expect.arrayContaining([expect.objectContaining({ failure: "net::ERR_ABORTED" })]) }));
+        expect(report.routes.some((r: { status: string; navError: string }) => r.status === "navfail" && r.navError.includes("trade-journeys"))).toBe(true);
+        expect(md).toContain("GET /bff/management/trade-journeys: net::ERR_ABORTED");
+        expect(report.pinnedTransport.terminatedBeforeSend).toContainEqual(expect.objectContaining({ phase: "close", outcome: "terminated_before_send" }));
+        expect(bffSeen).toContainEqual(expect.objectContaining({ path: "/bff/management/trade-journeys", authorization: `Bearer ${TOKEN}`, tenant: "tenant-local" }));
+      }
+      expect(JSON.stringify(report.pinnedTransport)).not.toMatch(/stream-test-token|Bearer|Cookie|\?/iu);
+      await test.info().attach("generated-local-transport-failure-report.json", { path: jsonPath, contentType: "application/json" });
+      await test.info().attach("generated-local-transport-failure-report.md", { path: mdPath, contentType: "text/markdown" });
+      return;
+    }
+    if (managementFixtureFailure) {
+      expect(fixtureProcess.exitCode).toBe(1);
+      expect(report.result.pass).toBe(false);
+      expect(report.result.failures).toContain("Every route and detail resolves auth/loading and completes its data checks.");
+      if (managementFixtureFailure === "discovery") {
+        expect(report.liveIdResolution).toContainEqual(expect.objectContaining({ entity: "strategies", error: "non-200 or invalid list data", liveId: null }));
+      } else expect(report.routes).toContainEqual(expect.objectContaining({ path: managementFixtureFailure, status: "datafail", dataCheck: expect.objectContaining({ pass: false }) }));
+      transport.assertHealthy();
+      expectTerminated(transport);
+      await test.info().attach("generated-local-management-negative-report.json", { path: jsonPath, contentType: "application/json" });
+      return;
+    }
     expect(fixtureProcess.exitCode).toBe(0);
     expect(report.result).toMatchObject({ pass: true, overall: "pass", failures: [], missing: [] });
     expect(report.routeCounts.baseline).toBe(95);
@@ -1491,17 +1634,16 @@ main`, {
     probeBrowser.newContext = newContext;
     context.newPage = newPage;
     await api.dispose();
-    release(); releaseForeign(); managementFixture = false;
+    release(); releaseForeign(); managementFixture = false; managementFixtureFailure = "";
     await closeBrowser(); await transport.settle();
     console.log(JSON.stringify({ localCallerTrace: trace, transportErrors: transport.errors }));
   }
 });
 }
 
-// A new-document request queued during the same transition is still live at
-// release. Corrupt its actual CDP id and retain the native protocol failure;
-// neither the previous document replacement nor later closure can excuse it.
-test("actual caller preserves a genuine invalid id on a queued new-document request", async () => {
+// A corrupted id still gets a real Request-stage InvalidID. The operator rule
+// records it; only actual route/detail data can establish acceptance afterwards.
+test("actual caller records a Request-stage invalid id on a queued new-document request", async () => {
   const c = await controlledInterception(installPinnedBffBearer, true);
   const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
   const start = source.indexOf("async function gotoRouteWithRetry(");
@@ -1519,16 +1661,13 @@ test("actual caller preserves a genuine invalid id on a queued new-document requ
     await c.transport.settle();
     expect(c.receipt.canceled).toBe(false);
     expect(c.receipt.errors.some((e) => e.includes("Invalid InterceptionId"))).toBe(true);
-    expect(() => c.transport.assertHealthy()).toThrow(/Invalid InterceptionId/);
-    const detail = JSON.parse(c.transport.errors.find((e: string) => e.includes("Invalid InterceptionId"))!.match(/CDP continueRequest (\{.*\}):/)![1]);
-    expect(detail).toMatchObject({ path: "/held", pausePhase: "navigation", queued: true,
-      issued: true, bound: true, canceled: false });
+    expectTerminated(c.transport);
+    const detail = c.transport.terminatedBeforeSend.find((entry) => entry.path === "/held")!;
+    expect(detail).toMatchObject({ path: "/held", pausePhase: "navigation", outcome: "terminated_before_send" });
     expect(detail.interceptionId).toBeTruthy();
     expect(detail.networkId).toBeTruthy();
-    expect(typeof detail.sampledBeforeIssue).toBe("number");
-    const before = c.page.url();
-    const failure = await navigate(c.page, `${feOrigin}/later`, c.transport).then(() => undefined, (error: unknown) => error);
-    expect(String(failure)).toContain("Invalid InterceptionId");
-    expect(c.page.url()).toBe(before);
+
+    expect(await navigate(c.page, `${feOrigin}/later`, c.transport)).toBeNull();
+    expect(c.page.url()).toBe(`${feOrigin}/later`);
   } finally { c.release(); await c.context.close(); await c.transport.settle(); }
 });
