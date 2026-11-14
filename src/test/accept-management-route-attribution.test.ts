@@ -15,7 +15,7 @@ vi.mock("tsx/esm/api", () => ({ tsImport: async () => import("../management/navi
 const source = readFileSync("scripts/accept-management-hosted-production.mjs", "utf8");
 const bff = "https://api.dev.mvl-cap.tw";
 // Run the maintained crawl function without invoking the CLI or hosted I/O.
-function harness(feBase = "http://127.0.0.1:4173", settle = "2") {
+function harness(feBase = "http://127.0.0.1:4173", settle = "2", bffBase?: string) {
   return runInNewContext(`${source
     .replace(/^#![^\n]*\n/, "")
     .replace(/^import[\s\S]*?from "[^"]+";\n/gm, "")
@@ -23,6 +23,7 @@ function harness(feBase = "http://127.0.0.1:4173", settle = "2") {
     ({ crawlRoute, requestTimingReport, NO_ROUTE_DATA_READS, ROUTE_TIMEOUT_MS, SETTLE_TIMEOUT_MS });`, {
     process: { argv: ["node", "offline"], env: {
       PANTHEON_FE_BASE_URL: feBase, PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: settle,
+      ...(bffBase ? { PANTHEON_BFF_BASE_URL: bffBase } : {}),
     } },
     URL, URLSearchParams, Date, Object,
     BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS,
@@ -343,85 +344,129 @@ it("attributes Chromium's inline new-document reads and excludes old reads while
 }, 15_000);
 
 describe("canonical /api/v1 read attribution through the production crawl", () => {
-  const record = { items: [{ id: "pm-1", title: "Postmortem one" }], meta: { surfaces: { postmortems: { status: "ok" } } } };
-  // Real Chromium serves the document; the browser issues the actual fetches.
-  async function chromiumCrawl(script: (origin: string) => string, route: (url: string) => { status: number; body?: string; hang?: boolean }, path = "/management/postmortems", settle = "1500") {
-    const server = createServer((_req, res) => {
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(`<main>Finite route content is ready and visible</main><script>${script(bff)}</script>`);
+  const rec = (id: string) => ({ postmortem_id: id, title: `Postmortem ${id}`, status: "published", action_items: [] });
+  const list = { items: [rec("pm-1"), rec("pm-2")], page_info: { has_more: false }, meta: { surfaces: { postmortems: { status: "ok" } } } };
+  const detail = { data: rec("pm-1"), meta: { surfaces: { postmortems: { status: "ok" } } } };
+  type Spec = { status?: number; body?: string; stream?: boolean };
+  type Out = { result: any; rendered: string };
+  const listen = (server: ReturnType<typeof createServer>) =>
+    new Promise<number>((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port)));
+  const close = (server: ReturnType<typeof createServer>) =>
+    new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); });
+
+  // A real local BFF and real FE origin; Chromium issues the actual fetches and
+  // the page renders the parsed response before the production crawl settles.
+  async function run(opts: {
+    script: (bffOrigin: string) => string; bff: (path: string) => Spec;
+    settle?: string; old?: boolean; bffOriginOverride?: (real: string) => string;
+  }): Promise<Out> {
+    const bffServer = createServer((req, res) => {
+      const spec = opts.bff(new URL(req.url!, "http://x").pathname);
+      const cors = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
+      if (spec.stream) { res.writeHead(200, cors); res.write('{"items":['); return; } // headers + partial body, never ends
+      res.writeHead(spec.status ?? 200, cors); res.end(spec.body ?? "{}");
     });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const fe = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const bffPort = await listen(bffServer);
+    const bffOrigin = `http://127.0.0.1:${bffPort}`;
+    const feServer = createServer((req, res) => {
+      const isOld = req.url === "/old";
+      const send = () => {
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(isOld
+          ? `<main>Old finite route content here</main><script>setInterval(()=>fetch('${bffOrigin}/api/v1/postmortems').catch(()=>{}),5)</script>`
+          : `<main id="m">Finite route content is ready and visible</main><script>${opts.script(opts.bffOriginOverride?.(bffOrigin) ?? bffOrigin)}</script>`);
+      };
+      if (!isOld && opts.old) setTimeout(send, 120); else send();
+    });
+    const fe = `http://127.0.0.1:${await listen(feServer)}`;
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
-      await page.route((u) => u.origin !== fe, async (r) => {
-        const spec = route(r.request().url());
-        if (spec.hang) return; // never fulfilled
-        await r.fulfill({ status: spec.status, contentType: "application/json", body: spec.body ?? "{}", headers: { "Access-Control-Allow-Origin": "*" } });
-      });
-      return await harness(fe, settle).crawlRoute(page, { path }, {
+      if (opts.old) await page.goto(`${fe}/old`);
+      const result = await harness(fe, opts.settle ?? "1500", bffOrigin).crawlRoute(page, { path: "/management/postmortems" }, {
         source: "baseline-or-live-nav",
-        transport: { navigate: async (_p: unknown, target: string) => { await page.goto(target, { waitUntil: "domcontentloaded" }); return null; } },
+        transport: { navigate: async (_p: unknown, target: string) => { await page.goto(target, { waitUntil: "commit" }); await page.waitForLoadState("domcontentloaded"); return null; } },
       });
+      const rendered = await page.evaluate(() => document.querySelector("main")?.textContent ?? "").catch(() => "");
+      return { result, rendered };
     } finally {
       await browser.close();
-      await new Promise<void>((resolve, reject) => server.close((e) => e ? reject(e) : resolve()));
+      await Promise.all([close(bffServer), close(feServer)]);
     }
   }
-  const okRoute = (url: string) => ({ status: 200, body: JSON.stringify(record) });
+  const render = (o: string, path: string, pick = "d.items.map(i=>i.postmortem_id+' '+i.title).join(';')") =>
+    `fetch('${o}${path}').then(r=>r.json()).then(d=>{document.getElementById('m').textContent='Rendered: '+(${pick})})`;
+  const good = (path: string): Spec =>
+    path === "/api/v1/postmortems/pm-1" ? { body: JSON.stringify(detail) } : { body: JSON.stringify(list) };
 
-  it("counts a completed200 valid canonical list read on the maintained origin", async () => {
-    const result = await chromiumCrawl((o) => `fetch('${o}/api/v1/postmortems?limit=50')`, okRoute);
+  it("counts a completed200 canonical list read with real record shape and rendered data", async () => {
+    const { result, rendered } = await run({ script: (o) => render(o, "/api/v1/postmortems?page_size=50"), bff: good });
     expect(result.status, JSON.stringify(result.dataCheck)).toBe("ok");
     expect(result.dataCheck.reads[0]).toMatchObject({ path: "/api/v1/postmortems", status: 200, complete: true, valid: true });
+    expect(rendered).toContain("pm-1 Postmortem pm-1;pm-2 Postmortem pm-2");
   }, 20_000);
 
-  it("counts a canonical detail read together with a BFF read", async () => {
-    const result = await chromiumCrawl((o) => `fetch('${o}/bff/me');fetch('${o}/api/v1/postmortems/pm-1');`, okRoute);
-    expect(result.status).toBe("ok");
+  it("counts a canonical detail read (data envelope) together with a BFF read", async () => {
+    const { result, rendered } = await run({
+      script: (o) => `fetch('${o}/bff/me');` + render(o, "/api/v1/postmortems/pm-1", "d.data.postmortem_id+' '+d.data.title"),
+      bff: good,
+    });
+    expect(result.status, JSON.stringify(result.dataCheck)).toBe("ok");
     expect(result.dataCheck.reads.map((r: { path: string }) => r.path)).toEqual(["/api/v1/postmortems/pm-1"]);
+    expect(rendered).toContain("pm-1 Postmortem pm-1");
   }, 20_000);
 
   it("does not credit a wrong-origin canonical read or a same-origin static URL", async () => {
-    const result = await chromiumCrawl((o) => `fetch('https://other.example.test/api/v1/postmortems');fetch('${o}/assets/data.json');fetch('${o}/api/v2/postmortems')`, okRoute);
-    expect(result.dataCheck.reasons).toContain("no_completed_route_data");
-    expect(result.status).toBe("datafail");
-  }, 20_000);
-
-  it("does not let an old-document canonical read satisfy readiness", async () => {
-    const path = "/management/postmortems";
-    const page = pageFor(path);
-    const result = await harness().crawlRoute(page, { path }, {
-      source: "baseline-or-live-nav",
-      transport: { navigate: async () => {
-        const old = request(page, `${bff}/api/v1/postmortems`);
-        page.emit("request", old); // before commit: old document
-        commit(page, path);
-        page.emit("response", response(old, 200, record));
-        return null;
-      } },
+    const { result } = await run({
+      script: (o) => `fetch('http://localhost:${new URL(o).port}/api/v1/postmortems').catch(()=>{});fetch('${o}/assets/data.json');fetch('${o}/api/v2/postmortems')`,
+      bff: good, settle: "700",
     });
     expect(result.dataCheck.reasons).toContain("no_completed_route_data");
-  });
-
-  it("keeps a never-completing canonical read failing", async () => {
-    const result = await chromiumCrawl((o) => `fetch('${o}/api/v1/postmortems')`, () => ({ status: 200, hang: true }), "/management/postmortems", "700");
     expect(result.status).toBe("datafail");
   }, 20_000);
 
-  it("keeps invalid JSON, error bodies and failed canonical reads failing", async () => {
-    for (const spec of [{ status: 200, body: "not json" }, { status: 200, body: '{"error":"x"}' }, { status: 500, body: "{}" }]) {
-      const result = await chromiumCrawl((o) => `fetch('${o}/api/v1/postmortems')`, () => spec);
+  it("does not let an old-document canonical read satisfy readiness (real Chromium navigation)", async () => {
+    const { result } = await run({ script: () => "", bff: good, old: true, settle: "700" });
+    expect(result.bffRequests.some((r: { attributed: boolean; url: string }) => !r.attributed && r.url.includes("/api/v1/postmortems"))).toBe(true);
+    expect(result.dataCheck.reasons).toContain("no_completed_route_data");
+    expect(result.status).toBe("datafail");
+  }, 20_000);
+
+  it("keeps a canonical read whose headers arrived but finite body never completes failing", async () => {
+    const { result } = await run({ script: (o) => render(o, "/api/v1/postmortems"), bff: () => ({ stream: true }), settle: "700" });
+    expect(result.dataCheck.reads[0]).toMatchObject({ status: 200, valid: false });
+    expect(result.dataCheck.reasons).toContain("no_completed_route_data");
+    expect(result.status).toBe("datafail");
+  }, 20_000);
+
+  it("retains an incomplete required canonical read beside a completed successful read", async () => {
+    const { result } = await run({
+      script: (o) => `fetch('${o}/api/v1/postmortems').then(r=>r.json());fetch('${o}/api/v1/postmortems/pm-1');`,
+      bff: (p) => p === "/api/v1/postmortems/pm-1" ? { stream: true } : good(p), settle: "700",
+    });
+    expect(result.dataCheck.reads.some((r: { complete: boolean; valid: boolean }) => r.complete && r.valid)).toBe(true);
+    expect(result.dataCheck.reasons).toContain("data_reads_incomplete");
+    expect(result.status).toBe("datafail");
+  }, 20_000);
+
+  it("retains a failed canonical read beside a completed successful read", async () => {
+    const { result } = await run({
+      script: (o) => `fetch('${o}/api/v1/postmortems').then(r=>r.json());fetch('${o}/api/v1/postmortems/pm-1');`,
+      bff: (p) => p === "/api/v1/postmortems/pm-1" ? { status: 500, body: '{"error":"boom"}' } : good(p), settle: "700",
+    });
+    expect(result.dataCheck.reasons).toContain("api_data_failure");
+    expect(result.status).toBe("datafail");
+  }, 20_000);
+
+  it("keeps invalid JSON, error bodies and HTTP 500 canonical reads failing", async () => {
+    for (const spec of [{ body: "not json" }, { body: '{"error":"x"}' }, { status: 500, body: "{}" }] as Spec[]) {
+      const { result } = await run({ script: (o) => `fetch('${o}/api/v1/postmortems')`, bff: () => spec, settle: "700" });
       expect(result.status, JSON.stringify(spec)).toBe("datafail");
     }
   }, 40_000);
 
   it("excludes canonical stream/events paths from data reads", async () => {
-    const { result } = await crawl("/management/postmortems", (page) => {
-      const req = request(page, `${bff}/api/v1/postmortems/events`);
-      page.emit("request", req); page.emit("response", response(req));
-    });
+    const { result } = await run({ script: (o) => `fetch('${o}/api/v1/postmortems/events')`, bff: good, settle: "700" });
     expect(result.dataCheck.reasons).toContain("no_completed_route_data");
-  });
+  }, 20_000);
 });
