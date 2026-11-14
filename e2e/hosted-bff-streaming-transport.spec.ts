@@ -769,6 +769,34 @@ for (const invalidLiveId of [false, true]) {
   });
 }
 
+test("actual route-load probe close drains a pending BFF interception before closing the browser", async () => {
+  const probeBrowser = await chromium.launch();
+  const c = await controlledInterception(installPinnedBffBearer, false, false, true, false, true, false, probeBrowser);
+  try {
+    expect(await startSse(c.page, `${bffOrigin}/sse`)).toBe("hello");
+    await c.page.evaluate((u) => { void fetch(u).catch(() => {}); }, `${bffOrigin}/held`);
+    await c.paused;
+    let entered!: () => void;
+    const draining = new Promise<void>((resolve) => { entered = resolve; });
+    const transport = { ...c.transport, async settle() { entered(); await c.transport.settle(); } };
+    const source = readFileSync("scripts/probe-route-load-baseline.mjs", "utf8");
+    const start = source.indexOf("} finally {", source.indexOf("let primaryApiStatus"));
+    expect(start).toBeGreaterThan(0);
+    const close = source.slice(start, source.indexOf("\nconst requestsBeforeFirstRow", start));
+    const outcome = vm.runInNewContext(`(async () => { let error = null; ${close.replace("} finally {", "try { throw new Error('probe body') } catch {} finally {")}\n return error; })()`, { transport, browser: probeBrowser })
+      .then((error: unknown) => ({ error }), (error: unknown) => ({ thrown: error }));
+    await draining;
+    // The probe must not have closed the browser while the interception is pending.
+    expect(probeBrowser.isConnected()).toBe(true);
+    c.release();
+    c.releaseRejection();
+    const result = await outcome;
+    expect(result).toEqual({ error: null });
+    expect(probeBrowser.isConnected()).toBe(false);
+    c.transport.assertHealthy();
+  } finally { c.release(); c.releaseRejection(); await probeBrowser.close(); await c.transport.settle(); }
+});
+
 for (const teardown of ["context close", "unrelated navigation"] as const) {
   test(`Request-stage invalid id remains recorded after ${teardown} before settle`, async () => {
     for (let attempt = 0; attempt < 3; attempt++) {
