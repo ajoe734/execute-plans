@@ -1322,6 +1322,7 @@ NODE
     ready_deadline=$((SECONDS + 180))
     while (( SECONDS < ready_deadline )); do
       remaining=$((ready_deadline - SECONDS))
+      (( remaining > 0 )) || break
       # Keep the existing per-request timeout, capped by the remaining budget.
       probe_timeout=$((remaining < 20 ? remaining : 20))
       attempt=$((attempt + 1))

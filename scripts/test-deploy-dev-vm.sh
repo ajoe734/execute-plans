@@ -2533,7 +2533,7 @@ test_operator_live_strict_health_retry_success() {
   run_operator_live_deploy MOCK_READY_STATUS_SEQUENCE=503,503,200
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "transient strict readiness must recover"
   assert_live_profile operator-live accepted
-  "${REAL_NODE}" --input-type=module - "${CASE_AUDIT}" "${CASE_CALL_LOG}" <<'NODE'
+  "${REAL_NODE}" --input-type=module - "${CASE_AUDIT}" "${CASE_CALL_LOG}" <<'NODE' || die "strict health recovery evidence mismatch"
 import assert from "node:assert/strict";
 import fs from "node:fs";
 const [audit, callLog] = process.argv.slice(2);
@@ -2584,7 +2584,7 @@ test_operator_live_strict_health_failures() {
     [[ "$(grep -c '^curl:anonymous:' "${MOCK_CALL_LOG}")" -eq 1 ]] || die "anonymous check retried"
     grep -Fq -- '--max-time 5 ' "${MOCK_CALL_LOG}" || \
       grep -Eq -- '--max-time ([1-9]|1[0-9]) ' "${MOCK_CALL_LOG}" || die "last curl exceeded remaining budget"
-    "${REAL_NODE}" --input-type=module - "${AUDIT_DIR}" "${stage}" <<'NODE'
+    "${REAL_NODE}" --input-type=module - "${AUDIT_DIR}" "${stage}" <<'NODE' || die "strict health failure evidence mismatch"
 import assert from "node:assert/strict";
 import fs from "node:fs";
 const [audit, stage] = process.argv.slice(2);
