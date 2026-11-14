@@ -317,6 +317,12 @@ async function crawlRoute(page, route, { source, transport }) {
   let finalUrl = "";
   let bodyText = "";
   let dataReasons = ["navigation_incomplete"];
+  let verdictReads = [];
+  let verdictRequests = [];
+  const freezeEvidence = () => {
+    verdictReads = dataReads.map((read) => ({ ...read }));
+    verdictRequests = [...requestTimeline.values()].map((entry) => ({ ...entry }));
+  };
 
   try {
     const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport, beforeAttempt);
@@ -346,9 +352,12 @@ async function crawlRoute(page, route, { source, transport }) {
       // must return real data; a 404 there is a failure.
       const honestNotFound = route.kind === "detail-or-alias" && source === "baseline-or-live-nav" &&
         /not found|找不到|不存在/iu.test(snapshot.content);
-      const validReads = dataReads.filter((read) => read.complete &&
+      // Freeze reads and request evidence at this verdict boundary; a pending
+      // res.json() or later navigation must not mutate the returned result.
+      freezeEvidence();
+      const validReads = verdictReads.filter((read) => read.complete &&
         ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
-      const failedReads = dataReads.filter((read) => read.complete && !validReads.includes(read));
+      const failedReads = verdictReads.filter((read) => read.complete && !validReads.includes(read));
       // The route segment and the API path may spell the same opaque id
       // differently (":" vs "%3A"). Compare exactly one decoded segment each;
       // an encoded separator (%2F) stays inside its segment and a literal
@@ -369,7 +378,7 @@ async function crawlRoute(page, route, { source, transport }) {
         validReads.length === 0 && !Object.hasOwn(NO_ROUTE_DATA_READS, requestedPathname) && "no_completed_route_data",
         (failedReads.length > 0 || apiFailure) && "api_data_failure",
         !entityDataReady && "entity_detail_data_missing",
-        (dataReads.length !== routeRequests.size || dataReads.some((read) => !read.complete)) && "data_reads_incomplete",
+        (verdictReads.length !== routeRequests.size || verdictReads.some((read) => !read.complete)) && "data_reads_incomplete",
       ].filter(Boolean);
       ready = dataReasons.length === 0;
       if (ready || Date.now() >= deadline) break;
@@ -380,6 +389,7 @@ async function crawlRoute(page, route, { source, transport }) {
     else if (bodyText.trim().length < 15) status = "blank";
   } catch (err) {
     status = "navfail";
+    freezeEvidence(); // keep observed reads/timeline at the failure verdict too
     navError = String(err).replace(/\s+/g, " ").slice(0, 240);
   }
 
@@ -439,10 +449,10 @@ async function crawlRoute(page, route, { source, transport }) {
     finalUrl,
     alias,
     controls,
-    dataCheck: { pass: status === "ok", reasons: dataReasons, reads: dataReads,
+    dataCheck: { pass: status === "ok", reasons: dataReasons, reads: verdictReads,
       noDataReadReason: NO_ROUTE_DATA_READS[requestedPathname] || null },
     timing: { startedAt: new Date(startedAt).toISOString(), elapsedMs: elapsed(), navigationAttempts },
-    bffRequests: [...requestTimeline.values()],
+    bffRequests: verdictRequests,
     bffRequestCount: requests.length,
     bffResponseCount: responses.length,
     bffFailedCount: failedRequests.length,

@@ -1,0 +1,13 @@
+{
+  "task": "FE-CRAWL-READ-SNAPSHOT-20261114",
+  "scope": "source validation only; not hosted acceptance",
+  "change": "crawlRoute freezes dataReads and bffRequests copies at the readiness-verdict boundary and at the navfail verdict; returned dataCheck.reads and bffRequests no longer alias live objects",
+  "unchanged": ["route inventory", "document identity", "strict JSON checks", "live-id detail checks", "historical 404 semantics", "timeouts", "success rules"],
+  "tests": {
+    "file": "src/test/accept-management-route-attribution.test.ts",
+    "result": "55 passed (real Chromium)",
+    "new": ["completed-body positive control PASS", "late finite-200 completion FAIL byte-identical", "navigation-cancel FAIL byte-identical", "navfail verdict keeps observed reads/timeline, immutable after return", "second crawlRoute on same Page leaves first result byte-identical"],
+    "counterexample_control": "late and cancel negatives fail on pre-fix source (2 failed), navfail test fails without the catch-path freeze; all pass after fix"
+  },
+  "not_claimed": ["73 pending finite requests were complete", "all34 hosted failures were false", "hosted acceptance"]
+}
