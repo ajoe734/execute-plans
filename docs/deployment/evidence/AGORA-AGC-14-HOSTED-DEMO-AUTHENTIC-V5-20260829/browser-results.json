@@ -1,43 +1,64 @@
 {
-  "schema_version": "pantheon.agora.hosted-demo-browser-results.v1",
+  "schema_version": "pantheon.hosted-demo-browser-results.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
-  "status": "not-run",
-  "recorded_at": "2026-08-30T10:15:02Z",
-  "reason": "The exact task candidate passed release admission and integration gate 33304410236, but deploy run 33304974209 rejected it before the frontend switch because immutable evidence did not accept the emitted candidateRef detail. The controller compensated to the accepted read-only baseline; no write-proof or mutating browser journey was authorized.",
-  "prerequisite": {
-    "requested_frontend_sha": "4ec9d1b69b32fcf3e2bf8c42feff5e5dc40b0c67",
-    "requested_bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "integration_gate_run_id": 33304410236,
-    "integration_gate_conclusion": "success",
-    "release_candidate_id": "63e531ac780a419662da33e3dce58c62e7b9f914d46814560ceb26c2975bec2e",
-    "deploy_run_id": 33304974209,
-    "deploy_conclusion": "failure",
-    "deploy_outcome": "rejected_before_switch",
-    "frontend_switched": false,
-    "compensation_conclusion": "success",
-    "repair_pull_request": 699,
-    "repair_exact_head_sha": "96bdc6056fcfd3fdeb0a22d81dae4be57fc417e2"
+  "status": "not-run-deployment-blocked",
+  "recorded_at": "2026-08-31T04:04:02Z",
+  "run_id": null,
+  "job_id": null,
+  "parent_run_id": null,
+  "watchdog_run_id": null,
+  "correlation_id": null,
+  "candidate_pair": {
+    "frontend_commit": "c77dc7b60f8df8982866859ffb3eeb954b2264cb",
+    "backend_commit": "bc142c9a2041ef9e3345f24187be29f491681120",
+    "release_candidate_id": "e35aae3ee40b67432fae2d972889fa105d95f4988b423359eb847d76f1061555",
+    "admitted": false
   },
-  "login": {
-    "status": "not-run",
-    "provider": "gcp-email-password",
-    "route_mocking": false,
-    "under_five_seconds_claimed": false
+  "deployment_blocker": {
+    "controller_run_id": 33354645302,
+    "failed_step": "Deploy dev VM stack under lease",
+    "candidate_backend_exact_sha_verified": true,
+    "candidate_backend_lifecycle_ready": true,
+    "frontend_switch_reached": false,
+    "reason": "Strict authenticated browser readiness timed out after 120 seconds with providerReady=false, provider=openclaw, reason=OPENCLAW_GATEWAY_TIMEOUT."
   },
-  "page_journeys": {
-    "persona_list_fleet_detail_talk": "not-run",
-    "workshop_create_message_event_reconstruction_strategy_version": "not-run",
-    "trading_room_proposal_candidate_decision_consultation_terminal_readback": "not-run",
-    "strategy_performance_receipt_reload_readback": "not-run"
+  "authentication": {
+    "fresh_short_lived_credentials_minted": false,
+    "fresh_credentials_validated": false,
+    "real_firebase_email_password_browser_login_executed": false,
+    "authenticated_readiness_under_five_seconds_proven": false,
+    "not_run_reason": "The candidate pair was not admitted and no parent-bound proof was authorized."
+  },
+  "required_page_journeys": {
+    "agora": "not-run-before-proof-window",
+    "persona": "not-run-before-proof-window",
+    "workshop": "not-run-before-proof-window",
+    "trade_journey": "not-run-before-proof-window",
+    "management_ai": "not-run-before-proof-window"
   },
   "negative_controls": {
-    "unauthenticated": "not-run",
-    "viewer_write_denial": "not-run",
-    "cross_tenant_non_enumeration": "not-run",
-    "order_or_trade_execution_absent_or_denied": "not-run"
+    "viewer_write_denied": "not-run",
+    "cross_tenant_non_enumerating": "not-run",
+    "no_order_route_proof": "not-run",
+    "execution_authority_preserved": "not-run"
   },
-  "runtime_objects": {},
   "screenshots": [],
-  "network_receipts": [],
+  "screenshot_note": "No browser job or proof credentials existed for this retry because deployment admission failed first.",
+  "immutable_deployment_artifact": {
+    "run_id": 33354645302,
+    "artifact_id": 9744740804,
+    "name": "pantheon-dev-release-admission-33354645302-1",
+    "digest": "sha256:b670dfe8a5370ca66aab632981ddbb471b928e1db782f96b3592b2d3e7cf24ae"
+  },
+  "superseded_prior_browser_attempt": {
+    "run_id": 33328934580,
+    "parent_run_id": 33328350776,
+    "status": "failed",
+    "acceptance_reuse_allowed": false,
+    "historical_failures": [
+      "persona_not_active",
+      "Persona detail heading absent"
+    ]
+  },
   "pass_claimed": false
 }

@@ -1,52 +1,98 @@
 {
-  "schema_version": "pantheon.agora.hosted-demo-restore-attestation.v1",
+  "schema_version": "pantheon.hosted-demo-restore-attestation.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
-  "status": "compensated-safe-read-only",
-  "observed_at": "2026-08-30T10:15:02Z",
-  "observation_source": {
-    "frontend_manifest_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
-    "backend_version_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/version",
-    "backend_readiness_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/readyz"
+  "status": "safe-read-only-baseline-restored",
+  "observed_at": "2026-08-31T04:04:02Z",
+  "observation_urls": {
+    "frontend_manifest": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
+    "backend_version": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/version",
+    "backend_readiness": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/readyz"
   },
-  "served_baseline": {
-    "frontend_sha": "bd03c863e3c2c1c64b9b7797f27cefaf84df17c1",
-    "bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "profile": "read-only",
-    "deployment_profile": "read-only",
-    "vite_bff_real_writes": "false",
-    "vite_bff_allow_dev_stub_writes": "false",
-    "vite_bff_embedded_bearer_token": "false",
+  "observation_sha256": {
+    "frontend_manifest": "5a288c17b3096a6f8088d26a121c05197adbf71a41bf1a4d9b1fb058c1c5a105",
+    "backend_version": "78d728d0886dd45fe9725c7133dd477c014e3b9283ef880a03a90c354f1f9b4a",
+    "backend_readiness": "1938cc10ed94879ef5a87e65c0a876d13b691299828fc78540b9f88f9cece155"
+  },
+  "candidate_pair_not_admitted": {
+    "frontend_commit": "c77dc7b60f8df8982866859ffb3eeb954b2264cb",
+    "backend_commit": "bc142c9a2041ef9e3345f24187be29f491681120",
+    "release_candidate_id": "e35aae3ee40b67432fae2d972889fa105d95f4988b423359eb847d76f1061555",
+    "compatibility_manifest_sha256": "fefe5d6f12b4b1f802179b6295b87c9b23cb42fc9d210492f11e8b77ebf7f7a1"
+  },
+  "pre_attempt_baseline": {
+    "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
+    "backend_commit": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+    "pair_id": "6fc13d1d8c61ce0b0b305962c4a950081e0cab61d9471a8b206f5be0af411144"
+  },
+  "write_proof_window": {
+    "activated": false,
+    "parent_run_id": null,
+    "child_run_id": null,
+    "watchdog_run_id": null,
+    "real_writes_enabled": false,
+    "reason": "Deployment admission failed before the FE switch or any proof authorization dispatch."
+  },
+  "deployment_compensation": {
+    "controller_run_id": 33354645302,
+    "deploy_step_conclusion": "failure",
+    "deploy_process_exit_code": 75,
+    "candidate_backend_was_temporarily_served": true,
+    "candidate_frontend_was_served": false,
+    "baseline_backend_restored": true,
+    "baseline_frontend_unchanged": true,
+    "compensation_step_conclusion": "success-with-continue-on-error",
+    "compensation_process_exit_code": 75,
+    "post_restore_failure": "Strict browser readiness still reported OPENCLAW_GATEWAY_TIMEOUT after exact baseline restoration.",
+    "lease": {
+      "lease_id": "3fd045b4-14ee-4f9d-b844-3a53295732b5",
+      "owner": "pantheon:ajoe734/pantheon:33354645302:1:rollback",
+      "expected_backend_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+      "quarantined_until": "2026-08-31T04:03:44Z",
+      "expired_before_final_observation": true
+    }
+  },
+  "restored_manifest": {
     "deployment_state": "accepted",
-    "release_name": "20260830T092733Z-bd03c863e3c2-gate-33303235915-33303831532-1-475108",
-    "pair_id": "c426db52184193a4063e57e6d8f06b14d8743336db7ab50f06b8325165d5902e",
-    "release_candidate_id": "dd70bd23385f81ad23781cf74bd9d0d3429242d2d829d4333c085cdf13050da3",
-    "bff_source_commit_known": true,
-    "bff_auth_mode": "strict",
-    "bff_auth_stub": false,
-    "bff_build_time": "2026-08-30T09:56:53Z",
-    "bff_version_http_status": 200,
-    "bff_readyz_http_status": 200,
-    "bff_ready": true,
-    "lifecycle_projector_ready": true,
-    "lifecycle_projector_deployment_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "lifecycle_projector_backlog": 0
+    "profile": "read-only",
+    "release_name": "20260830T221921Z-7d30e78476be-gate-33336555863-33337854851-1-write-proof-read-only",
+    "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
+    "backend_commit": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+    "pair_id": "6fc13d1d8c61ce0b0b305962c4a950081e0cab61d9471a8b206f5be0af411144",
+    "vite_bff_mode": "live",
+    "vite_bff_fallback": "strict",
+    "frontend_real_writes": false,
+    "frontend_stub_writes": false,
+    "embedded_bearer_token": false,
+    "safe_restore_probe": "passed",
+    "rollback_required": false
   },
-  "candidate_failure": {
-    "controller_run_id": 33304197062,
-    "requested_frontend_sha": "4ec9d1b69b32fcf3e2bf8c42feff5e5dc40b0c67",
-    "requested_backend_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "integration_gate_run_id": 33304410236,
-    "deploy_run_id": 33304974209,
-    "failed_step": "Deploy verified persistent candidate profile",
-    "failure_reason": "candidateRef was not accepted by the immutable evidence detail allowlist",
-    "rejected_before_switch": true,
-    "compensation_step_conclusion": "success",
-    "compensation_artifact_id": 9730276117,
-    "compensation_artifact_digest": "sha256:c2559f9e700a0d9ad67598c0e9b40e70005b6472ae355cffbc9f34b4d7c456bd"
+  "backend_readback": {
+    "service": "operator-bff",
+    "source_commit_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+    "source_commit_known": true,
+    "auth_stub": false,
+    "auth_mode": "strict",
+    "ready": true,
+    "lifecycle_projector": {
+      "ready": true,
+      "status": "ready",
+      "writer_backend": "postgres",
+      "reader_backend": "postgres",
+      "deployment_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+      "expected_deployment_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+      "backlog": 0,
+      "quarantine_count": 0,
+      "accepted_live": true
+    }
   },
-  "requested_pair_write_proof_activated": false,
-  "requested_pair_watchdog_armed": false,
-  "same_requested_pair_read_only_restored_after_write_proof": false,
-  "safe_baseline_preserved_after_rejected_pre_switch_candidate": true,
-  "acceptance_restore_claimed": false
+  "restore_claims": {
+    "candidate_pair_required_watchdog_restore_proven": false,
+    "pre_attempt_baseline_restored": true,
+    "read_only_restored": true,
+    "writes_disabled": true,
+    "direct_manifest_accepted": true,
+    "backend_ready": true,
+    "lease_quarantine_expired": true,
+    "task_pass": false
+  }
 }
