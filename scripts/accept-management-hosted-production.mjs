@@ -170,6 +170,17 @@ function isBffUrl(url) {
   }
 }
 
+// Supported canonical reads live under /api/v1 on the exact maintained BFF
+// origin. Arbitrary same-origin static URLs and other origins are not data.
+function isCanonicalApiUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === new URL(BFF_BASE).origin && parsed.pathname.startsWith("/api/v1/");
+  } catch {
+    return false;
+  }
+}
+
 async function gotoRouteWithRetry(page, targetUrl, transport, beforeAttempt = () => {}) {
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -225,7 +236,7 @@ async function crawlRoute(page, route, { source, transport }) {
   };
   const isDataUrl = (url) => {
     const pathname = new URL(url).pathname;
-    return isBffUrl(url) && pathname.startsWith("/bff/") &&
+    return ((isBffUrl(url) && pathname.startsWith("/bff/")) || isCanonicalApiUrl(url)) &&
       !["/bff/me", "/bff/auth/readiness", "/bff/management/shell-summary"].includes(pathname) &&
       !/\/(?:stream|events)(?:\/|$)/u.test(pathname);
   };
@@ -242,7 +253,7 @@ async function crawlRoute(page, route, { source, transport }) {
       documentCommitted = false;
     }
     const url = req.url();
-    if (!isBffUrl(url)) return;
+    if (!isBffUrl(url) && !isCanonicalApiUrl(url)) return;
     const attributed = documentCommitted && mainDocument;
     const timingStart = req.timing().startTime;
     const entry = {
