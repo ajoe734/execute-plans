@@ -319,6 +319,10 @@ async function crawlRoute(page, route, { source, transport }) {
   let dataReasons = ["navigation_incomplete"];
   let verdictReads = [];
   let verdictRequests = [];
+  const freezeEvidence = () => {
+    verdictReads = dataReads.map((read) => ({ ...read }));
+    verdictRequests = [...requestTimeline.values()].map((entry) => ({ ...entry }));
+  };
 
   try {
     const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport, beforeAttempt);
@@ -350,8 +354,7 @@ async function crawlRoute(page, route, { source, transport }) {
         /not found|找不到|不存在/iu.test(snapshot.content);
       // Freeze reads and request evidence at this verdict boundary; a pending
       // res.json() or later navigation must not mutate the returned result.
-      verdictReads = dataReads.map((read) => ({ ...read }));
-      verdictRequests = [...requestTimeline.values()].map((entry) => ({ ...entry }));
+      freezeEvidence();
       const validReads = verdictReads.filter((read) => read.complete &&
         ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
       const failedReads = verdictReads.filter((read) => read.complete && !validReads.includes(read));
@@ -386,6 +389,7 @@ async function crawlRoute(page, route, { source, transport }) {
     else if (bodyText.trim().length < 15) status = "blank";
   } catch (err) {
     status = "navfail";
+    freezeEvidence(); // keep observed reads/timeline at the failure verdict too
     navError = String(err).replace(/\s+/g, " ").slice(0, 240);
   }
 

@@ -590,10 +590,15 @@ describe("returned crawl evidence is frozen at its readiness verdict (real Chrom
       if (mode === "late") { for (const res of pending) res.end("]}"); }
       if (mode === "cancel") { await page.goto("about:blank"); }
       await new Promise((resolve) => setTimeout(resolve, 300));
-      // Crawl another page with the same page object, then compare again.
-      await page.goto(`${fe}/other`);
+      const afterSettle = JSON.stringify(result);
+      // Actually crawl a second route on the same Page, then compare again.
+      const second = await harness(fe, "400", bffOrigin).crawlRoute(
+        page, { path: "/management/other" }, {
+          source: "baseline-or-live-nav",
+          transport: { navigate: async (_p: unknown, target: string) => { await page.goto(target, { waitUntil: "commit" }); await page.waitForLoadState("domcontentloaded"); return null; } },
+        });
       await new Promise((resolve) => setTimeout(resolve, 200));
-      return { result, atReturn, after: JSON.stringify(result) };
+      return { result, atReturn, afterSettle, after: JSON.stringify(result), second };
     } finally {
       await browser.close();
       for (const res of pending) res.destroy();
@@ -603,18 +608,56 @@ describe("returned crawl evidence is frozen at its readiness verdict (real Chrom
   }
 
   it("keeps the completed-body positive control PASS and immutable", async () => {
-    const { result, atReturn, after } = await scenario("complete");
+    const { result, atReturn, afterSettle, after } = await scenario("complete");
     expect(result.status, atReturn).toBe("ok");
     expect(result.dataCheck.reads).toEqual([expect.objectContaining({ complete: true, valid: true })]);
+    expect(afterSettle).toBe(atReturn);
     expect(after).toBe(atReturn);
   }, 20_000);
 
   it.each(["late", "cancel"] as const)("keeps %s finite-200 completion FAIL and byte-identical after settling", async (mode) => {
-    const { result, atReturn, after } = await scenario(mode);
+    const { result, atReturn, afterSettle, after } = await scenario(mode);
     expect(result.status, atReturn).toBe("datafail");
     expect(result.dataCheck.pass).toBe(false);
     expect(result.dataCheck.reasons).toContain("data_reads_incomplete");
     expect(result.dataCheck.reads).toEqual([expect.objectContaining({ complete: false, valid: false })]);
+    expect(afterSettle).toBe(atReturn);
     expect(after).toBe(atReturn);
   }, 20_000);
+
+  it("keeps observed reads and timeline at a navfail verdict, immutable afterwards", async () => {
+    const cors = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
+    const hung: Array<import("node:http").ServerResponse> = [];
+    const bffServer = createServer((_req, res) => { res.writeHead(200, cors); res.end('{"items":[]}'); });
+    const bffOrigin = `http://127.0.0.1:${await listen(bffServer)}`;
+    const feServer = createServer((req, res) => {
+      if (req.url === "/hang.js") { hung.push(res); return; } // parser-blocking, never answers
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(`<main>Finite route content is ready</main><script>fetch('${bffOrigin}/bff/current').catch(()=>{})</script><script src="/hang.js"></script>`);
+    });
+    const fe = `http://127.0.0.1:${await listen(feServer)}`;
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      const result = await harness(fe, "400", bffOrigin).crawlRoute(
+        page, { path: "/management/performance" }, {
+          source: "baseline-or-live-nav",
+          transport: { navigate: async (_p: unknown, target: string) => {
+            try { await page.goto(target, { waitUntil: "domcontentloaded", timeout: 1000 }); return null; } catch (e) { return e; }
+          } },
+        });
+      const atReturn = JSON.stringify(result);
+      expect(result.status, atReturn).toBe("navfail");
+      expect(result.dataCheck.reads).toEqual([expect.objectContaining({ complete: true, valid: true })]);
+      expect(result.bffRequests.length).toBeGreaterThan(0);
+      await page.goto("about:blank");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(JSON.stringify(result)).toBe(atReturn);
+    } finally {
+      await browser.close();
+      for (const res of hung) res.destroy();
+      bffServer.closeAllConnections(); feServer.closeAllConnections();
+      bffServer.close(); feServer.close();
+    }
+  }, 30_000);
 });
