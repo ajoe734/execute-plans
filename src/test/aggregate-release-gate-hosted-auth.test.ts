@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
 
 const aggregateScript = resolve(process.cwd(), "scripts/aggregate-release-gate.mjs");
@@ -172,7 +173,7 @@ describe("release Gate 8 hosted management acceptance posture", () => {
     const checks = gate8For("false");
 
     expect(checks[0]).toMatchObject({
-      status: "warn",
+      status: "advisory_fail",
       note: "count:1; advisory on pull_request",
     });
   });
@@ -184,5 +185,80 @@ describe("release Gate 8 hosted management acceptance posture", () => {
       status: "fail",
       note: "count:1",
     });
+  });
+});
+
+describe("hosted acceptance uses the same tenant for Node and browser reads", () => {
+  const source = readFileSync(resolve("scripts/accept-management-hosted-production.mjs"), "utf8");
+  const bearerSource = readFileSync(resolve("scripts/lib/bearer-token.mjs"), "utf8");
+  const transportSource = readFileSync(resolve("scripts/lib/pinned-browser-bff-bearer.mjs"), "utf8");
+
+  it.each([
+    [undefined, undefined],
+    ["   ", undefined],
+    [" pantheon-dev ", "pantheon-dev"],
+    ["tenant-dev", "tenant-dev"],
+  ])("follows authenticated default or explicit selection %s", async (override, expectedHeader) => {
+    const token = "offline-operator-token";
+    const apiReads: Array<{ url: string; headers: Headers; tenant: string }> = [];
+    // Evaluate the maintained script without its CLI entry point. All I/O is
+    // synthetic: no hosted requests, credentials, owner data or business writes.
+    const harness = runInNewContext(
+      `${bearerSource.replace(/^export /gm, "")}\n${transportSource.replace(/^import[^\n]*\n/gm, "").replace(/^export /gm, "")}\n${source
+        .replace(/^#![^\n]*\n/, "")
+        .replace(/^import[\s\S]*?from "[^"]+";\n/gm, "")
+        .replace(/\nmain\(\);\s*$/, "")}\n({ TENANT_ID, installPinnedBffBearer, sessionRbacCheck, resolveLiveIdRoutes });`,
+      {
+        process: { env: { BFF_AUTH_TOKEN: token, PANTHEON_TENANT_ID: override }, argv: ["node", "offline"] },
+        URL, http: {}, https: {}, AbortSignal: { timeout: () => undefined },
+        BASELINE_ROUTES: [{ path: "/management/strategies/fixture-id", entity: "strategy" }],
+        ENTITY_LIST_ENDPOINTS: { strategy: "/bff/strategies" },
+        fetch: async (url: string, options: { headers: Record<string, string> }) => {
+          const headers = new Headers(options.headers);
+          const tenant = headers.get("x-tenant-id") || "authenticated-tenant";
+          apiReads.push({ url, headers, tenant });
+          return {
+            status: headers.get("authorization") === `Bearer ${token}` ? 200 : 401,
+            text: async () => JSON.stringify({ tenant: { id: tenant }, items: [{ id: `strategy-${tenant}` }] }),
+          };
+        },
+      },
+    );
+    expect((await harness.sessionRbacCheck()).overall).toBe("pass");
+    const liveRoutes = await harness.resolveLiveIdRoutes();
+    expect(apiReads.map(({ url }) => new URL(url).pathname)).toEqual([
+      "/bff/me", "/bff/me", "/bff/management/shell-summary", "/bff/strategies",
+    ]);
+    for (const { headers } of apiReads) {
+      expect(headers.get("x-tenant-id")).toBe(expectedHeader ?? null);
+    }
+    const selectedTenant = expectedHeader || "authenticated-tenant";
+    expect(liveRoutes[0].liveId).toBe(`strategy-${selectedTenant}`);
+
+    let handler!: (event: unknown) => void;
+    const calls: Array<{ headers: Array<{ name: string; value: string }> }> = [];
+    const page = { on: () => {}, isClosed: () => false };
+    await harness.installPinnedBffBearer(
+      { on: () => {}, pages: () => [page], newCDPSession: async () => ({
+        on: (_name: string, h: typeof handler) => { handler = h; },
+        send: async (name: string, arg: any) => { if (name === "Fetch.continueRequest") calls.push(arg); },
+      }) },
+      { token, feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw", tenantId: harness.TENANT_ID },
+    );
+    for (const endpoint of ["/bff/me", "/bff/management/shell-summary", "/bff/strategies"]) {
+      handler({ requestId: endpoint, request: {
+        url: `https://api.dev.mvl-cap.tw${endpoint}`,
+        headers: { "X-Tenant-Id": "stale-frontend-tenant", "x-tenant-id": "another-stale-tenant", accept: "application/json" },
+      } });
+      const headers = new Headers(calls.at(-1)!.headers.map(({ name, value }): [string, string] => [name, value]));
+      expect(headers.get("x-tenant-id")).toBe(expectedHeader ?? null);
+      expect(headers.get("authorization")).toBe(`Bearer ${token}`);
+      expect(headers.get("accept")).toBe("application/json");
+      expect(headers.get("x-tenant-id") || "authenticated-tenant").toBe(selectedTenant);
+    }
+  });
+
+  it("passes the configured selection to the browser in the CLI flow", () => {
+    expect(source).toMatch(/await installPinnedBffBearer\(context, \{[^\n]*tenantId: TENANT_ID \}\)/);
   });
 });
