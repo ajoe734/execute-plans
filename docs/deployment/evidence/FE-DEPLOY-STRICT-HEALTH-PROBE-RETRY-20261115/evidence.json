@@ -1,0 +1,162 @@
+{
+  "task_id": "FE-DEPLOY-STRICT-HEALTH-PROBE-RETRY-20261115",
+  "owner": "Codex2",
+  "reviewer": "Claude2",
+  "repository": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "recorded_at_utc": "2026-11-14T23:53:58.180813+00:00",
+  "implementation_commit": "d88699c1320aa61beaa19c194a1155fe5cc11fc7",
+  "base_commit": "169022eb6ab5bc2dc3fddd13262ba8ea19b09af2",
+  "review_status": "ready_for_independent_review",
+  "changes": [
+    "operator-live checks anonymous /bff/me once before readiness; any response other than 401 immediately emits existing bff.strict_health.<stage> failure and returns nonzero.",
+    "/readyz retries with a 180-second SECONDS deadline, fixed 5-second backoff capped at the deadline, unchanged 5-second connect timeout and 20-second per-request timeout capped to the remaining budget.",
+    "Every readiness attempt appends attempt number, HTTP status and UTC timestamp to bff-ready-<stage>-attempts.jsonl in AUDIT_DIR; release evidence already hashes and durably copies these audit files.",
+    "The shared verify_bff_identity function applies identically to pre_candidate, pre_switch, post_switch and accepted_final, including alternate target_bff URLs."
+  ],
+  "acceptance_evidence": {
+    "503_503_200": "Full mocked operator-live deployment recovers at all four stages; each stage audit asserts [503,503,200], [1,2,3] attempt sequence and valid timestamps; release remains accepted with valid durable evidence.",
+    "deadline_exhaustion": "Actual verify_bff_identity and evidence_append functions run with a virtual sleep clock; each of the four stages exhausts the 180-second budget, limits the final curl to remaining time, and records existing bff.strict_health.<stage> failed event. No production deadline override.",
+    "anonymous_fail_closed": "HTTP 200, 403, 500 and 000 each fail with exactly one /bff/me call and zero readiness calls, preserving existing strict-health failure event.",
+    "regression": "All 75 unique existing and new deploy-controller test cases pass; all three bounded foreground shards exit 0."
+  },
+  "validation": {
+    "syntax": {
+      "command": "bash -n scripts/deploy-dev-vm.sh scripts/test-deploy-dev-vm.sh",
+      "exit_code": 0
+    },
+    "whitespace": {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    "commit_trailers": {
+      "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge",
+      "exit_code": 0
+    },
+    "focused": {
+      "command": "timeout 180s env PANTHEON_TEST_FILTER='strict health' bash scripts/test-deploy-dev-vm.sh",
+      "exit_code": 0,
+      "summary": "deploy contract harness: 2 passed, 0 failed"
+    },
+    "full_regression": {
+      "reproduce": "bash scripts/test-deploy-dev-vm.sh",
+      "execution": "75 named filter batches partitioned by case index modulo 3. Each case: env PANTHEON_TEST_FILTER=<case_name> bash scripts/test-deploy-dev-vm.sh. Each shard bounded by timeout 2400s; each filter batch bounded to 600s. All terminal outputs and exit codes collected before handoff.",
+      "unique_cases_passed": 75,
+      "failed": 0,
+      "note": "Substring filtering also repeats switch origin/dev lookup when selecting origin/dev lookup; coverage validated against all 75 unique registered names. Interrupted preliminary runs are excluded from pass claims.",
+      "shards": [
+        {
+          "shard": 1,
+          "filter_batches": 25,
+          "exit_code": 0,
+          "terminal_summary": "SHARD_RESULT shard=1 tests=25 failed=[] elapsed=305.8s",
+          "stdout_sha256": "4e546a3119a442323053ea9a5543ecda82e27e7f916638200cb2b0d6c0631b16",
+          "case_names": [
+            "valid candidate succeeds and evidence hashes verify",
+            "Agora pending/rejected or mismatched evidence cannot switch",
+            "candidate asset and digest tampering reject before switch",
+            "post-switch failure rolls back and re-probes",
+            "public manifest binds the GitHub archive digest",
+            "durable evidence failure during prepare rejects candidate",
+            "rollback re-probe failure stays nonzero with previous live",
+            "out-of-order and expected-dev mismatches reject",
+            "same SHA with a different digest rejects",
+            "emergency override cannot skip integrity or auth probes",
+            "operator-live strict health retries recover at all four stages",
+            "write failure restores the paired safe sibling",
+            "restore network failure preserves the safe release",
+            "advanced dev write-proof on served candidate succeeds with guards",
+            "prepared evidence symlinked durable copy rejects activation",
+            "prepared evidence repeated prepare rechecks mandatory gate",
+            "prepared evidence fresh activation retains original admission",
+            "exact pair protocol prepare leaves incumbent untouched and writes receipt",
+            "exact pair protocol lease delegation false rejected",
+            "exact pair protocol changed predecessor on replay rejected",
+            "exact pair protocol wrong lease restore rejected",
+            "exact pair protocol missing OpenClaw result rejects fleet fallback",
+            "exact pair protocol write predecessor retention",
+            "exact pair protocol late watchdog restore succeeds",
+            "sealed return round-trips operator-live releases preserving bytes"
+          ]
+        },
+        {
+          "shard": 2,
+          "filter_batches": 25,
+          "exit_code": 0,
+          "terminal_summary": "SHARD_RESULT shard=2 tests=25 failed=[] elapsed=241.2s",
+          "stdout_sha256": "9f14ba0c9bee7c25b2e516792830a630b66318f78e214ff66380c32076c5a8d0",
+          "case_names": [
+            "origin/dev lookup retries a transient git failure",
+            "release candidate hash follows canonical LF contract",
+            "candidate pre-probe failure preserves exact previous",
+            "public health retries are bounded and persistent 502 rolls back",
+            "external predecessor restore is fully re-probed",
+            "bootstrap installs only if absent and CAS-removes a failed candidate",
+            "external live switch is preserved by rollback CAS",
+            "governed task-branch candidate can deploy out of order",
+            "exact same SHA and digest revalidates the live release",
+            "write, bearer, and skip-probe inputs fail closed",
+            "operator-live strict health deadline and anonymous failures stay closed",
+            "explicit restore switches safe before network and never rolls back to write",
+            "restore rejects a nonprivate or tampered locator before switch",
+            "prepared evidence missing durable copy rejects activation",
+            "prepared evidence repeated prepare preserves locator and receipt",
+            "prepared evidence prepare cannot mutate an interrupted public candidate",
+            "prepared evidence write prepare replay preserves safe sibling",
+            "exact pair protocol activate in new process without rebuild",
+            "exact pair protocol tampered receipt rejected",
+            "exact pair protocol idempotent replay succeeds",
+            "exact pair protocol failed mandatory gate prepare rejected",
+            "exact pair protocol forged receipt and unregistered lease rejected",
+            "exact pair protocol write replay idempotent",
+            "exact pair protocol non-root runner prepares receipt into read-only release dir",
+            "sealed return rejects bad seals, stale predecessor, and wrong profile"
+          ]
+        },
+        {
+          "shard": 3,
+          "filter_batches": 25,
+          "exit_code": 0,
+          "terminal_summary": "SHARD_RESULT shard=3 tests=25 failed=[] elapsed=302.8s",
+          "stdout_sha256": "f70edd67108562a1e472f0bb691a75ff5170352734e348e3f5b54007a581e9c1",
+          "case_names": [
+            "switch origin/dev lookup retries a transient git failure",
+            "canonical hash matches cross-repo pantheon fixture",
+            "BFF identity is exact and stable across the switch",
+            "rollback validates the predecessor's own paired identity",
+            "durable evidence failure rolls back and re-finalizes",
+            "manual rollback drill restores and re-probes exact previous release",
+            "active admitted pair survives new merges but rejects rewritten history",
+            "concurrent flock rejects",
+            "interrupted candidate rolls forward or restores its exact predecessor",
+            "operator-live persists only through the strict BFF path",
+            "paired write installs a qualified safe sibling and private locator",
+            "restore accepts an already-safe accepted read-only release",
+            "restore reaches safe sibling when Agora evidence is absent or rejected",
+            "prepared evidence mismatched durable copy rejects activation",
+            "prepared evidence rejected replay preserves original admission",
+            "prepared evidence fresh audit reuses exact locator",
+            "prepared evidence live no-op prepare preserves manifest and receipt",
+            "exact pair protocol lease epoch mismatch rejected",
+            "exact pair protocol predecessor CAS mismatch rejected",
+            "exact pair protocol one-shot bypass is retired",
+            "exact pair protocol explicit OpenClaw failure rejects fleet fallback",
+            "exact pair protocol schemaless receipt restore rejected",
+            "exact pair protocol default watchdog restore succeeds",
+            "browser dependencies avoid routine apt and fail closed on missing runtime",
+            "sealed return rejects unmanaged paths and invalid leases"
+          ]
+        }
+      ]
+    }
+  },
+  "unchanged_boundaries": [
+    "Gate crawler and workflows",
+    "BFF identity and strict auth posture checks",
+    "Other deployment profiles, write controls, other timeouts and release/rollback behavior"
+  ],
+  "deployment": {
+    "published_to_dev": false,
+    "note": "Task branch delivery pending independent canonical review and supervisor merge. No deployment workflow dispatched by this task."
+  }
+}
