@@ -39,6 +39,12 @@ import {
 import { installPinnedBffBearer, pinnedTargetProblem } from "./lib/pinned-browser-bff-bearer.mjs";
 import { BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS } from "./lib/management-routes.mjs";
 
+// An honest not-found message may legitimately be short (zh-TW "找不到策略
+// stg_001。" is 14 chars); only non-not-found content is held to the minimum.
+function shortContentIncomplete(content, honestNotFound) {
+  return !honestNotFound && String(content).trim().length <= 15;
+}
+
 // --- argv / env --------------------------------------------------------
 
 function parseArgs(argv) {
@@ -374,7 +380,7 @@ async function crawlRoute(page, route, { source, transport }) {
         snapshot.login && "auth_unresolved",
         (snapshot.busy || loading) && "loading_unresolved",
         dataError && "rendered_data_error",
-        snapshot.content.trim().length <= 15 && "content_incomplete",
+        shortContentIncomplete(snapshot.content, honestNotFound) && "content_incomplete",
         validReads.length === 0 && !Object.hasOwn(NO_ROUTE_DATA_READS, requestedPathname) && "no_completed_route_data",
         (failedReads.length > 0 || apiFailure) && "api_data_failure",
         !entityDataReady && "entity_detail_data_missing",
