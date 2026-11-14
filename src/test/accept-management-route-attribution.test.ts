@@ -470,3 +470,94 @@ describe("canonical /api/v1 read attribution through the production crawl", () =
     expect(result.dataCheck.reasons).toContain("no_completed_route_data");
   }, 20_000);
 });
+
+describe("opaque entity detail id identity through the production crawl (real Chromium)", () => {
+  type Spec = { status?: number; body?: string; stream?: boolean };
+  const listen = (server: ReturnType<typeof createServer>) =>
+    new Promise<number>((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port)));
+  const close = (server: ReturnType<typeof createServer>) =>
+    new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); });
+
+  // routeSegment is the FE URL segment; fetchPath(o) is the exact API URL the page requests.
+  async function detail(opts: {
+    routeSegment: string; fetchUrl: (o: string, port: number) => string; spec?: Spec; old?: boolean; kind?: string; settle?: string;
+  }) {
+    const bffServer = createServer((req, res) => {
+      const cors = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
+      const spec = opts.spec ?? {};
+      if (spec.stream) { res.writeHead(200, cors); res.write('{"id":'); return; }
+      res.writeHead(spec.status ?? 200, cors); res.end(spec.body ?? '{"id":"ok","name":"Strategy record"}');
+    });
+    const port = await listen(bffServer);
+    const o = `http://127.0.0.1:${port}`;
+    const feServer = createServer((req, res) => {
+      const isOld = req.url === "/old";
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(isOld
+        ? `<main>Old finite route content here</main><script>setInterval(()=>fetch('${opts.fetchUrl(o, port)}').catch(()=>{}),5)</script>`
+        : `<main id="m">Finite route content is ready and visible</main><script>if(${!opts.old})fetch('${opts.fetchUrl(o, port)}').then(r=>r.json()).then(d=>{document.getElementById('m').textContent='Rendered: '+(d.name||'no record returned')},()=>{})</script>`);
+    });
+    const fe = `http://127.0.0.1:${await listen(feServer)}`;
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      if (opts.old) await page.goto(`${fe}/old`);
+      const kind = opts.kind ?? "live-id-detail";
+      const result = await harness(fe, opts.settle ?? "1500", o).crawlRoute(page,
+        { path: `/management/strategies/${opts.routeSegment}`, kind, entity: "strategies" }, {
+          source: kind === "live-id-detail" ? "live-id:strategies" : "baseline-or-live-nav",
+          transport: { navigate: async (_p: unknown, target: string) => { await page.goto(target, { waitUntil: "commit" }); await page.waitForLoadState("domcontentloaded"); return null; } },
+        });
+      const rendered = await page.evaluate(() => document.querySelector("main")?.textContent ?? "").catch(() => "");
+      return { result, rendered };
+    } finally {
+      await browser.close();
+      await Promise.all([close(bffServer), close(feServer)]);
+    }
+  }
+  const api = (seg: string) => (o: string) => `${o}/bff/strategies/${seg}`;
+
+  it.each([
+    ["retained colon id (route raw, API encoded)", "strat:2026:abc", api("strat%3A2026%3Aabc")],
+    ["frozen real retained colon id (route raw, API encoded)", "strat-collector:collector-tw-ptt-stock:ptt-stock-M.1794529035.A.2DC:83c616b3b151-650ab18a5161", api("strat-collector%3Acollector-tw-ptt-stock%3Aptt-stock-M.1794529035.A.2DC%3A83c616b3b151-650ab18a5161")],
+    ["frozen real retained colon id (route encoded, API encoded)", "strat-collector%3Acollector-tw-ptt-stock%3Aptt-stock-M.1794529035.A.2DC%3A83c616b3b151-650ab18a5161", api("strat-collector%3Acollector-tw-ptt-stock%3Aptt-stock-M.1794529035.A.2DC%3A83c616b3b151-650ab18a5161")],
+    ["colon id (route encoded, API encoded)", "strat%3A2026%3Aabc", api("strat%3A2026%3Aabc")],
+    ["plain id control", "plain-id", api("plain-id")],
+    ["encoded separator stays one segment", "a%2Fb", api("a%2Fb")],
+    ["literal percent id", "100%25", api("100%25")],
+  ])("passes: %s", async (_n, routeSegment, fetchUrl) => {
+    const { result, rendered } = await detail({ routeSegment, fetchUrl });
+    expect(result.status, JSON.stringify(result.dataCheck)).toBe("ok");
+    expect(result.dataCheck.reasons).toEqual([]);
+    expect(rendered).toContain("Rendered: Strategy record");
+  }, 20_000);
+
+  it.each([
+    ["wrong id", "strat:2026:abc", api("strat%3A2026%3Aabd")],
+    ["literal percent is not collapsed", "100%25", api("100%2525")],
+    ["encoded separator is not a raw separator", "a%2Fb", api("a/b")],
+    ["extra path segment", "strat:1", api("strat%3A1/child")],
+    ["wrong-origin read", "plain-id", (_o: string, port: number) => `http://localhost:${port}/bff/strategies/plain-id`],
+  ])("still fails: %s", async (_n, routeSegment, fetchUrl) => {
+    const { result } = await detail({ routeSegment, fetchUrl, settle: "700" });
+    expect(result.status).toBe("datafail");
+    expect(result.dataCheck.reasons.some((r: string) => r === "entity_detail_data_missing" || r === "no_completed_route_data")).toBe(true);
+  }, 20_000);
+
+  it("does not let an old-document successful read satisfy the colon id", async () => {
+    const { result } = await detail({ routeSegment: "strat:1", fetchUrl: (o) => `${o}/bff/strategies/strat%3A1`, old: true, settle: "700" });
+    // The new document issues no read; the old document's reads are unattributed.
+    expect(result.dataCheck.reasons).toContain("entity_detail_data_missing");
+  }, 20_000);
+
+  it.each([
+    ["stream/noncomplete", { stream: true }],
+    ["invalid JSON", { body: "not json" }],
+    ["error body", { body: '{"error":"x"}' }],
+    ["HTTP 500", { status: 500, body: "{}" }],
+    ["live-id 404", { status: 404, body: '{"detail":"not found"}' }],
+  ] as [string, Spec][])("keeps the colon id failing for %s", async (_n, spec) => {
+    const { result } = await detail({ routeSegment: "strat:1", fetchUrl: api("strat%3A1"), spec, settle: "700" });
+    expect(result.status).toBe("datafail");
+  }, 20_000);
+});

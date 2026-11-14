@@ -1,0 +1,27 @@
+{
+  "task": "FE-CRAWL-OPAQUE-DETAIL-ID-20261114",
+  "scope": "Existing crawl entity-detail readiness now matches the opaque id by one decoded path segment, so route ':' and API '%3A' spellings of the same id are equal. Observer representation fix only; no hosted result is claimed fixed.",
+  "fix": "scripts/accept-management-hosted-production.mjs entityDataReady: read path must be <entity endpoint>/<single segment>; decodeURIComponent(segment) must equal decoded route segment. Encoded separators (%2F) stay inside one segment; literal percent (%25 vs %2525) and extra/raw '/' segments do not match.",
+  "unchanged": [
+    "95+9 route set",
+    "6000ms settle/navigation/performance budgets",
+    "aggregate/data completeness",
+    "live-id 404 still failing",
+    "no timeout/skip/waiver"
+  ],
+  "notClaimed": [
+    "remaining 34 datafail",
+    "slow API/503/financial acceptance",
+    "hosted delivery (soleOps owns)"
+  ],
+  "verification": {
+    "test": "npx vitest run src/test/accept-management-route-attribution.test.ts (real Chromium through production crawlRoute; unchanged 6000ms budgets)",
+    "withFix": "51 passed (includes exact retained id raw-route and encoded-route cases: status ok, valid completed 200, rendered 'Rendered: Strategy record')",
+    "withoutFix": "scripts file at 452d5494b: 2 failed | 49 passed; the exact retained raw-route id (and strat:2026:abc) fail with entity_detail_data_missing; encoded-route and plain controls pass"
+  },
+  "retainedId": {
+    "raw": "strat-collector:collector-tw-ptt-stock:ptt-stock-M.1794529035.A.2DC:83c616b3b151-650ab18a5161",
+    "encoded": "strat-collector%3Acollector-tw-ptt-stock%3Aptt-stock-M.1794529035.A.2DC%3A83c616b3b151-650ab18a5161",
+    "source": "goal-frozen-crawl-real-colon-ID-completed200-false-failure-counterexample-20261114T0600.json"
+  }
+}

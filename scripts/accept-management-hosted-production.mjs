@@ -349,9 +349,16 @@ async function crawlRoute(page, route, { source, transport }) {
       const validReads = dataReads.filter((read) => read.complete &&
         ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
       const failedReads = dataReads.filter((read) => read.complete && !validReads.includes(read));
-      const expectedDataPath = route.entity && ENTITY_LIST_ENDPOINTS[route.entity]
-        ? `${ENTITY_LIST_ENDPOINTS[route.entity]}/${route.path.split("?")[0].split("/").pop()}` : null;
-      const entityDataReady = !expectedDataPath || validReads.some((read) => read.path === expectedDataPath);
+      // The route segment and the API path may spell the same opaque id
+      // differently (":" vs "%3A"). Compare exactly one decoded segment each;
+      // an encoded separator (%2F) stays inside its segment and a literal
+      // percent ("%25") never collapses into another id.
+      const entityEndpoint = route.entity && ENTITY_LIST_ENDPOINTS[route.entity];
+      const decodeSegment = (value) => { try { return decodeURIComponent(value); } catch { return value; } };
+      const expectedSegment = decodeSegment(route.path.split("?")[0].split("/").pop());
+      const entityDataReady = !entityEndpoint || validReads.some((read) =>
+        read.path.startsWith(`${entityEndpoint}/`) && !read.path.slice(entityEndpoint.length + 1).includes("/") &&
+        decodeSegment(read.path.slice(entityEndpoint.length + 1)) === expectedSegment);
       const apiFailure = responses.some((response) => response.status >= 400 && !(response.status === 404 && honestNotFound));
       dataReasons = [
         snapshot.path !== expectedPath && "route_or_redirect_unresolved",
