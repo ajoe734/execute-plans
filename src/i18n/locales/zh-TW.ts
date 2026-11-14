@@ -4160,6 +4160,8 @@ export default {
       verificationMethod: "驗證方式",
       loading: "正在載入證據詳情…",
       unavailableTitle: "證據詳情不可用",
+      detailNotFoundTitle: "找不到證據",
+      detailNotFoundBody: "找不到證據 {{id}}，可能已移除或參照有誤。",
       ref: "證據參照",
       refOnlyHint: "此項目是證據參照，不是可在管理台直接展開的 packet；請從原始任務或證據庫交叉查詢。",
       seeListAt: "完整清單請看",

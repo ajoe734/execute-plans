@@ -609,6 +609,43 @@ describe("EvidenceExplorerPage", () => {
     expect(screen.queryByText("storage://opaque/not-for-ui")).not.toBeInTheDocument();
   });
 
+  describe.each([
+    ["path form", "/management/evidence/evref-demo-readiness-001"],
+    ["ref_id form", "/management/evidence?ref_id=evref-demo-readiness-001"],
+  ])("detail not found handling (%s)", (_label, route) => {
+    it("renders an explicit not found state on a BFF 404", () => {
+      mocks.useV5Live.mockReturnValue({
+        data: undefined,
+        loading: false,
+        error: Object.assign(new Error("HTTP 404"), { code: "RESOURCE_NOT_FOUND" }),
+        refresh: vi.fn(),
+      });
+      renderEvidence(route);
+      expect(screen.getByRole("heading", { name: "Evidence not found" })).toBeInTheDocument();
+      expect(screen.getByText(/was not found/)).toBeInTheDocument();
+      expect(screen.queryByText("Evidence detail unavailable")).not.toBeInTheDocument();
+    });
+
+    it("keeps the unavailable state on a 503", () => {
+      mocks.useV5Live.mockReturnValue({
+        data: undefined,
+        loading: false,
+        error: Object.assign(new Error("HTTP 503"), { code: "BACKEND_UNAVAILABLE" }),
+        refresh: vi.fn(),
+      });
+      renderEvidence(route);
+      expect(screen.getByRole("heading", { name: "Evidence detail unavailable" })).toBeInTheDocument();
+      expect(screen.queryByText(/not found/i)).not.toBeInTheDocument();
+    });
+
+    it("renders a valid record without the not found text", () => {
+      mocks.useV5Live.mockReturnValue({ data: evidenceDetail(), loading: false, error: null, refresh: vi.fn() });
+      renderEvidence(route);
+      expect(screen.getByRole("heading", { name: "TW momentum candidate" })).toBeInTheDocument();
+      expect(screen.queryByText("Evidence not found")).not.toBeInTheDocument();
+    });
+  });
+
   it("submits EvidenceRefAction operations from detail", async () => {
     const refresh = vi.fn();
     mocks.useV5Live.mockReturnValue({ data: evidenceDetail(), loading: false, refresh });

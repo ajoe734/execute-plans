@@ -56,6 +56,7 @@ import {
   type EvidenceOperationAction,
 } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
+import { isNotFoundError } from "@/lib/bff-v1/useLiveDetail";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import {
   dataSourceLiveEnabled,
@@ -3522,7 +3523,7 @@ const EvidenceSourceContexts = ({ detail }: { detail: ManagementEvidenceDetail }
 
 const EvidenceDetailView = ({ refId }: { refId: string }) => {
   const { t } = useTranslation();
-  const { data, loading, refresh } = useV5Live(
+  const { data, loading, error, refresh } = useV5Live(
     (signal) => refId ? mgmt.evidence.detailLiveOnly(refId, { signal }) : Promise.resolve(undefined),
     [refId],
     { cacheKey: `oversight.evidence.detail.${refId}` },
@@ -3548,11 +3549,17 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
   }
 
   if (!data) {
+    const notFound = Boolean(error) && isNotFoundError(error);
     return (
       <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.packetTitle")}>
         <header>
-          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.unavailableTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {notFound ? t("mgmt.evidence.detailNotFoundTitle") : t("mgmt.evidence.unavailableTitle")}
+          </h1>
           <p className="text-sm text-muted-foreground">{refId}</p>
+          {notFound && (
+            <p className="text-sm text-muted-foreground">{t("mgmt.evidence.detailNotFoundBody", { id: refId })}</p>
+          )}
         </header>
         <Card className="p-4">
           <Button asChild size="sm" variant="outline">

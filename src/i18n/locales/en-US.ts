@@ -4179,6 +4179,8 @@ export default {
       verificationMethod: "Verification method",
       loading: "Loading evidence detail…",
       unavailableTitle: "Evidence detail unavailable",
+      detailNotFoundTitle: "Evidence not found",
+      detailNotFoundBody: "Evidence {{id}} was not found. It may have been removed or the reference is incorrect.",
       ref: "Evidence ref",
       refOnlyHint: "This item is an evidence reference, not a packet that can be expanded directly in the console. Cross-check it from the source task or Evidence Explorer.",
       seeListAt: "See list at",
