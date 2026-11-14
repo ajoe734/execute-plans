@@ -1,0 +1,12 @@
+{
+  "task": "FE-CRAWL-OPAQUE-DETAIL-ID-20261114",
+  "scope": "Existing crawl entity-detail readiness now matches the opaque id by one decoded path segment, so route ':' and API '%3A' spellings of the same id are equal. Observer representation fix only; no hosted result is claimed fixed.",
+  "fix": "scripts/accept-management-hosted-production.mjs entityDataReady: read path must be <entity endpoint>/<single segment>; decodeURIComponent(segment) must equal decoded route segment. Encoded separators (%2F) stay inside one segment; literal percent (%25 vs %2525) and extra/raw '/' segments do not match.",
+  "unchanged": ["95+9 route set", "6000ms settle/navigation/performance budgets", "aggregate/data completeness", "live-id 404 still failing", "no timeout/skip/waiver"],
+  "notClaimed": ["remaining 34 datafail", "slow API/503/financial acceptance", "hosted delivery (soleOps owns)"],
+  "verification": {
+    "test": "npx vitest run src/test/accept-management-route-attribution.test.ts (real Chromium through production crawlRoute)",
+    "withFix": "49 passed",
+    "withoutFix": "retained colon-id passing case fails with entity_detail_data_missing; all controls unchanged"
+  }
+}
