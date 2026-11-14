@@ -170,17 +170,24 @@ function isBffUrl(url) {
   }
 }
 
-async function gotoRouteWithRetry(page, targetUrl, transport) {
+async function gotoRouteWithRetry(page, targetUrl, transport, beforeAttempt = () => {}) {
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     // The transport arms its request hold before draining, so renderer work
     // arriving after the drain cannot race this document replacement.
+    beforeAttempt(attempt);
     lastError = await transport.navigate(page, targetUrl, { timeout: ROUTE_TIMEOUT_MS });
     if (!lastError) return null;
     await page.waitForTimeout(750).catch(() => {});
   }
   return lastError;
 }
+
+// These routes deliberately have no finite route-specific BFF read. Shell/auth
+// reads and all other readiness/error rules still apply; no implicit exemption.
+const NO_ROUTE_DATA_READS = Object.freeze({
+  "/management/settings": "Local preferences and static forms; no route-specific BFF data is read.",
+});
 
 async function crawlRoute(page, route, { source, transport }) {
   const requests = [];
@@ -189,6 +196,33 @@ async function crawlRoute(page, route, { source, transport }) {
   const consoleErrors = [];
   const routeRequests = new Set();
   const dataReads = [];
+  const startedAt = Date.now();
+  const requestTimeline = new Map();
+  const navigationAttempts = [];
+  let attempt = 0;
+  let awaitingCommit = false;
+  let documentCommitted = false;
+  const elapsed = () => Date.now() - startedAt;
+  const clearDocumentReads = (reason) => {
+    for (const entry of requestTimeline.values()) {
+      if (entry.attributed) { entry.attributed = false; entry.exclusionReason = reason; }
+    }
+    requests.length = responses.length = failedRequests.length = dataReads.length = 0;
+    routeRequests.clear();
+  };
+  const beforeAttempt = (number) => {
+    attempt = number;
+    documentCommitted = false;
+    awaitingCommit = false;
+    clearDocumentReads("superseded_navigation_attempt");
+    navigationAttempts.push({ attempt, startedAtMs: elapsed(), committedAtMs: null });
+  };
+  const onFrameNavigated = (frame) => {
+    if (frame !== page.mainFrame() || !awaitingCommit) return;
+    awaitingCommit = false;
+    documentCommitted = true;
+    navigationAttempts.at(-1).committedAtMs = elapsed();
+  };
   const isDataUrl = (url) => {
     const pathname = new URL(url).pathname;
     return isBffUrl(url) && pathname.startsWith("/bff/") &&
@@ -197,14 +231,42 @@ async function crawlRoute(page, route, { source, transport }) {
   };
 
   const onRequest = (req) => {
+    // Playwright emits the main-frame commit before the new document's script
+    // requests. A frame object survives document replacement: frame equality
+    // alone would credit the previous document's pre-commit reads/aborts.
+    let mainDocument = false;
+    try { mainDocument = req.frame() === page.mainFrame(); } catch { /* service worker */ }
+    if (mainDocument && req.isNavigationRequest()) {
+      clearDocumentReads("replaced_document");
+      awaitingCommit = true;
+      documentCommitted = false;
+    }
     const url = req.url();
-    if (isBffUrl(url)) requests.push({ method: req.method(), url });
+    if (!isBffUrl(url)) return;
+    const attributed = documentCommitted && mainDocument;
+    const timingStart = req.timing().startTime;
+    const entry = {
+      attempt, method: req.method(), url,
+      attributed, exclusionReason: attributed ? null : "outside_current_document",
+      startedAtMs: timingStart > 0 ? timingStart - startedAt : elapsed(),
+      observedAtMs: elapsed(), responseAtMs: null, finishedAtMs: null, failedAtMs: null,
+      status: null, failure: null,
+    };
+    requestTimeline.set(req, entry);
+    if (!attributed) return;
+    requests.push({ method: req.method(), url });
     if (isDataUrl(url) && req.method() === "GET") routeRequests.add(req);
   };
   const onResponse = (res) => {
+    const req = res.request();
+    const entry = requestTimeline.get(req);
+    if (!entry) return; // Never credit an in-flight request from the prior route.
+    entry.responseAtMs = elapsed();
+    entry.status = res.status();
+    if (!entry.attributed || entry.attempt !== attempt) return;
     const url = res.url();
-    if (isBffUrl(url)) responses.push({ status: res.status(), method: res.request().method(), url });
-    if (!routeRequests.has(res.request())) return;
+    responses.push({ status: res.status(), method: req.method(), url });
+    if (!routeRequests.has(req)) return;
     const read = { path: new URL(url).pathname, status: res.status(), complete: false, valid: false };
     dataReads.push(read);
     // Do not keep response bodies or credentials. A response header alone does
@@ -214,13 +276,24 @@ async function crawlRoute(page, route, { source, transport }) {
     }, () => {}).finally(() => { read.complete = true; });
   };
   const onRequestFailed = (req) => {
-    const url = req.url();
-    if (isBffUrl(url)) failedRequests.push({ method: req.method(), url, failure: req.failure()?.errorText || "" });
+    const entry = requestTimeline.get(req);
+    if (!entry) return;
+    entry.failedAtMs = elapsed();
+    entry.failure = req.failure()?.errorText || "";
+    if (entry.attributed && entry.attempt === attempt) {
+      failedRequests.push({ method: req.method(), url: req.url(), failure: entry.failure });
+    }
+  };
+  const onRequestFinished = (req) => {
+    const entry = requestTimeline.get(req);
+    if (entry) entry.finishedAtMs = elapsed();
   };
   const onConsole = (msg) => {
     if (msg.type() === "error") consoleErrors.push(msg.text());
   };
 
+  page.on("framenavigated", onFrameNavigated);
+  page.on("requestfinished", onRequestFinished);
   page.on("request", onRequest);
   page.on("response", onResponse);
   page.on("requestfailed", onRequestFailed);
@@ -235,12 +308,12 @@ async function crawlRoute(page, route, { source, transport }) {
   let dataReasons = ["navigation_incomplete"];
 
   try {
-    const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport);
+    const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport, beforeAttempt);
     if (navErrorMaybe) throw navErrorMaybe;
     // Reuse the existing settle budget for auth, lazy-route resolution,
     // redirects and finite data. A long loading message is never readiness.
     const deadline = Date.now() + SETTLE_TIMEOUT_MS;
-    const expectedPath = expectedCanonicalPath(requestedPathname) || requestedPathname;
+    const expectedPath = expectedCanonicalPath(requestedPathname, route.path.slice(requestedPathname.length)) || requestedPathname;
     let ready = false;
     do {
       const snapshot = await page.evaluate(() => {
@@ -275,7 +348,7 @@ async function crawlRoute(page, route, { source, transport }) {
         (snapshot.busy || loading) && "loading_unresolved",
         dataError && "rendered_data_error",
         snapshot.content.trim().length <= 15 && "content_incomplete",
-        validReads.length === 0 && "no_completed_route_data",
+        validReads.length === 0 && !Object.hasOwn(NO_ROUTE_DATA_READS, requestedPathname) && "no_completed_route_data",
         (failedReads.length > 0 || apiFailure) && "api_data_failure",
         !entityDataReady && "entity_detail_data_missing",
         (dataReads.length !== routeRequests.size || dataReads.some((read) => !read.complete)) && "data_reads_incomplete",
@@ -315,6 +388,8 @@ async function crawlRoute(page, route, { source, transport }) {
       .catch(() => controls);
   }
 
+  page.off("framenavigated", onFrameNavigated);
+  page.off("requestfinished", onRequestFinished);
   page.off("request", onRequest);
   page.off("response", onResponse);
   page.off("requestfailed", onRequestFailed);
@@ -324,7 +399,7 @@ async function crawlRoute(page, route, { source, transport }) {
   const classifiedConsoleErrors = consoleErrors.map((text) => ({ text: text.slice(0, 240), kind: classifyConsoleError(text) }));
 
   let alias = null;
-  const expected = expectedCanonicalPath(requestedPathname);
+  const expected = expectedCanonicalPath(requestedPathname, route.path.slice(requestedPathname.length));
   if (expected) {
     const finalPathname = (finalUrl || "").split("?")[0];
     const redirected = finalPathname === expected;
@@ -346,7 +421,10 @@ async function crawlRoute(page, route, { source, transport }) {
     finalUrl,
     alias,
     controls,
-    dataCheck: { pass: status === "ok", reasons: dataReasons, reads: dataReads },
+    dataCheck: { pass: status === "ok", reasons: dataReasons, reads: dataReads,
+      noDataReadReason: NO_ROUTE_DATA_READS[requestedPathname] || null },
+    timing: { startedAt: new Date(startedAt).toISOString(), elapsedMs: elapsed(), navigationAttempts },
+    bffRequests: [...requestTimeline.values()],
     bffRequestCount: requests.length,
     bffResponseCount: responses.length,
     bffFailedCount: failedRequests.length,
@@ -361,6 +439,17 @@ async function crawlRoute(page, route, { source, transport }) {
     detailHonestyViolations: findings.honesty,
     textSampleLen: bodyText.trim().length,
   };
+}
+
+function requestTimingReport(routes) {
+  return routes.map((r) => [
+    `### ${r.path} (${r.status})`,
+    ``,
+    `| Attempt | Request | Attributed | Start | Response | Finish | Failure time | Status / failure |`,
+    `|---|---|---|---:|---:|---:|---:|---|`,
+    ...r.bffRequests.map((q) => `| ${q.attempt} | ${q.method} ${new URL(q.url).pathname} | ${q.attributed} | ${q.startedAtMs} | ${q.responseAtMs} | ${q.finishedAtMs} | ${q.failedAtMs} | ${q.status ?? ""} ${q.failure ?? ""} |`),
+    ``,
+  ].join("\n"));
 }
 
 async function discoverLiveNav(page, transport) {
@@ -789,6 +878,11 @@ async function main() {
       ...dataFailRoutes.map((r) => `- \`${r.path}\`: ${r.dataCheck.reasons.join(", ")}`),
       ...liveIdDataFailures.map((r) => `- entity discovery \`${r.entity}\`: status ${r.status}, invalid or missing list data`),
     ].join("\n") : "None",
+    ``,
+    `## Per-route BFF request timings`,
+    ``,
+    `Times are milliseconds from each route's start; null means the event was not observed. Excluded previous-document requests are diagnostic only.`,
+    ...requestTimingReport(allResults),
     ``,
     `## Alias direct-render failures`,
     ``,

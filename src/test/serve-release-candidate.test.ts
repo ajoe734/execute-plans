@@ -191,6 +191,25 @@ describe("serve-release-candidate", () => {
     expect(await missingAsset.text()).toBe("Not Found\n");
   });
 
+  it.each([
+    "/management/strategies/ptt-stock-M.1794513294.A.432",
+    "/management/strategies/id.json?tab=detail",
+    "/some-route/entity.with.dots",
+  ])("serves the SPA shell for dotted route %s", async (routePath) => {
+    const response = await fetch(`${serverInfo.origin}${routePath}`, { headers: { Accept: "text/html" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await response.text()).toContain("candidate shell");
+  });
+
+  it.each(["/assets/missing", "/assets/nested/missing.json", "/assets", "/missing.js"])(
+    "keeps missing asset %s a 404 even for HTML requests", async (assetPath) => {
+      const response = await fetch(`${serverInfo.origin}${assetPath}`, { headers: { Accept: "text/html" } });
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("Not Found\n");
+    },
+  );
+
   it("rejects mutations, plain and encoded traversal, and symlink escapes", async () => {
     const mutation = await rawRequest(serverInfo.origin, "/deployment.json", "POST");
     expect(mutation.status).toBe(405);
