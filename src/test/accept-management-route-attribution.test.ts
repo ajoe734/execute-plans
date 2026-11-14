@@ -561,3 +561,60 @@ describe("opaque entity detail id identity through the production crawl (real Ch
     expect(result.status).toBe("datafail");
   }, 20_000);
 });
+
+describe("returned crawl evidence is frozen at its readiness verdict (real Chromium)", () => {
+  const listen = (server: ReturnType<typeof createServer>) =>
+    new Promise<number>((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port)));
+  async function scenario(mode: "complete" | "late" | "cancel") {
+    const pending: Array<import("node:http").ServerResponse> = [];
+    const cors = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
+    const bffServer = createServer((_req, res) => {
+      if (mode === "complete") { res.writeHead(200, cors); res.end('{"items":[]}'); return; }
+      res.writeHead(200, cors); res.write('{"items":['); pending.push(res); // finite 200, body still incomplete
+    });
+    const bffOrigin = `http://127.0.0.1:${await listen(bffServer)}`;
+    const feServer = createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(`<main>Finite route content is ready and visible</main><script>fetch('${bffOrigin}/bff/current').catch(()=>{})</script>`);
+    });
+    const fe = `http://127.0.0.1:${await listen(feServer)}`;
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      const result = await harness(fe, mode === "complete" ? "1500" : "400", bffOrigin).crawlRoute(
+        page, { path: "/management/performance" }, {
+          source: "baseline-or-live-nav",
+          transport: { navigate: async (_p: unknown, target: string) => { await page.goto(target, { waitUntil: "commit" }); await page.waitForLoadState("domcontentloaded"); return null; } },
+        });
+      const atReturn = JSON.stringify(result);
+      if (mode === "late") { for (const res of pending) res.end("]}"); }
+      if (mode === "cancel") { await page.goto("about:blank"); }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Crawl another page with the same page object, then compare again.
+      await page.goto(`${fe}/other`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return { result, atReturn, after: JSON.stringify(result) };
+    } finally {
+      await browser.close();
+      for (const res of pending) res.destroy();
+      bffServer.closeAllConnections(); feServer.closeAllConnections();
+      bffServer.close(); feServer.close();
+    }
+  }
+
+  it("keeps the completed-body positive control PASS and immutable", async () => {
+    const { result, atReturn, after } = await scenario("complete");
+    expect(result.status, atReturn).toBe("ok");
+    expect(result.dataCheck.reads).toEqual([expect.objectContaining({ complete: true, valid: true })]);
+    expect(after).toBe(atReturn);
+  }, 20_000);
+
+  it.each(["late", "cancel"] as const)("keeps %s finite-200 completion FAIL and byte-identical after settling", async (mode) => {
+    const { result, atReturn, after } = await scenario(mode);
+    expect(result.status, atReturn).toBe("datafail");
+    expect(result.dataCheck.pass).toBe(false);
+    expect(result.dataCheck.reasons).toContain("data_reads_incomplete");
+    expect(result.dataCheck.reads).toEqual([expect.objectContaining({ complete: false, valid: false })]);
+    expect(after).toBe(atReturn);
+  }, 20_000);
+});
