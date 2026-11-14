@@ -223,8 +223,17 @@ try {
 } catch (err) {
   error = String(err).replace(/\s+/g, " ").slice(0, 400);
 } finally {
-  await browser.close();
-  await transport?.settle();
+  // Pinned transport owns the close boundary: it holds new Request-stage
+  // pauses, drains pending interceptions, then closes the browser. Failures
+  // stay retained in transport.errors and are reported below.
+  let closeFailure = null;
+  if (transport) {
+    try { await transport.closeBrowser(browser); } catch (err) { closeFailure = err; }
+    try { await transport.settle(); } catch (err) { closeFailure ??= err; }
+    if (closeFailure && !transport.errors.length) transport.errors.push(String(closeFailure).replace(/\s+/g, " "));
+  } else {
+    await browser.close();
+  }
   if (!error && transport?.errors.length) error = `Pinned BFF transport failures: ${transport.errors.slice(0, 3).join("; ")}`.slice(0, 400);
 }
 
