@@ -40,6 +40,7 @@ import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
 import type { Watcher, DecisionJournalEntry } from "@/lib/bff-v1";
 import { Eye, BookOpen, User } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
+import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
 
 export const StrategyDetail = () => {
   const { id } = useParams();
@@ -215,6 +216,7 @@ export const StrategyDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (
               <>
+                <DiscoverySections record={s} testId="strategy-discovery" />
                 <Section>
                   <div className="mb-4 space-y-3">
                     <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("lifecycle.title")}</div>

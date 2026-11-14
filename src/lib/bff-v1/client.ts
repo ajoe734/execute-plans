@@ -157,6 +157,7 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
       code: "UNKNOWN_ERROR",
       message: `HTTP ${res.status}`,
       correlationId: headers["X-Request-Id"],
+      cause: ownerReasonFrom(json),
     });
   }
   return json as T;
@@ -167,6 +168,14 @@ function normaliseQuery(q?: BffRequest["query"]): Record<string, string> {
   if (!q) return out;
   for (const [k, v] of Object.entries(q)) if (v !== undefined) out[k] = String(v);
   return out;
+}
+
+/** Restored Agora owner routes fail closed with `{detail:{status:"unavailable",reason}}`; keep that recorded reason. */
+function ownerReasonFrom(value: unknown): string | undefined {
+  const detail = (value as { detail?: unknown } | undefined)?.detail;
+  if (typeof detail === "string" && detail) return detail;
+  const reason = (detail as { reason?: unknown } | undefined)?.reason;
+  return typeof reason === "string" && reason ? reason : undefined;
 }
 
 function safeJson(text: string): unknown {

@@ -36,6 +36,7 @@ import {
   bearerAuthorization,
   normalizeOptionalBearerToken,
 } from "./lib/bearer-token.mjs";
+import { installPinnedBffBearer, pinnedTargetProblem } from "./lib/pinned-browser-bff-bearer.mjs";
 import { BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS } from "./lib/management-routes.mjs";
 
 // --- argv / env --------------------------------------------------------
@@ -75,24 +76,20 @@ const CLICK_WRITE_CTAS = argv["click-write-ctas"] === "true" || process.env.PANT
 const STRICT_SOURCE_SCAN = process.env.PANTHEON_ACCEPT_STRICT_SOURCE_SCAN === "1";
 const LOAD_GATE_ONLY = argv["load-gate-only"] === "true";
 
-const OPERATOR_ID = process.env.PANTHEON_ACCEPT_OPERATOR_ID || "op-mgmt-gap-006";
-const OPERATOR_ROLES = (process.env.PANTHEON_ACCEPT_OPERATOR_ROLES || "operator,reviewer,approver").split(",").map((r) => r.trim()).filter(Boolean);
-// The hosted dev BFF's stub-auth allows only the `pantheon-dev` tenant (see
-// `/bff/me` -> tenant.allowed_ids). `e2e/helpers/auth.ts`'s DEFAULT_FE_TENANT_ID
-// ("tenant-dev") is a fixture-mock-only value for the CI-safe Playwright specs
-// and 403s against the real hosted BFF.
-const TENANT_ID = process.env.PANTHEON_TENANT_ID || "pantheon-dev";
+// Let the BFF select the authenticated tenant unless the caller explicitly
+// selects one. Apply that same selection to browser and Node read probes.
+const TENANT_ID = (process.env.PANTHEON_TENANT_ID || "").trim();
 const BEARER_TOKEN = normalizeOptionalBearerToken(
   process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || ""
 );
 
-const AUTH_STORAGE_KEYS = {
-  bearerToken: "pantheon.bff.bearerToken",
-  legacyBearerToken: "pantheon_operator_token",
-  tenantId: "pantheon.bff.tenantId",
-  legacyTenantId: "pantheon_tenant_id",
-  devOidcSession: "pantheon.e2e.devOidcSession",
-};
+// Release-gate credential boundary: a short-lived BFF bearer is released only to
+// the maintained dev BFF origin, and only while the browser target is the
+// maintained dev FE origin or the local exact-candidate preview. The token is
+// attached per-request to that BFF origin; it is never written to browser
+// storage (the retired bearer storage keys
+// are not read by the strict FE and are not recreated here).
+
 const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 function sleep(ms) {
@@ -164,8 +161,8 @@ function textFindings(text) {
 }
 
 function isBffUrl(url) {
-  if (!url.startsWith(BFF_BASE)) return false;
   try {
+    if (new URL(url).origin !== new URL(BFF_BASE).origin) return false;
     const pathname = new URL(url).pathname;
     return pathname.startsWith("/bff/") || ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname);
   } catch {
@@ -173,33 +170,48 @@ function isBffUrl(url) {
   }
 }
 
-async function gotoRouteWithRetry(page, targetUrl) {
+async function gotoRouteWithRetry(page, targetUrl, transport) {
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS });
-      return null;
-    } catch (err) {
-      lastError = err;
-      await page.waitForTimeout(750).catch(() => {});
-    }
+    // The transport arms its request hold before draining, so renderer work
+    // arriving after the drain cannot race this document replacement.
+    lastError = await transport.navigate(page, targetUrl, { timeout: ROUTE_TIMEOUT_MS });
+    if (!lastError) return null;
+    await page.waitForTimeout(750).catch(() => {});
   }
   return lastError;
 }
 
-async function crawlRoute(page, route, { source }) {
+async function crawlRoute(page, route, { source, transport }) {
   const requests = [];
   const responses = [];
   const failedRequests = [];
   const consoleErrors = [];
+  const routeRequests = new Set();
+  const dataReads = [];
+  const isDataUrl = (url) => {
+    const pathname = new URL(url).pathname;
+    return isBffUrl(url) && pathname.startsWith("/bff/") &&
+      !["/bff/me", "/bff/auth/readiness", "/bff/management/shell-summary"].includes(pathname) &&
+      !/\/(?:stream|events)(?:\/|$)/u.test(pathname);
+  };
 
   const onRequest = (req) => {
     const url = req.url();
     if (isBffUrl(url)) requests.push({ method: req.method(), url });
+    if (isDataUrl(url) && req.method() === "GET") routeRequests.add(req);
   };
   const onResponse = (res) => {
     const url = res.url();
     if (isBffUrl(url)) responses.push({ status: res.status(), method: res.request().method(), url });
+    if (!routeRequests.has(res.request())) return;
+    const read = { path: new URL(url).pathname, status: res.status(), complete: false, valid: false };
+    dataReads.push(read);
+    // Do not keep response bodies or credentials. A response header alone does
+    // not establish that finite route data arrived; open streams are excluded.
+    void res.json().then((body) => {
+      read.valid = body !== null && typeof body === "object" && !body.error && body.ok !== false && body.success !== false;
+    }, () => {}).finally(() => { read.complete = true; });
   };
   const onRequestFailed = (req) => {
     const url = req.url();
@@ -220,16 +232,59 @@ async function crawlRoute(page, route, { source }) {
   let navError = "";
   let finalUrl = "";
   let bodyText = "";
+  let dataReasons = ["navigation_incomplete"];
 
   try {
-    const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl);
+    const navErrorMaybe = await gotoRouteWithRetry(page, targetUrl, transport);
     if (navErrorMaybe) throw navErrorMaybe;
-    await page
-      .waitForFunction(() => (document.body?.innerText || "").trim().length > 15, undefined, { timeout: SETTLE_TIMEOUT_MS })
-      .catch(() => {});
-    await page.waitForTimeout(400);
-    finalUrl = await page.evaluate(() => window.location.pathname + window.location.search);
-    bodyText = (await page.locator("body").innerText().catch(() => "")) || "";
+    // Reuse the existing settle budget for auth, lazy-route resolution,
+    // redirects and finite data. A long loading message is never readiness.
+    const deadline = Date.now() + SETTLE_TIMEOUT_MS;
+    const expectedPath = expectedCanonicalPath(requestedPathname) || requestedPathname;
+    let ready = false;
+    do {
+      const snapshot = await page.evaluate(() => {
+        const content = document.querySelector("main") || document.body;
+        return {
+          path: window.location.pathname, finalUrl: window.location.pathname + window.location.search,
+          body: document.body?.innerText || "", content: content?.innerText || "",
+          busy: Boolean(document.querySelector('[data-testid="route-chunk-loading"]') ||
+            content?.matches('[aria-busy="true"], [data-state="loading"]') ||
+            content?.querySelector('[aria-busy="true"], [data-state="loading"]')),
+          login: Boolean(document.querySelector('input[type="password"]')),
+        };
+      });
+      finalUrl = snapshot.finalUrl;
+      bodyText = snapshot.body;
+      const loading = /(?:^|\n)\s*(?:Loading(?:\s*[.…]+)?|Verifying (?:Pantheon session|Agora access)[.…]*|(?:正在)?載入(?:中)?[.…]*|資料載入中[.…]*)\s*(?:$|\n)/iu.test(snapshot.content);
+      const dataError = /(?:^|\n)\s*(?:Failed to (?:load|fetch)|Unable to load|載入失敗|無法載入|資料讀取失敗)/iu.test(snapshot.content);
+      // Historical fixture ids may honestly render not-found. Live-id details
+      // must return real data; a 404 there is a failure.
+      const honestNotFound = route.kind === "detail-or-alias" && source === "baseline-or-live-nav" &&
+        /not found|找不到|不存在/iu.test(snapshot.content);
+      const validReads = dataReads.filter((read) => read.complete &&
+        ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
+      const failedReads = dataReads.filter((read) => read.complete && !validReads.includes(read));
+      const expectedDataPath = route.entity && ENTITY_LIST_ENDPOINTS[route.entity]
+        ? `${ENTITY_LIST_ENDPOINTS[route.entity]}/${route.path.split("?")[0].split("/").pop()}` : null;
+      const entityDataReady = !expectedDataPath || validReads.some((read) => read.path === expectedDataPath);
+      const apiFailure = responses.some((response) => response.status >= 400 && !(response.status === 404 && honestNotFound));
+      dataReasons = [
+        snapshot.path !== expectedPath && "route_or_redirect_unresolved",
+        snapshot.login && "auth_unresolved",
+        (snapshot.busy || loading) && "loading_unresolved",
+        dataError && "rendered_data_error",
+        snapshot.content.trim().length <= 15 && "content_incomplete",
+        validReads.length === 0 && "no_completed_route_data",
+        (failedReads.length > 0 || apiFailure) && "api_data_failure",
+        !entityDataReady && "entity_detail_data_missing",
+        (dataReads.length !== routeRequests.size || dataReads.some((read) => !read.complete)) && "data_reads_incomplete",
+      ].filter(Boolean);
+      ready = dataReasons.length === 0;
+      if (ready || Date.now() >= deadline) break;
+      await page.waitForTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
+    } while (true);
+    if (!ready) status = "datafail";
     if (bodyText.includes("畫面渲染失敗")) status = "crash";
     else if (bodyText.trim().length < 15) status = "blank";
   } catch (err) {
@@ -291,6 +346,7 @@ async function crawlRoute(page, route, { source }) {
     finalUrl,
     alias,
     controls,
+    dataCheck: { pass: status === "ok", reasons: dataReasons, reads: dataReads },
     bffRequestCount: requests.length,
     bffResponseCount: responses.length,
     bffFailedCount: failedRequests.length,
@@ -307,8 +363,8 @@ async function crawlRoute(page, route, { source }) {
   };
 }
 
-async function discoverLiveNav(page) {
-  await page.goto(`${FE_BASE}/management/cockpit`, { waitUntil: "domcontentloaded", timeout: ROUTE_TIMEOUT_MS }).catch(() => {});
+async function discoverLiveNav(page, transport) {
+  await transport.navigate(page, `${FE_BASE}/management/cockpit`, { timeout: ROUTE_TIMEOUT_MS });
   await page.waitForTimeout(1500);
   const hrefs = await page
     .evaluate(() => {
@@ -327,7 +383,7 @@ function authHeaders(token, tenantId) {
   return {
     Accept: "application/json",
     Authorization: bearerAuthorization(token),
-    "X-Tenant-Id": tenantId,
+    ...(tenantId ? { "X-Tenant-Id": tenantId } : {}),
     "X-Request-Id": `mgmt-gap-006-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   };
 }
@@ -379,13 +435,15 @@ async function resolveLiveIdRoutes() {
   for (const [entity, fixturePath] of entities) {
     const endpoint = ENTITY_LIST_ENDPOINTS[entity];
     const { status, body, error } = await fetchJson(`${BFF_BASE}${endpoint}`, authHeaders(BEARER_TOKEN, TENANT_ID));
-    if (status !== 200 || !body) {
-      results.push({ entity, endpoint, status, error: error || "non-200 or unparseable body", liveId: null });
+    const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data;
+    if (status !== 200 || !body || body.error || body.ok === false || body.success === false || !Array.isArray(items)) {
+      results.push({ entity, endpoint, status, error: error || "non-200 or invalid list data", liveId: null });
       continue;
     }
     const liveId = firstLiveId(body);
     if (!liveId) {
-      results.push({ entity, endpoint, status, liveId: null, note: "no live id resolvable (empty list)" });
+      results.push({ entity, endpoint, status, liveId: null,
+        ...(items.length === 0 ? { note: "no live id resolvable (empty list)" } : { error: "nonempty list has no resolvable id" }) });
       continue;
     }
     const segments = fixturePath.split("/");
@@ -537,46 +595,22 @@ async function main() {
     );
   }
 
+  const pinProblem = pinnedTargetProblem({ feBase: FE_BASE, bffBase: BFF_BASE });
+  if (pinProblem) throw new Error(`Refusing to release BFF credential: ${pinProblem}`);
+
   const chromium = await loadChromium();
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 
-  await context.addInitScript(
-    ({ keys, token, roles, operatorId, tenantId }) => {
-      const write = (target) => {
-        if (!target) return;
-        target.setItem(keys.bearerToken, token);
-        target.setItem(keys.legacyBearerToken, token);
-        target.setItem(keys.tenantId, tenantId);
-        target.setItem(keys.legacyTenantId, tenantId);
-        target.setItem(
-          keys.devOidcSession,
-          JSON.stringify({
-            aud: "pantheon-bff",
-            auth_time: Math.floor(Date.now() / 1000),
-            iss: "pantheon-e2e-dev-login",
-            roles,
-            sub: operatorId,
-            tenant_id: tenantId,
-          }),
-        );
-      };
-      try {
-        write(window.sessionStorage);
-        write(window.localStorage);
-      } catch {
-        // storage may be unavailable before a durable origin exists
-      }
-    },
-    { keys: AUTH_STORAGE_KEYS, token: BEARER_TOKEN, roles: OPERATOR_ROLES, operatorId: OPERATOR_ID, tenantId: TENANT_ID },
-  );
+  const transport = await installPinnedBffBearer(context, { token: BEARER_TOKEN, feBase: FE_BASE, bffBase: BFF_BASE, tenantId: TENANT_ID });
 
   const page = await context.newPage();
+  await transport.attachPage(page);
   page.setDefaultTimeout(ROUTE_TIMEOUT_MS);
   page.setDefaultNavigationTimeout(ROUTE_TIMEOUT_MS);
 
   console.log(`[accept-management-hosted-production] discovering live nav at ${FE_BASE}/management/cockpit ...`);
-  const liveNavHrefs = await discoverLiveNav(page);
+  const liveNavHrefs = await discoverLiveNav(page, transport);
 
   const routeMap = new Map();
   for (const route of BASELINE_ROUTES) routeMap.set(route.path, { path: route.path, kind: route.kind });
@@ -596,7 +630,7 @@ async function main() {
 
   const results = [];
   for (const route of routes) {
-    const result = await crawlRoute(page, route, { source: "baseline-or-live-nav" });
+    const result = await crawlRoute(page, route, { source: "baseline-or-live-nav", transport });
     results.push(result);
   }
 
@@ -605,11 +639,17 @@ async function main() {
   const liveIdResults = [];
   for (const resolved of liveIdResolution) {
     if (!resolved.routePath) continue;
-    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail" }, { source: `live-id:${resolved.entity}` });
+    const result = await crawlRoute(page, { path: resolved.routePath, kind: "live-id-detail", entity: resolved.entity }, { source: `live-id:${resolved.entity}`, transport });
     liveIdResults.push(result);
   }
 
-  await browser.close();
+  // Preserve the completed crawl even when closure/health fails. The helper
+  // closes in finally; retain its sanitized errors, never arbitrary raw errors.
+  let transportFailed = false;
+  try { await transport.closeBrowser(browser); }
+  catch { transportFailed = true; }
+  try { await transport.settle(); transport.assertHealthy(); }
+  catch { transportFailed = true; }
 
   console.log("[accept-management-hosted-production] running session/RBAC check ...");
   const sessionRbac = await sessionRbacCheck();
@@ -622,6 +662,8 @@ async function main() {
 
   const allResults = [...results, ...liveIdResults];
   const crashRoutes = allResults.filter((r) => r.status === "crash" || r.status === "blank" || r.status === "navfail");
+  const dataFailRoutes = allResults.filter((r) => !r.dataCheck.pass);
+  const liveIdDataFailures = liveIdResolution.filter((r) => r.error);
   const aliasFailRoutes = allResults.filter((r) => r.alias?.directRenderFail);
   const detailHonestyFailRoutes = allResults.filter((r) => r.detailHonestyViolations.length > 0);
   const seedFallbackArmedRoutes = allResults.filter((r) => r.mockFindings.some((m) => m.id === "seed_fallback_armed"));
@@ -643,6 +685,7 @@ async function main() {
 
   const gateChecks = [
     { label: "No route crashes, is blank, or fails to navigate.", status: crashRoutes.length === 0 ? "pass" : "fail", note: `count:${crashRoutes.length}` },
+    { label: "Every route and detail resolves auth/loading and completes its data checks.", status: dataFailRoutes.length === 0 && liveIdDataFailures.length === 0 ? "pass" : "fail", note: `routes:${dataFailRoutes.length}; discovery:${liveIdDataFailures.length}` },
     { label: "No known alias direct-renders instead of redirecting to its canonical path.", status: aliasFailRoutes.length === 0 ? "pass" : "fail", note: `count:${aliasFailRoutes.length}` },
     { label: "No detail route shows raw undefined/NaN/Invalid Date.", status: detailHonestyFailRoutes.length === 0 ? "pass" : "fail", note: `count:${detailHonestyFailRoutes.length}` },
     { label: "No route claims seed fallback armed in strict-live mode.", status: seedFallbackArmedRoutes.length === 0 ? "pass" : "fail", note: `count:${seedFallbackArmedRoutes.length}` },
@@ -658,7 +701,7 @@ async function main() {
     },
   ];
 
-  const hardFail = gateChecks.some((c) => c.status === "fail");
+  const hardFail = transportFailed || gateChecks.some((c) => c.status === "fail");
   const overall = hardFail ? "fail" : gateChecks.some((c) => c.status === "warn") ? "warn" : gateChecks.some((c) => c.status === "missing") ? "missing" : "pass";
   const pass = !hardFail;
 
@@ -684,10 +727,11 @@ async function main() {
     loadGate,
     sourceScan: { ...sourceScan, findings: sourceScan.findings.slice(0, 200) },
     gateChecks,
+    pinnedTransport: { pass: !transportFailed, errors: transport.errors, terminatedBeforeSend: transport.terminatedBeforeSend },
     result: {
       pass,
       overall,
-      failures: gateChecks.filter((c) => c.status === "fail").map((c) => c.label),
+      failures: [...(transportFailed ? ["Pinned BFF transport failed."] : []), ...gateChecks.filter((c) => c.status === "fail").map((c) => c.label)],
       warnings: gateChecks.filter((c) => c.status === "warn").map((c) => c.label),
       missing: gateChecks.filter((c) => c.status === "missing").map((c) => c.label),
     },
@@ -724,9 +768,19 @@ async function main() {
     `|---|---|---|`,
     ...gateChecks.map((c) => `| ${c.status} | ${c.label} | ${c.note} |`),
     ``,
+    `Pinned BFF transport: **${transportFailed ? "fail" : "pass"}**`,
+    ...transport.errors.map((error) => `- ${error}`),
+    ``,
     `## Failing / crashed / blank routes`,
     ``,
     crashRoutes.length ? crashRoutes.map((r) => `- \`${r.path}\` -> status=${r.status} error="${r.navError}"`).join("\n") : "None",
+    ``,
+    `## Route and detail data failures`,
+    ``,
+    dataFailRoutes.length || liveIdDataFailures.length ? [
+      ...dataFailRoutes.map((r) => `- \`${r.path}\`: ${r.dataCheck.reasons.join(", ")}`),
+      ...liveIdDataFailures.map((r) => `- entity discovery \`${r.entity}\`: status ${r.status}, invalid or missing list data`),
+    ].join("\n") : "None",
     ``,
     `## Alias direct-render failures`,
     ``,

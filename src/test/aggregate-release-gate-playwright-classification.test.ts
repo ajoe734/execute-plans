@@ -85,7 +85,7 @@ describe("release gate Playwright classification", () => {
       gates["0"].find((check) =>
         check.label.includes("Auth token or test OIDC"),
       ),
-    ).toMatchObject({ status: "warn" });
+    ).toMatchObject({ status: "advisory_fail" });
     expect(
       gates["5"].find(
         (check) => check.label === "No unexpected Playwright failures.",

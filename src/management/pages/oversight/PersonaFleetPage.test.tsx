@@ -5,7 +5,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import { mgmt, type ManagementPersonaFleetPage, type ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import { adaptManagementPersonaFleet, mgmt, type ManagementPersonaFleetPage, type ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { PersonaFleetPage } from "./_core";
 
 const mocks = vi.hoisted(() => ({
@@ -1085,7 +1085,7 @@ describe("PersonaFleetPage", () => {
     expect(headerCells[8]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
     expect(headerCells[9]).toHaveClass("min-w-[130px]", "whitespace-nowrap");
     expect(headerCells[10]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
-    expect(headerCells[12]).toHaveClass("min-w-[140px]", "whitespace-nowrap", "pr-7");
+    expect(headerCells[13]).toHaveClass("min-w-[140px]", "whitespace-nowrap", "pr-7");
     expect(noneRowCells[0]).toHaveClass(
       "sticky",
       "left-0",
@@ -1099,7 +1099,7 @@ describe("PersonaFleetPage", () => {
     expect(noneRowCells[8]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
     expect(noneRowCells[9]).toHaveClass("min-w-[130px]", "whitespace-nowrap");
     expect(noneRowCells[10]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
-    expect(noneRowCells[12]).toHaveClass("min-w-[140px]", "whitespace-nowrap", "pr-7");
+    expect(noneRowCells[13]).toHaveClass("min-w-[140px]", "whitespace-nowrap", "pr-7");
 
     expect(screen.getByTestId("fleet-data-scope-persona-none-review")).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(screen.getByTestId("fleet-purpose-persona-none-review")).toHaveClass("shrink-0", "whitespace-nowrap");
@@ -1136,5 +1136,25 @@ describe("PersonaFleetPage", () => {
     );
     expect(frozenCell.className).not.toContain("bg-primary/10");
     expect(frozenCell.className).not.toContain("group-hover:bg-primary/15");
+  });
+
+  it("shows controller-record cycle health per persona and unavailable without fabricating (FE-PERSONA-CYCLE-VIEWS-20261112)", () => {
+    // Rows go through the real adapter from BFF snake_case shape.
+    const raw = (id: string, health: Record<string, unknown>) => ({
+      ...fleetRow(id, `Name ${id}`), persona_id: id, persona_cycle_health: health,
+    });
+    const rows = adaptManagementPersonaFleet([
+      raw("persona-ok", { status: "failed", last_packet_id: "pkt-9", stage: "failed", failure_reason: "risk_veto", updated_at: "2026-11-13T01:00:00Z", harness_version: 2, risk_status: "vetoed" }),
+      raw("persona-none", { status: "unavailable", last_packet_id: null, stage: null, failure_reason: "cycle_owner_unavailable" }),
+    ])!;
+    mockFleet({ data: rows, loading: false, refresh: vi.fn() });
+    renderFleet("/management/persona-fleet");
+    const ok = screen.getByTestId("fleet-cycle-health-persona-ok");
+    expect(ok.textContent).toContain("failed");
+    expect(ok.textContent).toContain("risk_veto");
+    const none = screen.getByTestId("fleet-cycle-health-persona-none");
+    expect(none.textContent).toContain("無法讀取");
+    expect(none.textContent).toContain("cycle_owner_unavailable");
+    expect(none.querySelector('[class*="badge"], .inline-flex')).toBeNull();
   });
 });

@@ -8,11 +8,9 @@
 //   - /bff/logout                            (was /bff/session/logout)
 //   - /bff/approvals/{id}/decide             (was /bff/approvals/{id}/decision)
 //   - /bff/mcp-servers/{id}/import-tools     (new — replaces /bff/mcp-tools/import)
-//   - /bff/actions/{entityType}/{entityId}/{actionId} — canonical action endpoint
 //
-// Legacy nested per-entity action builders (strategyAction, personaAction, etc.)
-// remain only for in-process mock compatibility and are NOT canonical. Live
-// callers MUST use `actionCanonical(entityType, entityId, actionId)`.
+// Entity action builders and legacy aliases were removed (no callers); command
+// writes use `paths.commandsV1()` (`POST /bff/v1/commands`).
 
 const BASE = "/bff";
 
@@ -25,19 +23,6 @@ export const paths = {
   authReadiness: () => `${BASE}/auth/readiness`,
   authRefresh: () => `${BASE}/auth/refresh`,
   logout: () => `${BASE}/logout`,
-  /** @deprecated Alias of `me()` retained for legacy callers. */
-  sessionMe: () => `${BASE}/me`,
-  /** @deprecated Alias of `authRefresh()`. */
-  sessionRefresh: () => `${BASE}/auth/refresh`,
-  /** @deprecated Alias of `logout()`. */
-  sessionLogout: () => `${BASE}/logout`,
-
-  /**
-   * @deprecated Retired in U9 / BFF-CANONICAL-COMMAND-API-RETIREMENT-001.
-   * All command writes use `paths.commandsV1()` (`POST /bff/v1/commands`).
-   */
-  action: (entityType: string, entityId: string, actionId: string) =>
-    `${BASE}/actions/${enc(entityType)}/${enc(entityId)}/${enc(actionId)}`,
 
   /** GET action catalog (surviving read route). */
   actionCatalog: () => `${BASE}/actions`,
@@ -74,8 +59,6 @@ export const paths = {
     return `${BASE}/strategies${query ? `?${query}` : ""}`;
   },
   strategy: (id: string) => `${BASE}/strategies/${enc(id)}`,
-  /** @deprecated Use `paths.action("strategy", id, action)`. Kept for in-process mocks. */
-  strategyAction: (id: string, action: string) => `${BASE}/strategies/${enc(id)}/actions/${enc(action)}`,
 
   personas: () => `${BASE}/personas`,
   persona: (id: string) => `${BASE}/personas/${enc(id)}`,
@@ -83,23 +66,15 @@ export const paths = {
   personaRoutePolicy: (id: string) => `${BASE}/personas/${enc(id)}/route-policy`,
   personaEvaluations: (id: string) => `${BASE}/personas/${enc(id)}/evaluations`,
   personaMemory: (id: string) => `${BASE}/personas/${enc(id)}/memory`,
-  /** @deprecated Use `paths.action("persona", id, action)`. */
-  personaAction: (id: string, action: string) => `${BASE}/personas/${enc(id)}/actions/${enc(action)}`,
 
   capitalPools: () => `${BASE}/capital-pools`,
   capitalPool: (id: string) => `${BASE}/capital-pools/${enc(id)}`,
-  /** @deprecated Use `paths.action("capitalPool", id, action)`. */
-  capitalPoolAction: (id: string, action: string) => `${BASE}/capital-pools/${enc(id)}/actions/${enc(action)}`,
 
   rebalances: () => `${BASE}/rebalances`,
   rebalance: (id: string) => `${BASE}/rebalances/${enc(id)}`,
-  /** @deprecated Use `paths.action("rebalance", id, action)`. */
-  rebalanceAction: (id: string, action: string) => `${BASE}/rebalances/${enc(id)}/actions/${enc(action)}`,
 
   deployments: () => `${BASE}/deployments`,
   deployment: (id: string) => `${BASE}/deployments/${enc(id)}`,
-  /** @deprecated Use `paths.action("deployment", id, action)`. */
-  deploymentAction: (id: string, action: string) => `${BASE}/deployments/${enc(id)}/actions/${enc(action)}`,
 
   // ---- Evolution ----
   evolutionPrograms: () => `${BASE}/evolution-programs`,
@@ -117,8 +92,6 @@ export const paths = {
   approval: (id: string) => `${BASE}/approvals/${enc(id)}`,
   approvalDecide: (id: string) => `${BASE}/approvals/${enc(id)}/decide`,
   approvalsBatchDecide: () => `${BASE}/approvals/batch-decide`,
-  /** @deprecated Alias of `approvalDecide(id)` — final OpenAPI uses `/decide`. */
-  approvalDecision: (id: string) => `${BASE}/approvals/${enc(id)}/decide`,
   alerts: () => `${BASE}/alerts`,
   alertAcknowledge: (id: string) => `${BASE}/alerts/${enc(id)}/acknowledge`,
   incidents: () => `${BASE}/incidents`,
@@ -134,8 +107,6 @@ export const paths = {
   mcpServers: () => `${BASE}/mcp-servers`,
   mcpServerImportTools: (id: string) => `${BASE}/mcp-servers/${enc(id)}/import-tools`,
   mcpTools: () => `${BASE}/mcp-tools`,
-  /** @deprecated Use `mcpServerImportTools(serverId)` per final OpenAPI. */
-  mcpToolImport: () => `${BASE}/mcp-tools/import`,
   skills: () => `${BASE}/skills`,
   channels: () => `${BASE}/channels`,
   tools: () => `${BASE}/tools`,
@@ -405,6 +376,20 @@ export const paths = {
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:submit-review`,
   tradeLessonDecide: (personaId: string, lessonId: string) =>
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:decide`,
+
+  // ---- 2026-11-12 Agora learning surfaces (restored thin BFF routes) ----
+  agoraCommitteeSessions: () => `${BASE}/agora/committee/sessions`,
+  agoraCommitteeSession: (sessionId: string) => `${BASE}/agora/committee/sessions/${enc(sessionId)}`,
+  agoraCommitteeMemos: (sessionId: string) => `${BASE}/agora/committee/sessions/${enc(sessionId)}/memos`,
+  agoraCommitteeMemoPublish: (sessionId: string, memoId: string) =>
+    `${BASE}/agora/committee/sessions/${enc(sessionId)}/memos/${enc(memoId)}/publish`,
+  agoraMemoryReview: () => `${BASE}/agora/memory`,
+  agoraMemoryQuarantine: (memoryId: string) => `${BASE}/agora/memory/${enc(memoryId)}/actions/quarantine`,
+  agoraPersonaLab: (personaId: string, tail = "") => `${BASE}/agora/persona-lab/${enc(personaId)}${tail}`,
+  agoraHumanEvidenceSubmit: (kind: "signal-feedback" | "notes" | "insights" | "training-examples") =>
+    `${BASE}/agora/${kind}`,
+  agoraHumanEvidence: (evidenceId: string) => `${BASE}/agora/human-evidence/${enc(evidenceId)}`,
+  agoraPersonaHumanEvidence: (personaId: string) => `${BASE}/agora/personas/${enc(personaId)}/human-evidence`,
 
   // ---- 2026-07-12 Agora Interactions ----
   agoraInteractionsResolve: () => `${BASE}/agora/interactions/context:resolve`,

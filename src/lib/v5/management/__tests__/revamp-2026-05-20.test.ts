@@ -79,8 +79,8 @@ describe("PM-9 aggregate paths + PM-10 canonical write path", () => {
     expect(aggregates).toHaveLength(14);
     expect(aggregates.every((p) => p.startsWith("/bff/management/"))).toBe(true);
   });
-  it("paths.action builds the canonical /bff/actions/{type}/{id}/{action} shape", () => {
-    expect(paths.action("persona", "alpha", "suspend")).toBe("/bff/actions/persona/alpha/suspend");
+  it("writes use the canonical /bff/v1/commands path", () => {
+    expect(paths.commandsV1()).toBe("/bff/v1/commands");
   });
 });
 

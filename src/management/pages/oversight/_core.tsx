@@ -847,6 +847,7 @@ export const PersonaFleetPage = () => {
               <th className="min-w-[110px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="min-w-[130px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
               <th className="min-w-[110px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
               <th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.state")}</th>
+              <th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.cycleHealth", { defaultValue: "循環健康" })}</th>
               <th className="min-w-[140px] whitespace-nowrap py-2 pl-3 pr-7 text-right">{t("mgmt.fleet.actions")}</th>
             </tr>
           </thead>
@@ -1280,6 +1281,26 @@ export const PersonaFleetPage = () => {
                       </OptionalFleetLink>
                       );
                     })()}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2" data-testid={`fleet-cycle-health-${r.personaId}`}>
+                    {r.personaCycleHealth && r.personaCycleHealth.status !== "unavailable" ? (
+                      <span title={r.personaCycleHealth.failureReason ?? undefined}>
+                        <Badge variant="outline">{r.personaCycleHealth.status}</Badge>
+                        {r.personaCycleHealth.stage ? (
+                          <span className="ml-1 font-mono text-xs text-muted-foreground">{r.personaCycleHealth.stage}</span>
+                        ) : null}
+                        {r.personaCycleHealth.failureReason ? (
+                          <span className="ml-1 font-mono text-xs text-destructive">({r.personaCycleHealth.failureReason})</span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {t("mgmt.fleet.cycleUnavailable", { defaultValue: "無法讀取" })}
+                        {r.personaCycleHealth?.failureReason ? (
+                          <span className="ml-1 font-mono">({r.personaCycleHealth.failureReason})</span>
+                        ) : null}
+                      </span>
+                    )}
                   </td>
                   <td className="min-w-[140px] whitespace-nowrap py-2 pl-3 pr-7 text-right">
                     {!retired && (

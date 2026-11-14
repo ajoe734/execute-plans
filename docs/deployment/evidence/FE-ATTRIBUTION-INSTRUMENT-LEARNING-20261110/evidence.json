@@ -1,0 +1,61 @@
+{
+  "task_id": "FE-ATTRIBUTION-INSTRUMENT-LEARNING-20261110",
+  "title": "Attribution tab never renders instrument learning; holdings mislabels a missing mark as no average cost",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-ATTRIBUTION-INSTRUMENT-LEARNING-20261110",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "hosted_verification": {
+    "status": "not_run",
+    "statement": "The hosted page was not verified in a browser by this task; this file records local unit, component, contract-drift, i18n parity, typecheck, lint, and production build verification only."
+  },
+  "acceptance_evidence": {
+    "ac1_instrument_learning_and_instrument_breakdown_render": {
+      "status": "passed",
+      "detail": "PerformanceAttribution.tsx renders summary.instrument_learning as separate figures (direction_hit_rate with direction_hit_count over direction_graded_count, instrument_regret with instrument_regret_graded_count, margin_use, and decision_count, showing an em dash '—' for null values) and a per-decision table with decision_id, chosen_instrument_id, best_instrument_id, direction_hit, instrument_regret, margin_use, and chosen_pnl. It also renders summary.instrument_breakdown as rows with instrument_key, instrument_kind, contract_month, multiplier, margin_reserved, holding_count, market_value, total_pnl, unrealized_pnl, and realized_pnl directly from BFF values without recomputation. PerformanceAttribution.test.tsx covers both the real 2026-11-10 all-null hosted payload and a graded payload in en-US and zh-TW."
+    },
+    "ac2_adapter_snake_case_summary_and_contract_drift": {
+      "status": "passed",
+      "detail": "src/lib/v5/management/performanceAttribution.ts defines AttributionInstrumentLearningDecisionRow, AttributionInstrumentLearning, AttributionInstrumentBreakdownRow, and AttributionSummary keeping the snake_case BFF keys, and src/lib/bff-v1/management.ts (adaptPerformanceAttributionResult) attaches summary when present while preserving rows and period byte-for-byte when summary is absent. src/lib/v5/management/__tests__/performanceAttribution.test.ts and src/lib/bff-v1/__tests__/contract-drift.test.ts verify both present and absent summary shapes."
+    },
+    "ac3_portfolio_book_missing_mark_vs_no_average_cost": {
+      "status": "passed",
+      "detail": "src/management/pages/oversight/PortfolioBook.tsx computes missingUnrealizedLabel as noAverageCostLabel only when average_price itself is null (!hasAveragePrice) and markUnavailableLabel when average_price is present (e.g., when mark_status is unavailable or stale). PortfolioBook.test.tsx verifies the real 2026-11-10 stock future row (instrument_id ssf:SRF:202611, average_price 97.1, mark_status unavailable, unrealized_pnl null, currency TWD) renders Avg entry NT$97.10 and the mark unavailable explanation ('No price available' / '無可用報價') on Unrealized PnL, and shows 'Source reports no average cost' / '來源未提供平均成本' only when average_price is null."
+    },
+    "ac4_i18n_parity_and_existing_tests_unweakened": {
+      "status": "passed",
+      "detail": "Both src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts carry the 27 new mgmt.attribution.* keys (4343 keys in each locale, 0 only-in-en-US, 0 only-in-zh-TW). src/lib/v5/management/__tests__/i18nParity.test.ts passes (13/13) and all existing tests in PerformanceAttribution.test.tsx and PortfolioBook.test.tsx pass without modification."
+    },
+    "ac5_evidence_commands_and_hosted_disclaimer": {
+      "status": "passed",
+      "detail": "Exact validation commands and results are recorded below, and hosted_verification.statement states plainly that the hosted page was not verified in a browser by this task."
+    }
+  },
+  "verification_results": [
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "0 TypeScript errors across tsconfig.app.json and tsconfig.agora.json"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/lib/v5/management/performanceAttribution.ts src/lib/v5/management/__tests__/performanceAttribution.test.ts src/lib/bff-v1/management.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/management/pages/oversight/PerformanceAttribution.tsx src/management/pages/oversight/PerformanceAttribution.test.tsx src/management/pages/oversight/PortfolioBook.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts",
+      "exit_code": 0,
+      "summary": "0 ESLint errors or warnings across all 10 touched TypeScript and locale files"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/command-runtimes/30ae728a8b98eb135e2718c995307d48512aa80c npm run contract:drift",
+      "exit_code": 0,
+      "summary": "[contract-drift] Agora bundle aligned: 49 schemas, 99 routes, 75 sha256 entries"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/lib/v5/management/__tests__/performanceAttribution.test.ts src/management/pages/oversight/PerformanceAttribution.test.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/bff-v1/__tests__/management-pm12.test.ts",
+      "exit_code": 0,
+      "summary": "6 test files passed, 86 tests passed (performanceAttribution.test.ts 8, PerformanceAttribution.test.tsx 21, PortfolioBook.test.tsx 14, contract-drift.test.ts 11, i18nParity.test.ts 13, management-pm12.test.ts 19)"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "summary": "Production dev-target Vite bundle built cleanly"
+    }
+  ]
+}

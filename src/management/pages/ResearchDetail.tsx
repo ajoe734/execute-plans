@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1, mgmt, runActionSafe, BffError } from "@/lib/bff-v1";
+import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
@@ -342,6 +343,7 @@ export const ResearchDetail = () => {
                 <Section title={t("research.detail.objective")}>
                   <p className="text-sm leading-relaxed">{x.objective || x.hypothesis || "—"}</p>
                 </Section>
+                <DiscoverySections record={x} testId="research-discovery" />
                 <Section title={t("research.detail.runsTitle")}>
                   {Array.isArray(x.runs) && x.runs.length > 0 ? (
                     <div className="space-y-3" data-testid="research-task-runs">

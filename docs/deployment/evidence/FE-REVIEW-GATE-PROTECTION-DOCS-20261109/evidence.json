@@ -1,0 +1,342 @@
+{
+  "task_id": "FE-REVIEW-GATE-PROTECTION-DOCS-20261109",
+  "title": "Document the canonical review gate as a required check on execute-plans dev",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "recorded_at_utc": "2026-11-09T23:47:50Z",
+  "upstream_context": {
+    "task_id": "OPS-REVIEW-GATE-SHARED-IDENTITY-20261108",
+    "repository": "ajoe734/pantheon",
+    "pr_number": 7074,
+    "commit_sha": "a057663329f34d5f95b11ce1a66bdd33c23cddfc",
+    "summary": "The Pantheon review bridge records approve and reopen decisions as COMMENT reviews with proof tags under review_gate.github_review_identity=shared, and the shared verifier in ajoe734/pantheon@dev publishes the Pantheon canonical review gate commit status because review_gate.github_review_bridge_required is true."
+  },
+  "changes": [
+    "docs/conventions/GIT_WORKFLOW.md: updated section 6 table and branch protection description to match the 2026-11-09 gh api read-back of execute-plans dev and main (and upstream pantheon dev and master), stating that execute-plans dev requires four checks bound to the GitHub Actions app (app_id: 15368) including Pantheon canonical review gate (added 2026-11-09T23:36:52Z) with strict: true, a pull-request rule with 0 approvals, and enforce_admins.enabled: false, while execute-plans main does not require Pantheon canonical review gate; updated section 6.1 to document shared identity mode and residual risk (GitHub now refuses a merge into dev without a green gate, a holder of the shared GitHub credential can still deliberately push a proof tag or add the delivery:tooling label, and only a separate review identity closes that).",
+    ".github/workflows/pantheon-canonical-review-gate.yml: updated only the header comment to state that Pantheon canonical review gate is a required status check on execute-plans/dev (bound to the GitHub Actions app, app_id: 15368) and not on execute-plans/main, and that the shared Pantheon verifier publishes it while review_gate.github_review_bridge_required is true; every non-comment line stays byte-identical."
+  ],
+  "unchanged_boundaries": [
+    "No source code, test, or build configuration changes.",
+    "src/test/pantheon-canonical-review-workflow.test.ts is unchanged and passes all 26 tests.",
+    "Every non-comment line of .github/workflows/pantheon-canonical-review-gate.yml is byte-identical to HEAD.",
+    "Only docs/conventions/GIT_WORKFLOW.md, .github/workflows/pantheon-canonical-review-gate.yml, and this evidence file change."
+  ],
+  "branch_protection_readback_2026_11_09": {
+    "ajoe734/execute-plans": {
+      "dev": {
+        "command": "gh api repos/ajoe734/execute-plans/branches/dev/protection",
+        "gate_added_at_utc": "2026-11-09T23:36:52Z",
+        "raw": {
+          "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/dev/protection",
+          "required_status_checks": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/dev/protection/required_status_checks",
+            "strict": true,
+            "contexts": [
+              "Commit trailers",
+              "Generated files guard",
+              "Component merge gate",
+              "Pantheon canonical review gate"
+            ],
+            "contexts_url": "https://api.github.com/repos/ajoe734/execute-plans/branches/dev/protection/required_status_checks/contexts",
+            "checks": [
+              {
+                "context": "Commit trailers",
+                "app_id": 15368
+              },
+              {
+                "context": "Generated files guard",
+                "app_id": 15368
+              },
+              {
+                "context": "Component merge gate",
+                "app_id": 15368
+              },
+              {
+                "context": "Pantheon canonical review gate",
+                "app_id": 15368
+              }
+            ]
+          },
+          "required_pull_request_reviews": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/dev/protection/required_pull_request_reviews",
+            "dismiss_stale_reviews": false,
+            "require_code_owner_reviews": false,
+            "require_last_push_approval": false,
+            "required_approving_review_count": 0
+          },
+          "required_signatures": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/dev/protection/required_signatures",
+            "enabled": false
+          },
+          "enforce_admins": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/dev/protection/enforce_admins",
+            "enabled": false
+          },
+          "required_linear_history": {
+            "enabled": false
+          },
+          "allow_force_pushes": {
+            "enabled": false
+          },
+          "allow_deletions": {
+            "enabled": false
+          },
+          "block_creations": {
+            "enabled": false
+          },
+          "required_conversation_resolution": {
+            "enabled": false
+          },
+          "lock_branch": {
+            "enabled": false
+          },
+          "allow_fork_syncing": {
+            "enabled": false
+          }
+        }
+      },
+      "main": {
+        "command": "gh api repos/ajoe734/execute-plans/branches/main/protection",
+        "raw": {
+          "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/main/protection",
+          "required_status_checks": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/main/protection/required_status_checks",
+            "strict": true,
+            "contexts": [
+              "Commit trailers",
+              "Generated files guard",
+              "Smoke acceptance"
+            ],
+            "contexts_url": "https://api.github.com/repos/ajoe734/execute-plans/branches/main/protection/required_status_checks/contexts",
+            "checks": [
+              {
+                "context": "Commit trailers",
+                "app_id": 15368
+              },
+              {
+                "context": "Generated files guard",
+                "app_id": 15368
+              },
+              {
+                "context": "Smoke acceptance",
+                "app_id": 15368
+              }
+            ]
+          },
+          "required_pull_request_reviews": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/main/protection/required_pull_request_reviews",
+            "dismiss_stale_reviews": false,
+            "require_code_owner_reviews": false,
+            "require_last_push_approval": false,
+            "required_approving_review_count": 0
+          },
+          "required_signatures": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/main/protection/required_signatures",
+            "enabled": false
+          },
+          "enforce_admins": {
+            "url": "https://api.github.com/repos/ajoe734/execute-plans/branches/main/protection/enforce_admins",
+            "enabled": false
+          },
+          "required_linear_history": {
+            "enabled": false
+          },
+          "allow_force_pushes": {
+            "enabled": false
+          },
+          "allow_deletions": {
+            "enabled": false
+          },
+          "block_creations": {
+            "enabled": false
+          },
+          "required_conversation_resolution": {
+            "enabled": false
+          },
+          "lock_branch": {
+            "enabled": false
+          },
+          "allow_fork_syncing": {
+            "enabled": false
+          }
+        }
+      }
+    },
+    "ajoe734/pantheon": {
+      "dev": {
+        "command": "gh api repos/ajoe734/pantheon/branches/dev/protection",
+        "gate_added_at_utc": "2026-11-09T13:26:52Z",
+        "raw": {
+          "url": "https://api.github.com/repos/ajoe734/pantheon/branches/dev/protection",
+          "required_status_checks": {
+            "url": "https://api.github.com/repos/ajoe734/pantheon/branches/dev/protection/required_status_checks",
+            "strict": false,
+            "contexts": [
+              "Commit trailers",
+              "Runtime mirror guard",
+              "Smoke acceptance",
+              "Service suites",
+              "Pantheon canonical review gate"
+            ],
+            "contexts_url": "https://api.github.com/repos/ajoe734/pantheon/branches/dev/protection/required_status_checks/contexts",
+            "checks": [
+              {
+                "context": "Commit trailers",
+                "app_id": 15368
+              },
+              {
+                "context": "Runtime mirror guard",
+                "app_id": 15368
+              },
+              {
+                "context": "Smoke acceptance",
+                "app_id": 15368
+              },
+              {
+                "context": "Service suites",
+                "app_id": 15368
+              },
+              {
+                "context": "Pantheon canonical review gate",
+                "app_id": 15368
+              }
+            ]
+          },
+          "required_signatures": {
+            "url": "https://api.github.com/repos/ajoe734/pantheon/branches/dev/protection/required_signatures",
+            "enabled": false
+          },
+          "enforce_admins": {
+            "url": "https://api.github.com/repos/ajoe734/pantheon/branches/dev/protection/enforce_admins",
+            "enabled": true
+          },
+          "required_linear_history": {
+            "enabled": false
+          },
+          "allow_force_pushes": {
+            "enabled": false
+          },
+          "allow_deletions": {
+            "enabled": false
+          },
+          "block_creations": {
+            "enabled": false
+          },
+          "required_conversation_resolution": {
+            "enabled": false
+          },
+          "lock_branch": {
+            "enabled": false
+          },
+          "allow_fork_syncing": {
+            "enabled": false
+          }
+        }
+      },
+      "master": {
+        "command": "gh api repos/ajoe734/pantheon/branches/master/protection",
+        "raw": {
+          "url": "https://api.github.com/repos/ajoe734/pantheon/branches/master/protection",
+          "required_status_checks": {
+            "url": "https://api.github.com/repos/ajoe734/pantheon/branches/master/protection/required_status_checks",
+            "strict": true,
+            "contexts": [
+              "Commit trailers",
+              "Runtime mirror guard",
+              "Smoke acceptance"
+            ],
+            "contexts_url": "https://api.github.com/repos/ajoe734/pantheon/branches/master/protection/required_status_checks/contexts",
+            "checks": [
+              {
+                "context": "Commit trailers",
+                "app_id": 15368
+              },
+              {
+                "context": "Runtime mirror guard",
+                "app_id": 15368
+              },
+              {
+                "context": "Smoke acceptance",
+                "app_id": 15368
+              }
+            ]
+          },
+          "required_pull_request_reviews": {
+            "url": "https://api.github.com/repos/ajoe734/pantheon/branches/master/protection/required_pull_request_reviews",
+            "dismiss_stale_reviews": false,
+            "require_code_owner_reviews": false,
+            "require_last_push_approval": false,
+            "required_approving_review_count": 0
+          },
+          "required_signatures": {
+            "url": "https://api.github.com/repos/ajoe734/pantheon/branches/master/protection/required_signatures",
+            "enabled": false
+          },
+          "enforce_admins": {
+            "url": "https://api.github.com/repos/ajoe734/pantheon/branches/master/protection/enforce_admins",
+            "enabled": false
+          },
+          "required_linear_history": {
+            "enabled": false
+          },
+          "allow_force_pushes": {
+            "enabled": false
+          },
+          "allow_deletions": {
+            "enabled": false
+          },
+          "block_creations": {
+            "enabled": false
+          },
+          "required_conversation_resolution": {
+            "enabled": false
+          },
+          "lock_branch": {
+            "enabled": false
+          },
+          "allow_fork_syncing": {
+            "enabled": false
+          }
+        }
+      }
+    }
+  },
+  "validation": [
+    {
+      "command": "gh api repos/ajoe734/execute-plans/branches/dev/protection",
+      "exit_code": 0,
+      "result": "required_status_checks.strict=true, contexts=['Commit trailers', 'Generated files guard', 'Component merge gate', 'Pantheon canonical review gate'] (all app_id=15368), required_pull_request_reviews.required_approving_review_count=0, enforce_admins.enabled=false, allow_force_pushes.enabled=false, allow_deletions.enabled=false"
+    },
+    {
+      "command": "gh api repos/ajoe734/execute-plans/branches/main/protection",
+      "exit_code": 0,
+      "result": "required_status_checks.strict=true, contexts=['Commit trailers', 'Generated files guard', 'Smoke acceptance'] (all app_id=15368), required_pull_request_reviews.required_approving_review_count=0, enforce_admins.enabled=false, allow_force_pushes.enabled=false, allow_deletions.enabled=false"
+    },
+    {
+      "command": "gh api repos/ajoe734/pantheon/branches/dev/protection",
+      "exit_code": 0,
+      "result": "required_status_checks.strict=false, contexts=['Commit trailers', 'Runtime mirror guard', 'Smoke acceptance', 'Service suites', 'Pantheon canonical review gate'] (all app_id=15368), required_pull_request_reviews absent, enforce_admins.enabled=true, allow_force_pushes.enabled=false, allow_deletions.enabled=false"
+    },
+    {
+      "command": "gh api repos/ajoe734/pantheon/branches/master/protection",
+      "exit_code": 0,
+      "result": "required_status_checks.strict=true, contexts=['Commit trailers', 'Runtime mirror guard', 'Smoke acceptance'] (all app_id=15368), required_pull_request_reviews.required_approving_review_count=0, enforce_admins.enabled=false, allow_force_pushes.enabled=false, allow_deletions.enabled=false"
+    },
+    {
+      "command": "npx vitest run src/test/pantheon-canonical-review-workflow.test.ts",
+      "exit_code": 0,
+      "result": "Test Files 1 passed (1), Tests 26 passed (26)"
+    },
+    {
+      "command": "python3 -c 'import subprocess; head_lines = subprocess.check_output([\"git\", \"show\", \"HEAD:.github/workflows/pantheon-canonical-review-gate.yml\"], text=True).splitlines(True); cur_lines = open(\".github/workflows/pantheon-canonical-review-gate.yml\", encoding=\"utf-8\").readlines(); assert head_lines[:2] == cur_lines[:2]; head_on = head_lines.index(\"on:\\n\"); cur_on = cur_lines.index(\"on:\\n\"); assert all(l.startswith(\"#\") for l in cur_lines[2:cur_on-1]); assert cur_lines[cur_on-1] == \"\\n\"; assert \"\".join(head_lines[head_on:]) == \"\".join(cur_lines[cur_on:]); assert [l for l in head_lines if not l.startswith(\"#\")] == [l for l in cur_lines if not l.startswith(\"#\")]; print(\"OK: every non-comment line is byte-identical\")'",
+      "exit_code": 0,
+      "result": "OK: every non-comment line is byte-identical"
+    },
+    {
+      "command": "git diff --name-only HEAD -- src/",
+      "exit_code": 0,
+      "result": "(empty output; src/test/pantheon-canonical-review-workflow.test.ts and all src/ files unchanged)"
+    }
+  ]
+}

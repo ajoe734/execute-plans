@@ -45,6 +45,7 @@ import { evolutionMachine, type EvolutionState } from "@/lib/stateMachines";
 import { FitnessFormulaPanel } from "../components/detail/FitnessFormulaPanel";
 import { PromotionPanel } from "../components/detail/PromotionPanel";
 import { MutationRuleManager } from "../components/detail/MutationRuleManager";
+import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
 import { EvolutionCandidatesTab } from "../components/detail/EvolutionCandidatesTab";
 import { EvolutionFreezePanel } from "../components/detail/EvolutionFreezePanel";
 
@@ -688,6 +689,7 @@ export const EvolutionDetail = () => {
             label: t("section.overview"),
             content: (
               <div className="space-y-4">
+                <DiscoverySections record={e} testId="evolution-discovery" />
                 {actionError && (
                   <Card
                     role="alert"

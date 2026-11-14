@@ -66,4 +66,85 @@ describe("strict browser auth source contract", () => {
     expect(app).not.toContain("<Route element={<PlatformShellRoute />}>");
     expect(app).not.toContain("<ProtectedRoute><PersonaDetailRoute /></ProtectedRoute>");
   });
+
+  it("shares one lightweight pinned-bearer browser transport between both hosted probes", () => {
+    const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
+    const lib = read("scripts/lib/pinned-browser-bff-bearer.mjs");
+    expect(lib).not.toMatch(/(?:from|import\()\s*["']@?playwright/);
+    expect(lib).not.toContain("route.fetch");
+    expect(lib).toContain("Fetch.continueRequest");
+    expect(lib).toContain("Fetch.requestPaused");
+    expect(lib).not.toContain("route.continue({ headers");
+    expect(lib).not.toMatch(/node:https?/);
+    expect(lib).not.toMatch(/localStorage|sessionStorage|addInitScript/);
+    for (const script of ["scripts/probe-route-load-baseline.mjs", "scripts/accept-management-hosted-production.mjs"]) {
+      const src = read(script);
+      expect(src).toContain('from "./lib/pinned-browser-bff-bearer.mjs"');
+      expect(src).not.toMatch(/function (installPinnedBffBearer|pinnedTargetProblem|originOf)/);
+    }
+  });
+});
+
+
+describe("pinned native transport error propagation", () => {
+  it("records a failed actual CDP continue, fails that request, and redacts the token", async () => {
+    const { EventEmitter } = await import("node:events");
+    const { installPinnedBffBearer } = await import("../../scripts/lib/pinned-browser-bff-bearer.mjs");
+    const session = new EventEmitter();
+    const calls: string[] = [];
+    Object.assign(session, { send: async (method: string) => {
+      calls.push(method);
+      if (method === "Fetch.continueRequest") throw new Error("socket failure secret-test-token");
+    } });
+    const page = Object.assign(new EventEmitter(), { isClosed: () => false });
+    const context = Object.assign(new EventEmitter(), { pages: () => [page], newCDPSession: async () => session });
+    const transport = await installPinnedBffBearer(context, { token: "secret-test-token", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
+    session.emit("Fetch.requestPaused", { requestId: "one", request: {
+      url: "https://api.dev.mvl-cap.tw/bff/events/stream?private=query-secret",
+      headers: { Cookie: "cookie-secret", Authorization: "header-secret" },
+    } });
+    await transport.settle();
+    expect(() => transport.assertHealthy()).toThrow(/CDP continueRequest.*socket failure \[REDACTED\]/);
+    expect(calls).toEqual(["Network.enable", "Page.enable", "Performance.enable", "Page.getFrameTree", "Fetch.enable", "Fetch.continueRequest", "Fetch.failRequest"]);
+    expect(transport.errors.join()).not.toContain("secret-test-token");
+    expect(transport.errors.join()).not.toMatch(/query-secret|cookie-secret|header-secret|\?private/);
+    const detail = JSON.parse(transport.errors[0].match(/CDP continueRequest (\{.*\}):/)![1]);
+    expect(detail).toMatchObject({ interceptionId: "one", networkId: null,
+      origin: "https://api.dev.mvl-cap.tw", path: "/bff/events/stream",
+      pausePhase: "active", issuePhase: "active",
+      rejectionPhase: "active", queued: false, issued: true, bound: false,
+      sampledBeforeIssue: null, canceled: false });
+  });
+  it.each([
+    { name: "Request-stage exact BFF invalid id", path: "https://api.dev.mvl-cap.tw/bff/data?secret=query", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Invalid InterceptionId.", terminated: true },
+    { name: "response-stage invalid id", path: "https://api.dev.mvl-cap.tw/bff/data", responseStatusCode: 200, error: "Protocol error (Fetch.continueRequest): Invalid InterceptionId.", terminated: false },
+    { name: "foreign invalid id", path: "https://foreign.invalid/bff/data", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Invalid InterceptionId.", terminated: false },
+    { name: "other CDP error after closure", closed: true, path: "https://api.dev.mvl-cap.tw/bff/data", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Target closed", terminated: false },
+    { name: "other CDP error", path: "https://api.dev.mvl-cap.tw/bff/data", responseStatusCode: undefined, error: "Protocol error (Fetch.continueRequest): Invalid parameters", terminated: false },
+  ])("applies the pre-send rule only to $name", async ({ path, responseStatusCode, error, terminated, closed }) => {
+    const { EventEmitter } = await import("node:events");
+    const { installPinnedBffBearer } = await import("../../scripts/lib/pinned-browser-bff-bearer.mjs");
+    const session = Object.assign(new EventEmitter(), { send: async (method: string) => {
+      if (method === "Fetch.continueRequest") throw new Error(error);
+    } });
+    const page = Object.assign(new EventEmitter(), { isClosed: () => closed === true });
+    const context = Object.assign(new EventEmitter(), { pages: () => [page], newCDPSession: async () => session });
+    const transport = await installPinnedBffBearer(context, { token: "secret-test-token", feBase: "http://127.0.0.1:4173", bffBase: "https://api.dev.mvl-cap.tw" });
+    session.emit("Fetch.requestPaused", { requestId: "opaque-id", responseStatusCode, request: {
+      url: path, headers: { Cookie: "cookie-secret", Authorization: "header-secret" },
+    } });
+    await transport.settle();
+    if (terminated) {
+      transport.assertHealthy();
+      expect(transport.terminatedBeforeSend).toEqual([{
+        outcome: "terminated_before_send", interceptionId: "opaque-id", networkId: null,
+        path: "/bff/data", requestStage: "Request", pausePhase: "active", phase: "active", reason: "invalid_interception_id",
+      }]);
+    } else {
+      expect(() => transport.assertHealthy()).toThrow(error);
+      expect(transport.terminatedBeforeSend).toEqual([]);
+    }
+    expect(JSON.stringify(transport.terminatedBeforeSend)).not.toMatch(/query|cookie-secret|header-secret|secret-test-token/);
+  });
+
 });

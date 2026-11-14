@@ -1,6 +1,10 @@
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
 import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
+import { CommitteePage } from "@/agora/pages/learning/CommitteePage";
+import { MemoryReviewPage } from "@/agora/pages/learning/MemoryReviewPage";
+import { PersonaLabPage } from "@/agora/pages/learning/PersonaLabPage";
+import { FeedbackPage } from "@/agora/pages/learning/FeedbackPage";
 import { StrategyPerformancePage } from "@/agora/pages/strategy-performance/StrategyPerformancePage";
 import {
   StrategyWorkshopPage,
@@ -160,3 +164,8 @@ export function AgoraStrategyPerformanceRoute() {
 export function AgoraFallbackRoute() {
   return <Navigate to="/agora/trading-room" replace />;
 }
+
+export const AgoraCommitteeRoute = () => <CommitteePage />;
+export const AgoraMemoryRoute = () => <MemoryReviewPage />;
+export const AgoraPersonaLabRoute = () => <PersonaLabPage />;
+export const AgoraFeedbackRoute = () => <FeedbackPage />;

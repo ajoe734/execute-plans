@@ -86,6 +86,168 @@ export interface PersonaManagementSurfaceStatus {
   reason?: string | null;
 }
 
+/** Owner-shaped strategy pool read (BFF-PERSONA-POOL-VIEWS-20261112). Every section is null when unavailable. */
+export interface PoolMemberRecord {
+  artifact_ref: string;
+  checksum: string;
+  stage: "trial" | "active" | "removed" | string;
+  risk_weight: number | null;
+  baseline_ref: string | null;
+  joined_at?: string | null;
+  removed_at?: string | null;
+  removal_reason?: string | null;
+}
+export interface PoolVersionRecord {
+  tenant_id: string;
+  persona_id: string;
+  pool_version: number;
+  digest: string;
+  members: PoolMemberRecord[];
+  change_reason?: string | null;
+  created_at?: string | null;
+}
+export interface PoolNetMetrics {
+  total_return?: number | null;
+  sharpe_ratio?: number | null;
+  max_drawdown?: number | null;
+  observation_count?: number | null;
+  basis?: string | null;
+}
+export interface PoolBaselineComparison {
+  status: string;
+  reason?: string | null;
+  sharpe_delta?: number;
+  drawdown_delta?: number;
+  below_baseline_sharpe?: boolean;
+  exceeds_baseline_drawdown?: boolean;
+}
+export interface PoolMemberBookRow {
+  artifact_ref: string;
+  checksum: string;
+  stage: string;
+  risk_weight: number | null;
+  baseline_ref: string | null;
+  status: "ok" | "unavailable" | string;
+  reason: string | null;
+  book: {
+    net_of_costs?: PoolNetMetrics;
+    baseline_comparison?: PoolBaselineComparison;
+    [key: string]: unknown;
+  } | null;
+}
+export interface PoolHealthMeasure {
+  status: "known" | "unknown" | string;
+  value?: number | null;
+  reason?: string | null;
+}
+export interface PoolHealthRecord {
+  pool_version?: number;
+  window_trading_days?: number;
+  window_start?: string | null;
+  window_end?: string | null;
+  gross_utilisation?: PoolHealthMeasure;
+  drawdown_utilisation?: PoolHealthMeasure;
+  effective_bets?: PoolHealthMeasure;
+  idle_day_share?: PoolHealthMeasure;
+  demand_reasons?: string[];
+}
+export interface PoolCycleRecord {
+  packet_id: string;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  phase?: string | null;
+  failure_reason?: string | null;
+  decisions?: Array<Record<string, unknown>> | null;
+  pool_autonomy?: Record<string, unknown> | null;
+}
+export interface PoolDemandRecord {
+  demand_id: string;
+  persona_id?: string;
+  mandate?: string;
+  short_measure?: string;
+  pool_version?: number;
+  status?: string;
+  created_at?: string;
+  expires_at?: string;
+  [key: string]: unknown;
+}
+export interface PersonaStrategyPoolView {
+  current: PoolVersionRecord | null;
+  versions: PoolVersionRecord[] | null;
+  memberVirtualBooks: PoolMemberBookRow[] | null;
+  health: PoolHealthRecord | null;
+  cycles: PoolCycleRecord[] | null;
+  openDemands: PoolDemandRecord[] | null;
+}
+
+/** Owner-shaped cycle/memory/memo/harness read (BFF-PERSONA-CYCLE-VIEWS-20261112). Every section is null when unavailable. */
+export interface PersonaCycleHealth {
+  status: "running" | "completed" | "failed" | "unobserved" | "unavailable" | string;
+  last_packet_id: string | null;
+  stage: string | null;
+  failure_reason: string | null;
+  updated_at?: string | null;
+  harness_version?: number | null;
+  risk_status?: string | null;
+}
+export interface PersonaCyclePacket {
+  packet_id: string;
+  stage?: string | null;
+  updated_at?: string | null;
+  phase?: string | null;
+  failure_reason?: string | null;
+  harness_version?: number | null;
+}
+export interface PersonaMemoryEntry {
+  memory_id: string;
+  memory_type?: string | null;
+  written_at?: string | null;
+  source_event_id?: string | null;
+  summary?: string | null;
+}
+export interface PersonaConsultationMemo {
+  memo_id: string;
+  request_id?: string | null;
+  status?: string | null;
+  summary?: string | null;
+  recommendation?: string | null;
+  created_at?: string | null;
+  evidence_refs?: string[] | null;
+}
+export interface PersonaHarnessVersionRow {
+  schema_version?: number | string | null;
+  persona_id?: string;
+  version: number;
+  parent_version?: number | null;
+  patch_id?: string | null;
+  created_at?: string | null;
+  created_by?: string | null;
+  content_digest?: string | null;
+}
+export interface PersonaHarnessExperience {
+  memory_id: string;
+  source_event_id?: string | null;
+  written_at?: string | null;
+  summary?: string | null;
+  experience?: {
+    cue?: unknown;
+    lesson?: unknown;
+    outcome?: unknown;
+    confidence?: number | null;
+    evidence_refs?: string[] | null;
+    harness_version?: number | null;
+    proposal_ids?: string[] | null;
+  };
+}
+export interface PersonaCycleView {
+  cycle: { health: PersonaCycleHealth; packets: PersonaCyclePacket[] } | null;
+  memorySummary: { returned: number; limit: number; entries: PersonaMemoryEntry[] } | null;
+  consultationMemos: PersonaConsultationMemo[] | null;
+  harness: { active_version: number; versions: PersonaHarnessVersionRow[] } | null;
+  harnessExperiences: PersonaHarnessExperience[] | null;
+}
+
 export interface PersonaManagementEnvelope {
   data?: {
     persona?: Record<string, unknown> & {
@@ -110,6 +272,8 @@ export interface PersonaManagementEnvelope {
     capitalPools?: Array<Record<string, unknown>>;
     activeIncidents?: Array<Record<string, unknown>>;
     latestTelemetry?: Record<string, unknown> | null;
+    strategyPool?: PersonaStrategyPoolView | null;
+    personaCycle?: PersonaCycleView | null;
     health?: {
       status?: "healthy" | "degraded" | "critical" | "unknown";
       reasons?: string[];

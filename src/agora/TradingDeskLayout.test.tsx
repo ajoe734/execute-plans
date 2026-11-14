@@ -83,11 +83,15 @@ describe("TradingDeskLayout", () => {
     expect(screen.getByTestId("trading-desk-tab-bar")).toBeDefined();
   });
 
-  it("renders exactly three tab buttons", () => {
+  it("renders the three core tabs plus the four learning surface tabs", () => {
     renderTradingDesk();
     const tabBar = screen.getByTestId("trading-desk-tab-bar");
     const buttons = tabBar.querySelectorAll("button");
-    expect(buttons.length).toBe(3);
+    expect(buttons.length).toBe(7);
+    const labels = Array.from(buttons).map((b) => b.textContent ?? "");
+    for (const label of ["Committee", "Memory", "Persona Lab", "Feedback"]) {
+      expect(labels.some((text) => text.includes(label))).toBe(true);
+    }
   });
 
   it("navigates to strategy-workshop when that tab is clicked", () => {

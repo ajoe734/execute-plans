@@ -221,6 +221,7 @@ export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | unde
     review,
     approval,
     rejection,
+    ...(asRecord(record.discovery) ? { discovery: asRecord(record.discovery) } : {}),
     ...(allowedActions !== undefined
       ? {
           allowedActions,

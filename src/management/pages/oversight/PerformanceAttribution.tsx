@@ -16,6 +16,8 @@ import { useV5Live } from "@/management/pages/v5/useV5Live";
 import type { HoldingRow } from "@/lib/v5/management/portfolio";
 import {
   SUPPORTED_ATTRIBUTION_DIMENSIONS,
+  adaptAttributionInstrumentBreakdown,
+  adaptAttributionInstrumentLearning,
   confirmedAppliedPeriod,
   DATED_ATTRIBUTION_SOURCE_UNAVAILABLE,
   isSupportedAttributionDimension,
@@ -34,6 +36,15 @@ const fmtUsd = (n: number) =>
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
     : MISSING;
 const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : MISSING);
+const fmtBffNumber = (n?: number | null): string => {
+  if (n === undefined || n === null || typeof n !== "number" || !Number.isFinite(n)) return MISSING;
+  const amount = Object.is(n, -0) ? 0 : n;
+  const isInt = Number.isInteger(amount);
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: isInt ? 0 : 2,
+    maximumFractionDigits: isInt ? 0 : 6,
+  }).format(amount);
+};
 
 const PERIODS: AttributionPeriod[] = ["latest", "7d", "30d", "quarter", "ytd"];
 
@@ -501,6 +512,20 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
     () => (unsupportedDimension ? [] : (data?.rows ?? []).map(normalizePerformanceAttributionRow)),
     [data, unsupportedDimension],
   );
+  const instrumentLearning = useMemo(
+    () => (unsupportedDimension ? undefined : adaptAttributionInstrumentLearning(data?.summary?.instrument_learning)),
+    [data?.summary?.instrument_learning, unsupportedDimension],
+  );
+  const instrumentBreakdown = useMemo(
+    () => (unsupportedDimension ? undefined : adaptAttributionInstrumentBreakdown(data?.summary?.instrument_breakdown)),
+    [data?.summary?.instrument_breakdown, unsupportedDimension],
+  );
+  const formatInstrumentKind = (kind: string | null) => {
+    if (!kind) return MISSING;
+    if (kind === "cash_share") return t("mgmt.portfolio.instrumentKindCashShare");
+    if (kind === "stock_future") return t("mgmt.portfolio.instrumentKindStockFuture");
+    return kind;
+  };
   // Applied period comes from the BFF response, never from the selector.
   const periodState = data?.period;
   const appliedPeriod = periodState ? confirmedAppliedPeriod(periodState) : undefined;
@@ -766,6 +791,166 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
         </table>
         </ManagementTableScroll>
       </Card>
+
+      {instrumentLearning ? (
+        <Card className="p-4 space-y-4" data-testid="attribution-instrument-learning">
+          <header>
+            <h2 className="text-sm font-semibold text-foreground">{t("mgmt.attribution.instrumentLearningTitle")}</h2>
+            <p className="text-xs text-muted-foreground">{t("mgmt.attribution.instrumentLearningSubtitle")}</p>
+          </header>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded border border-border p-3" data-testid="attribution-learning-direction-hit-rate">
+              <div className="text-xs text-muted-foreground">{t("mgmt.attribution.directionHitRate")}</div>
+              <div className="text-lg font-mono text-foreground">
+                {instrumentLearning.direction_hit_rate !== null
+                  ? fmtPct(instrumentLearning.direction_hit_rate)
+                  : MISSING}
+              </div>
+              <div className="text-xs font-mono text-muted-foreground" data-testid="attribution-learning-direction-hit-counts">
+                {t("mgmt.attribution.directionHitCountsFmt", {
+                  hits: instrumentLearning.direction_hit_count,
+                  graded: instrumentLearning.direction_graded_count,
+                })}
+              </div>
+            </div>
+            <div className="rounded border border-border p-3" data-testid="attribution-learning-instrument-regret">
+              <div className="text-xs text-muted-foreground">{t("mgmt.attribution.instrumentRegret")}</div>
+              <div className="text-lg font-mono text-foreground">
+                {fmtBffNumber(instrumentLearning.instrument_regret)}
+              </div>
+              <div className="text-xs font-mono text-muted-foreground" data-testid="attribution-learning-instrument-regret-counts">
+                {t("mgmt.attribution.instrumentRegretGradedFmt", {
+                  graded: instrumentLearning.instrument_regret_graded_count,
+                })}
+              </div>
+            </div>
+            <div className="rounded border border-border p-3" data-testid="attribution-learning-margin-use">
+              <div className="text-xs text-muted-foreground">{t("mgmt.attribution.marginUse")}</div>
+              <div className="text-lg font-mono text-foreground">
+                {fmtBffNumber(instrumentLearning.margin_use)}
+              </div>
+            </div>
+            <div className="rounded border border-border p-3" data-testid="attribution-learning-decision-count">
+              <div className="text-xs text-muted-foreground">{t("mgmt.attribution.decisionCount")}</div>
+              <div className="text-lg font-mono text-foreground">
+                {fmtBffNumber(instrumentLearning.decision_count)}
+              </div>
+            </div>
+          </div>
+          <ManagementTableScroll minScrollWidth={960}>
+            <table className="w-full min-w-[960px] text-sm" data-testid="attribution-learning-decisions-table">
+              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
+                <tr>
+                  <th className="px-3 py-2">{t("mgmt.attribution.decisionId")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.chosenInstrument")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.bestInstrument")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.directionHit")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.instrumentRegret")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.marginUse")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.chosenPnl")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {instrumentLearning.decisions.map((decision, index) => (
+                  <tr
+                    key={`${decision.decision_id}-${index}`}
+                    className="border-b border-border/50"
+                    data-testid="attribution-learning-decision-row"
+                  >
+                    <td className="px-3 py-2 font-mono">{decision.decision_id}</td>
+                    <td className="px-3 py-2 font-mono">{decision.chosen_instrument_id ?? MISSING}</td>
+                    <td className="px-3 py-2 font-mono">{decision.best_instrument_id ?? MISSING}</td>
+                    <td className="px-3 py-2 font-mono">
+                      {decision.direction_hit === null
+                        ? MISSING
+                        : decision.direction_hit
+                          ? t("mgmt.attribution.directionHitYes")
+                          : t("mgmt.attribution.directionHitNo")}
+                    </td>
+                    <td className="px-3 py-2 font-mono">{fmtBffNumber(decision.instrument_regret)}</td>
+                    <td className="px-3 py-2 font-mono">{fmtBffNumber(decision.margin_use)}</td>
+                    <td className="px-3 py-2 font-mono">{fmtBffNumber(decision.chosen_pnl)}</td>
+                  </tr>
+                ))}
+                {instrumentLearning.decisions.length === 0 && (
+                  <tr>
+                    <td className="px-3 py-3 text-center text-muted-foreground" colSpan={7}>
+                      {t("mgmt.attribution.noGradedDecisions")}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </ManagementTableScroll>
+        </Card>
+      ) : null}
+
+      {instrumentBreakdown ? (
+        <Card data-testid="attribution-instrument-breakdown">
+          <header className="px-4 py-2 border-b border-border">
+            <h2 className="text-sm font-semibold text-foreground">{t("mgmt.attribution.instrumentBreakdownTitle")}</h2>
+          </header>
+          <ManagementTableScroll minScrollWidth={1280}>
+            <table className="w-full min-w-[1280px] text-sm" data-testid="attribution-instrument-breakdown-table">
+              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
+                <tr>
+                  <th className="px-3 py-2">{t("mgmt.attribution.instrumentKey")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.instrumentKind")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.contractMonth")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.multiplier")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.marginReserved")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.holdingCount")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.marketValue")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.totalPnl")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.unrealizedPnl")}</th>
+                  <th className="px-3 py-2">{t("mgmt.attribution.realizedPnl")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {instrumentBreakdown.map((item, index) => {
+                  const localizedKind = formatInstrumentKind(item.instrument_kind);
+                  return (
+                    <tr
+                      key={`${item.instrument_key}-${index}`}
+                      className="border-b border-border/50"
+                      data-testid="attribution-instrument-breakdown-row"
+                    >
+                      <td className="px-3 py-2 font-mono">{item.instrument_key}</td>
+                      <td className="px-3 py-2">
+                        {item.instrument_kind ? (
+                          <>
+                            <div>{localizedKind}</div>
+                            {localizedKind !== item.instrument_kind ? (
+                              <div className="font-mono text-xs text-muted-foreground">{item.instrument_kind}</div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="font-mono">{MISSING}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono">{item.contract_month ?? MISSING}</td>
+                      <td className="px-3 py-2 font-mono">{fmtBffNumber(item.multiplier)}</td>
+                      <td className="px-3 py-2 font-mono">{fmtBffNumber(item.margin_reserved)}</td>
+                      <td className="px-3 py-2 font-mono">{fmtBffNumber(item.holding_count)}</td>
+                      <td className="px-3 py-2 font-mono">{fmtBffNumber(item.market_value)}</td>
+                      <td className="px-3 py-2 font-mono">{fmtBffNumber(item.total_pnl)}</td>
+                      <td className="px-3 py-2 font-mono">{fmtBffNumber(item.unrealized_pnl)}</td>
+                      <td className="px-3 py-2 font-mono">{fmtBffNumber(item.realized_pnl)}</td>
+                    </tr>
+                  );
+                })}
+                {instrumentBreakdown.length === 0 && (
+                  <tr>
+                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={10}>
+                      {t("mgmt.pulse.noRows")}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </ManagementTableScroll>
+        </Card>
+      ) : null}
 
       {personaFocus && sourceDetails.length > 0 && (
         <Card>

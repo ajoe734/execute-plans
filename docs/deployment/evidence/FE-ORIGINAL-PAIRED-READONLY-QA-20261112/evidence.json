@@ -1,0 +1,61 @@
+{
+  "task": "FE-ORIGINAL-PAIRED-READONLY-QA-20261112",
+  "kind": "source-only acceptance tooling; NOT hosted/product/all-roles/financial/W1-W5 PASS",
+  "artifacts": {
+    "cli": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+    "tests": "src/test/persona-strategy-hosted-readonly.test.ts",
+    "cli_sha256": "c8354cbebe09cd56b46132ea3d5f83146bd718e08a38b7fc28530d5d5ae4e329",
+    "tests_sha256": "fd0df18e83a411cb7bccd7ef36b8466d31d623afdcb26d52d182e43262e3f3ef"
+  },
+  "source_references_inspected_fully_not_executed": [
+    "/tmp/pantheon-root01a15322-resume-20261111/four-profile-readonly.cjs",
+    "/tmp/pantheon-root01a15322-resume-20261111/strategy-readonly-acceptance.cjs",
+    "/tmp/compat-residual-probe.cjs (sha256 7adaffe7577b1841263cc53a98f242d2b7249839ce836095d18e8a953bb47fee; read-only code input, supplementary protocol ported, never executed)"
+  ],
+  "invocation": "node scripts/accept-persona-strategy-hosted-readonly.mjs --out-dir <private-dir> < input.json  (only argv is --out-dir; credentials stdin/RAM only)",
+  "input_contract": {
+    "profiles": "TEST_ADMIN/OPERATOR_A/OPERATOR_B/VIEWER {client_id, client_secret}",
+    "identity": "DEV_FE_URL, DEV_BFF_URL (https, mvl-cap.tw origins only)",
+    "expected": "fe, bff, root, pair, tenant_id, roles{per profile exact set}, persona_id (original query id; must occur in baseline), source_owner_registry{connector_ids, source_mode legacy_projection|governed_owner, meta_source?}, reconciliations? (exact path+pointer, owner, reason)",
+    "baseline_raw": "ORIGINAL strategies_baseline.json text supplied privately by caller (12 strategy + 1 data-sources)",
+    "baseline_identity": "{sha256} must equal sha256(baseline_raw)"
+  },
+  "output_contract": {
+    "stdout": "sanitized summary {file, pass, verdict, errors, role_errors}; exit 0 pass, 1 acceptance fail, 2 input/usage/runtime failure",
+    "private_files": "<out-dir>/paired-readonly-*/{result.json,current-responses.json,full-baseline-differences.json} (dir 0700, files 0600); no screenshots/trace/video",
+    "result.json": "per-role cold timings, routes, me identity, logout/me401; strategy warm 20 samples, 13 captures with request ids/UTC/sha256, 10-repeat samples, hide_retired, persona_detail, parity (exact_equal, documented_reconciliations separate, unreconciled), source hashes, blocked_writes, errors; supplementary{api_reads(9),retired_reads(4),views(4),identity,logout/me401}"
+  },
+  "protected_caller_integration": "Original protected GitHub dev workflow (existing secrets) pipes JSON on stdin after the pair is accepted; this task creates no workflow/secret and does no hosted run. Caller may need a separate small backend wiring task.",
+  "preserved_original_checks": {
+    "cold_each_of_four": "first Fleet API <=2000ms and visible table <=2500ms, fresh context/login, all four required",
+    "warm_fleet": "20 browser reads, nearest-rank p95 <=1000ms",
+    "per_query": "10 repeats default page and per-persona, p50 (mean of middle two) <1200ms",
+    "hide_retired": "<5000ms",
+    "persona_detail": "<6400ms",
+    "parity": "all 13 raw diffs retained; exact_equal never forced; documented reconciliations reported separately",
+    "fleet_typed_classification": "trading/regular/exclude filters + typed purpose/data_scope/classification_confirmed/archived",
+    "data_sources": "exact owner connector inventory; legacy: degraded+legacy_projection+commands false+no action fields+banner+no More actions; governed owner mode supported",
+    "errors": "no pageerror/failed/unexpected HTTP; only prelogin me/readiness 401 excluded; aborted requests recorded separately; a live request failure is never erased by a later unrelated navigation/close (no deferred reclassification); benign abort requires causal navigation/detach/close evidence at failure time; browser HTTP observation stays active through logout/context close (only the original prelogin me/readiness 401 is excluded; the direct APIRequestContext post-logout me 401 is asserted separately); late teardown HTTP errors fail the final verdict",
+    "writes": "only auth login/refresh/logout allowed; others blocked and reported",
+    "pair": "manifest accepted + strict BFF version before reads; identical pair before/after four-role/after batch",
+    "supplementary_original_report_protocol": "AFTER the measured phases, separate OPERATOR_A GUI login (not a 5th benchmark/profile): 9 canonical GETs (me, personas, strategies?page_size=5, deployments, runtimes, ranking-formulas, mcp-servers, mcp-tools, strategies/{live id}), 4 retired GETs (404/405 only, meaning recorded), 4 views (management/deployments, rankings, mcp, performance-attribution?tab=overview -> performance?tab=attribution) waiting API body + loading markers gone + 2 RAF; records status/count/readiness/text/elapsed; empty/degraded are honest observations. Failures keep out.pass false but do NOT enter verdict.all_acceptances_proven (release aggregation unchanged); verdict.supplementary_pass reported separately."
+  },
+  "intentional_deviations_from_private_sources": [
+    "machine-specific Playwright path -> package resolution (playwright, then @playwright/test)",
+    "hardcoded baseline path, persona id and tenant-dev -> caller-supplied inputs",
+    "screenshots removed (credentialed-playwright no-screenshot policy)",
+    "four-role failures aggregated per role instead of aborting at first role",
+    "reconciliation is additive reporting; raw exact_equal semantics unchanged"
+  ],
+  "local_verification": {
+    "command": "npx vitest run src/test/persona-strategy-hosted-readonly.test.ts",
+    "result": "37 passed (adds real-Chromium end-to-end late HTTP 500 during logout/close across four roles, admin batch and supplementary)",
+    "tsc_app_errors_in_new_files": 0,
+    "eslint": "clean",
+    "note": "loopback fixtures are explicitly not hosted proof"
+  },
+  "not_done": [
+    "no hosted run, no credentials used, no Env/SSH extraction, no workflow created",
+    "Root43215810588 untouched"
+  ]
+}

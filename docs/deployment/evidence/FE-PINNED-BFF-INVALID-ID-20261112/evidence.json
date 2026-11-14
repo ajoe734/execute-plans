@@ -1,0 +1,93 @@
+{
+  "task": "FE-PINNED-BFF-INVALID-ID-20261112",
+  "scope": "Local source and real-Chromium reproduction only. No hosted, SSH, provider, credential, Root or business-write activity.",
+  "hosted_acceptance": {
+    "status": "NOT_RUN_BY_THIS_TASK",
+    "note": "Original Root 43215810588 / a7ff971 / 352cb886 FE gate reported Fetch.continueRequest Invalid InterceptionId; hosted causation is not proven here. Candidate is not claimed accepted; redeploy and QA remain with the original STRAT Human/Ops owner."
+  },
+  "local_root_cause": "Chromium can deliver Fetch.requestPaused before Network.requestWillBeSent for the same network id (observed locally for XHR /held, e.g. network id 7152.2, in the full-suite run). The helper looked up the network entry only at pause time, found none, and therefore had no lifecycle binding or pre-command sample; a later real navigation-cancelled Invalid InterceptionId could not be proven and was recorded as a transport failure. Historical hosted ordering is unmeasured (unknown).",
+  "fix": "On requestPaused without a network entry, register an unbound placeholder under the network id; the later requestWillBeSent binds frame/loader onto that same object. Proof rules are unchanged (same-id cancellation timestamped no later than the pre-command Performance sample plus document replacement, same-document navigation or detach). An unbound request never gains proof and still fails closed. No global swallow, no assertHealthy removal, no timeout/SLA change.",
+  "files": [
+    "scripts/lib/pinned-browser-bff-bearer.mjs",
+    "e2e/hosted-bff-streaming-transport.spec.ts"
+  ],
+  "unchanged_callers": [
+    "scripts/accept-management-hosted-production.mjs",
+    "scripts/probe-route-load-baseline.mjs"
+  ],
+  "reproduction": {
+    "command": "PLAYWRIGHT_BROWSERS_PATH=<chromium 1223 cache> PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts",
+    "before_fix": "Full suite intermittently failed 2 of 6 runs (queued-positive, same-document and exact-82ff tests) with Pinned BFF transport failures: Fetch.continueRequest Invalid InterceptionId; instrumented runs showed the failing requests had no network entry at pause time. New deterministic regression (real Chromium, real event delivery deferred in order, nothing synthesized) fails on the pre-fix helper (exit non-zero, timed out).",
+    "after_fix": "Full spec exit 0; 5 consecutive repeats of the 18 non-aa17 tests exit 0; new positive and live-invalid-id negative regressions pass; all PR989 positive/negative regressions retained."
+  },
+  "other_checks": {
+    "vitest": "strict-browser-auth-source-contract, aggregate-release-gate-auth-truth, aggregate-release-gate-hosted-auth: 46 passed",
+    "eslint_changed_files": 0,
+    "tsc_noEmit": 0
+  },
+  "trace_policy": "No tokens, auth headers, URLs with data or business content recorded.",
+  "frame_detach_addendum": {
+    "root_cause": "For a real iframe removal Chromium emits Network.loadingFailed(canceled) BEFORE Page.frameDetached for the same network id. The helper's frameDetached handler required !request.failed, and requestfailed treated the detached-frame ERR_ABORTED as live, so detach proof was discarded.",
+    "fix": "frameDetached now marks detached for same-frame interceptions that have not yet had their pre-command Performance sample (request.sampled) and are not closed; a detach observed after the sample/command cannot excuse a live failure. requestfailed also accepts ERR_ABORTED when the request's frame is detached (checked after the existing 25ms delay). Same-id canceledAt<=pre-command sample rule unchanged; no blanket suppression.",
+    "heldSample_scope": "Test harness clears heldSample when the held continuation begins so a later navigation sample is not held.",
+    "new_tests": [
+      "iframe removal cancelling a held interception settles healthy (x3, positive)",
+      "live abort then later iframe removal stays actionable (negative: Invalid InterceptionId and ERR_ABORTED retained)"
+    ],
+    "commands": "PLAYWRIGHT_BROWSERS_PATH=<cache> PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts [--grep 'iframe removal']",
+    "exit_codes": {
+      "old_helper_c276a414_detach_positive": 1,
+      "new_helper_detach_tests_repeat3_twice": 0,
+      "new_helper_full_suite_24_passed": 0,
+      "vitest_auth_aggregate_46": 0,
+      "eslint_changed": 0
+    },
+    "old_trace": "loadingFailed(canceled, same network id) -> frameDetached -> Performance sample -> Fetch.continueRequest Invalid InterceptionId; assertHealthy retained GET /held net::ERR_ABORTED and CDP InvalidId",
+    "hosted": "No hosted acceptance claimed."
+  },
+  "observed_abort_then_detach_addendum": {
+    "review_finding": "P1 on 80d28fb8: detach arriving before the sample marked a previously observed live ERR_ABORTED failure as detach-caused, and requestfailed excused it via isDetached() after its 25ms delay; real Chromium repro (fixture review observed live abort then immediate detach, x3) left transport.errors=[] and assertHealthy passing.",
+    "measured_event_order": "Detach teardown: Page.frameSubtreeWillBeDetached -> Network.loadingFailed(canceled) -> Page.frameDetached. Live JS abort then later removal: Network.loadingFailed(canceled) -> frameSubtreeWillBeDetached -> frameDetached. Hosted ordering remains unmeasured (unknown).",
+    "fix": "Detach evidence is now causal: a cancellation is detach-caused only if Page.frameSubtreeWillBeDetached for the request's frame (or an ancestor) preceded its Network.loadingFailed. The arrival-order `sampled` gate and the post-delay req.frame().isDetached() excuse are removed; requestfailed consumes a per-url detach-cancel record instead. Same-id canceledAt<=pre-command-sample rule, navigation/same-document proofs and no-global-swallow unchanged.",
+    "new_test": "observed live abort then immediate iframe removal before sample stays actionable (x3, real Chromium; asserts ERR_ABORTED retained and Invalid InterceptionId thrown)",
+    "exit_codes": {
+      "reviewer_fixture_before_fix_80d28fb8": 1,
+      "reviewer_fixture_after_fix_repeat3": 0,
+      "full_browser_spec_25_passed": 0,
+      "vitest_auth_aggregate_46": 0,
+      "eslint_changed": 0,
+      "git_diff_check": 0
+    },
+    "hosted": "No hosted acceptance, credentials or deploy activity."
+  },
+  "same_url_frame_credit_addendum": {
+    "root_cause": "detachCancelled credits were keyed only by URL; a live aborted request in the main frame (same URL as a request in a detached iframe) consumed the iframe's detach credit, and the iframe's own failure was excused by changed generation, hiding the live ERR_ABORTED.",
+    "fix": "requestfailed may consume a detach credit only when the failed Playwright request's own frame isDetached(); a live frame's abort never consumes another frame's credit.",
+    "new_test": "same-URL frame detach credit cannot excuse a live abort in another frame (negative, x3, real Chromium, nothing synthesized)",
+    "exit_codes": {
+      "old_helper_7b45ff5d3_new_negative": 1,
+      "fixed_helper_new_negative_repeat3": 0,
+      "full_spec": "25 passed; 1 failed: pre-existing 'exact aa17 accept-management-hosted-production' timing test, which loads historical aa17 source via git and does not exercise the modified helper"
+    },
+    "command": "npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --grep 'same-URL frame detach' --repeat-each=3"
+  },
+  "exact_request_causal_addendum": {
+    "review_finding": "P1 on 28b18566: helper still consumed a URL-keyed detach credit using req.frame().isDetached() after the 25ms delay; live iframe A aborted before any detach, then B's genuine teardown credit plus A's later own removal excused A (2/3 runs false-green).",
+    "fix": "Detach credits and URL/frame matching removed. A BFF ERR_ABORTED is judged in Network.loadingFailed on that exact network id's own record: underDetach captured at the failure instant, same-document flag, per-frame navigation count since request start (Page.frameNavigated), or page/context closure. Playwright requestfailed only handles non-ABORTED failures, and ERR_ABORTED beyond the native per-URL count (no CDP record) falls back to closure/frame generation only. No new framework, timeout or SLA.",
+    "new_test": "a live frame abort stays actionable when a later own detach follows another frame's genuine teardown (real Chromium, two iframes, x5)",
+    "exit_codes": {
+      "full_browser_spec_27": 0,
+      "new_negative_repeat5": 0,
+      "strict_auth_contract_7": 0,
+      "eslint_changed": 0
+    },
+    "hosted": "No hosted acceptance, credentials or deploy; hosted cause remains unknown."
+  },
+  "failure_time_closure_addendum": {
+    "finding": "P1 at c0e8bf8b1: ERR_ABORTED judged 25ms later against future closed/page.isClosed or any later frameNavigated, so a live abort confirmed by Network.loadingFailed and requestfailed became healthy after later page.close/navigation.",
+    "fix": "Closure is captured at the failure instant; a trailing frameNavigated excuses only if a replacing document navigation (navigationLoader != request loaderId) was already in flight at failure.",
+    "reproduction": "PANTHEON_FE_BASE_URL=http://127.0.0.1:1 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --project=chromium -g 'already observed' --repeat-each=3",
+    "before": "reviewer fixture: errors=[] and assertHealthy passed 3/3 (negative suite exit 1)",
+    "after": "page-close and navigation negatives 6/6 pass; full streaming suite 27/27 pass before negatives appended; strict-browser-auth contract 7/7 pass"
+  }
+}

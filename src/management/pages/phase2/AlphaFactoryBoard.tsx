@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLiveStatus } from "@/lib/bff-v1";
 import { alphaFactory, type AlphaFactoryCard, type AlphaFactoryEnvelope } from "@/lib/bff-v1/alphaFactory";
+import { SampleMetricsPanel, LineagePanel, AttributionNote, TemplateEvaluationsPanel } from "@/management/components/discovery/DiscoveryPanels";
+import { normalizeDiscovery } from "@/lib/bff-v1/discovery";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { useT } from "@/platform/hooks";
@@ -212,6 +214,17 @@ export const AlphaFactoryBoardPage = () => {
           </div>
         )}
 
+        {(() => {
+          const discovery = normalizeDiscovery(c.discovery);
+          return (
+            <div className="mt-2 space-y-2" data-testid={`alpha-factory-discovery-${c.id}`} onClick={(e) => e.stopPropagation()}>
+              <SampleMetricsPanel view={discovery} testId={`alpha-factory-metrics-${c.id}`} collapseWhenAbsent />
+              <LineagePanel view={discovery} testId={`alpha-factory-lineage-${c.id}`} />
+              <AttributionNote view={discovery} testId={`alpha-factory-attribution-${c.id}`} />
+            </div>
+          );
+        })()}
+
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border">
           {strategyHref && (
             <Link
@@ -319,6 +332,9 @@ export const AlphaFactoryBoardPage = () => {
             ))}
           </div>
         )}
+        <div className="mt-4">
+          <TemplateEvaluationsPanel templates={envelope?.data.templates} testId="alpha-factory-templates" />
+        </div>
       </PageBody>
     </>
   );

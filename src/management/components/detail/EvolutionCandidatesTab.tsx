@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { bffV1 } from "@/lib/bff-v1";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
+import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 type StateFilter = "all" | EvolutionCandidate["state"];
@@ -117,6 +118,7 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
                     {inspect.mutationsApplied.length === 0 && <li className="text-muted-foreground">—</li>}
                   </ul>
                 </div>
+                <DiscoverySections record={inspect} testId="evolution-candidate-discovery" />
                 <NonProductionActionButton size="sm" status="owner endpoint exists with frontend wiring pending">{t("evolution.candidate.promote")}</NonProductionActionButton>
               </div>
             </>

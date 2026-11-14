@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import { mgmt } from "@/lib/bff-v1";
+import { adaptPerformanceAttributionResult } from "@/lib/bff-v1/management";
 import {
   BFF_ACCEPTED_ATTRIBUTION_DIMENSIONS,
   normalizePerformanceAttributionRow,
@@ -46,7 +47,9 @@ function attributionResult(rows: unknown[], period: Record<string, unknown> = LA
   return { rows, period };
 }
 
-function mockAttributionOnly(result: ReturnType<typeof attributionResult>) {
+function mockAttributionOnly(
+  result: ReturnType<typeof attributionResult> | PerformanceAttributionResult,
+) {
   mocks.useV5Live.mockImplementation((_fn: unknown, _deps: unknown, opts?: { cacheKey?: string }) => {
     if (opts?.cacheKey?.startsWith("oversight.performanceAttribution.")) {
       return { data: result, loading: false, refresh: vi.fn() };
@@ -1272,6 +1275,320 @@ describe("PerformanceAttributionPage", () => {
         screen.getByText(`${REAL_HOSTED_PERSONA_ROW.label} · operations summary`),
       ).toBeInTheDocument();
       expect(screen.queryByText("No rows.")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("instrument learning and instrument breakdown summary sections", () => {
+    it("renders the real 2026-11-10 all-null instrument_learning payload with — for null metrics and renders instrument_breakdown rows without recomputation in en-US and zh-TW", async () => {
+      const adapted = adaptPerformanceAttributionResult({
+        data: {
+          period: "latest",
+          summary: {
+            period: "latest",
+            requested_period: "latest",
+            period_windowed: false,
+            instrument_learning: {
+              direction_hit_rate: null,
+              direction_hit_count: 0,
+              direction_graded_count: 0,
+              instrument_regret: null,
+              instrument_regret_graded_count: 0,
+              margin_use: null,
+              decision_count: 0,
+              decisions: [],
+            },
+            instrument_breakdown: [
+              {
+                instrument_key: "ssf:SRF:202611",
+                instrument_id: "ssf:SRF:202611",
+                symbol: "0050.TWSE",
+                instrument_kind: "stock_future",
+                contract_month: "202611",
+                multiplier: 1000.0,
+                margin_reserved: 17400.0,
+                holding_count: 1,
+                market_value: null,
+                total_notional: null,
+                total_pnl: 0.0,
+                unrealized_pnl: null,
+                realized_pnl: 0.0,
+              },
+              {
+                instrument_key: "unassigned",
+                instrument_id: null,
+                symbol: "2330.TWSE",
+                instrument_kind: "cash_share",
+                contract_month: null,
+                multiplier: 1.0,
+                margin_reserved: null,
+                holding_count: 1,
+                market_value: -11200.0,
+                total_notional: 11200.0,
+                total_pnl: 295.0,
+                unrealized_pnl: 295.0,
+                realized_pnl: 0.0,
+              },
+            ],
+          },
+          items: [
+            {
+              id: "attribution:asset:0050.TWSE:latest",
+              dimension: "asset",
+              dimension_key: "0050.TWSE",
+              label: "0050.TWSE",
+              period: "latest",
+              metrics: { total_pnl: 0, pnl_contribution_pct: 0, notional_weight: 0, worst_drawdown: 0 },
+            },
+          ],
+        },
+        meta: {
+          period: {
+            requested: "latest",
+            applied: "latest",
+            windowed: false,
+            basis: "latest_runtime_telemetry_snapshot",
+          },
+        },
+      });
+
+      mockAttributionOnly(adapted);
+      const { unmount } = renderPage("/management/performance-attribution?period=latest");
+
+      const learningCard = screen.getByTestId("attribution-instrument-learning");
+      expect(within(learningCard).getByText("Instrument decision learning")).toBeInTheDocument();
+      expect(within(learningCard).getByTestId("attribution-learning-direction-hit-rate")).toHaveTextContent(
+        "Direction hit rate",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-direction-hit-rate")).toHaveTextContent("—");
+      expect(within(learningCard).getByTestId("attribution-learning-direction-hit-rate")).toHaveTextContent(
+        "0 / 0 graded",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-instrument-regret")).toHaveTextContent(
+        "Instrument regret",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-instrument-regret")).toHaveTextContent("—");
+      expect(within(learningCard).getByTestId("attribution-learning-instrument-regret")).toHaveTextContent(
+        "0 graded",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-margin-use")).toHaveTextContent("Margin use");
+      expect(within(learningCard).getByTestId("attribution-learning-margin-use")).toHaveTextContent("—");
+      expect(within(learningCard).getByTestId("attribution-learning-decision-count")).toHaveTextContent("Decisions");
+      expect(within(learningCard).getByTestId("attribution-learning-decision-count")).toHaveTextContent("0");
+      expect(within(learningCard).getByText("No counterfactual decisions recorded.")).toBeInTheDocument();
+
+      const breakdownCard = screen.getByTestId("attribution-instrument-breakdown");
+      expect(within(breakdownCard).getByText("Instrument breakdown")).toBeInTheDocument();
+      const breakdownRows = within(breakdownCard).getAllByTestId("attribution-instrument-breakdown-row");
+      expect(breakdownRows).toHaveLength(2);
+
+      const futCells = within(breakdownRows[0]).getAllByRole("cell");
+      expect(futCells[0]).toHaveTextContent("ssf:SRF:202611");
+      expect(futCells[1]).toHaveTextContent("Stock future");
+      expect(futCells[1]).toHaveTextContent("stock_future");
+      expect(futCells[2]).toHaveTextContent("202611");
+      expect(futCells[3]).toHaveTextContent("1,000");
+      expect(futCells[4]).toHaveTextContent("17,400");
+      expect(futCells[5]).toHaveTextContent("1");
+      expect(futCells[6]).toHaveTextContent("—");
+      expect(futCells[7]).toHaveTextContent("0");
+      expect(futCells[8]).toHaveTextContent("—");
+      expect(futCells[9]).toHaveTextContent("0");
+
+      const cashCells = within(breakdownRows[1]).getAllByRole("cell");
+      expect(cashCells[0]).toHaveTextContent("unassigned");
+      expect(cashCells[1]).toHaveTextContent("Cash share");
+      expect(cashCells[1]).toHaveTextContent("cash_share");
+      expect(cashCells[2]).toHaveTextContent("—");
+      expect(cashCells[3]).toHaveTextContent("1");
+      expect(cashCells[4]).toHaveTextContent("—");
+      expect(cashCells[5]).toHaveTextContent("1");
+      expect(cashCells[6]).toHaveTextContent("-11,200");
+      expect(cashCells[7]).toHaveTextContent("295");
+      expect(cashCells[8]).toHaveTextContent("295");
+      expect(cashCells[9]).toHaveTextContent("0");
+
+      unmount();
+
+      await act(async () => {
+        await i18n.changeLanguage("zh-TW");
+      });
+      try {
+        renderPage("/management/performance-attribution?period=latest");
+        const zhLearning = screen.getByTestId("attribution-instrument-learning");
+        expect(within(zhLearning).getByText("商品決策學習")).toBeInTheDocument();
+        expect(within(zhLearning).getByTestId("attribution-learning-direction-hit-rate")).toHaveTextContent(
+          "方向命中率",
+        );
+        expect(within(zhLearning).getByTestId("attribution-learning-direction-hit-rate")).toHaveTextContent(
+          "0 / 0 筆已評分",
+        );
+        expect(within(zhLearning).getByTestId("attribution-learning-instrument-regret")).toHaveTextContent(
+          "商品選擇遺憾",
+        );
+        expect(within(zhLearning).getByTestId("attribution-learning-instrument-regret")).toHaveTextContent(
+          "0 筆已評分",
+        );
+        expect(within(zhLearning).getByTestId("attribution-learning-margin-use")).toHaveTextContent(
+          "保證金使用",
+        );
+        expect(within(zhLearning).getByTestId("attribution-learning-decision-count")).toHaveTextContent(
+          "決策筆數",
+        );
+        expect(within(zhLearning).getByText("尚無反事實決策紀錄。")).toBeInTheDocument();
+
+        const zhBreakdown = screen.getByTestId("attribution-instrument-breakdown");
+        expect(within(zhBreakdown).getByText("商品別損益拆解")).toBeInTheDocument();
+      } finally {
+        await act(async () => {
+          await i18n.changeLanguage("en-US");
+        });
+      }
+    });
+
+    it("renders a graded instrument_learning payload with per-decision rows and preserves BFF values without recomputation", () => {
+      const adapted = adaptPerformanceAttributionResult({
+        data: {
+          period: "latest",
+          summary: {
+            period: "latest",
+            requested_period: "latest",
+            period_windowed: false,
+            instrument_learning: {
+              direction_hit_rate: 0.5,
+              direction_hit_count: 1,
+              direction_graded_count: 2,
+              instrument_regret: 120.5,
+              instrument_regret_graded_count: 2,
+              margin_use: 0.174,
+              decision_count: 3,
+              decisions: [
+                {
+                  decision_id: "rt-1:dec-101",
+                  chosen_instrument_id: "ssf:SRF:202611",
+                  best_instrument_id: "ssf:SRF:202611",
+                  direction_hit: true,
+                  instrument_regret: 0,
+                  margin_use: 0.174,
+                  chosen_pnl: 850.25,
+                },
+                {
+                  decision_id: "rt-1:dec-102",
+                  chosen_instrument_id: "eq:0050.TWSE",
+                  best_instrument_id: "ssf:SRF:202611",
+                  direction_hit: false,
+                  instrument_regret: 241,
+                  margin_use: null,
+                  chosen_pnl: -110.5,
+                },
+                {
+                  decision_id: "rt-1:dec-103",
+                  chosen_instrument_id: "ssf:SRF:202611",
+                  best_instrument_id: null,
+                  direction_hit: null,
+                  instrument_regret: null,
+                  margin_use: 0.174,
+                  chosen_pnl: null,
+                },
+              ],
+            },
+            instrument_breakdown: [
+              {
+                instrument_key: "ssf:SRF:202611",
+                instrument_id: "ssf:SRF:202611",
+                symbol: "0050.TWSE",
+                instrument_kind: "stock_future",
+                contract_month: "202611",
+                multiplier: 1000,
+                margin_reserved: 17400,
+                holding_count: 2,
+                market_value: 388400,
+                total_notional: 388400,
+                total_pnl: 850.25,
+                unrealized_pnl: 600.25,
+                realized_pnl: 250,
+              },
+            ],
+          },
+          items: [],
+        },
+        meta: {
+          period: {
+            requested: "latest",
+            applied: "latest",
+            windowed: false,
+            basis: "latest_runtime_telemetry_snapshot",
+          },
+        },
+      });
+
+      mockAttributionOnly(adapted);
+      renderPage("/management/performance-attribution?period=latest");
+
+      const learningCard = screen.getByTestId("attribution-instrument-learning");
+      expect(within(learningCard).getByTestId("attribution-learning-direction-hit-rate")).toHaveTextContent(
+        "50.00%",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-direction-hit-rate")).toHaveTextContent(
+        "1 / 2 graded",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-instrument-regret")).toHaveTextContent(
+        "120.50",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-instrument-regret")).toHaveTextContent(
+        "2 graded",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-margin-use")).toHaveTextContent(
+        "0.174",
+      );
+      expect(within(learningCard).getByTestId("attribution-learning-decision-count")).toHaveTextContent(
+        "3",
+      );
+
+      const decisionRows = within(learningCard).getAllByTestId("attribution-learning-decision-row");
+      expect(decisionRows).toHaveLength(3);
+
+      const dec0 = within(decisionRows[0]).getAllByRole("cell");
+      expect(dec0[0]).toHaveTextContent("rt-1:dec-101");
+      expect(dec0[1]).toHaveTextContent("ssf:SRF:202611");
+      expect(dec0[2]).toHaveTextContent("ssf:SRF:202611");
+      expect(dec0[3]).toHaveTextContent("Hit");
+      expect(dec0[4]).toHaveTextContent("0");
+      expect(dec0[5]).toHaveTextContent("0.174");
+      expect(dec0[6]).toHaveTextContent("850.25");
+
+      const dec1 = within(decisionRows[1]).getAllByRole("cell");
+      expect(dec1[0]).toHaveTextContent("rt-1:dec-102");
+      expect(dec1[1]).toHaveTextContent("eq:0050.TWSE");
+      expect(dec1[2]).toHaveTextContent("ssf:SRF:202611");
+      expect(dec1[3]).toHaveTextContent("Miss");
+      expect(dec1[4]).toHaveTextContent("241");
+      expect(dec1[5]).toHaveTextContent("—");
+      expect(dec1[6]).toHaveTextContent("-110.50");
+
+      const dec2 = within(decisionRows[2]).getAllByRole("cell");
+      expect(dec2[0]).toHaveTextContent("rt-1:dec-103");
+      expect(dec2[1]).toHaveTextContent("ssf:SRF:202611");
+      expect(dec2[2]).toHaveTextContent("—");
+      expect(dec2[3]).toHaveTextContent("—");
+      expect(dec2[4]).toHaveTextContent("—");
+      expect(dec2[5]).toHaveTextContent("0.174");
+      expect(dec2[6]).toHaveTextContent("—");
+
+      const breakdownCard = screen.getByTestId("attribution-instrument-breakdown");
+      const breakdownRows = within(breakdownCard).getAllByTestId("attribution-instrument-breakdown-row");
+      expect(breakdownRows).toHaveLength(1);
+      const bCells = within(breakdownRows[0]).getAllByRole("cell");
+      expect(bCells[0]).toHaveTextContent("ssf:SRF:202611");
+      expect(bCells[1]).toHaveTextContent("Stock future");
+      expect(bCells[1]).toHaveTextContent("stock_future");
+      expect(bCells[2]).toHaveTextContent("202611");
+      expect(bCells[3]).toHaveTextContent("1,000");
+      expect(bCells[4]).toHaveTextContent("17,400");
+      expect(bCells[5]).toHaveTextContent("2");
+      expect(bCells[6]).toHaveTextContent("388,400");
+      expect(bCells[7]).toHaveTextContent("850.25");
+      expect(bCells[8]).toHaveTextContent("600.25");
+      expect(bCells[9]).toHaveTextContent("250");
     });
   });
 });

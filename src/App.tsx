@@ -144,6 +144,10 @@ const SkillSandboxRoute = lazyNamedRoute(() => import("@/routes/management/studi
 const AgoraLayoutRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraLayoutRoute", "Agora shell");
 const AgoraTradingRoomRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraTradingRoomRoute", "Agora trading room");
 const AgoraStrategyWorkshopRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraStrategyWorkshopRoute", "Agora strategy workshop");
+const AgoraCommitteeRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraCommitteeRoute", "Agora committee");
+const AgoraMemoryRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraMemoryRoute", "Agora memory review");
+const AgoraPersonaLabRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraPersonaLabRoute", "Agora persona lab");
+const AgoraFeedbackRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraFeedbackRoute", "Agora human feedback");
 const AgoraStrategyPerformanceRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraStrategyPerformanceRoute", "Agora strategy performance");
 
 function DeploymentAliasRedirect() {
@@ -337,6 +341,10 @@ const App = () => (
               <Route path="strategy-workshop" element={<AgoraStrategyWorkshopRoute />} />
               <Route path="strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
               <Route path="strategy-performance" element={<AgoraStrategyPerformanceRoute />} />
+              <Route path="committee" element={<AgoraCommitteeRoute />} />
+              <Route path="memory" element={<AgoraMemoryRoute />} />
+              <Route path="persona-lab" element={<AgoraPersonaLabRoute />} />
+              <Route path="feedback" element={<AgoraFeedbackRoute />} />
               <Route path="*" element={<Navigate to="/agora/trading-room" replace />} />
             </Route>
 
