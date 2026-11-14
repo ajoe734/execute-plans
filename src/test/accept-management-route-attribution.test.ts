@@ -519,6 +519,8 @@ describe("opaque entity detail id identity through the production crawl (real Ch
 
   it.each([
     ["retained colon id (route raw, API encoded)", "strat:2026:abc", api("strat%3A2026%3Aabc")],
+    ["frozen real retained colon id (route raw, API encoded)", "strat-collector:collector-tw-ptt-stock:ptt-stock-M.1794529035.A.2DC:83c616b3b151-650ab18a5161", api("strat-collector%3Acollector-tw-ptt-stock%3Aptt-stock-M.1794529035.A.2DC%3A83c616b3b151-650ab18a5161")],
+    ["frozen real retained colon id (route encoded, API encoded)", "strat-collector%3Acollector-tw-ptt-stock%3Aptt-stock-M.1794529035.A.2DC%3A83c616b3b151-650ab18a5161", api("strat-collector%3Acollector-tw-ptt-stock%3Aptt-stock-M.1794529035.A.2DC%3A83c616b3b151-650ab18a5161")],
     ["colon id (route encoded, API encoded)", "strat%3A2026%3Aabc", api("strat%3A2026%3Aabc")],
     ["plain id control", "plain-id", api("plain-id")],
     ["encoded separator stays one segment", "a%2Fb", api("a%2Fb")],
