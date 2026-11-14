@@ -12,6 +12,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { installPinnedBffBearer, pinnedTargetProblem } from "./lib/pinned-browser-bff-bearer.mjs";
 
 const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://app.dev.mvl-cap.tw");
 const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://api.dev.mvl-cap.tw");
@@ -64,6 +65,13 @@ function isBffUrl(url) {
   return url.startsWith(BFF_BASE);
 }
 
+// Release-gate credential boundary: a short-lived BFF bearer is released only to
+// the maintained dev BFF origin, and only while the browser target is the
+// maintained dev FE origin or the local exact-candidate preview. The token is
+// attached per-request to that BFF origin; it is never written to browser
+// storage (the retired bearer storage keys
+// are not read by the strict FE and are not recreated here).
+
 let chromium;
 try {
   ({ chromium } = await import("@playwright/test"));
@@ -75,38 +83,25 @@ try {
 const FE_COMMIT = currentSha();
 const probeTimestamp = new Date().toISOString();
 
+if (BEARER_TOKEN) {
+  const problem = pinnedTargetProblem({ feBase: FE_BASE, bffBase: BFF_BASE });
+  if (problem) {
+    console.error(`Refusing to release BFF credential: ${problem}`);
+    process.exit(2);
+  }
+}
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
+let transport = null;
 if (BEARER_TOKEN) {
-  const normalizedToken = BEARER_TOKEN.replace(/^Bearer\s+/i, "").trim();
-  const tokenParts = normalizedToken.split(":");
-  const operatorId = tokenParts[0] || "op-route-load";
-  const roles = (tokenParts[1] || "operator")
-    .split(",")
-    .map((role) => role.trim())
-    .filter(Boolean);
-  await context.addInitScript(
-    ({ operatorId: subject, roles: sessionRoles, tenantId, token }) => {
-      const session = JSON.stringify({
-        aud: "pantheon-bff",
-        auth_time: Math.floor(Date.now() / 1000),
-        iss: "pantheon-route-load-probe",
-        roles: sessionRoles,
-        sub: subject,
-        tenant_id: tenantId,
-      });
-      for (const storage of [window.sessionStorage, window.localStorage]) {
-        storage.setItem("pantheon.bff.bearerToken", token);
-        storage.setItem("pantheon_operator_token", token);
-        storage.setItem("pantheon.bff.tenantId", tenantId);
-        storage.setItem("pantheon_tenant_id", tenantId);
-        storage.setItem("pantheon.e2e.devOidcSession", session);
-      }
-    },
-    { operatorId, roles, tenantId: TENANT_ID, token: normalizedToken },
-  );
+  transport = await installPinnedBffBearer(context, {
+    token: BEARER_TOKEN.replace(/^Bearer\s+/i, "").trim(),
+    feBase: FE_BASE,
+    bffBase: BFF_BASE,
+  });
 }
 const page = await context.newPage();
+await transport?.attachPage(page);
 page.setDefaultTimeout(OVERALL_TIMEOUT_MS);
 page.setDefaultNavigationTimeout(OVERALL_TIMEOUT_MS);
 
@@ -180,6 +175,7 @@ const milestones = {
   firstRowOrEmptyVisibleMs: null,
 };
 let error = null;
+let primaryApiStatus = null;
 
 try {
   navStartMs = Date.now();
@@ -191,6 +187,7 @@ try {
     )
     .then((res) => {
       milestones.primaryApiCompleteMs = Date.now() - navStartMs;
+      primaryApiStatus = res.status();
       return res;
     })
     .catch(() => null);
@@ -227,6 +224,8 @@ try {
   error = String(err).replace(/\s+/g, " ").slice(0, 400);
 } finally {
   await browser.close();
+  await transport?.settle();
+  if (!error && transport?.errors.length) error = `Pinned BFF transport failures: ${transport.errors.slice(0, 3).join("; ")}`.slice(0, 400);
 }
 
 const requestsBeforeFirstRow = milestones.firstRowOrEmptyVisibleMs === null
@@ -234,7 +233,19 @@ const requestsBeforeFirstRow = milestones.firstRowOrEmptyVisibleMs === null
   : waterfall.filter((entry) => entry.startMs <= milestones.firstRowOrEmptyVisibleMs).length;
 
 const usedNetworkidle = false; // structural guarantee: this probe never calls waitUntil: "networkidle"
+// Required authenticated readiness: timing is always retained, but a missing
+// credential or a non-2xx primary response (401/403/5xx) is never a pass.
+const authenticatedPrimaryOk = Boolean(BEARER_TOKEN)
+  && primaryApiStatus !== null
+  && primaryApiStatus >= 200
+  && primaryApiStatus < 300;
+if (!error && !authenticatedPrimaryOk) {
+  error = !BEARER_TOKEN
+    ? "authenticated route-load requires a bearer token; none supplied"
+    : `primary API ${PRIMARY_API_PATH} returned non-success status ${primaryApiStatus}`;
+}
 const pass = !error
+  && authenticatedPrimaryOk
   && milestones.domContentLoadedMs !== null
   && milestones.headingVisibleMs !== null
   && milestones.primaryApiCompleteMs !== null
@@ -250,6 +261,7 @@ const routeTiming = {
   authTokenShape: tokenShape(BEARER_TOKEN),
   routePath: ROUTE_PATH,
   primaryApiPath: PRIMARY_API_PATH,
+  primaryApiStatus,
   navigationWaitUntil: NAVIGATION_WAIT_UNTIL,
   usedNetworkidle,
   milestones,

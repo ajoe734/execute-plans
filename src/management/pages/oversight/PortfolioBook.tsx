@@ -395,6 +395,10 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                     const isStaleRow = row.markStatus === "stale" || row.telemetryStale;
                     const effectiveSourceStatus = isStaleRow && row.sourceStatus === "ok" ? "stale" : row.sourceStatus;
                     const noAverageCostLabel = t("mgmt.portfolio.noAverageCost", { defaultValue: "Source reports no average cost" });
+                    const markUnavailableLabel = t("mgmt.portfolio.markUnavailable", { defaultValue: "No price available" });
+                    const missingUnrealizedLabel = !hasAveragePrice
+                      ? noAverageCostLabel
+                      : markUnavailableLabel;
                     const rawInstrumentKind = row.instrumentKind?.trim();
                     const rawInstrumentId = row.instrumentId?.trim();
                     const instrumentKindLabel =
@@ -483,9 +487,9 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                               {unrealizedPnlPct ? ` (${unrealizedPnlPct})` : ""}
                             </div>
                           ) : (
-                            <span aria-label={noAverageCostLabel} title={noAverageCostLabel}>
+                            <span aria-label={missingUnrealizedLabel} title={missingUnrealizedLabel}>
                               <span aria-hidden="true">—</span>
-                              <span className="sr-only"> {noAverageCostLabel}</span>
+                              <span className="sr-only"> {missingUnrealizedLabel}</span>
                             </span>
                           )}
                           {hasRealizedPnl ? (

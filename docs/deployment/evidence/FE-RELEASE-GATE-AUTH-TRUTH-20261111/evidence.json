@@ -1,0 +1,72 @@
+{
+  "task": "FE-RELEASE-GATE-AUTH-TRUTH-20261111",
+  "rootCause": {
+    "summary": "Workflow job env PANTHEON_HOSTED_FE_HARD_GATE=false (pre-switch hosted evidence advisory, LOOP-PROD-FE-001) turned every hosted fail/missing into a bare 'warn'. route_load, mgmt_load_gate and the hosted desktop e2e step outcomes were never read by the aggregate, and Gate 5 F12 read only the loopback fixture lane (@approval-local), so real hosted failures were invisible and the job concluded success.",
+    "sourceRun": "gate 43108247755 / job 130817129871 (raw history preserved, not rewritten)"
+  },
+  "changes": [
+    "aggregate: hostedStatus downgrade is now 'advisory_fail' (never pass, never bare warn); non-blocking exit semantics unchanged",
+    "aggregate: Gate 8 now reads real step outcomes for route_load, mgmt_load_gate, mgmt_hosted_accept, e2e (skipped = fail)",
+    "aggregate: Gate 8 hosted F12 owner readback read from playwright-desktop-results.json only; fixture results never satisfy it",
+    "aggregate JSON/markdown: releaseReadiness (ready|limited|blocked) + advisoryFailures[]",
+    "workflow: candidate summary records releaseReadiness",
+    "REVIEW FIX: required authenticated probe checks (route_load, mgmt_load_gate, mgmt_hosted_accept, e2e, hosted F12) are strict fail/missing regardless of HOSTED_FE_HARD_GATE; Gate 7 fails and aggregate exits 1, so candidate_upload (needs aggregate success) cannot publish. Only stale-host readback checks remain advisory_fail.",
+    "REVIEW FIX 3 corrected after independent review: e2e/12-approvals.spec.ts keeps the nonempty owner-record assertion; an authenticated 200 with empty items fails as a truthful limitation (no seeding, no fabricated data). Both top-level and data.items empty envelopes are covered by the local boundary regression.",
+    "REVIEW FIX 2 (superseded): the earlier in-job dev-login mint was removed; it put secrets.* into the ordinary secretless integration-gate job, violating the maintained boundary asserted by paired-release-workflow.test.ts. No credential path is added to that job.",
+    "REVIEW FIX 4: probe-route-load-baseline.mjs and accept-management-hosted-production.mjs no longer write the bearer into retired browser storage keys/localStorage; an inlined pinned-bearer helper in each script attaches Authorization per-request only to the pinned maintained dev BFF origin, and refuses (before use) unless the FE target is the maintained dev FE or a loopback exact-candidate preview.",
+    "REVIEW FIX 5: trusted read-only auth path in integration-gate: a single masked step 'Mint short-lived read-only probe credential' runs only for workflow_dispatch on refs/heads/dev with frontend_ref=dev, release_candidate_id and release_controller_run_id set (never PR/push/branch dispatch), uses the existing /bff/auth/dev-login operator client (existing repo secret, no new secret/issuer), exports BFF_AUTH_TOKEN for GET-only probes; continue-on-error so a missing credential surfaces as missing-auth in the aggregate. Probe scripts attach it per-request to the pinned BFF only and never across redirects (route.fetch maxRedirects:0). Authenticated e2e runs with PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 (trace/screenshot/video off) and reporter list,json (no HTML).",
+    "REVIEW FIX 6: (a) scripts/lib/pinned-bff-bearer.mjs + workflow step 'Redact credentials from evidence before upload' scrubs Bearer/JWT/literal BFF token from the audit dir, playwright-report and test-results before Prepare/Upload evidence (raw Playwright JSON error.message/stack previously carried the bearer). (b) probe-route-load-baseline.mjs records primaryApiStatus; pass requires a bearer token and a 2xx primary response, so no-token or 401/403/5xx primary is pass:false (timings retained)."
+  ],
+  "unchanged": [
+    "no new auth issuer/token/secret; hosted auth probes still need the existing genuine short-lived token and fail honestly without it",
+    "write proof and finite Loops/provider cases remain not-applicable/skipped; gate-before-switch, manifest admission and rollback untouched",
+    "stale-host readback checks (gate 3/4, Gate 8 core evidence) remain advisory pre-switch; required authenticated probes no longer are"
+  ],
+  "sourceTests": "npm run test -- src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/paired-release-workflow.test.ts src/test/e2e-auth-helper-session.test.ts src/test/aggregate-release-gate-hard-gates.test.ts: 6 files, 98/98 passed, exit 0 on 2026-11-12. Covers required failures, missing-auth, permitted skips, pinned bearer, sentinel redaction and same-tenant default/override behavior; the route-load criteria check is static, not a live 401 server run.",
+  "reviewCorrection": {
+    "rejectedHead": "690aa1698bcc1eb484a3afed3bed281c4d250190",
+    "base": "acf3efaeb9141e1abd80375c9c2a357328c02c79",
+    "commitMessages": "The recovered local branch already repairs the four missing-trailer commits and long subjects. python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge exits 0. Existing authorship remains attributed to the original worker.",
+    "remoteChecksAtRecovery": "PR #985 still points to the rejected head. Branch CI 43128295419 and 43128288434 report failed Commit trailers; the new delivery requires fresh checks and independent review before canonical integration.",
+    "ownerEvidence": "A 200 response with zero genuine owner records remains a failure. Every present record still requires an id, decision_state and positive integer version. Local fixture results do not prove hosted owner acceptance.",
+    "localOwnerRegression": "npx playwright test e2e/12-approvals.spec.ts --project=chromium --grep 'F12 lane boundary regressions' --reporter=list: 2/2 passed against the loopback build. Confirms empty owner data fails and hosted selection excludes local fixtures; no hosted requests or business writes were performed."
+  },
+  "f12EndpointCompletion": {
+    "sourceHeadBeforeCorrection": "256e82b357365fb3f9acfb9dabd41fd793106b77",
+    "problem": "The hosted test required nonempty records from the pending-only /bff/approvals projection. A legitimately empty pending inbox could not prove the existing all-decisions owner records.",
+    "correction": "Read GET /bff/approvals with authenticated 200 and valid row schema (empty permitted), then separately require authenticated GET /api/v1/approval-decisions with nonempty owner records. Parse the canonical data array as well as existing items envelopes. Preserve id, decision_state and strictly positive integer version assertions for every returned record. Both GETs refuse redirects; no new route, fallback, seeding or business writes.",
+    "diagnosticReference": {
+      "path": "/tmp/pantheon-compat-residual-20261111/approval-owner-readonly-result.json",
+      "recordedAt": "2026-11-12T00:51:23.574759+00:00",
+      "scope": "Prior targeted read-only BFF diagnostic only, NOT hosted pair acceptance and NOT executed by this source continuation.",
+      "pendingRows": 0,
+      "allDecisionRows": 660,
+      "decidedRows": 657,
+      "revokedRows": 3,
+      "rowsMatchingOriginalOwnerPredicate": 660,
+      "sampleDetailVersionMatchesList": 3,
+      "bffCommit": "bee62bc2978618539984aff9db136b064adc14a0"
+    },
+    "offlineRegression": "Loopback-only synthetic response cases exercise the same two-GET helper as the hosted test: pending-empty plus versioned decided/revoked data-array rows, empty owner data, invalid owner versions, 401 from either endpoint, and malformed/nonversioned pending rows. Offline cases cannot count as genuine hosted owner evidence.",
+    "validation": "npm run test -- src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/paired-release-workflow.test.ts src/test/e2e-auth-helper-session.test.ts src/test/aggregate-release-gate-hard-gates.test.ts: 93/93 passed, exit 0. npx playwright test e2e/12-approvals.spec.ts --project=chromium --grep 'F12 lane boundary regressions' --reporter=list: 3/3 passed, exit 0 (loopback build, no hosted proof). git diff --check passed. Fresh exact-head remote CI and assigned Claude review remain required before native integration."
+  },
+  "tenantConsistencyCompletion": {
+    "sourceHeadBeforeCorrection": "58dae0cc245db1c9a6e5a7a65ccf208187a87dae",
+    "problem": "Hosted acceptance Node RBAC/live-ID reads forced pantheon-dev while browser bearer reads omitted tenant selection, producing different tenant contexts. The old stub-only/tenant-dev-403 comment was obsolete.",
+    "diagnosticReference": {
+      "path": "/tmp/pantheon-compat-residual-20261111/probe-tenant-readonly-result.json",
+      "recordedAt": "2026-11-12T01:12:25Z to 01:12:26Z",
+      "scope": "Human/Ops read-only diagnostic summarized in canonical task state; not rerun or treated as hosted acceptance by this source worker.",
+      "result": "Normal OP_A bearer /bff/me returned 200 with tenant-dev/operator without X-Tenant-Id; explicit pantheon-dev and tenant-dev each returned 200 selecting that tenant. Shell-summary returned 200 in all three cases. This describes existing tenant selection, not an auth-policy denial or bypass."
+    },
+    "correction": "Default Node and pinned-browser requests omit X-Tenant-Id and follow the authenticated server tenant. Existing explicit PANTHEON_TENANT_ID is trimmed and applied to both. Browser interception removes conflicting frontend tenant headers before applying that same selection. BFF auth policy, credential provenance, origin pins, redirect isolation, redaction, F12 owner requirements and deployment flow remain unchanged.",
+    "offlineRegression": "The maintained acceptance functions run with synthetic fetch/route boundaries. Cases cover unset and blank overrides plus explicit pantheon-dev and tenant-dev, assert all Node RBAC/live-ID headers, selected live IDs, matching browser headers despite stale mixed-case frontend headers, bearer attachment and maxRedirects=0. CLI wiring is checked separately. No real credentials or business writes.",
+    "validation": "Focused six-file Vitest batch 98/98 passed (exit 0); node --check scripts/accept-management-hosted-production.mjs and git diff --check passed (exit 0). Fresh exact-head CI, assigned Claude review and canonical integration pending at source commit preparation; prior green CI applies only to the prior head."
+  },
+  "notProven": "No real protected-run or hosted proof from this source-only worker; local operator/original publisher own the authenticated gate execution.",
+  "authApplicability": "Trusted exact-dev dispatch receives a short-lived operator token via existing dev-login; untrusted PR/push/branch runs remain credential-free and required authenticated probes fail honestly as missing-auth. paired-release-workflow.test.ts now asserts exactly one secret reference in the ordinary job.",
+  "nativeWiringDependency": {
+    "status": "resolved in source for trusted exact-dev dispatch; real protected run unproven",
+    "notProven": "Real protected run, hosted owner-version/F12 proof and cookie-vs-bearer behavior against the live BFF remain with operator/original publisher. Source uses a bearer minted by dev-login (non-browser_session) attached per-request to the pinned BFF rather than the browser_session cookie, because the Playwright e2e F12 owner readback consumes BFF_AUTH_TOKEN directly."
+  }
+}
