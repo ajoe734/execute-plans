@@ -1,0 +1,1 @@
+{"task":"FE-GATE-HONEST-NOT-FOUND-CONTENT-20261114","change":"shortContentIncomplete(content, honestNotFound) helper; content_incomplete no longer fires on honest not-found","tests":"vitest accept-management-honest-not-found + accept-management-route-attribution: 59 passed","unchanged":["honestNotFound definition","other reasons","budgets/timeouts","transport failure rule"]}
