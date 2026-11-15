@@ -935,8 +935,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain(
       'authMode !== "strict" || authStub !== false',
     );
-    expect(deployScript).toContain("${BFF_HOST%/}/readyz");
-    expect(deployScript).toContain("${BFF_HOST%/}/bff/me");
+    expect(deployScript).toContain("${target_bff%/}/readyz");
+    expect(deployScript).toContain("${target_bff%/}/bff/me");
     expect(deployWorkflow).toContain(
       "needs.deploy.outputs.deployment_profile == 'write-proof'",
     );

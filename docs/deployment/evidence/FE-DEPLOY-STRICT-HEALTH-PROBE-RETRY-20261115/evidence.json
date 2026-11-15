@@ -4,7 +4,7 @@
   "reviewer": "Claude2",
   "repository": "ajoe734/execute-plans",
   "target_branch": "dev",
-  "recorded_at_utc": "2026-11-14T23:53:58.180813+00:00",
+  "recorded_at_utc": "2026-11-15T00:14:15.875520+00:00",
   "implementation_commit": "d88699c1320aa61beaa19c194a1155fe5cc11fc7",
   "base_commit": "169022eb6ab5bc2dc3fddd13262ba8ea19b09af2",
   "review_status": "ready_for_independent_review",
@@ -158,5 +158,30 @@
   "deployment": {
     "published_to_dev": false,
     "note": "Task branch delivery pending independent canonical review and supervisor merge. No deployment workflow dispatched by this task."
+  },
+  "ci_repair": {
+    "prior_head": "a160c7b30d77512d5d193c9b074651b5a4e97ade",
+    "pull_request": 1021,
+    "failed_run": "https://github.com/ajoe734/execute-plans/actions/runs/43655525267",
+    "cause": "Deploy safety contract asserted literal BFF_HOST probe URLs after the shared identity function switched both strict-health requests to its target_bff parameter. Smoke acceptance propagated the component gate failure.",
+    "repair": "Update the two existing URL assertions in src/test/deploy-safe-defaults.test.ts to target_bff, preserving the required readiness and anonymous-auth endpoints. No deploy script or harness behavior changed in this repair.",
+    "validation": [
+      {
+        "command": "timeout 120s npx --no-install vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
+        "exit_code": 0,
+        "summary": "3 files passed; 57 tests passed"
+      },
+      {
+        "command": "timeout 180s env PANTHEON_TEST_FILTER='strict health' bash scripts/test-deploy-dev-vm.sh",
+        "exit_code": 0,
+        "summary": "deploy contract harness: 2 passed, 0 failed"
+      },
+      {
+        "command": "bash -n scripts/deploy-dev-vm.sh scripts/test-deploy-dev-vm.sh && git diff --check",
+        "exit_code": 0
+      }
+    ],
+    "regression_note": "The 75-case regression evidence above remains from the implementation head; this repair changes only existing Vitest assertions and this manifest. The focused strict-health behavior tests were rerun and all terminal exits collected.",
+    "review": "New head requires fresh Claude2 exact-head review; earlier approval does not carry forward."
   }
 }
