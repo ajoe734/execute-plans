@@ -1313,8 +1313,13 @@ NODE
   if [[ "${DEPLOY_PROFILE}" == "operator-live" ]]; then
     local ready_status="" me_status attempt=0 remaining probe_timeout backoff
     local ready_deadline
+    local ready_url="${BFF_HOST%/}/readyz" me_url="${BFF_HOST%/}/bff/me"
+    if [[ "${target_bff}" != "${BFF_HOST}" ]]; then
+      ready_url="${target_bff%/}/readyz"
+      me_url="${target_bff%/}/bff/me"
+    fi
     me_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-me-anonymous-${stage}.json" \
-      --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${target_bff%/}/bff/me" || true)"
+      --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${me_url}" || true)"
     if [[ "${me_status}" != "401" ]]; then
       evidence_append "bff.strict_health.${stage}" failed "probeStatus=failed"
       return 1
@@ -1327,7 +1332,7 @@ NODE
       probe_timeout=$((remaining < 20 ? remaining : 20))
       attempt=$((attempt + 1))
       ready_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-ready-${stage}.json" \
-        --write-out '%{http_code}' --connect-timeout 5 --max-time "${probe_timeout}" "${target_bff%/}/readyz" || true)"
+        --write-out '%{http_code}' --connect-timeout 5 --max-time "${probe_timeout}" "${ready_url}" || true)"
       printf '{"attempt":%s,"httpStatus":"%s","at":"%s"}\n' \
         "${attempt}" "${ready_status}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         >> "${AUDIT_DIR}/bff-ready-${stage}-attempts.jsonl"
