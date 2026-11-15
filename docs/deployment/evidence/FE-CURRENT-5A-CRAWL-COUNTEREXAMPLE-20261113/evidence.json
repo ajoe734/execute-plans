@@ -1,0 +1,23 @@
+{
+  "task": "FE-CURRENT-5A-CRAWL-COUNTEREXAMPLE-20261113",
+  "owner": "Claude",
+  "reviewer": "Codex2",
+  "branch": "task/FE-CURRENT-5A-CRAWL-COUNTEREXAMPLE-20261113",
+  "base_sha": "5a738d0c90adfa67021abe22bae03016a1a5538f",
+  "outcome": "Source/local qualification only. No hosted acceptance, deployment, review approval, merge or DONE claimed. CurrentRoot434976 stays rejected until genuine original acceptance passes.",
+  "actual_evidence_diagnosed": {
+    "report": "/tmp/pantheon-root01a15322-resume-20261111/FE435017-management-hosted-acceptance-2026-11-13.json",
+    "report_sha256": "c2394d15bb478e864a03445b43d348870bdcd5daa2165ce264aeaae9143aee18",
+    "finding_1": "One real pinned transport failure (GET /bff/management/trade-journeys net::ERR_ABORTED) was retained; transport.navigate() called assertHealthy() before page.goto, so every later route record was navfail with empty finalUrl and zero requests (93+ records follow the first failure; not 97 independent crashes).",
+    "finding_2": "/bff/evolution-programs and /bff/deployments returned nonempty lists whose items carry canonical ids under program_id / plan_id (per normalizeEvolutionProgram and normalizeDeploymentFields) and were not resolved by the generic key list."
+  },
+  "repair": {
+    "scripts/lib/pinned-browser-bff-bearer.mjs": "navigate() no longer throws on errors retained from earlier navigations; failures first recorded during a navigation are returned for that route. Retained errors still fail assertHealthy()/closeBrowser() and the aggregate. Request-stage InvalidInterceptionId rule, detach/causal rules, origin/tenant/bearer hygiene unchanged.",
+    "scripts/accept-management-hosted-production.mjs": "firstLiveId resolves per-entity canonical id fields (evolution: id/program_id/programId/evolution_program_id; deployments: id/plan_id/planId/deployment_id). Empty lists still note-only; nonempty lists with no id still fail. Budgets (20s nav, 4s settle) unchanged."
+  },
+  "tests": {
+    "e2e/hosted-bff-streaming-transport.spec.ts": "'continued request failure' case now asserts the first failure is retained (exit 1, pinnedTransport fail) while all later baseline and live-id routes are genuinely navigated; new 'canonical id schemas' case serves program_id/plan_id lists through the real caller in real Chromium. Both fail against the pre-change scripts and pass now. Full spec: 77 passed.",
+    "src/test/strict-browser-auth-source-contract.test.ts": "retained failure does not block navigate but still fails assertHealthy; canonical id keys present. 13 passed."
+  },
+  "limitations": "Local fixtures and source checks are not hosted PASS. Author has no VM/SSH/hosted credentials or dispatch authority; the deployment operator owns the one exact-pair publication and full actual acceptance."
+}

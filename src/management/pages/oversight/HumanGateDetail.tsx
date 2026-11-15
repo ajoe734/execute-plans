@@ -39,7 +39,8 @@ export const HumanGateDetailPage = () => {
   const [rationale, setRationale] = useState("");
   const [submittingDecision, setSubmittingDecision] = useState<PromotionReviewDecisionValue | null>(null);
   const item = data;
-  const hasLoadError = Boolean(error) && !isNotFoundError(error);
+  const notFound = Boolean(error) && isNotFoundError(error);
+  const hasLoadError = Boolean(error) && !notFound;
 
   if (loading && !item) {
     return (
@@ -62,7 +63,9 @@ export const HumanGateDetailPage = () => {
       <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
         <header className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.inbox.detailUnavailableTitle")}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">
+              {notFound ? t("mgmt.inbox.detailNotFoundTitle") : t("mgmt.inbox.detailUnavailableTitle")}
+            </h1>
             <p className="text-sm text-muted-foreground">{id}</p>
           </div>
           <Button asChild variant="outline" size="sm">
@@ -70,9 +73,11 @@ export const HumanGateDetailPage = () => {
           </Button>
         </header>
         <Card className="p-4 text-sm text-muted-foreground">
-          {hasLoadError
-            ? `${t("mgmt.inbox.detailUnavailableBody")} (${formatDetailError(error)})`
-            : t("mgmt.inbox.detailUnavailableBody")}
+          {notFound
+            ? t("mgmt.inbox.detailNotFoundBody", { id })
+            : hasLoadError
+              ? `${t("mgmt.inbox.detailUnavailableBody")} (${formatDetailError(error)})`
+              : t("mgmt.inbox.detailUnavailableBody")}
         </Card>
       </section>
     );

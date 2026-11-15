@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import "@/i18n";
 import { setMockResolver, type MockHandler } from "@/lib/bff-v1/client";
 import { makeBffError } from "@/lib/bff-v1/errors";
+import { panelView } from "@/management/components/case-file/__tests__/fixtures";
 import { CommitteePage } from "./CommitteePage";
 import { MemoryReviewPage } from "./MemoryReviewPage";
 import { PersonaLabPage } from "./PersonaLabPage";
@@ -69,6 +70,25 @@ describe("committee page", () => {
     expect(receipt.textContent).toContain('"status": "published"');
     expect(receipt.textContent).toContain("2026-11-13T03:10:00Z");
     expect(calls.find((c) => c.method === "POST")?.headers["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("shows the memo's case file, claim citations and rejected-contribution reason", async () => {
+    on("GET", "/bff/agora/committee/sessions", ownerEnvelope("consultation", [session]));
+    on("GET", "/bff/agora/committee/sessions/req-1/memos", ownerEnvelope("consultation", [{ ...memo, case_file_view: panelView }]));
+    renderAt(<CommitteePage />);
+    fireEvent.click(await screen.findByText("req-1"));
+    const view = await screen.findByTestId("memo-memo-1-case-file");
+    expect(view.textContent).toContain("similar drawdown in Q3");
+    expect(screen.getByTestId("memo-memo-1-case-file-contribution-0-claim-0-cite-lessons:1")).toBeInTheDocument();
+    expect(screen.getByTestId("memo-memo-1-case-file-rejected-0-reason").textContent).toBe("claim_uncited");
+  });
+
+  it("shows the recorded reason when a memo's case file is unavailable", async () => {
+    on("GET", "/bff/agora/committee/sessions", ownerEnvelope("consultation", [session]));
+    on("GET", "/bff/agora/committee/sessions/req-1/memos", ownerEnvelope("consultation", [{ ...memo, case_file_view: { status: "unavailable", reason: "no_case_file_recorded", case_file: null } }]));
+    renderAt(<CommitteePage />);
+    fireEvent.click(await screen.findByText("req-1"));
+    expect((await screen.findByTestId("memo-memo-1-case-file-unavailable-reason")).textContent).toContain("no_case_file_recorded");
   });
 
   it("shows an empty owner as unavailable with the recorded reason, never as an empty list", async () => {

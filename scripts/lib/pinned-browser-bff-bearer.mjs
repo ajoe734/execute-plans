@@ -326,7 +326,11 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       const release = holds.get(page)("navigation");
       try {
         await this.settle();
-        this.assertHealthy();
+        // Failures retained from earlier navigations stay in `errors` and fail
+        // the aggregate (assertHealthy/closeBrowser); they must not stop later
+        // routes from being genuinely attempted. Only failures first recorded
+        // during this navigation are attributed to it.
+        const retainedBefore = errors.length;
         const started = Date.now();
         let error = null;
         try { await page.goto(targetUrl, { waitUntil: "commit", timeout }); }
@@ -336,6 +340,11 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // Both waits share the original navigation timeout budget.
         if (!error) try { await page.waitForLoadState("domcontentloaded", { timeout: Math.max(1, timeout - (Date.now() - started)) }); }
         catch (err) { error = err; }
+        // No settle() here: pending work is drained by the next navigation or
+        // closeBrowser. Later-recorded failures stay retained in `errors`.
+        if (!error && errors.length > retainedBefore) {
+          error = new Error(`Pinned BFF transport failures: ${errors.slice(retainedBefore, retainedBefore + 5).join("; ")}`);
+        }
         return error;
       } finally { release(); }
     },

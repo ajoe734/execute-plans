@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "task_id": "FE-GATE-CRAWLER-ROUTE-ATTRIBUTION-20261114",
+  "owner": "Codex2",
+  "reviewer": "Claude2",
+  "generated_at": "2026-11-13T23:32:12.990208+00:00",
+  "delivery_repository": "ajoe734/execute-plans",
+  "delivery_branch": "task/FE-GATE-CRAWLER-ROUTE-ATTRIBUTION-20261114",
+  "base_commit": "585bcdc7c20747ce1aecf524345ee4b5a604de89",
+  "anchor_commit": "53065a040",
+  "scope": "Release acceptance crawler and candidate preview only. Local source/regression evidence; no hosted acceptance or deployment claim.",
+  "changes": [
+    {
+      "acceptance": 1,
+      "implementation": "SPA fallback identifies the /assets namespace and root static files by location; dots inside route parameters no longer identify assets. Existing file, traversal, symlink, MIME/cache, and method checks remain in place.",
+      "proof": "12 candidate-server tests: dotted strategy id and .json route parameter return index.html; missing nested/extensionless assets return 404, including Accept: text/html."
+    },
+    {
+      "acceptance": 2,
+      "implementation": "A main-document navigation request closes attribution until its main-frame commit. Only requests captured from that committed main document contribute responses and finite reads. Late prior responses/aborts and requests issued before commit are excluded. Same-document redirects retain reads; retries and subsequent full document replacements clear prior read credit.",
+      "proof": "Synthetic event regressions plus real Chromium: old-document interval reads issue 503 while the replacement document is pending; none contribute to its data checks. An inline new-document fetch completes and is credited. Current-document aborts, incomplete bodies, and unrelated entity reads still fail."
+    },
+    {
+      "acceptance": 3,
+      "implementation": "scripts/lib/management-routes.mjs loads resolveLegacyRedirect from the frontend TypeScript manifest via the existing tsx runtime dependency. The duplicated center redirect table was removed; legacy non-center/detail aliases retain their existing mapping. Query-sensitive promotion-allocation resolution also uses the manifest.",
+      "proof": "All manifest rules are covered by baseline/explicit samples and compared to frontend resolution; capital-live and readiness/capital-binding-live both resolve to governance-decisions. Bare-node subprocess verifies the actual TypeScript loader, separate from the Vitest loader adapter."
+    },
+    {
+      "acceptance": 4,
+      "implementation": "Explicit NO_ROUTE_DATA_READS allowlist contains only /management/settings, with the reason that local preferences/static forms issue no route-specific BFF reads. Only no_completed_route_data is exempted; failures from reads that do occur still fail.",
+      "proof": "Every baseline pathname is checked with no data; settings is the sole exemption. Unknown settings subpaths require data, and settings with a 500 response fails."
+    },
+    {
+      "acceptance": 5,
+      "implementation": "Every route JSON includes timing.startedAt, elapsedMs, navigation attempt/commit offsets and an untruncated bffRequests timeline. Each request records attempt, method, URL, attribution/exclusion reason, start/observed/response/finish/failure offsets, HTTP status and failure. Markdown prints every route/request as well. Null event times mean not observed, rather than success. No response bodies or headers are retained.",
+      "proof": "A failing 12-request route round-trips through JSON and the maintained Markdown formatter with all requests and start/response/failure fields; separate cases cover success, no response, and body failure after headers."
+    },
+    {
+      "acceptance": 6,
+      "implementation": "No edits to transport, release budgets/timeouts, fixture 404 honesty, API failure validity, expected entity read, loading/auth rules, or existing tests.",
+      "proof": "Original auth/transport suites pass (52 tests); negative regressions retain current-document abort/incomplete-data failures, live-id 404 failure, and fixture 404 without honest not-found failure."
+    }
+  ],
+  "unchanged_policy": {
+    "script_route_timeout_ms": 20000,
+    "script_settle_timeout_ms": 4000,
+    "ci_route_timeout_ms": 45000,
+    "ci_settle_timeout_ms": 6000,
+    "navigation_attempts": 2,
+    "retry_delay_ms": 750,
+    "transport_module": "scripts/lib/pinned-browser-bff-bearer.mjs unchanged; retained errors still fail aggregate",
+    "not_found": "404 is valid only for baseline detail-or-alias with an honest not-found render; live entity detail 404 remains a failure"
+  },
+  "verification": [
+    {
+      "command": "timeout 90 npm test -- src/test/accept-management-route-attribution.test.ts src/test/serve-release-candidate.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/strict-browser-auth-source-contract.test.ts",
+      "exit_code": 0,
+      "result": "5 suites, 88 tests passed (24 new crawler regressions, 12 server regressions, 52 existing auth/transport regressions). Chromium test executed; no skips.",
+      "log": "/tmp/fe-route-focused-tests.log"
+    },
+    {
+      "command": "timeout 120 npm run typecheck",
+      "result": "Full application TypeScript check passed on the final source/tests.",
+      "log": "/tmp/fe-route-typecheck.log",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 150 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "result": "Vite production build passed; existing large-chunk warning. Generated dist excluded from delivery.",
+      "log": "/tmp/fe-route-build.log"
+    },
+    {
+      "command": "node --check scripts/accept-management-hosted-production.mjs; node --check scripts/lib/management-routes.mjs; node --check scripts/serve-release-candidate.mjs; git diff --check",
+      "exit_code": 0,
+      "result": "Passed"
+    }
+  ],
+  "source_sha256": {
+    "scripts/serve-release-candidate.mjs": "8ffa0e4af1c35a54bc73178a1b839b121cd211c372e128834d262c007893e551",
+    "src/test/serve-release-candidate.test.ts": "99e6bb305f64f4e5440a93716ebb38f583d409720dccc638817808ee4022de92",
+    "scripts/accept-management-hosted-production.mjs": "e7e26fc7beaa46036fe26efb8de57c31c7ffc62992c01f8b40763c69b5864456",
+    "scripts/lib/management-routes.mjs": "9100963a487caa0f0b4dce95254ba6f9d2bd1fc0098a150e628422d5a8e8b7ea",
+    "src/test/accept-management-route-attribution.test.ts": "5c7c8674bca73f1c6da58d09b39a2282dbecdefbb4a078e1f834d550ffe20e06"
+  },
+  "limitations": [
+    "Local fixtures and synthetic events only; no authenticated full hosted management crawl was performed in this task run.",
+    "No real business writes, deployment, production promotion, or budget increases.",
+    "Dev readiness remains subject to independent Claude2 review, supervisor merge, successful integration/deploy workflows, deployment.json exact commit, and the direct browser/BFF gate. Parallel BFF latency/data repairs remain separate tasks."
+  ],
+  "review_status": "Pending independent Claude2 exact-head review; all owner validation batches collected with exit code 0."
+}
