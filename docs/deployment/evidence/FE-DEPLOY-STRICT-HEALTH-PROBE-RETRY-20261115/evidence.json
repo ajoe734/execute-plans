@@ -4,8 +4,8 @@
   "reviewer": "Claude2",
   "repository": "ajoe734/execute-plans",
   "target_branch": "dev",
-  "recorded_at_utc": "2026-11-15T00:14:15.875520+00:00",
-  "implementation_commit": "d88699c1320aa61beaa19c194a1155fe5cc11fc7",
+  "recorded_at_utc": "2026-11-15T00:29:29.871197+00:00",
+  "implementation_commit": "79e6da0d22dd325ec40fb67b427ea3b23197374a",
   "base_commit": "169022eb6ab5bc2dc3fddd13262ba8ea19b09af2",
   "review_status": "ready_for_independent_review",
   "changes": [
@@ -147,7 +147,8 @@
             "sealed return rejects unmanaged paths and invalid leases"
           ]
         }
-      ]
+      ],
+      "validated_commit": "d88699c1320aa61beaa19c194a1155fe5cc11fc7"
     }
   },
   "unchanged_boundaries": [
@@ -164,7 +165,7 @@
     "pull_request": 1021,
     "failed_run": "https://github.com/ajoe734/execute-plans/actions/runs/43655525267",
     "cause": "Deploy safety contract asserted literal BFF_HOST probe URLs after the shared identity function switched both strict-health requests to its target_bff parameter. Smoke acceptance propagated the component gate failure.",
-    "repair": "Update the two existing URL assertions in src/test/deploy-safe-defaults.test.ts to target_bff, preserving the required readiness and anonymous-auth endpoints. No deploy script or harness behavior changed in this repair.",
+    "repair": "Select default BFF_HOST or alternate target_bff readiness and anonymous-auth URLs once before the shared strict-health checks. Preserve existing deploy-safety assertions byte-for-byte from dev. Final PR diff contains only the three declared task artifacts.",
     "validation": [
       {
         "command": "timeout 120s npx --no-install vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
@@ -181,7 +182,16 @@
         "exit_code": 0
       }
     ],
-    "regression_note": "The 75-case regression evidence above remains from the implementation head; this repair changes only existing Vitest assertions and this manifest. The focused strict-health behavior tests were rerun and all terminal exits collected.",
-    "review": "New head requires fresh Claude2 exact-head review; earlier approval does not carry forward."
+    "regression_note": "The 75-case regression evidence above is from d88699c1320aa61beaa19c194a1155fe5cc11fc7. After URL selection was made explicit, reran the 57 deploy-safety tests and both strict-health behavior cases, covering default-host recovery and alternate-host deadline failures. All terminal exits collected.",
+    "review": "New head requires fresh Claude2 exact-head review; earlier approval does not carry forward.",
+    "validation_scope_commit": "79e6da0d22dd325ec40fb67b427ea3b23197374a",
+    "prior_candidate": {
+      "head": "cd92588294b48390324c16935a1f1b35a53e7e39",
+      "branch_ci_runs": [
+        43657192310,
+        43657186098
+      ],
+      "result": "Both runs completed success, but canonical handoff rejected the extra test file outside the artifact contract. Test file changes were restored to dev bytes in the final candidate; prior-head checks are not final-head validation."
+    }
   }
 }
