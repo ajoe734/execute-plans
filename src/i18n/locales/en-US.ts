@@ -1147,6 +1147,15 @@ export default {
       alert_escalation: "Alert escalation → incident",
     },
   },
+  caseFile: {
+    title: "Decision case file", unavailable: "Unavailable", reasonNotRecorded: "no reason recorded",
+    retrieval: "Retrieval mode", source: "Source", groupReason: "Reason", truncated: "Truncated",
+    unavailableParts: "Unavailable parts", privateWithheld: "{{count}} private memory item(s) withheld",
+    uncited: "No case-file item cited", unresolved: "not in case file", unresolvedHint: "This citation is not in the case file",
+    decisions: "Decisions and citations", contributions: "Contributions and claim citations", rejected: "Rejected contributions",
+    rejectionReason: "Rejection reason", noneApplicable: "None-applicable reason", loading: "Loading case file…",
+    open: "View case file", close: "Hide case file",
+  },
   committee: {
     subtitle: "Multi-persona structured deliberation. Sessions produce memos that can become governance evidence.",
     create: "New session", empty: "No sessions yet. Create one from a signal, alert, or research note.",
@@ -3923,6 +3932,7 @@ export default {
         allFilteredHint: "No personas match current filters. Switch data scope or show retired personas.",
       },
     },
+    strategy: { detailNotFound: "Strategy {{id}} was not found." },
     inbox: {
       title: "Human Inbox",
       subtitleFmt: "{{count}} kinds · required role + consequences shown up front · deep links to the page that fixes it.",
@@ -3944,6 +3954,8 @@ export default {
       loadingDetail: "Loading inbox item…",
       detailUnavailableTitle: "Inbox item unavailable",
       detailUnavailableBody: "Live details for this item are unavailable right now. Return to the inbox and open it again.",
+      detailNotFoundTitle: "Inbox item not found",
+      detailNotFoundBody: "Inbox item {{id}} was not found. It may have been resolved or archived.",
       evidenceCountFmt: "View {{count}} evidence refs",
       focusLoadingPersonaFmt: "Loading inbox items for {{persona}}…",
       focusedPersonaFmt: "Focused persona: {{persona}} · {{count}} matching inbox item(s)",

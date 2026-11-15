@@ -368,7 +368,6 @@ export function OpenClawLlmAuthPanel({
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
-    setState((current) => ({ ...current, authProbePending: true }));
     try {
       const [providerResult, modeResult, usageSummary] = await Promise.all([
         api.fetchProviders({ authProbe: false, signal }),
@@ -382,11 +381,22 @@ export function OpenClawLlmAuthPanel({
         mode: modeResult,
         providerResult,
         usageSummary,
-        authProbePending: true,
+        authProbePending: false,
       });
-
-      const authProbeResult = await api.fetchProviders({ authProbe: true, signal });
+    } catch {
       if (signal?.aborted) return;
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, [api]);
+
+  // Live provider auth verification is slow (external provider round trip) and consumes a
+  // provider check, so it only runs when the operator asks for it; mount reads the last known
+  // status from the non-probing read.
+  const runAuthProbe = useCallback(async () => {
+    setState((current) => ({ ...current, authProbePending: true }));
+    try {
+      const authProbeResult = await api.fetchProviders({ authProbe: true });
       setState((current) => ({
         ...current,
         providers: providersFromResults(authProbeResult, current.providers),
@@ -394,10 +404,7 @@ export function OpenClawLlmAuthPanel({
         authProbePending: false,
       }));
     } catch {
-      if (signal?.aborted) return;
       setState((current) => ({ ...current, authProbePending: false }));
-    } finally {
-      if (!signal?.aborted) setLoading(false);
     }
   }, [api]);
 
@@ -425,6 +432,7 @@ export function OpenClawLlmAuthPanel({
   }, [state.usageSummary]);
   const checkingAuth = state.authProbePending || (loading && rows.length === 0);
   const authProbeFailed = Boolean(state.providerResult && !state.providerResult.ok);
+  const authNotChecked = state.providerResult?.ok === true && state.providerResult.meta?.auth_probe === false;
   const authSummaryLabel = checkingAuth
     ? "checking auth"
     : authProbeFailed
@@ -432,7 +440,7 @@ export function OpenClawLlmAuthPanel({
     : attentionCount > 0
       ? `${attentionCount} attention`
       : rows.length > 0
-        ? "auth ready"
+        ? authNotChecked ? "auth not checked" : "auth ready"
         : "auth unknown";
   const authSummaryTone = checkingAuth
     ? statusTone("pending")
@@ -440,7 +448,7 @@ export function OpenClawLlmAuthPanel({
       ? statusTone("unknown")
     : attentionCount > 0
       ? statusTone("degraded", false)
-      : statusTone(rows.length > 0 ? "ready" : "unknown", rows.length > 0);
+      : statusTone(rows.length > 0 && !authNotChecked ? "ready" : "unknown", rows.length > 0 && !authNotChecked);
   const setProviderReauth = useCallback((key: string, patch: Partial<ProviderReauthUiState>) => {
     setReauthByProvider((current) => ({
       ...current,
@@ -642,6 +650,10 @@ export function OpenClawLlmAuthPanel({
           <Badge variant="outline" className={authSummaryTone}>
             {authSummaryLabel}
           </Badge>
+          <Button size="sm" variant="outline" onClick={() => void runAuthProbe()} disabled={loading || state.authProbePending}>
+            {state.authProbePending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+            Check auth now
+          </Button>
           <Button size="icon-sm" variant="outline" onClick={() => void load()} disabled={loading} aria-label="Refresh LLM provider auth">
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>

@@ -64,7 +64,7 @@ export const StrategyDetail = () => {
   const [lineage, setLineage] = useState<LineageRead | null>(null);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
 
-  const { data: s, setData: setS, loading, isError } = useLiveDetail<Strategy>(
+  const { data: s, setData: setS, loading, isError, notFound } = useLiveDetail<Strategy>(
     id,
     async (entityId) => {
       const failures: string[] = [];
@@ -134,7 +134,10 @@ export const StrategyDetail = () => {
   );
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
-  if (!s) return <div role="alert" className="p-6">{isError || loadErrors.includes("Strategy") ? "Strategy could not be loaded." : "Strategy not found."}</div>;
+  if (!s) {
+    if (notFound) return <div role="alert" className="p-6">{t("mgmt.strategy.detailNotFound", { id })}</div>;
+    return <div role="alert" className="p-6">{isError || loadErrors.includes("Strategy") ? "Strategy could not be loaded." : t("mgmt.strategy.detailNotFound", { id })}</div>;
+  }
 
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
   const noData = t("common.noData");

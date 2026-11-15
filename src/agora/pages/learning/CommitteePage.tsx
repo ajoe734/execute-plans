@@ -7,6 +7,7 @@ import {
   publishCommitteeMemo,
   type CommitteeMemo,
 } from "@/lib/bff-v1/agora/learning";
+import { CaseFileViewPanel } from "@/management/components/case-file/CaseFileViewPanel";
 import {
   OutcomeView, PageShell, ReadBoundary, WriteGateNote,
   useLearningRead, useLearningWriteAccess, type ActionOutcome,
@@ -40,6 +41,10 @@ function Memos({ sessionId }: { sessionId: string }) {
               <li key={memo.memo_id} className="rounded border border-border p-2 text-sm" data-testid={`memo-${memo.memo_id}`}>
                 <p><code>{memo.memo_id}</code> · {memo.status ?? t("agora.learning.notReported")}</p>
                 {memo.summary ? <p>{memo.summary}</p> : null}
+                <div className="mt-2">
+                  <CaseFileViewPanel view={memo.case_file_view} scope={`memo-${memo.memo_id}`}
+                                     testId={`memo-${memo.memo_id}-case-file`} />
+                </div>
                 {memo.status !== "published" ? (
                   <button
                     type="button"

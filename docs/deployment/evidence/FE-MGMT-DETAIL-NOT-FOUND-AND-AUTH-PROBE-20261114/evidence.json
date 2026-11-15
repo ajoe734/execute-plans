@@ -1,0 +1,18 @@
+{
+  "task": "FE-MGMT-DETAIL-NOT-FOUND-AND-AUTH-PROBE-20261114",
+  "date": "2026-11-13",
+  "acceptance": {
+    "1_not_found_states": "HumanGateDetail renders detailNotFoundTitle/Body (zh-TW: 找不到收件匣項目) and StrategyDetail renders mgmt.strategy.detailNotFound (zh-TW: 找不到策略) on 404; 5xx and network errors keep the load failure state. Covered by HumanGateDetail.test.tsx and StrategyDetail.spec.test.tsx.",
+    "2_ranking_formula_detail": "RankingFormulaDetail now calls bffV1.rankingFormulas.get(id) (GET /bff/ranking-formulas/{id}) instead of filtering list(); 404 renders 'Ranking Policy Not Found'. Existing list-mocking tests were re-pointed to get (same assertions). New tests assert get called with the id, list not called, and 404 not-found.",
+    "3_llm_auth_probe": "OpenClawLlmAuthPanel.load() only issues authProbe:false reads. The live probe runs through the new 'Check auth now' button (runAuthProbe). With auth_probe:false meta the badge reads 'auth not checked' instead of 'auth ready'. The old test asserting the automatic mount probe was replaced by two tests: no probe on mount, probe only on click.",
+    "4_postmortem_first_render": {
+      "test": "PostmortemLibrary.test.tsx 'issues the list read on first render under a production build' stubs PROD/NODE_ENV=production and VITE_BFF_MODE=live, uses the real transport with only fetch stubbed, and asserts a fetch to /api/v1/postmortems on first render.",
+      "hosted_crawl_cause": "The page does issue GET /api/v1/postmortems on first render. scripts/accept-management-hosted-production.mjs isBffUrl() only counts pathnames starting with /bff/ (plus health endpoints), so the /api/v1/postmortems request is never recorded as a BFF request and the crawler reports none. This is a crawler attribution gap, tracked by FE-GATE-CRAWLER-ROUTE-ATTRIBUTION-20261114; no gate script was changed here."
+    },
+    "5_scope": "No release gate script, budget, or rule changed. No test deleted; the only replaced test is the one that asserted the removed mount-time auto probe."
+  },
+  "verification": {
+    "vitest": "22 files / 304 tests passed (oversight, StrategyDetail, openclaw, RankingFormulaDetail, PostmortemLibrary, i18n) plus 7 files / 61 tests for LiveOnlyFallbacks, FormulaStudio, components/detail",
+    "tsc": "tsc --noEmit -p tsconfig.app.json clean"
+  }
+}
