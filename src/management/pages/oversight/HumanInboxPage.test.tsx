@@ -608,4 +608,143 @@ describe("HumanInboxPage", () => {
     renderInbox();
     expect(screen.getAllByText("cannot proceed")).toHaveLength(2);
   });
+
+  it("renders meetings ending in REVIEW, due meetings refused for too few participants, and proposals waiting for an operator with meeting links (AC4)", async () => {
+    await i18n.changeLanguage("en-US");
+    const meetingInboxList = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [
+          {
+            id: "meeting_review:mtg-review-01",
+            item_id: "mtg-review-01",
+            inbox_id: "meeting_review:mtg-review-01",
+            kind: "meeting_review",
+            inboxType: "meeting",
+            inbox_type: "meeting",
+            source_type: "meeting",
+            source_id: "mtg-review-01",
+            meeting_id: "mtg-review-01",
+            meeting_type: "MT-1",
+            persona_id: "persona-alpha",
+            outcome: "REVIEW",
+            title: "Meeting mtg-review-01 (MT-1) ended in REVIEW",
+            summary: "Deliberative meeting mtg-review-01 requires operator review (synthesis outcome: REVIEW).",
+            status: "open",
+            action_state: "pending",
+            reason: "meeting_outcome_review",
+            blocking_reasons: ["meeting_outcome_review"],
+            required_role: "operator",
+            can_decide: true,
+            can_proceed: false,
+            href: "/management/meetings/mtg-review-01",
+            route: "/management/meetings/mtg-review-01",
+            detail_href: "/management/meetings/mtg-review-01",
+            links: {
+              manageHref: "/management/meetings/mtg-review-01",
+              primaryObjectHref: "/management/meetings/mtg-review-01",
+              meeting: "/management/meetings/mtg-review-01",
+            },
+          },
+          {
+            id: "meeting_refusal:refusal-persona-alpha-MT-3-0",
+            item_id: "refusal-persona-alpha-MT-3-0",
+            inbox_id: "meeting_refusal:refusal-persona-alpha-MT-3-0",
+            kind: "meeting_refusal",
+            inboxType: "meeting",
+            inbox_type: "meeting",
+            source_type: "meeting",
+            source_id: "refusal-persona-alpha-MT-3-0",
+            meeting_type: "MT-3",
+            persona_id: "persona-alpha",
+            reason: "insufficient_participants",
+            title: "Due meeting MT-3 refused: insufficient_participants",
+            summary: "Scheduled or requested meeting MT-3 for persona-alpha was refused because too few participants were eligible.",
+            status: "open",
+            action_state: "blocked",
+            blocking_reasons: ["insufficient_participants"],
+            required_role: "operator",
+            can_decide: true,
+            can_proceed: false,
+            href: "/management/meetings?tab=budget",
+            route: "/management/meetings?tab=budget",
+            detail_href: "/management/meetings?tab=budget",
+            links: {
+              manageHref: "/management/meetings?tab=budget",
+              primaryObjectHref: "/management/meetings?tab=budget",
+              meeting: "/management/meetings?tab=budget",
+            },
+          },
+          {
+            id: "meeting_proposal:prop-wait-01",
+            item_id: "prop-wait-01",
+            inbox_id: "meeting_proposal:prop-wait-01",
+            kind: "meeting_proposal",
+            inboxType: "meeting",
+            inbox_type: "meeting",
+            source_type: "meeting",
+            source_id: "prop-wait-01",
+            proposal_id: "prop-wait-01",
+            proposal_kind: "governance_approval",
+            meeting_id: "mtg-normal-02",
+            persona_id: "persona-alpha",
+            title: "Meeting proposal prop-wait-01 (governance_approval) waiting for operator",
+            summary: "Proposal prop-wait-01 from meeting mtg-normal-02 requires operator review.",
+            status: "pending",
+            action_state: "pending",
+            reason: "proposal_waiting_for_operator",
+            blocking_reasons: ["proposal_waiting_for_operator"],
+            required_role: "operator",
+            can_decide: true,
+            can_proceed: false,
+            href: "/management/meetings/mtg-normal-02",
+            route: "/management/meetings/mtg-normal-02",
+            detail_href: "/management/meetings/mtg-normal-02",
+            links: {
+              manageHref: "/management/meetings/mtg-normal-02",
+              primaryObjectHref: "/management/meetings/mtg-normal-02",
+              meeting: "/management/meetings/mtg-normal-02",
+            },
+          },
+        ],
+      },
+      meta: {
+        snapshot_at: "2026-11-16T10:00:00Z",
+        surfaces: {
+          human_inbox: { status: "ok", snapshot_at: "2026-11-16T10:00:00Z" },
+          meetings: { status: "ok", snapshot_at: "2026-11-16T10:00:00Z" },
+        },
+      },
+    })!;
+
+    expect(meetingInboxList.map((i) => i.kind)).toEqual([
+      "meeting_review",
+      "meeting_refusal",
+      "meeting_proposal",
+    ]);
+
+    mocks.useV5Live.mockReturnValue({
+      data: meetingInboxList,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+
+    expect(screen.getByText("meeting_review")).toBeInTheDocument();
+    expect(screen.getByText("meeting_refusal")).toBeInTheDocument();
+    expect(screen.getByText("meeting_proposal")).toBeInTheDocument();
+    expect(screen.getByText("Meeting mtg-review-01 (MT-1) ended in REVIEW")).toBeInTheDocument();
+    expect(screen.getByText("Due meeting MT-3 refused: insufficient_participants")).toBeInTheDocument();
+    expect(
+      screen.getByText("Meeting proposal prop-wait-01 (governance_approval) waiting for operator"),
+    ).toBeInTheDocument();
+
+    const actionLinks = screen.getAllByRole("link", { name: "Open action page" });
+    const hrefs = actionLinks.map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("/management/meetings/mtg-review-01");
+    expect(hrefs).toContain("/management/meetings?tab=budget");
+    expect(hrefs).toContain("/management/meetings/mtg-normal-02");
+  });
 });

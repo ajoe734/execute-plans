@@ -52,7 +52,7 @@ export const LEGACY_CONTEXT_KEYS = [
   "capital_pool_id",
 ] as const;
 
-export type ManagementCenterId = "performance" | "rankings" | "governance-decisions";
+export type ManagementCenterId = "performance" | "rankings" | "governance-decisions" | "meetings";
 
 export interface ManagementCenterTab {
   id: string;
@@ -107,6 +107,19 @@ export const CANONICAL_CENTERS: Record<ManagementCenterId, ManagementCenter> = {
       { id: "recommendations", labelKey: "governanceDecisions.tabs.recommendations" },
       { id: "capital", labelKey: "governanceDecisions.tabs.capital" },
       { id: "policy", labelKey: "governanceDecisions.tabs.policy" },
+    ],
+  },
+  meetings: {
+    id: "meetings",
+    path: "/management/meetings",
+    labelKey: "nav.meetingsCenter",
+    icon: MessagesSquare,
+    defaultTab: "upcoming",
+    tabs: [
+      { id: "upcoming", labelKey: "meetingsCenter.tabs.upcoming" },
+      { id: "history", labelKey: "meetingsCenter.tabs.history" },
+      { id: "proposals", labelKey: "meetingsCenter.tabs.proposals" },
+      { id: "rules", labelKey: "meetingsCenter.tabs.rules" },
     ],
   },
 };
@@ -178,6 +191,7 @@ export const MANAGEMENT_SIDEBAR_GROUPS: readonly ManagementNavGroup[] = [
     id: "research-and-evolution",
     labelKey: "groups.researchAndEvolution",
     items: [
+      { id: "meetings", to: "/management/meetings", labelKey: "nav.meetingsCenter", icon: MessagesSquare },
       { id: "experiments", to: "/management/experiments", labelKey: "nav.experiments", icon: FlaskConical },
       { id: "evolution-journal", to: "/management/evolution-journal", labelKey: "nav.evolutionJournal", icon: GitBranch },
       { id: "evolution", to: "/management/evolution", labelKey: "nav.evolution", icon: GitBranch },
