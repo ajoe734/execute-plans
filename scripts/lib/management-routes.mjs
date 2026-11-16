@@ -18,6 +18,9 @@ const { resolveLegacyRedirect } = await tsImport(
 
 export const BASELINE_ROUTES = [
   { path: "/management/performance", kind: "nav" },
+  { path: "/management/performance?tab=attribution", kind: "detail-or-alias" },
+  { path: "/management/performance?tab=shadow", kind: "detail-or-alias" },
+  { path: "/management/performance?tab=shadow&decision=dec_001", kind: "detail-or-alias" },
   { path: "/management/rankings", kind: "nav" },
   { path: "/management/governance-decisions", kind: "nav" },
   { path: "/management/cockpit", kind: "nav" },

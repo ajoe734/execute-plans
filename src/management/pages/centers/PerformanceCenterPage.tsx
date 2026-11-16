@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CANONICAL_CENTERS } from "@/management/navigation/managementRouteManifest";
 import { PortfolioBookPage } from "@/management/pages/oversight/PortfolioBook";
 import { PerformanceAttributionPage } from "@/management/pages/oversight/PerformanceAttribution";
+import { OutliersAttributionTab } from "@/management/pages/performance/OutliersAttributionTab";
+import { ShadowComparisonTab } from "@/management/pages/performance/ShadowComparisonTab";
 import { PortfolioExposurePage } from "@/management/pages/oversight/PortfolioExposure";
 
 const CENTER = CANONICAL_CENTERS.performance;
@@ -50,6 +52,10 @@ export const PerformanceCenterPage = () => {
         </TabsContent>
         <TabsContent value="attribution" className="m-0">
           <PerformanceAttributionPage embedded />
+          <OutliersAttributionTab />
+        </TabsContent>
+        <TabsContent value="shadow" className="m-0">
+          <ShadowComparisonTab />
         </TabsContent>
         <TabsContent value="exposure" className="m-0">
           <PortfolioExposurePage embedded />

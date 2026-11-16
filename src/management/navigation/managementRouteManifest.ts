@@ -84,6 +84,7 @@ export const CANONICAL_CENTERS: Record<ManagementCenterId, ManagementCenter> = {
       { id: "overview", labelKey: "performanceCenter.tabs.overview" },
       { id: "attribution", labelKey: "performanceCenter.tabs.attribution" },
       { id: "exposure", labelKey: "performanceCenter.tabs.exposure" },
+      { id: "shadow", labelKey: "performanceCenter.tabs.shadow" },
     ],
   },
   rankings: {
