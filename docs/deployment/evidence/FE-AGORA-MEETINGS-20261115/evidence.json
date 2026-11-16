@@ -1,0 +1,46 @@
+{
+  "task_id": "FE-AGORA-MEETINGS-20261115",
+  "kind": "source_implementation_evidence",
+  "owner": "Antigravity",
+  "assigned_reviewer": "Antigravity2",
+  "independent_review": "pending",
+  "design": "docs/04/pantheon_persona_meetings_2026-11-15/SD_PERSONA_MEETINGS_2026-11-15.md (§5, §6, §11.2 d, §12.8)",
+  "prerequisites": [
+    "AGORA-MEETINGS-20261115",
+    "FE-MANAGEMENT-MEETINGS-20261115"
+  ],
+  "hosted_behavior_claimed": false,
+  "credentials_present": false,
+  "authority": {
+    "environment": "paper",
+    "execution_authority": "none",
+    "model_call_on_trade_path": false,
+    "new_credential_or_route": false
+  },
+  "files": {
+    "client": "src/lib/bff-v1/agora/learning.ts",
+    "workshop": "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+    "committee": "src/agora/pages/learning/CommitteePage.tsx",
+    "i18n": "src/i18n/locales/en-US.ts, src/i18n/locales/zh-TW.ts",
+    "tests": "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx, src/agora/pages/learning/learning.pages.test.tsx"
+  },
+  "acceptance_evidence": {
+    "AC1_workshop_convene_and_list": "WorkshopSessionView renders WorkshopDeliberativeMeetingsSection allowing a trader to pick participants from the eligible list including the trader's own private servant (with M9 cap <= 5), convenes deliberative meetings via POST /bff/agora/workshops/:id/meetings with Idempotency-Key, and lists the meetings convened by the session",
+    "AC2_committee_gate_panels_and_deliberative_rounds": "CommitteePage lists both gate panels (session_class=gate_panel) and deliberative meetings (session_class=deliberative_meeting) with class filters, every round (independent Round 1 and anonymised cross-visibility Round 2 with revised position badges, confidence, and citations), chair synthesis, non-binding tally, and dissent memo",
+    "AC3_unsponsored_agora_candidate_decisions": "Proposals without a trading-persona sponsor (sponsor_persona_id=null / approval_path=agora_candidate_decision) are displayed as Agora candidate decisions with their approval status and can be routed on the existing candidate-decision approval path (POST /bff/agora/meetings/:meetingId/proposals/:proposalId/candidates) with execution_authority=none",
+    "AC4_component_tests_and_existing_tests": "StrategyWorkshopPage.test.tsx (61 tests) and learning.pages.test.tsx (21 tests) cover workshop convening, refusal reasons (persona_user_mismatch, servant_absent, insufficient_participants, participant_budget_exceeded), gate panels, deliberative rounds/synthesis/dissent, and unsponsored Agora candidate decisions against recorded BFF responses",
+    "AC5_evidence_recorded_no_credentials": "Commands and results recorded below; no credentials or secrets included"
+  },
+  "commands": [
+    {
+      "command": "npx vitest run src/agora/pages/learning/learning.pages.test.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "exit_code": 0,
+      "summary": "2 test files passed, 82 tests passed (21 in learning.pages.test.tsx, 61 in StrategyWorkshopPage.test.tsx)"
+    },
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.app.json --noEmit and tsc -p tsconfig.agora.json --noEmit passed with 0 errors"
+    }
+  ]
+}
