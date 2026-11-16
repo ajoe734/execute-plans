@@ -14,12 +14,16 @@ export type HumanInboxKind =
   | "capital_breach"
   | "broker_disconnect"
   | "ranking_recommendation" // 2026-05-22 PM12-010 — quarterly ranking → governance
-  | "promotion_review"; // 2026-07-03 PPLG — paper/canary promotion human review
+  | "promotion_review" // 2026-07-03 PPLG — paper/canary promotion human review
+  | "meeting_review" // 2026-11-15 SD-PERSONA-MEETINGS — meeting ending in REVIEW
+  | "meeting_refusal" // 2026-11-15 SD-PERSONA-MEETINGS — due meeting refused (e.g. insufficient_participants)
+  | "meeting_proposal"; // 2026-11-15 SD-PERSONA-MEETINGS — meeting proposal waiting for operator
 
 export const HUMAN_INBOX_KINDS: readonly HumanInboxKind[] = [
   "approval", "incident", "sentinel", "ask", "intervention", "readiness_blocker",
   "policy_violation", "rollback_request", "capital_breach", "broker_disconnect",
   "ranking_recommendation", "promotion_review",
+  "meeting_review", "meeting_refusal", "meeting_proposal",
 ] as const;
 
 export interface HumanInboxAllowedActions {
@@ -107,9 +111,12 @@ export function humanInboxRank(kind: HumanInboxKind): number {
     case "capital_breach": return 8;
     case "promotion_review": return 7.5;
     case "rollback_request": return 7;
+    case "meeting_review": return 6.5;
+    case "meeting_proposal": return 6.2;
     case "sentinel": return 6;
     case "incident": return 5.5;
     case "broker_disconnect": return 5;
+    case "meeting_refusal": return 4.5;
     case "readiness_blocker": return 4;
     case "intervention": return 3;
     case "ranking_recommendation": return 2.5;

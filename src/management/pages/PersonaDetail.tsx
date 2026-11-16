@@ -40,6 +40,7 @@ import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHis
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaStrategyPoolPanel } from "../components/persona/PersonaStrategyPoolPanel";
 import { PersonaCyclePanel } from "../components/persona/PersonaCyclePanel";
+import { PersonaMeetingsPanel } from "../components/persona/PersonaMeetingsPanel";
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
@@ -336,6 +337,7 @@ export const PersonaDetail = () => {
     .map(immutableStrategyTarget)
     .filter((item): item is ImmutableStrategyTarget => Boolean(item));
   const headerState = p.lifecycleStatus?.trim() || p.state;
+  const requestedTab = new URLSearchParams(location.search).get("tab")?.trim() || undefined;
 
   return (
     <>
@@ -343,6 +345,7 @@ export const PersonaDetail = () => {
         object={p}
         state={headerState}
         subtitle={`${p.archetype} · ${p.id}`}
+        defaultTab={requestedTab}
         actions={
           <>
             <Button aria-label={`Talk with ${p.name}`} disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("ask")} size="sm" variant="outline">
@@ -467,6 +470,20 @@ export const PersonaDetail = () => {
             content: (
               <Section>
                 <PersonaCyclePanel
+                  management={management}
+                  managementUnavailable={
+                    managementState === "error" || (managementState === "ready" && !management?.data)
+                  }
+                />
+              </Section>
+            ),
+          },
+          {
+            value: "meetings", label: t("persona.meetings.tab", { defaultValue: "會議" }),
+            content: (
+              <Section>
+                <PersonaMeetingsPanel
+                  personaId={p.id}
                   management={management}
                   managementUnavailable={
                     managementState === "error" || (managementState === "ready" && !management?.data)
