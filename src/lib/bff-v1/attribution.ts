@@ -6,7 +6,14 @@
 
 import { bffFetch } from "./client";
 import { BffError } from "./errors";
-import { paths } from "./paths";
+
+const BASE = "/bff";
+const enc = (v: string) => encodeURIComponent(v);
+const paths = {
+  mgmtAttributionOutliers: () => `${BASE}/management/attribution/outliers`,
+  mgmtAttributionRecord: (recordId: string) => `${BASE}/management/attribution/records/${enc(recordId)}`,
+  mgmtAttributionShadow: (decisionId: string) => `${BASE}/management/attribution/shadow/${enc(decisionId)}`,
+};
 
 export type AttributionRead<T> =
   | { state: "ok"; data: T; degraded?: Record<string, string> }

@@ -448,10 +448,6 @@ export const paths = {
     const query = params.toString();
     return `${BASE}/management/meetings${query ? `?${query}` : ""}`;
   },
-  mgmtAttributionOutliers: () => `${BASE}/management/attribution/outliers`,
-  mgmtAttributionRecords: () => `${BASE}/management/attribution/records`,
-  mgmtAttributionRecord: (recordId: string) => `${BASE}/management/attribution/records/${enc(recordId)}`,
-  mgmtAttributionShadow: (decisionId: string) => `${BASE}/management/attribution/shadow/${enc(decisionId)}`,
   mgmtMeetingDetail: (meetingId: string) => `${BASE}/management/meetings/${enc(meetingId)}`,
   mgmtMeetingProposals: (
     filters: {
