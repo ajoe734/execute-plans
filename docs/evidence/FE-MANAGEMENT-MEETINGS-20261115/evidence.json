@@ -36,9 +36,9 @@
   },
   "commands": [
     {
-      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/meetings.test.tsx src/management/components/persona/PersonaMeetingsPanel.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx src/management/navigation/managementRouteManifest.test.ts src/test/accept-management-honest-not-found.test.ts",
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/meetings.test.tsx src/management/components/persona/PersonaMeetingsPanel.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts src/management/navigation/managementRouteManifest.test.ts src/test/accept-management-honest-not-found.test.ts",
       "exit_code": 0,
-      "summary": "6 test files passed, 52 tests passed"
+      "summary": "7 test files passed, 62 tests passed"
     },
     {
       "command": "./node_modules/.bin/vitest run src/test/accept-management-route-attribution.test.ts src/lib/v4/__tests__/spec-conflict-g-ui-hygiene.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx",

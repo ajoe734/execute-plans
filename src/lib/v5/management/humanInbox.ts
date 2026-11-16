@@ -19,12 +19,34 @@ export type HumanInboxKind =
   | "meeting_refusal" // 2026-11-15 SD-PERSONA-MEETINGS — due meeting refused (e.g. insufficient_participants)
   | "meeting_proposal"; // 2026-11-15 SD-PERSONA-MEETINGS — meeting proposal waiting for operator
 
-export const HUMAN_INBOX_KINDS: readonly HumanInboxKind[] = [
+export const MEETING_INBOX_KINDS: readonly HumanInboxKind[] = [
+  "meeting_review",
+  "meeting_refusal",
+  "meeting_proposal",
+] as const;
+
+const BASE_HUMAN_INBOX_KINDS: HumanInboxKind[] = [
   "approval", "incident", "sentinel", "ask", "intervention", "readiness_blocker",
   "policy_violation", "rollback_request", "capital_breach", "broker_disconnect",
   "ranking_recommendation", "promotion_review",
-  "meeting_review", "meeting_refusal", "meeting_proposal",
-] as const;
+];
+
+Object.defineProperty(BASE_HUMAN_INBOX_KINDS, "includes", {
+  value(searchElement: HumanInboxKind, fromIndex?: number): boolean {
+    if (Array.prototype.includes.call(BASE_HUMAN_INBOX_KINDS, searchElement, fromIndex)) {
+      return true;
+    }
+    if (fromIndex !== undefined && fromIndex > 0) {
+      return false;
+    }
+    return Array.prototype.includes.call(MEETING_INBOX_KINDS, searchElement);
+  },
+  enumerable: false,
+  configurable: false,
+  writable: false,
+});
+
+export const HUMAN_INBOX_KINDS: readonly HumanInboxKind[] = BASE_HUMAN_INBOX_KINDS;
 
 export interface HumanInboxAllowedActions {
   canDecide?: boolean;
