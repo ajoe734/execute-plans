@@ -449,8 +449,17 @@ case "${url}" in
     for ((i=1; i<=$#; i++)); do
       if [[ "${!i}" == "--output" ]]; then j=$((i+1)); output="${!j}"; fi
     done
-    [[ -z "${output}" ]] || printf '{"status":"ready"}\n' > "${output}"
-    printf '200'
+    count_file="${output}.count"
+    count=0
+    [[ ! -f "${count_file}" ]] || count="$(<"${count_file}")"
+    count=$((count + 1))
+    printf '%s\n' "${count}" > "${count_file}"
+    IFS=, read -ra statuses <<< "${MOCK_READY_STATUS_SEQUENCE:-200}"
+    status="${statuses[$((count <= ${#statuses[@]} ? count - 1 : ${#statuses[@]} - 1))]}"
+    printf 'curl:readyz:%s:%s\n' "${output}" "${status}" >> "${MOCK_CALL_LOG:?}"
+    printf 'curl:readyz-args:%s\n' "$*" >> "${MOCK_CALL_LOG}"
+    [[ -z "${output}" ]] || printf '{"status":"mock"}\n' > "${output}"
+    printf '%s' "${status}"
     ;;
   */bff/me*)
     output=""
@@ -458,7 +467,8 @@ case "${url}" in
       if [[ "${!i}" == "--output" ]]; then j=$((i+1)); output="${!j}"; fi
     done
     [[ -z "${output}" ]] || printf '{"code":"AUTH_REQUIRED"}\n' > "${output}"
-    printf '401'
+    printf 'curl:anonymous:%s\n' "${MOCK_ME_STATUS:-401}" >> "${MOCK_CALL_LOG:?}"
+    printf '%s' "${MOCK_ME_STATUS:-401}"
     ;;
   *)
     echo "unexpected mock curl URL" >&2
@@ -2518,6 +2528,85 @@ test_write_token_and_skip_flags_fail_closed() {
   fi
 }
 
+test_operator_live_strict_health_retry_success() {
+  setup_case strict-health-recovery "${CANDIDATE_SHA}" auto
+  run_operator_live_deploy MOCK_READY_STATUS_SEQUENCE=503,503,200
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "transient strict readiness must recover"
+  assert_live_profile operator-live accepted
+  "${REAL_NODE}" --input-type=module - "${CASE_AUDIT}" "${CASE_CALL_LOG}" <<'NODE' || die "strict health recovery evidence mismatch"
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const [audit, callLog] = process.argv.slice(2);
+const events = fs.readFileSync(`${audit}/evidence.jsonl`, "utf8").trim().split("\n").map(JSON.parse);
+for (const stage of ["pre_candidate", "pre_switch", "post_switch", "accepted_final"]) {
+  const attempts = fs.readFileSync(`${audit}/bff-ready-${stage}-attempts.jsonl`, "utf8")
+    .trim().split("\n").map(JSON.parse);
+  assert.deepEqual(attempts.map(row => row.httpStatus), ["503", "503", "200"], stage);
+  assert.deepEqual(attempts.map(row => row.attempt), [1, 2, 3], stage);
+  assert(attempts.every(row => Number.isFinite(Date.parse(row.at))), stage);
+  assert(events.some(row => row.type === `bff.strict_health.${stage}` && row.status === "passed"), stage);
+}
+assert.equal(fs.readFileSync(callLog, "utf8").split("\n").filter(row => row === "curl:anonymous:401").length, 4);
+NODE
+  assert_summary_outcome accepted
+  verify_evidence_pair
+}
+
+test_operator_live_strict_health_failures() {
+  # Exercise the actual shared function with a virtual sleep clock so deadline
+  # exhaustion remains deterministic without adding a production test override.
+  source <(sed -n '/^verify_bff_identity() {/,/^resolve_remote_dev_sha()/p' "${DEPLOY_SOURCE}" | sed '$d')
+  source <(sed -n '/^evidence_append() {/,/^}/p' "${DEPLOY_SOURCE}")
+  local stage status result started
+  local DEPLOY_PROFILE=operator-live BFF_HOST=https://bff.test BFF_COMMIT="${BFF_SHA}"
+  local AUDIT_DIR CANDIDATE_DIR="${HARNESS_ROOT}/absent-pair" EVIDENCE_LOG EVIDENCE_INITIALIZED=true
+  export PATH="${MOCK_BIN}:${SYSTEM_PATH}" REAL_NODE REAL_GIT
+  export MOCK_BFF_SHA="${BFF_SHA}" MOCK_BFF_AUTH_MODE=strict MOCK_BFF_AUTH_STUB=false
+  export MOCK_CALL_LOG="${HARNESS_ROOT}/strict-health-calls.log"
+  export MOCK_ME_STATUS MOCK_READY_STATUS_SEQUENCE
+  sleep() {
+    [[ "$1" -ge 1 && "$1" -le 5 ]] || die "unexpected strict health backoff: $1"
+    SECONDS=$((SECONDS + $1))
+  }
+  cd "${ROOT_DIR}"
+  for stage in pre_candidate pre_switch post_switch accepted_final; do
+    AUDIT_DIR="${HARNESS_ROOT}/strict-health-${stage}"
+    mkdir -p "${AUDIT_DIR}"
+    EVIDENCE_LOG="${AUDIT_DIR}/evidence.jsonl"
+    "${REAL_NODE}" "${EVIDENCE_SOURCE}" init --log "${EVIDENCE_LOG}" >/dev/null
+    : > "${MOCK_CALL_LOG}"
+    MOCK_ME_STATUS=401 MOCK_READY_STATUS_SEQUENCE=503
+    started=$SECONDS
+    result=0
+    verify_bff_identity "${stage}" https://candidate-bff.test || result=$?
+    [[ "${result}" -ne 0 ]] || die "persistent readiness failure accepted at ${stage}"
+    (( SECONDS - started >= 180 && SECONDS - started <= 181 )) || die "strict health exceeded deadline"
+    [[ "$(grep -c '^curl:anonymous:' "${MOCK_CALL_LOG}")" -eq 1 ]] || die "anonymous check retried"
+    grep -Fq -- '--max-time 5 ' "${MOCK_CALL_LOG}" || \
+      grep -Eq -- '--max-time ([1-9]|1[0-9]) ' "${MOCK_CALL_LOG}" || die "last curl exceeded remaining budget"
+    "${REAL_NODE}" --input-type=module - "${AUDIT_DIR}" "${stage}" <<'NODE' || die "strict health failure evidence mismatch"
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const [audit, stage] = process.argv.slice(2);
+const attempts = fs.readFileSync(`${audit}/bff-ready-${stage}-attempts.jsonl`, "utf8").trim().split("\n").map(JSON.parse);
+assert(attempts.length > 1 && attempts.length <= 36);
+assert(attempts.every((row, i) => row.httpStatus === "503" && row.attempt === i + 1 && Number.isFinite(Date.parse(row.at))));
+const events = fs.readFileSync(`${audit}/evidence.jsonl`, "utf8").trim().split("\n").map(JSON.parse);
+assert(events.some(row => row.type === `bff.strict_health.${stage}` && row.status === "failed"));
+NODE
+  done
+  for status in 200 403 500 000; do
+    : > "${MOCK_CALL_LOG}"
+    MOCK_ME_STATUS="${status}" MOCK_READY_STATUS_SEQUENCE=503,503,200
+    result=0
+    verify_bff_identity "anonymous-${status}" || result=$?
+    [[ "${result}" -ne 0 ]] || die "anonymous ${status} accepted"
+    [[ "$(grep -c '^curl:anonymous:' "${MOCK_CALL_LOG}")" -eq 1 ]] || die "anonymous failure retried"
+    ! grep -q '^curl:readyz:' "${MOCK_CALL_LOG}" || die "anonymous failure waited for readiness"
+    grep -Fq "\"type\":\"bff.strict_health.anonymous-${status}\",\"status\":\"failed\"" "${EVIDENCE_LOG}" || die "missing anonymous failure evidence"
+  done
+}
+
 test_operator_live_persists_with_strict_bff() {
   local accepted_operator_target
   setup_case operator-live-success "${CANDIDATE_SHA}" auto
@@ -3697,6 +3786,8 @@ run_test "interrupted candidate rolls forward or restores its exact predecessor"
 run_test "emergency override cannot skip integrity or auth probes" test_emergency_override_guards
 run_test "write, bearer, and skip-probe inputs fail closed" test_write_token_and_skip_flags_fail_closed
 run_test "operator-live persists only through the strict BFF path" test_operator_live_persists_with_strict_bff
+run_test "operator-live strict health retries recover at all four stages" test_operator_live_strict_health_retry_success
+run_test "operator-live strict health deadline and anonymous failures stay closed" test_operator_live_strict_health_failures
 run_test "paired write installs a qualified safe sibling and private locator" test_paired_write_installs_safe_sibling_and_private_locator
 run_test "write failure restores the paired safe sibling" test_write_failure_restores_paired_safe_sibling
 run_test "explicit restore switches safe before network and never rolls back to write" test_explicit_restore_switches_safe_before_network_and_never_rolls_back_write

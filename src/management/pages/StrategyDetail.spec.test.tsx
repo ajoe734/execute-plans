@@ -73,6 +73,32 @@ describe("StrategyDetail spec & artifacts truth (FE-STRATEGY-DETAIL-TRUTH-202611
     expect(screen.queryByText(ART_59B2)).not.toBeInTheDocument();
   });
 
+  it("renders an explicit 找不到 state when the strategy read answers 404, and keeps the load failure state for 5xx and network errors", async () => {
+    await i18n.changeLanguage("zh-TW");
+    try {
+      vi.spyOn(bffV1.artifacts, "list").mockResolvedValue([]);
+      const get = vi.spyOn(bffV1.strategies, "get");
+      get.mockRejectedValue(Object.assign(new Error("HTTP 404"), { status: 404 }));
+      const notFound = renderPage();
+      expect(await screen.findByText(/找不到策略/)).toBeInTheDocument();
+      expect(screen.queryByText("Strategy could not be loaded.")).not.toBeInTheDocument();
+      notFound.unmount();
+
+      get.mockRejectedValue(Object.assign(new Error("HTTP 503"), { status: 503 }));
+      const serverError = renderPage();
+      expect(await screen.findByText("Strategy could not be loaded.")).toBeInTheDocument();
+      expect(screen.queryByText(/找不到/)).not.toBeInTheDocument();
+      serverError.unmount();
+
+      get.mockRejectedValue(new TypeError("Failed to fetch"));
+      renderPage();
+      expect(await screen.findByText("Strategy could not be loaded.")).toBeInTheDocument();
+      expect(screen.queryByText(/找不到/)).not.toBeInTheDocument();
+    } finally {
+      await i18n.changeLanguage("en-US");
+    }
+  });
+
   it("a failed artifact read shows unavailable and no rows", async () => {
     vi.spyOn(bffV1.artifacts, "list").mockRejectedValue(new Error("boom"));
     renderPage();

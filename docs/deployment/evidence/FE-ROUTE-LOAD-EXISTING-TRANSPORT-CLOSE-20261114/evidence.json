@@ -1,0 +1,10 @@
+{
+  "task": "FE-ROUTE-LOAD-EXISTING-TRANSPORT-CLOSE-20261114",
+  "baseSha": "7a2f02e0bfdef2610f960ffb1fae87fe7ee98df5",
+  "change": "scripts/probe-route-load-baseline.mjs finally block now calls existing transport.closeBrowser(browser) (hold/drain/close) instead of browser.close() then settle(); close failures are retained in transport.errors. Shared transport module unchanged.",
+  "test": "e2e/hosted-bff-streaming-transport.spec.ts: 'actual route-load probe close drains a pending BFF interception before closing the browser' (real Chromium, loopback fixture, probe finally block executed from source).",
+  "preFix": "new case fails: browser already disconnected while the BFF interception is still pending (expect isConnected true, received false).",
+  "postFix": "new case passes; full spec 85 passed locally.",
+  "notClaimed": "Original hosted routeTiming.error was truncated to 400 chars, so its raw CDP message remains unknown; the 34 data failures and ~4904ms Evidence API are not addressed or attributed to this tool.",
+  "scope": "local fixture only; no hosted login, credentials, or deployment."
+}

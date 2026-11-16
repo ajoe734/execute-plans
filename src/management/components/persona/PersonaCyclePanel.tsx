@@ -3,7 +3,11 @@
 // A null section or a non-"ok" surface is shown as unavailable with the owner's
 // reason; nothing is derived, defaulted or synthesised here.
 
+import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
+import { getPacketCaseFileView, type CaseFileRead } from "@/lib/bff-v1/caseFile";
+import { CaseFileViewPanel } from "@/management/components/case-file/CaseFileViewPanel";
 import { useT } from "@/platform/hooks";
 import type { PersonaManagementEnvelope } from "@/lib/bff-v1/personas";
 
@@ -31,6 +35,36 @@ const reasonOf = (m: PersonaManagementEnvelope | null | undefined, surface: stri
   m?.meta?.surfaces?.[surface]?.reason ?? null;
 const text = (v: unknown): string =>
   v === null || v === undefined || v === "" ? "—" : typeof v === "string" ? v : JSON.stringify(v);
+
+/** Loads the packet's case file on demand through the existing OODA packet detail read. */
+function PacketCaseFile({ packetId }: { packetId: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [read, setRead] = useState<CaseFileRead | "loading" | null>(null);
+  const toggle = () => {
+    if (open) return setOpen(false);
+    setOpen(true);
+    if (read === null) {
+      setRead("loading");
+      void getPacketCaseFileView(packetId).then(setRead);
+    }
+  };
+  return (
+    <div className="ml-4">
+      <button type="button" onClick={toggle} aria-expanded={open} data-testid={`cycle-casefile-toggle-${packetId}`}
+              className="text-xs underline">
+        {open ? t("caseFile.close") : t("caseFile.open")}
+      </button>
+      {open ? (
+        read === "loading" || read === null ? (
+          <p role="status" className="text-xs text-muted-foreground">{t("caseFile.loading")}</p>
+        ) : (
+          <CaseFileViewPanel read={read} scope={`packet-${packetId}`} testId={`cycle-casefile-${packetId}`} />
+        )
+      ) : null}
+    </div>
+  );
+}
 
 export function PersonaCyclePanel({ management, managementUnavailable }: Props) {
   const t = useT();
@@ -67,6 +101,7 @@ export function PersonaCyclePanel({ management, managementUnavailable }: Props) 
                     {" · "}{t("persona.cycle.failure", { defaultValue: "失敗原因" })}: {p.failure_reason}
                   </span>
                 ) : null}
+                <PacketCaseFile packetId={p.packet_id} />
               </li>
             ))}
           </ul>

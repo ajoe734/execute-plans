@@ -1,0 +1,11 @@
+{
+  "task_id": "FE-EVIDENCE-DETAIL-NOT-FOUND-20261114",
+  "base_commit": "25eb22021",
+  "change": "EvidenceDetailView renders detailNotFoundTitle/Body when isNotFoundError(error) (404); 5xx/network/invalid payload keep unavailableTitle",
+  "commands": [
+    {"cmd": "npx vitest run src/management/pages/oversight/EvidenceExplorerPage.test.tsx", "result": "before fix (dev 25eb22021 behavior): 2 failed | 12 passed (404 tests, both route forms); after fix: 14 passed"},
+    {"cmd": "npx tsc --noEmit -p tsconfig.app.json", "result": "exit 0"}
+  ],
+  "gate_scripts_changed": false,
+  "hosted_behavior_claimed": false
+}

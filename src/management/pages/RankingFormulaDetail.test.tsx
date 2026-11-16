@@ -9,9 +9,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// The detail page reads GET /bff/ranking-formulas/{id}; serve the matching row per requested id.
+const mockFormulaGet = (rows: import("@/lib/bff-v1").RankingFormula[]) =>
+  vi.spyOn(bffV1.rankingFormulas, "get").mockImplementation(async (id: string) => rows.find((r) => r.id === id));
+
 describe("RankingFormulaDetail retired activate flow gate", () => {
   it("renders read surface link and does not render retired activate flow", async () => {
-    vi.spyOn(bffV1.rankingFormulas, "list").mockResolvedValue([
+    mockFormulaGet([
       {
         id: "rf_trend_v1",
         name: "Trend Momentum Formula",
@@ -52,7 +56,7 @@ describe("RankingFormulaDetail retired activate flow gate", () => {
   });
 
   it("never renders undefined when appliedTo is omitted and points the score tab to Rankings Center when no owner ranking rows are present", async () => {
-    vi.spyOn(bffV1.rankingFormulas, "list").mockResolvedValue([
+    mockFormulaGet([
       {
         id: "rf_no_applied",
         name: "Formula Without AppliedTo",
@@ -90,7 +94,7 @@ describe("RankingFormulaDetail retired activate flow gate", () => {
   });
 
   it("renders owner-supplied ranking rows on the score tab when provided by the formula DTO", async () => {
-    vi.spyOn(bffV1.rankingFormulas, "list").mockResolvedValue([
+    mockFormulaGet([
       {
         id: "rf_with_rows",
         name: "Formula With Owner Rows",
@@ -169,7 +173,7 @@ describe("RankingFormulaDetail retired activate flow gate", () => {
   };
 
   const renderDetail = (row: Record<string, unknown>) => {
-    vi.spyOn(bffV1.rankingFormulas, "list").mockResolvedValue([row as unknown as import("@/lib/bff-v1").RankingFormula]);
+    mockFormulaGet([row as unknown as import("@/lib/bff-v1").RankingFormula]);
     vi.spyOn(bffV1.audit, "list").mockResolvedValue([]);
     return render(
       <MemoryRouter initialEntries={[`/management/ranking/formulas/${row.id}`]}>
@@ -229,5 +233,36 @@ describe("RankingFormulaDetail retired activate flow gate", () => {
     expect(box).toHaveTextContent(/無資料|No data/);
     expect(box.textContent).not.toMatch(/\d%/);
     expect(bare.container.textContent).not.toContain("undefined");
+  });
+});
+
+describe("RankingFormulaDetail per-id read and not found (FE-MGMT-DETAIL-NOT-FOUND-AND-AUTH-PROBE-20261114)", () => {
+  const renderAt = (id: string) =>
+    render(
+      <MemoryRouter initialEntries={[`/management/ranking/formulas/${id}`]}>
+        <Routes>
+          <Route path="/management/ranking/formulas/:id" element={<RankingFormulaDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+  it("reads the requested formula by id and never the list", async () => {
+    const getSpy = mockFormulaGet([
+      { id: "rf_by_id", name: "Detail Read Formula", state: "active", owner: "risk_team", updatedAt: "2026-08-01T00:00:00Z" } as unknown as import("@/lib/bff-v1").RankingFormula,
+    ]);
+    const listSpy = vi.spyOn(bffV1.rankingFormulas, "list");
+    vi.spyOn(bffV1.audit, "list").mockResolvedValue([]);
+    renderAt("rf_by_id");
+    await waitFor(() => expect(screen.getByText("Detail Read Formula")).toBeInTheDocument());
+    expect(getSpy).toHaveBeenCalledWith("rf_by_id");
+    expect(listSpy).not.toHaveBeenCalled();
+  });
+
+  it("renders not found when the detail read answers 404", async () => {
+    vi.spyOn(bffV1.rankingFormulas, "get").mockRejectedValue(Object.assign(new Error("HTTP 404"), { status: 404 }));
+    vi.spyOn(bffV1.audit, "list").mockResolvedValue([]);
+    renderAt("rf_missing");
+    await waitFor(() => expect(screen.getByText("Ranking Policy Not Found")).toBeInTheDocument());
+    expect(screen.queryByText("Could Not Load Ranking Policy")).not.toBeInTheDocument();
   });
 });

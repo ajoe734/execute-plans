@@ -1,0 +1,26 @@
+{
+  "task": "FE-CRAWL-CANONICAL-READ-ATTRIBUTION-20261114",
+  "scope": "Existing crawl now observes GET /api/v1/* reads on the exact maintained BFF origin alongside /bff reads, using the same current-document attribution, finite JSON completion/validity, stream/events exclusion and failure retention.",
+  "unchanged": [
+    "budgets",
+    "baseline routes",
+    "NO_ROUTE_DATA_READS (postmortems not exempted)",
+    "aggregate failure rules"
+  ],
+  "verification": {
+    "test": "npx vitest run src/test/accept-management-route-attribution.test.ts",
+    "withFix": "33 passed (head after this revision)",
+    "withoutFix": "Crawl script restored to base 921b6ae0d (old crawl): 6 failed / 27 passed - canonical list, canonical detail, old-document real-navigation, headers-only streaming body, incomplete-beside-success, failed-beside-success",
+    "browser": "Real Chromium against real local FE and BFF HTTP origins (PANTHEON_BFF_BASE_URL); valid canonical postmortem_id list/detail shapes; page renders parsed fetched JSON and test asserts rendered record data; production crawlRoute unchanged otherwise",
+    "negativeControls": [
+      "wrong origin",
+      "same-origin static and /api/v2",
+      "old document via real Chromium navigation",
+      "headers-arrived streaming body never finishing",
+      "incomplete or failed canonical read beside a completed successful read",
+      "invalid JSON / error body / HTTP 500",
+      "canonical events path"
+    ]
+  },
+  "notClaimed": "Hosted acceptance, the 34 datafail report and Fleet 2937ms/2s shortfall remain unaccepted until fresh exact-pair original acceptance."
+}
