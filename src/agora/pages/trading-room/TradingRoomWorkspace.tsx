@@ -15,6 +15,8 @@ import type { TradingRoomWorkspaceProposal } from "@/lib/bff-v1/agora/tradingRoo
 import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
 import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
 import { TradeDecisionCard } from "@/agora/components/TradeDecisionCard";
+import { SystemSuggestionsPanel } from "./SystemSuggestionsPanel";
+import { ShadowComparisonPanel } from "./ShadowComparisonPanel";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -165,14 +167,16 @@ export interface TradingEventQueueProps {
   loading: boolean;
   /** ETag from listDecisionEvents — forwarded to each DecisionEventDetailPanel as If-Match. */
   eventsEtag?: string | null;
+  onSelectEvent?: (decisionEventId: string) => void;
 }
 
-export function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueueProps): JSX.Element {
+export function TradingEventQueue({ events, loading, eventsEtag, onSelectEvent }: TradingEventQueueProps): JSX.Element {
   const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function toggleExpand(id: string) {
     setExpandedId((prev) => (prev === id ? null : id));
+    onSelectEvent?.(id);
   }
 
   return (
@@ -400,14 +404,23 @@ export function TradingRoomWorkspace({
   const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [mobilePane, setMobilePane] = useState<"decisions" | "workspace">("decisions");
+  const [selectedDecisionEventId, setSelectedDecisionEventId] = useState<string | null>(
+    () => filteredEvents[0]?.decision_event_id ?? null,
+  );
   // Revision created by an explicit user regeneration: skip the saved-workspace
   // restore for that revision only (StrictMode-safe: never consumed/reset).
   const regenerateRevisionRef = useRef<number | null>(null);
+
+  const activeDecisionEvent =
+    filteredEvents.find((ev) => ev.decision_event_id === selectedDecisionEventId) ??
+    filteredEvents[0] ??
+    null;
 
   useEffect(() => {
     setWorkspaceResult(null);
     setSelectedPreviewViewId(null);
     setMobilePane("decisions");
+    setSelectedDecisionEventId(filteredEvents[0]?.decision_event_id ?? null);
   }, [strategyId, resolvedStrategyVersion]);
 
   useEffect(() => {
@@ -663,9 +676,29 @@ export function TradingRoomWorkspace({
           <div
             data-mobile-pane-hidden={mobilePane !== "decisions"}
             data-testid="trading-room-decision-surface"
-            style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}
+            style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "auto" }}
           >
-            <TradingEventQueue events={filteredEvents} eventsEtag={eventsEtag} loading={eventsLoading} />
+            <TradingEventQueue
+              events={filteredEvents}
+              eventsEtag={eventsEtag}
+              loading={eventsLoading}
+              onSelectEvent={setSelectedDecisionEventId}
+            />
+            <div data-testid="trading-room-advisory-panels">
+              <SystemSuggestionsPanel
+                action={activeDecisionEvent?.suggested_action}
+                decisionEvent={activeDecisionEvent}
+                decisionEventId={activeDecisionEvent?.decision_event_id ?? null}
+                eventKind={activeDecisionEvent?.event_kind}
+                strategyId={strategyId}
+                symbol={activeDecisionEvent?.subject.symbol}
+              />
+              <ShadowComparisonPanel
+                decisionEvents={filteredEvents}
+                decisionId={activeDecisionEvent?.decision_event_id ?? null}
+                onSelectDecisionId={setSelectedDecisionEventId}
+              />
+            </div>
           </div>
         </div>
         <div data-mobile-pane-hidden={mobilePane !== "decisions"} data-testid="trading-room-position-surface">
