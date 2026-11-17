@@ -1,0 +1,14 @@
+{
+  "task": "FE-TAILWIND-REPRO-TEST-GATE-ISOLATION-20261117",
+  "change": "src/test/build-tailwind-sources.test.ts now builds in a mkdtemp copy of index.html, src, public, .lovable, scripts/lib, config files and tsconfig*.json with node_modules symlinked; pantheon-contract/ is created only inside the temp root; the whole tmp dir is removed in finally.",
+  "runs": {
+    "clean_checkout_no_pantheon_contract": "3/3 passed",
+    "with_nonempty_pantheon_contract_at_fe_root": "3/3 passed; pantheon-contract/f.ts untouched after run",
+    "negative_source_none_removed_from_src_index_css": "2 failed (static check and the byte-identical build test); index.css restored via git checkout",
+    "full_npm_run_test_with_pantheon_contract_present": "279 files, 3220 tests passed",
+    "npm_run_lint": "0 errors, 94 warnings (pre-existing)",
+    "npm_run_build": "exit 0"
+  },
+  "tmp_dirs_tw_sources_count": { "before_full_test": 0, "after_full_test": 0 },
+  "notes": "Both builds share one iso root path (re-created per build) because absolute paths affect chunk hashes."
+}
