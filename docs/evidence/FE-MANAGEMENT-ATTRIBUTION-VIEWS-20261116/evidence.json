@@ -1,15 +1,36 @@
 {
   "task_id": "FE-MANAGEMENT-ATTRIBUTION-VIEWS-20261116",
   "commands": [
-    {"cmd": "npx tsc --noEmit -p .", "result": "pass (no errors)"},
-    {"cmd": "npx vitest run src/management src/test/accept-management-honest-not-found.test.ts src/i18n", "result": "82 files, 791 tests passed (before adding centers test)"},
-    {"cmd": "npx vitest run src/test/accept-management-route-attribution.test.ts", "result": "57 passed (real Chromium crawl harness)"},
-    {"cmd": "npx vitest run src/management/pages/centers src/management/pages/performance src/lib/bff-v1/attribution.test.ts", "result": "pass"}
+    {
+      "cmd": "npx tsc --noEmit -p .",
+      "result": "pass (no errors)"
+    },
+    {
+      "cmd": "npx vitest run src/management src/test/accept-management-honest-not-found.test.ts src/i18n",
+      "result": "82 files, 791 tests passed (before adding centers test)"
+    },
+    {
+      "cmd": "npx vitest run src/test/accept-management-route-attribution.test.ts",
+      "result": "57 passed (real Chromium crawl harness)"
+    },
+    {
+      "cmd": "npx vitest run src/management/pages/centers src/management/pages/performance src/lib/bff-v1/attribution.test.ts",
+      "result": "pass"
+    }
   ],
   "notes": [
     "Outliers section mounted under performance attribution tab; shadow tab added to manifest and crawl route list.",
     "MT-4 meeting detail already renders the attribution record above rounds (FE-MANAGEMENT-MEETINGS-20261115); covered by existing meetings tests.",
     "Paper proxy settlement is never labelled actual fill (settlementLabelKind)."
   ],
-  "credentials": "none"
+  "credentials": "none",
+  "attribution_correction": {
+    "delivery_commits": [
+      "49cd48bad",
+      "4afcb09b2"
+    ],
+    "pull_request": 1031,
+    "merge_commit": "ee6b70650",
+    "statement": "These delivery commits were written by Claude2 (worker run claude2-20261116T204001Z-05a71239). Their LLM-Agent trailer 'Claude' is wrong; the correct author is Claude2. No owner reassignment occurred."
+  }
 }
