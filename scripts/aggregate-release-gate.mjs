@@ -1,4 +1,21 @@
 #!/usr/bin/env node
+// Release gate aggregator for Pantheon FE-BFF integration.
+//
+// Operator decision 2026-11-17 (Remediation Plan RC1 step 6,
+// SD_DEV_DEPLOY_ACCEPTANCE_SPLIT_2026-11-17.md):
+// - For the dev release verdict (PANTHEON_HOSTED_FE_HARD_GATE=false), hosted
+//   functional checks in Gate 0, Gate 4, and Gate 8 (route_load, mgmt_load_gate,
+//   mgmt_hosted_accept, e2e, hostedF12Check, and the management page crawl
+//   buildGate8Core checks) are classified advisory_fail. Failures are listed
+//   by check name in release-gate-summary.json (advisoryFailures /
+//   advisoryFailureChecks) for the post-switch Pantheon acceptance stage and
+//   do not reject the deployable release candidate.
+// - Build integrity remains blocking: clean candidate SHA & BFF SHA, npm ci,
+//   release_identity, lint, test, deploy_controller, three-profile build,
+//   immutable candidate preparation, candidate_final same-SHA digest
+//   reproducibility, Agora compatibility manifest, bundle_budget, contract
+//   drift, mgmt_persona_3000, loopback fixture_e2e (Gate 5 & Gate 6),
+//   release_identity_final, auth posture and safe write defaults.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -856,6 +873,10 @@ function analyzeMgmtHostedAccept(stepOutcomes) {
 // Raw step outcomes for hosted probes that previously ran but were never read
 // by the aggregate (their failure was invisible). A forced-success step
 // (continue-on-error) is judged by its real outcome, never by job conclusion.
+// Per operator decision 2026-11-17 (RC1 step 6), hosted functional checks are
+// classified advisory_fail for the dev release verdict (HOSTED_FE_HARD_GATE=false)
+// so failures are recorded for the post-switch acceptance stage without
+// rejecting the deployable candidate.
 function hostedStepChecks(stepOutcomes) {
   const rows = [
     ["route_load", "Hosted route-load readiness baseline step passed.", ".lovable/audits/route-load-baseline.log"],
@@ -865,10 +886,13 @@ function hostedStepChecks(stepOutcomes) {
   ];
   return rows.map(([key, label, evidence]) => {
     const check = requiredStepCheck(stepOutcomes, key, label, evidence, GATE_OWNERS[8]);
-    // Applicable required authenticated probes are never advisory: a failed,
-    // timed-out or auth-missing step blocks candidate publication.
-    const status = check.status;
-    return { ...check, status, owner: status === "pass" ? "" : GATE_OWNERS[8] };
+    const status = hostedStatus(check.status);
+    return {
+      ...check,
+      status,
+      owner: status === "pass" ? "" : GATE_OWNERS[8],
+      note: status === "pass" ? check.note : hostedNote(check.note),
+    };
   });
 }
 
@@ -878,20 +902,22 @@ function hostedF12Check() {
   const file = latestAuditFile([/^playwright-desktop-results\.json$/]);
   const label = "F12 hosted authenticated approval owner readback passed.";
   if (!file) {
-    return makeCheck(label, "missing", {
-      owner: GATE_OWNERS[8],
-      note: "playwright-desktop-results.json missing",
+    const status = hostedStatus("missing");
+    return makeCheck(label, status, {
+      owner: status === "pass" ? "" : GATE_OWNERS[8],
+      note: hostedNote("playwright-desktop-results.json missing"),
     });
   }
   const specs = analyzePlaywright(file).specs.filter(
     (spec) => /12-approvals/.test(spec.file) && /authenticated approval owner readback/i.test(spec.title),
   );
   const raw = !specs.length ? "missing" : specs.every((s) => s.status === "pass") ? "pass" : specs.some((s) => s.status === "fail") ? "fail" : specs.some((s) => s.status === "skip") ? "fail" : "missing";
-  const status = raw;
+  const status = hostedStatus(raw);
+  const note = specs.length ? `hosted specs: ${specs.map((s) => s.status).join(",")}` : "hosted F12 owner readback spec not found in desktop results";
   return makeCheck(label, status, {
     owner: status === "pass" ? "" : GATE_OWNERS[8],
     evidence: evidencePath(file),
-    note: specs.length ? `hosted specs: ${specs.map((s) => s.status).join(",")}` : "hosted F12 owner readback spec not found in desktop results",
+    note: status === "pass" ? note : hostedNote(note),
   });
 }
 
@@ -1961,8 +1987,18 @@ function main() {
   const advisoryFailures = Object.entries(gates).flatMap(([gateNo, checks]) =>
     checks
       .filter((check) => check.status === "advisory_fail")
-      .map((check) => ({ gate: gateNo, label: check.label, note: check.note, evidence: check.evidence })),
+      .map((check) => ({
+        gate: gateNo,
+        check: check.label,
+        name: check.label,
+        label: check.label,
+        status: check.status,
+        owner: check.owner || GATE_OWNERS[gateNo] || "",
+        note: check.note,
+        evidence: check.evidence,
+      })),
   );
+  const advisoryFailureChecks = advisoryFailures.map((check) => check.label);
   // "overall" can be a non-blocking pre-switch result; readiness is only
   // "ready" when no hosted probe genuinely failed or was missing.
   const releaseReadiness =
@@ -1992,6 +2028,7 @@ function main() {
     overall,
     releaseReadiness,
     advisoryFailures,
+    advisoryFailureChecks,
     auditDir: rel(AUDIT_DIR),
     runUrl: RUN_URL,
     checklistOut: CHECKLIST_TEMPLATE_PATH ? rel(CHECKLIST_OUT_PATH) : "",

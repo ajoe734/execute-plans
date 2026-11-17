@@ -261,4 +261,27 @@ describe("release gate Playwright classification", () => {
       )?.status,
     ).toBe("pass");
   });
+
+  it("classifies Gate 8 hosted desktop Playwright F12 failures as advisory_fail while keeping Gate 5 fixture E2E blocking", () => {
+    const gates = aggregatePlaywright(
+      [
+        {
+          file: "12-approvals.spec.ts",
+          status: "expected",
+          title: "F12 approval governance",
+        },
+      ],
+      { PANTHEON_HOSTED_FE_HARD_GATE: "false" },
+    );
+
+    expect(
+      gates["5"].find((check) => check.label === "F12 Approval Governance.")
+        ?.status,
+    ).toBe("pass");
+    expect(
+      gates["8"].find((check) =>
+        check.label.includes("F12 hosted authenticated approval owner readback"),
+      )?.status,
+    ).toBe("advisory_fail");
+  });
 });

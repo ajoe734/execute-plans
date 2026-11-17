@@ -475,9 +475,10 @@ jobs:
       # overrides are limited to an explicit manual gate run and can never
       # create a release artifact consumed by the deploy workflow.
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.soft_fail || 'false' }}
-      # The integration gate proves the exact candidate before deploy. Current
-      # hosted FE readback is enforced by the deploy workflow after switch, so
-      # stale-host evidence must not deadlock candidate publication.
+      # The integration gate proves the exact candidate build integrity before
+      # deploy. Per operator decision 2026-11-17 (RC1 step 6), hosted functional
+      # checks and the management page crawl are advisory for the dev release
+      # verdict and evaluated by the post-switch acceptance stage.
       PANTHEON_HOSTED_FE_HARD_GATE: "false"
       # Ordinary push/PR/manual integration is always credential-free. The
       # parent-bound proof runs in authorized-write-proof after one-time auth.
@@ -1618,10 +1619,10 @@ jobs:
             echo "- write-proof digest: \`${PANTHEON_EXPECTED_WRITE_PROOF_DIGEST}\`"
             echo "- artifact: \`pantheon-fe-release-candidate-attempt-${GITHUB_RUN_ATTEMPT}\`"
             echo "- GitHub artifact digest: \`${{ steps.candidate_upload.outputs.artifact-digest }}\`"
-            # Candidate admission is gate-before-switch; hosted probes are advisory
-            # pre-switch. Record the real readiness so a forced-success step is not
-            # read as "all probes passed".
-            node -e 'const f=process.argv[1];try{const j=JSON.parse(require("fs").readFileSync(f,"utf8"));console.log("- release readiness: `"+j.releaseReadiness+"` ("+(j.advisoryFailures||[]).length+" hosted probe failure(s) advisory, not passing)")}catch{console.log("- release readiness: `unknown` (summary unreadable)")}' "$PANTHEON_AUDIT_OUT_DIR/release-gate-summary.json"
+            # Candidate admission enforces build integrity; hosted functional checks
+            # are advisory for the dev release verdict (operator decision 2026-11-17,
+            # RC1 step 6) and recorded for the post-switch acceptance stage.
+            node -e 'const f=process.argv[1];try{const j=JSON.parse(require("fs").readFileSync(f,"utf8"));const af=j.advisoryFailures||[];console.log("- release readiness: `"+j.releaseReadiness+"` ("+af.length+" hosted probe failure(s) advisory, not passing)");for(const c of af){console.log("  - advisory failure: `"+(c.check||c.label)+"`")}}catch{console.log("- release readiness: `unknown` (summary unreadable)")}' "$PANTHEON_AUDIT_OUT_DIR/release-gate-summary.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Redact credentials from evidence before upload
