@@ -568,12 +568,28 @@ jobs:
             ).toLowerCase();
             const active = controller.status === "in_progress" && controller.conclusion == null;
             const accepted = controller.status === "completed" && controller.conclusion === "success";
+            // The controller head is the dev tip at dispatch time, so a newest-green
+            // deploy of an older dev commit has head_sha != backend. Admit that only
+            // when the trusted nonprod-deploy workflow's own run-name ("Dev release
+            // <backend> + <frontend>") names exactly this backend and the backend is
+            // the controller head or an ancestor of it on Pantheon dev.
+            const controllerHead = String(controller.head_sha || "").toLowerCase();
+            let controllerDeploysBackend = controllerHead === backendSha;
+            if (!controllerDeploysBackend && path === ".github/workflows/nonprod-deploy.yml" &&
+                repository === "ajoe734/pantheon" && controller.event === "workflow_dispatch" &&
+                controller.head_branch === "dev" && sha.test(controllerHead) &&
+                new RegExp(`^Dev release ${backendSha} \\+ [0-9a-f]{40}$`).test(String(controller.name || ""))) {
+              const { data: ancestry } = await github.rest.repos.compareCommits({
+                owner: "ajoe734", repo: "pantheon", base: backendSha, head: controllerHead,
+              });
+              controllerDeploysBackend = ["ahead", "identical"].includes(ancestry.status);
+            }
             if (path !== ".github/workflows/nonprod-deploy.yml" ||
                 repository !== "ajoe734/pantheon" ||
                 controller.event !== "workflow_dispatch" ||
                 controller.head_branch !== "dev" ||
             (!active && !accepted) ||
-            (!bootstrapPredecessor && String(controller.head_sha || "").toLowerCase() !== backendSha) ||
+            (!bootstrapPredecessor && !controllerDeploysBackend) ||
             (bootstrapPredecessor && !sha.test(String(controller.head_sha || "").toLowerCase()))) {
               core.setFailed("release candidate is not owned by the exact active Pantheon dev controller");
               return;
