@@ -419,4 +419,62 @@ export const paths = {
   evolutionProgramOodaPackets: (id: string) => `${BASE}/evolution-programs/${enc(id)}/ooda`,
   evolutionMutationReview: (decisionId: string) => `/api/v1/operator/mutation-review/${enc(decisionId)}`,
   operatorCommand: (id: string) => `/api/v1/operator/commands/${enc(id)}`,
+
+  // ---- 2026-11-15 Management & Agora Persona Meetings ----
+  mgmtMeetings: (
+    filters: {
+      status?: string;
+      type?: string;
+      meetingType?: string;
+      meeting_type?: string;
+      personaId?: string;
+      persona_id?: string;
+      cursor?: string;
+      limit?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    const status = filters.status?.trim();
+    const type = (filters.type ?? filters.meeting_type ?? filters.meetingType)?.trim();
+    const personaId = (filters.persona_id ?? filters.personaId)?.trim();
+    const cursor = filters.cursor?.trim();
+    if (status) params.set("status", status);
+    if (type) params.set("type", type);
+    if (personaId) params.set("persona_id", personaId);
+    if (cursor) params.set("cursor", cursor);
+    if (typeof filters.limit === "number" && Number.isFinite(filters.limit) && filters.limit > 0) {
+      params.set("limit", String(filters.limit));
+    }
+    const query = params.toString();
+    return `${BASE}/management/meetings${query ? `?${query}` : ""}`;
+  },
+  mgmtMeetingDetail: (meetingId: string) => `${BASE}/management/meetings/${enc(meetingId)}`,
+  mgmtMeetingProposals: (
+    filters: {
+      status?: string;
+      personaId?: string;
+      persona_id?: string;
+      meetingId?: string;
+      meeting_id?: string;
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    const status = filters.status?.trim();
+    const personaId = (filters.persona_id ?? filters.personaId)?.trim();
+    const meetingId = (filters.meeting_id ?? filters.meetingId)?.trim();
+    if (status) params.set("status", status);
+    if (personaId) params.set("persona_id", personaId);
+    if (meetingId) params.set("meeting_id", meetingId);
+    const query = params.toString();
+    return `${BASE}/management/meetings/proposals${query ? `?${query}` : ""}`;
+  },
+  mgmtMeetingCatalogue: (filters: { personaId?: string; persona_id?: string } = {}) => {
+    const personaId = (filters.persona_id ?? filters.personaId)?.trim();
+    return `${BASE}/management/meetings/catalogue${personaId ? `?persona_id=${enc(personaId)}` : ""}`;
+  },
+  mgmtMeetingConvene: () => `${BASE}/management/meetings`,
+  meetings: () => `${BASE}/meetings`,
+  meetingDetail: (meetingId: string) => `${BASE}/meetings/${enc(meetingId)}`,
+  meetingProposals: () => `${BASE}/meetings/proposals`,
+  meetingCatalogue: () => `${BASE}/meetings/catalogue`,
 } as const;
