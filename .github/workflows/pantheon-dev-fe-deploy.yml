@@ -717,8 +717,23 @@ jobs:
               repository === "ajoe734/pantheon" &&
               run.event === "workflow_dispatch" &&
               run.head_branch === "dev";
-            const trustedController = trustedControllerIdentity &&
-              String(run.head_sha || "").toLowerCase() === process.env.EXPECTED_BACKEND_SHA;
+            // The controller head is the dev tip at dispatch time, so a newest-green
+            // deploy of an older dev commit has head_sha != backend. Admit that only
+            // when the trusted nonprod-deploy workflow's own run-name ("Dev release
+            // <backend> + <frontend>") names exactly this backend and the backend is
+            // the controller head or an ancestor of it on Pantheon dev.
+            const expectedBackend = String(process.env.EXPECTED_BACKEND_SHA || "").toLowerCase();
+            const controllerHead = String(run.head_sha || "").toLowerCase();
+            let controllerDeploysBackend = controllerHead === expectedBackend;
+            if (!controllerDeploysBackend && trustedControllerIdentity &&
+                /^[0-9a-f]{40}$/.test(expectedBackend) && /^[0-9a-f]{40}$/.test(controllerHead) &&
+                new RegExp(`^Dev release ${expectedBackend} \\+ [0-9a-f]{40}$`).test(String(run.name || ""))) {
+              const { data: ancestry } = await github.rest.repos.compareCommits({
+                owner: "ajoe734", repo: "pantheon", base: expectedBackend, head: controllerHead,
+              });
+              controllerDeploysBackend = ["ahead", "identical"].includes(ancestry.status);
+            }
+            const trustedController = trustedControllerIdentity && controllerDeploysBackend;
             const activeController = run.status === "in_progress" && run.conclusion == null;
             const overallSuccess = run.status === "completed" && run.conclusion === "success";
             const failedParent = run.status === "completed" && run.conclusion === "failure";

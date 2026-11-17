@@ -416,9 +416,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(controller).toContain('repository === "ajoe734/pantheon"');
     expect(controller).toContain('run.event === "workflow_dispatch"');
     expect(controller).toContain('run.head_branch === "dev"');
-    expect(controller).toContain(
-      'String(run.head_sha || "").toLowerCase() === process.env.EXPECTED_BACKEND_SHA',
-    );
+    expect(controller).toContain('String(run.head_sha || "").toLowerCase()');
+    expect(controller).toContain('controllerHead === expectedBackend');
+    expect(controller).toContain('base: expectedBackend, head: controllerHead');
     expect(controller).toContain(
       'const activeController = run.status === "in_progress" && run.conclusion == null;',
     );
