@@ -27,6 +27,15 @@ import {
   rollbackTradingRoomWorkspaceVersion,
   getTradingRoom,
   getDecisionEvent,
+  getTradingRoomSystemSuggestions,
+  getDecisionEventSystemSuggestions,
+  isValidatedSystemSuggestion,
+  filterValidatedSystemSuggestions,
+  getTradingRoomShadowComparison,
+  getTradingRoomDecisionLock,
+  classifyShadowSettlementSource,
+  isPaperProxySettlement,
+  sanitizeShadowExecutionLabel,
 } from "./tradingRoom";
 import { BffError } from "../errors";
 import { getAuthProvider, setAuthProvider } from "../headers";
@@ -1599,4 +1608,266 @@ it("retains per-event ETags on queue and detail reads", async () => {
   expect(page.etag).toBe('"page-v1"');
   expect(page.items[0].etag).toBe('"event-v1"');
   expect((await getDecisionEvent("evt-001", BASE))?.etag).toBe('"event-v1"');
+});
+
+describe("system suggestions & shadow comparison BFF client (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
+  const VALIDATED_SUGGESTION = {
+    suggestion_id: "sug:evt-ik-2330:fact:attr:attr-001:hyp-val-001",
+    fact_id: "fact:attr:attr-001:hyp-val-001",
+    fact_kind: "validated_attribution_finding",
+    decision_event_id: "evt-ik-2330",
+    servant_persona_id: "agora-servant-123",
+    title: "Validated attribution finding (entry_timing)",
+    suggestion: "Wait 15 minutes after open on high-IV semi days to reduce adverse entry timing by 18 bps",
+    summary: "Wait 15 minutes after open on high-IV semi days to reduce adverse entry timing by 18 bps",
+    hypothesis: "Wait 15 minutes after open on high-IV semi days to reduce adverse entry timing by 18 bps",
+    component: "entry_timing",
+    validation_status: "validated",
+    source_owner: "attribution+research",
+    relevance_score: 0.85,
+    relevance_reasons: ["symbol_match", "strategy_match"],
+    attribution_record_id: "attr-001",
+    validation_result_id: "demand-val-001",
+    links: {
+      attribution_record: "/api/attribution/records/attr-001",
+      validation_result: "/api/research/persona-demands?demand_id=demand-val-001",
+    },
+    evidence: {
+      effect_bps: 18,
+      p_value: 0.012,
+      sample_size: 48,
+      evidence_refs: [
+        { ref_type: "source_record", ref_id: "attr-001", summary: "Attribution record attr-001" },
+        { ref_type: "research_run", ref_id: "demand-val-001", summary: "Validation result demand-val-001" },
+      ],
+    },
+    evidence_refs: [
+      { ref_type: "source_record", ref_id: "attr-001", summary: "Attribution record attr-001" },
+      { ref_type: "research_run", ref_id: "demand-val-001", summary: "Validation result demand-val-001" },
+    ],
+    advice_only: true,
+    read_only: true,
+    execution_authority: "none",
+    environment_ceiling: "paper",
+    no_order_route_proof: "agora_decision_support_only",
+  };
+
+  it("filters out unvalidated and luck_or_unsupported hypotheses on the client boundary", () => {
+    const unvalidated = {
+      ...VALIDATED_SUGGESTION,
+      suggestion_id: "sug-unval",
+      validation_status: "pending",
+    };
+    const luck = {
+      ...VALIDATED_SUGGESTION,
+      suggestion_id: "sug-luck",
+      validation_status: "luck_or_unsupported",
+    };
+    const nestedLuck = {
+      ...VALIDATED_SUGGESTION,
+      suggestion_id: "sug-nested-luck",
+      evidence: {
+        ...VALIDATED_SUGGESTION.evidence,
+        hypothesis_validation: { status: "luck_or_unsupported" },
+      },
+    };
+    expect(isValidatedSystemSuggestion(VALIDATED_SUGGESTION)).toBe(true);
+    expect(isValidatedSystemSuggestion(unvalidated)).toBe(false);
+    expect(isValidatedSystemSuggestion(luck)).toBe(false);
+    expect(isValidatedSystemSuggestion(nestedLuck)).toBe(false);
+
+    const filtered = filterValidatedSystemSuggestions([
+      VALIDATED_SUGGESTION,
+      unvalidated,
+      luck,
+      nestedLuck,
+    ]);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].suggestion_id).toBe(VALIDATED_SUGGESTION.suggestion_id);
+  });
+
+  it("fetches decision-event system suggestions via GET with no mutation headers", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        status: "ok",
+        data: {
+          decision_event_id: "evt-ik-2330",
+          read_only: true,
+          advice_only: true,
+          execution_authority: "none",
+          environment_ceiling: "paper",
+          no_order_route_proof: "agora_decision_support_only",
+          suggestions: [VALIDATED_SUGGESTION],
+          items: [VALIDATED_SUGGESTION],
+          count: 1,
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const read = await getDecisionEventSystemSuggestions("evt-ik-2330", BASE);
+    expect(read.state).toBe("ok");
+    if (read.state === "ok") {
+      expect(read.data.suggestions).toHaveLength(1);
+      expect(read.data.suggestions[0].validation_result_id).toBe("demand-val-001");
+      expect(read.data.suggestions[0].attribution_record_id).toBe("attr-001");
+    }
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/decision-events/evt-ik-2330/system-suggestions`,
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("GET");
+    expect((init.headers as Record<string, string>)["If-Match"]).toBeUndefined();
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+  });
+
+  it("fetches query-filtered system suggestions and surfaces 503 owner outage as unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        ok({
+          status: "ok",
+          data: {
+            suggestions: [],
+            items: [],
+            count: 0,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            detail: {
+              code: "DEPENDENCY_UNAVAILABLE",
+              status: "unavailable",
+              owner: "research",
+              reason: "research_owner_http_503",
+              fallback_used: false,
+            },
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    globalThis.fetch = fetchMock;
+
+    const emptyRead = await getTradingRoomSystemSuggestions(
+      { symbol: "2330.TW", strategy_id: "strat-001", action: "entry" },
+      BASE,
+    );
+    expect(emptyRead.state).toBe("empty");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/system-suggestions?strategy_id=strat-001&symbol=2330.TW&action=entry`,
+    );
+
+    const unavailRead = await getTradingRoomSystemSuggestions(
+      { symbol: "2330.TW" },
+      BASE,
+    );
+    expect(unavailRead).toEqual({
+      state: "unavailable",
+      owner: "research",
+      reason: "research_owner_http_503",
+    });
+  });
+
+  it("fetches shadow comparisons and never classifies paper proxy as actual fill", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        status: "degraded",
+        owner: "attribution+agora",
+        data: {
+          decision_id: "dec-1",
+          account_id: "acct-alice-01",
+          arms: [
+            {
+              arm: "trader",
+              decision_detail: {
+                available: true,
+                decision: "enter",
+                trading_room_verdict: "approve",
+                execution_observation_kind: "pantheon_paper_proxy",
+                execution_display_label: "交易員決策（紙上代理）",
+                execution_verified: false,
+              },
+              settlement_source: "pantheon_paper_proxy",
+              outcome: { pnl: -0.01 },
+              settled_at: "2026-11-12T00:00:00Z",
+              unavailable_reason: null,
+            },
+            {
+              arm: "base_strategy",
+              decision_detail: { available: true, strategy_id: "s1" },
+              settlement_source: "market_data_replay",
+              outcome: { pnl: 0.01 },
+              settled_at: "2026-11-12T00:00:00Z",
+              unavailable_reason: null,
+            },
+            {
+              arm: "private_servant",
+              decision_detail: {
+                available: false,
+                unavailable_reason: "no_servant_suggestion_on_decision_event",
+              },
+              settlement_source: null,
+              outcome: null,
+              settled_at: null,
+              unavailable_reason: "no_suggestion",
+            },
+            {
+              arm: "institutional_view",
+              decision_detail: { available: true, suggested_action: "hold" },
+              settlement_source: "market_data_replay",
+              outcome: { pnl: 0.02 },
+              settled_at: "2026-11-12T00:00:00Z",
+              unavailable_reason: null,
+            },
+          ],
+        },
+        meta: {
+          snapshot_at: "2026-11-12T01:00:00Z",
+          sources: {
+            attribution: "ok",
+            agora: "agora_lock_not_found",
+          },
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const shadowRead = await getTradingRoomShadowComparison("dec-1", BASE);
+    expect(shadowRead.state).toBe("ok");
+    if (shadowRead.state === "ok") {
+      expect(shadowRead.data.arms).toHaveLength(4);
+      const traderArm = shadowRead.data.arms.find((a) => a.arm === "trader")!;
+      expect(traderArm.settlement_source).toBe("pantheon_paper_proxy");
+      expect(traderArm.settlement_source_kind).toBe("paper_proxy");
+      expect(isPaperProxySettlement(traderArm.settlement_source, traderArm.decision_detail)).toBe(true);
+      expect(shadowRead.degraded).toEqual({ agora: "agora_lock_not_found" });
+    }
+    expect(classifyShadowSettlementSource("pantheon_paper_proxy")).toBe("paper_proxy");
+    expect(classifyShadowSettlementSource("paper_simulated")).toBe("paper_proxy");
+    expect(classifyShadowSettlementSource("market_data_replay")).toBe("market_data_replay");
+    expect(classifyShadowSettlementSource("actual_fill")).toBe("actual_fill");
+    expect(
+      classifyShadowSettlementSource("actual_fill", {
+        execution_observation_kind: "pantheon_paper_proxy",
+      }),
+    ).toBe("paper_proxy");
+    expect(sanitizeShadowExecutionLabel("實際成交", "paper_proxy")).toBe(
+      "交易員決策（紙上代理）",
+    );
+  });
+
+  it("reads decision lock and returns null on 404", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        ok({ data: { decision_id: "evt-1", execution_observation_kind: "pantheon_paper_proxy" } }),
+      )
+      .mockResolvedValueOnce(new Response("{}", { status: 404 }));
+
+    const lock = await getTradingRoomDecisionLock("evt-1", BASE);
+    expect(lock?.execution_observation_kind).toBe("pantheon_paper_proxy");
+    expect(await getTradingRoomDecisionLock("evt-missing", BASE)).toBeNull();
+  });
 });

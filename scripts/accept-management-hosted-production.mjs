@@ -77,7 +77,7 @@ const SRC_SCAN_DIR = argv["src-scan-dir"] || "src/management";
 const LOAD_GATE_MANIFEST = argv["load-gate-manifest"] || process.env.PANTHEON_LOAD_GATE_MANIFEST || "";
 const LOAD_BASELINE_DIR = argv["load-baseline-dir"] || process.env.PANTHEON_LOAD_BASELINE_OUT_DIR || OUT_DIR;
 const ROUTE_TIMEOUT_MS = Number(process.env.PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS || 20_000);
-const SETTLE_TIMEOUT_MS = Number(process.env.PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS || 4_000);
+const SETTLE_TIMEOUT_MS = Number(process.env.PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS || 15_000);
 const CLICK_WRITE_CTAS = argv["click-write-ctas"] === "true" || process.env.PANTHEON_ACCEPT_CLICK_WRITE_CTAS === "1";
 const STRICT_SOURCE_SCAN = process.env.PANTHEON_ACCEPT_STRICT_SOURCE_SCAN === "1";
 const LOAD_GATE_ONLY = argv["load-gate-only"] === "true";

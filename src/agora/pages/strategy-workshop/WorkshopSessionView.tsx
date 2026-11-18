@@ -64,6 +64,14 @@ import {
 import type { TradingRoomReadinessHandoff } from "./StrategyWorkshopPage";
 import { ResearchPlanPanel } from "./ResearchPlanPanel";
 import { resolveSubmissionTenant } from "./submissionTenant";
+import {
+  DELIBERATIVE_MEETING_TYPE_OPTIONS,
+  conveneWorkshopMeeting,
+  getCommitteeMeetings,
+  type CommitteeParticipant,
+  type ConvenedWorkshopMeeting,
+  type DeliberativeMeetingType,
+} from "@/lib/bff-v1/agora/learning";
 
 export type WorkshopInteractionMode = DailyInteractionMode;
 
@@ -525,6 +533,358 @@ async function sha256(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function participantIdOf(entry: string | CommitteeParticipant): string {
+  return typeof entry === "string" ? entry : entry.persona_id;
+}
+
+function isServantParticipant(entry: string | CommitteeParticipant): boolean {
+  if (typeof entry === "string") return entry.toLowerCase().includes("servant");
+  return entry.origin === "private_servant" || entry.role === "servant" || entry.persona_id.toLowerCase().includes("servant");
+}
+
+function sameStringList(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((item, idx) => item === right[idx]);
+}
+
+interface WorkshopDeliberativeMeetingsSectionProps {
+  workshopId: string;
+  workshop: StrategyWorkshop | null;
+  strategySpecIdentity: StrategySpecIdentity | null;
+  eligibleParticipants: PersonaEligibility[];
+  composerValue: string;
+  writeAccess: ReturnType<typeof useAgoraWriteAccess>;
+}
+
+function WorkshopDeliberativeMeetingsSection({
+  workshopId,
+  workshop,
+  strategySpecIdentity,
+  eligibleParticipants,
+  composerValue,
+  writeAccess,
+}: WorkshopDeliberativeMeetingsSectionProps): JSX.Element {
+  const [meetingType, setMeetingType] = useState<DeliberativeMeetingType>("MT-3");
+  const [meetingTopic, setMeetingTopic] = useState("");
+  const [meetingParticipants, setMeetingParticipants] = useState<string[]>([]);
+  const [participantsTouched, setParticipantsTouched] = useState(false);
+  const [includePrivateServant, setIncludePrivateServant] = useState(true);
+  const [customParticipantId, setCustomParticipantId] = useState("");
+  const [convenedMeetings, setConvenedMeetings] = useState<ConvenedWorkshopMeeting[]>([]);
+  const [meetingsUnavailable, setMeetingsUnavailable] = useState<{ reason: string; owner?: string } | null>(null);
+  const [conveneBusy, setConveneBusy] = useState(false);
+  const [conveneReceipt, setConveneReceipt] = useState<ConvenedWorkshopMeeting | null>(null);
+  const [conveneRefusal, setConveneRefusal] = useState<{ reason: string; owner?: string } | null>(null);
+
+  useEffect(() => {
+    setParticipantsTouched(false);
+    setConveneReceipt(null);
+    setConveneRefusal(null);
+    setConvenedMeetings([]);
+    setMeetingsUnavailable(null);
+  }, [workshopId]);
+
+  useEffect(() => {
+    if (participantsTouched) return;
+    const defaultIds = eligibleParticipants.map((p) => p.persona_id).slice(0, 5);
+    setMeetingParticipants((prev) => (sameStringList(prev, defaultIds) ? prev : defaultIds));
+  }, [eligibleParticipants, participantsTouched]);
+
+  const refreshConvenedMeetings = useCallback(async () => {
+    const res = await getCommitteeMeetings();
+    if (res.state === "ok") {
+      const serverMeetings: ConvenedWorkshopMeeting[] = res.data
+        .filter((m) => !m.workshop_id || m.workshop_id === workshopId)
+        .map((m) => ({
+          ...m,
+          meeting_id: String(m.meeting_id ?? m.session_id ?? m.request_id),
+          status: String(m.status ?? "convened"),
+          meeting_type: String(m.meeting_type ?? "MT-3"),
+          topic: typeof m.topic === "string" ? m.topic : typeof m.agenda === "string" ? m.agenda : undefined,
+          agenda: typeof m.agenda === "string" ? m.agenda : typeof m.topic === "string" ? m.topic : undefined,
+          participants: Array.isArray(m.participants) ? m.participants : [],
+          environment_ceiling: "paper",
+          execution_authority: "none",
+        }));
+      setConvenedMeetings((prev) => {
+        const byId = new Map<string, ConvenedWorkshopMeeting>();
+        for (const item of serverMeetings) byId.set(item.meeting_id, item);
+        for (const local of prev) {
+          if (!byId.has(local.meeting_id)) byId.set(local.meeting_id, local);
+        }
+        return Array.from(byId.values());
+      });
+      setMeetingsUnavailable(null);
+    } else if (res.reason !== "RESOURCE_NOT_FOUND" && res.reason !== "no_persona_meetings") {
+      setMeetingsUnavailable({ reason: res.reason, owner: res.owner });
+    } else {
+      setMeetingsUnavailable(null);
+    }
+  }, [workshopId]);
+
+  useEffect(() => {
+    if (!workshop) return;
+    void refreshConvenedMeetings();
+  }, [workshop, refreshConvenedMeetings]);
+
+  const effectiveTopic = meetingTopic.trim() || composerValue.trim();
+  const canConvene =
+    writeAccess.writeAllowed &&
+    writeAccess.interactionAllowed &&
+    workshop?.status !== "concluded" &&
+    !conveneBusy &&
+    Boolean(effectiveTopic);
+
+  const handleConvene = async () => {
+    if (!canConvene) return;
+    setConveneBusy(true);
+    setConveneRefusal(null);
+    const extraIds = customParticipantId
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const requestedParticipants = Array.from(new Set([...meetingParticipants, ...extraIds]));
+    try {
+      const res = await conveneWorkshopMeeting(workshopId, {
+        meeting_type: meetingType,
+        topic: effectiveTopic,
+        subject_ref: strategySpecIdentity?.strategyId ?? workshop?.subject?.ref,
+        participants: requestedParticipants.length > 0 ? requestedParticipants : undefined,
+        include_private_servant: includePrivateServant,
+      });
+      if (res.state === "ok") {
+        setConveneReceipt(res.data);
+        setConveneRefusal(null);
+        setConvenedMeetings((prev) => [
+          res.data,
+          ...prev.filter((item) => item.meeting_id !== res.data.meeting_id),
+        ]);
+        void refreshConvenedMeetings();
+      } else {
+        setConveneReceipt(null);
+        setConveneRefusal({ reason: res.reason, owner: res.owner });
+      }
+    } finally {
+      setConveneBusy(false);
+    }
+  };
+
+  return (
+    <section
+      className="space-y-2 border-t border-slate-100 pt-2"
+      data-testid="workshop-deliberative-meetings"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Deliberative Persona Meetings
+          </span>
+          <span className="text-[10px] text-slate-400">
+            paper · execution_authority: none · M9 cap ≤ 5
+          </span>
+        </div>
+        <a
+          className="text-[11px] font-medium text-indigo-600 underline"
+          data-testid="workshop-committee-link"
+          href="/agora/committee"
+        >
+          Open Committee Board
+        </a>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
+        <label className="flex flex-col gap-1 text-[11px] text-slate-600">
+          <span>Meeting Type</span>
+          <select
+            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800"
+            data-testid="workshop-meeting-type-select"
+            value={meetingType}
+            onChange={(e) => setMeetingType(e.target.value as DeliberativeMeetingType)}
+          >
+            {DELIBERATIVE_MEETING_TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-[11px] text-slate-600 sm:col-span-2">
+          <span>Meeting Topic / Agenda</span>
+          <input
+            type="text"
+            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800"
+            data-testid="workshop-meeting-topic-input"
+            placeholder="Discuss strategy evolution, parameters, or attribution..."
+            value={meetingTopic}
+            onChange={(e) => setMeetingTopic(e.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded border border-slate-100 bg-slate-50 p-2 text-xs">
+        <label className="flex items-center gap-1.5 font-medium text-indigo-800 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={includePrivateServant}
+            data-testid="workshop-meeting-include-servant"
+            onChange={(e) => setIncludePrivateServant(e.target.checked)}
+          />
+          <span>Include own private servant (納入自己的私人交易僕人)</span>
+        </label>
+
+        <div className="flex flex-wrap items-center gap-3" data-testid="workshop-meeting-participants">
+          {eligibleParticipants.map((persona) => {
+            const isServant =
+              persona.persona_id.toLowerCase().includes("servant") ||
+              persona.display_name.toLowerCase().includes("servant");
+            const checked = meetingParticipants.includes(persona.persona_id);
+            return (
+              <label
+                key={persona.persona_id}
+                className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer"
+                data-testid={`workshop-meeting-participant-label-${persona.persona_id}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  data-testid={`workshop-meeting-participant-${persona.persona_id}`}
+                  onChange={(e) => {
+                    setParticipantsTouched(true);
+                    setMeetingParticipants((prev) =>
+                      e.target.checked
+                        ? Array.from(new Set([...prev, persona.persona_id]))
+                        : prev.filter((id) => id !== persona.persona_id),
+                    );
+                  }}
+                />
+                <span>
+                  {`${persona.display_name} (${persona.persona_id})${isServant ? " · Own Private Servant" : ""}`}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+
+        <input
+          type="text"
+          aria-label="Additional participant IDs"
+          className="h-6 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700"
+          data-testid="workshop-meeting-custom-participant-input"
+          placeholder="Participant ID override (optional)"
+          value={customParticipantId}
+          onChange={(e) => setCustomParticipantId(e.target.value)}
+        />
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs font-medium bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+          data-testid="workshop-convene-meeting-btn"
+          disabled={!canConvene}
+          type="button"
+          onClick={() => void handleConvene()}
+        >
+          + Convene Deliberative Meeting
+        </Button>
+      </div>
+
+      {conveneRefusal ? (
+        <div
+          role="alert"
+          className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700"
+          data-testid="workshop-meeting-refusal"
+        >
+          <span className="font-semibold">Meeting convening refused: </span>
+          <code data-testid="workshop-meeting-refusal-reason">{conveneRefusal.reason}</code>
+          {conveneRefusal.owner ? <span> · owner: <code>{conveneRefusal.owner}</code></span> : null}
+        </div>
+      ) : null}
+
+      {conveneReceipt ? (
+        <div
+          className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900 space-y-1"
+          data-testid="workshop-meeting-receipt"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              <strong>Convened:</strong> <code>{conveneReceipt.meeting_id}</code> ·{" "}
+              <code>{conveneReceipt.meeting_type}</code> · {conveneReceipt.status}
+            </span>
+            <span>paper · execution_authority: {conveneReceipt.execution_authority ?? "none"}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {meetingsUnavailable ? (
+        <div
+          role="status"
+          className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800"
+          data-testid="workshop-meetings-unavailable"
+        >
+          Meetings read unavailable: <code>{meetingsUnavailable.reason}</code>
+        </div>
+      ) : null}
+
+      {convenedMeetings.length > 0 ? (
+        <ul className="space-y-1.5" data-testid="workshop-convened-meetings">
+          {convenedMeetings.map((m) => (
+            <li
+              key={m.meeting_id}
+              className="rounded border border-slate-200 bg-slate-50/70 p-2 text-xs space-y-1"
+              data-testid={`workshop-convened-meeting-${m.meeting_id}`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <code className="font-semibold text-slate-800">{m.meeting_id}</code>
+                  <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
+                    {m.meeting_type}
+                  </span>
+                  <span className="text-slate-600">{m.status}</span>
+                  {m.outcome ? <span className="text-slate-500">· {m.outcome}</span> : null}
+                  {m.topic || m.agenda ? (
+                    <span className="font-medium text-slate-800">· {m.topic ?? m.agenda}</span>
+                  ) : null}
+                </div>
+                <span className="text-[10px] text-slate-500">
+                  paper · execution_authority: {m.execution_authority ?? "none"}
+                </span>
+              </div>
+              <div
+                className="flex flex-wrap items-center gap-1.5"
+                data-testid={`workshop-convened-meeting-${m.meeting_id}-participants`}
+              >
+                <span className="text-[11px] text-slate-500">Participants:</span>
+                {(m.participants ?? []).map((p) => {
+                  const pid = participantIdOf(p);
+                  const servant = isServantParticipant(p);
+                  return (
+                    <span
+                      key={pid}
+                      className={cn(
+                        "rounded border px-1.5 py-0.5 text-[11px] font-mono",
+                        servant
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          : "border-slate-200 bg-white text-slate-700",
+                      )}
+                    >
+                      {pid}
+                      {servant ? " (own private servant)" : ""}
+                    </span>
+                  );
+                })}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[11px] text-slate-400" data-testid="workshop-convened-meetings-empty">
+          No deliberative meetings convened in this workshop session yet.
+        </p>
+      )}
+    </section>
+  );
 }
 
 export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoom, entry }: WorkshopSessionViewProps): JSX.Element {
@@ -1546,6 +1906,15 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           <ResearchPlanPanel
             workshopId={workshopId}
             strategySpec={strategySpecIdentity ? { strategyId: strategySpecIdentity.strategyId, registryId: strategySpecIdentity.registryId } : null}
+          />
+
+          <WorkshopDeliberativeMeetingsSection
+            workshopId={workshopId}
+            workshop={workshop}
+            strategySpecIdentity={strategySpecIdentity}
+            eligibleParticipants={eligibleParticipants}
+            composerValue={composerValue}
+            writeAccess={writeAccess}
           />
 
           {/* Workshop Command Shortcuts */}

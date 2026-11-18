@@ -118,6 +118,363 @@ describe("committee page", () => {
     expect((await screen.findByRole("button", { name: /發布備忘錄|Publish memo/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByTestId("learning-write-disabled").textContent).toContain("read-only session");
   });
+
+  const gatePanelWithRounds = {
+    request_id: "panel-gate-1",
+    session_id: "panel-gate-1",
+    tenant_id: "tenant-a",
+    consultation_type: "persona_panel",
+    session_class: "gate_panel",
+    target_type: "trial_admission",
+    target_id: "cand-1",
+    status: "published",
+    round: 1,
+    rounds: [
+      {
+        round: 1,
+        mode: "independent",
+        positions: [
+          {
+            label: "risk_officer",
+            persona_id: "persona-risk-officer",
+            role: "risk_officer",
+            style: "independent_gate_panel",
+            stance: "approve",
+            confidence: null,
+            citations: ["artifact://risk-check-1"],
+            changed: false,
+          },
+        ],
+      },
+    ],
+  };
+
+  const deliberativeMeeting = {
+    session_id: "mtg-delib-1",
+    meeting_id: "mtg-delib-1",
+    request_id: "mtg-delib-1",
+    meeting_type: "MT-3",
+    consultation_type: "persona_meeting",
+    session_class: "deliberative_meeting",
+    status: "closed",
+    outcome: "completed",
+    chair_persona_id: "persona-inst-1",
+    convened_by: { kind: "agora_user", id: "alice" },
+    subject_ref: "strat-alpha",
+    participants: [
+      { persona_id: "persona-inst-1", role: "chair", origin: "institutional" },
+      { persona_id: "persona-advisor-1", role: "advisor", origin: "agora_advisor" },
+      {
+        persona_id: "agora-servant-alice",
+        role: "servant",
+        origin: "private_servant",
+        agora_user_id: "alice",
+      },
+    ],
+    round: 2,
+    agenda: "Turn volatility regime findings into testable ideas",
+    case_file_items: [
+      {
+        item_id: "cf-shared-1",
+        kind: "research_finding",
+        excerpt: "Intraday range expansion precedes trend continuation.",
+        relevance_scope: "committee",
+      },
+      {
+        item_id: "cf-private-leak",
+        kind: "private_memory",
+        excerpt: "SECRET_PRIVATE_MEMORY_NEVER_RETURN",
+        relevance_scope: "persona_private",
+      },
+    ],
+    rounds: [
+      {
+        round: 1,
+        positions: [
+          {
+            label: "chair_trend",
+            persona_id: "persona-inst-1",
+            role: "chair",
+            style: "trend",
+            stance: "support",
+            confidence: 0.84,
+            citations: ["cf-shared-1"],
+            changed: false,
+          },
+          {
+            label: "advisor_macro",
+            persona_id: "persona-advisor-1",
+            role: "advisor",
+            style: "macro",
+            stance: "support",
+            confidence: 0.78,
+            citations: ["cf-shared-1"],
+            changed: false,
+          },
+          {
+            label: "servant_operator_guided",
+            persona_id: "agora-servant-alice",
+            role: "servant",
+            style: "operator-guided",
+            stance: "conditional",
+            confidence: 0.71,
+            citations: ["cf-shared-1"],
+            changed: false,
+          },
+        ],
+      },
+      {
+        round: 2,
+        positions: [
+          {
+            label: "chair_trend",
+            persona_id: "persona-inst-1",
+            role: "chair",
+            style: "trend",
+            stance: "support",
+            confidence: 0.86,
+            citations: ["cf-shared-1"],
+            changed: false,
+          },
+          {
+            label: "advisor_macro",
+            persona_id: "persona-advisor-1",
+            role: "advisor",
+            style: "macro",
+            stance: "support",
+            confidence: 0.8,
+            citations: ["cf-shared-1"],
+            changed: false,
+          },
+          {
+            label: "servant_operator_guided",
+            persona_id: "agora-servant-alice",
+            role: "servant",
+            style: "operator-guided",
+            stance: "support",
+            confidence: 0.79,
+            citations: ["cf-shared-1"],
+            changed: true,
+          },
+        ],
+      },
+    ],
+    synthesis: {
+      proposals: [
+        {
+          proposal_id: "prop-sponsored-1",
+          meeting_id: "mtg-delib-1",
+          kind: "research_demand",
+          sponsor_persona_id: "persona-inst-1",
+          approval_path: "governed_owner_entry_point",
+          payload: { title: "Sponsored volatility demand", proposed_value: { window: 20 } },
+          citations: ["cf-shared-1"],
+          downstream: { target: "research_demand", id: "rd-101", status: "open" },
+          execution_authority: "none",
+        },
+        {
+          proposal_id: "prop-unsponsored-1",
+          meeting_id: "mtg-delib-1",
+          kind: "agora_candidate_decision",
+          sponsor_persona_id: null,
+          approval_path: "agora_candidate_decision",
+          payload: {
+            measure_type: "strategy_parameter_change",
+            target: { kind: "strategy", id: "strat-alpha", version: "spec-v1", path: "entry.volatility_threshold" },
+            current_value: 1.5,
+            proposed_value: 1.25,
+            rationale: "Agora workshop meeting proposed tighter volatility entry threshold.",
+            confidence: 0.79,
+          },
+          citations: ["cf-shared-1"],
+          downstream: { target: "agora_candidate_decision", id: "prop-unsponsored-1", status: "draft" },
+          execution_authority: "none",
+        },
+      ],
+      tally: { support: 2.45, oppose: 0.0 },
+      dissent_memo_id: "memo-dissent-1",
+      outcome: "completed",
+    },
+    proposals: [
+      {
+        proposal_id: "prop-sponsored-1",
+        meeting_id: "mtg-delib-1",
+        kind: "research_demand",
+        sponsor_persona_id: "persona-inst-1",
+        approval_path: "governed_owner_entry_point",
+        payload: { title: "Sponsored volatility demand", proposed_value: { window: 20 } },
+        citations: ["cf-shared-1"],
+        downstream: { target: "research_demand", id: "rd-101", status: "open" },
+        execution_authority: "none",
+      },
+      {
+        proposal_id: "prop-unsponsored-1",
+        meeting_id: "mtg-delib-1",
+        kind: "agora_candidate_decision",
+        sponsor_persona_id: null,
+        approval_path: "agora_candidate_decision",
+        payload: {
+          measure_type: "strategy_parameter_change",
+          target: { kind: "strategy", id: "strat-alpha", version: "spec-v1", path: "entry.volatility_threshold" },
+          current_value: 1.5,
+          proposed_value: 1.25,
+          rationale: "Agora workshop meeting proposed tighter volatility entry threshold.",
+          confidence: 0.79,
+        },
+        citations: ["cf-shared-1"],
+        downstream: { target: "agora_candidate_decision", id: "prop-unsponsored-1", status: "draft" },
+        execution_authority: "none",
+      },
+    ],
+    private_items_withheld: 2,
+    environment_ceiling: "paper",
+    execution_authority: "none",
+  };
+
+  it("lists both gate panels and deliberative meetings with every round, synthesis, and dissent", async () => {
+    on("GET", "/bff/agora/committee/sessions", ownerEnvelope("consultation", [gatePanelWithRounds, deliberativeMeeting]));
+    on("GET", "/bff/agora/committee/sessions/panel-gate-1/memos", ownerEnvelope("consultation", [{ memo_id: "memo-gate-1", request_id: "panel-gate-1", status: "published", summary: "Drawdown bounds satisfied" }]));
+    on("GET", "/bff/agora/committee/sessions/mtg-delib-1/memos", ownerEnvelope("consultation", [{ memo_id: "memo-dissent-1", request_id: "mtg-delib-1", status: "published", summary: "Red-team dissent: false breakout risk in choppy sessions" }]));
+
+    renderAt(<CommitteePage />);
+
+    const gateItem = await screen.findByTestId("committee-session-panel-gate-1");
+    const delibItem = await screen.findByTestId("committee-session-mtg-delib-1");
+    expect(gateItem.getAttribute("data-session-offsets") ?? gateItem.getAttribute("data-session-class")).toBe("gate_panel");
+    expect(delibItem.getAttribute("data-session-class")).toBe("deliberative_meeting");
+
+    // Select gate panel: shows single independent round + memos
+    fireEvent.click(screen.getByText("panel-gate-1"));
+    const gateRound1 = await screen.findByTestId("committee-round-1");
+    expect(gateRound1.textContent).toContain("persona-risk-officer");
+    expect(gateRound1.textContent).toContain("approve");
+    expect(gateRound1.textContent).toContain("artifact://risk-check-1");
+    expect((await screen.findByTestId("memo-memo-gate-1")).textContent).toContain("Drawdown bounds satisfied");
+
+    // Filter to deliberative meetings only, then back to all
+    fireEvent.click(screen.getByTestId("committee-filter-deliberative_meeting"));
+    expect(screen.queryByTestId("committee-session-panel-gate-1")).toBeNull();
+    expect(screen.getByTestId("committee-session-mtg-delib-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("committee-filter-all"));
+
+    // Select deliberative meeting: shows participants, Round 1, Round 2, synthesis, tally, and dissent
+    fireEvent.click(screen.getByText("mtg-delib-1"));
+    const detail = await screen.findByTestId("committee-deliberative-detail");
+    expect(detail.textContent).not.toContain("SECRET_PRIVATE_MEMORY_NEVER_RETURN");
+    expect(screen.getByTestId("committee-participant-agora-servant-alice").textContent).toMatch(/Private servant|私人交易僕人/);
+    expect(screen.getByTestId("committee-private-withheld").textContent).toContain("2");
+
+    const round1 = screen.getByTestId("committee-round-1");
+    const round2 = screen.getByTestId("committee-round-2");
+    expect(round1.textContent).toContain("chair_trend");
+    expect(round1.textContent).toContain("0.84");
+    expect(round1.textContent).toContain("servant_operator_guided");
+    expect(round1.textContent).toContain("conditional");
+
+    expect(round2.textContent).toContain("0.86");
+    expect(round2.textContent).toContain("0.79");
+    expect(screen.getByTestId("committee-round-2-position-2-changed")).toBeInTheDocument();
+
+    const synthesis = screen.getByTestId("committee-synthesis");
+    expect(synthesis.textContent).toContain("persona-inst-1");
+    expect(synthesis.textContent).toContain("completed");
+    expect(screen.getByTestId("committee-synthesis-tally").textContent).toContain("2.45");
+
+    const dissent = screen.getByTestId("committee-dissent");
+    expect(within(dissent).getByTestId("committee-dissent-memo-id").textContent).toBe("memo-dissent-1");
+    expect((await within(dissent).findByTestId("dissent-memo-memo-dissent-1")).textContent).toContain(
+      "Red-team dissent: false breakout risk in choppy sessions",
+    );
+  });
+
+  it("shows proposals without a trading-persona sponsor as Agora candidate decisions with their approval status and routes them on the existing approval path", async () => {
+    on("GET", "/bff/agora/committee/sessions", ownerEnvelope("consultation", [deliberativeMeeting]));
+    on("POST", "/bff/agora/meetings/mtg-delib-1/proposals/prop-unsponsored-1/candidates", () =>
+      json(
+        {
+          data: {
+            candidate: {
+              proposal_id: "prop-unsponsored-1",
+              meeting_id: "mtg-delib-1",
+              sponsor_persona_id: null,
+              state: "review_requested",
+              revision: 3,
+              proposed_value: 1.25,
+              execution_authority: "none",
+            },
+            validation_receipts: [
+              {
+                validation_receipt_id: "val-1",
+                outcome: "passed",
+                authority: "canonical_validation_service",
+              },
+            ],
+            formal_approval_receipts: [
+              {
+                approval_decision_id: "approval-mtg-1",
+                outcome: "rejected",
+                reviewer_id: "risk-reviewer-1",
+                execution_authority: "none",
+              },
+            ],
+            execution_authority: "none",
+          },
+          meta: {
+            snapshot_at: "2026-11-16T12:00:00Z",
+            capability: "agora.persona.candidate.v1.9",
+            spec_version: "1.9",
+          },
+        },
+        201,
+      ),
+    );
+
+    renderAt(<CommitteePage />);
+    fireEvent.click(await screen.findByText("mtg-delib-1"));
+
+    const sponsored = await screen.findByTestId("committee-proposal-prop-sponsored-1");
+    expect(sponsored.textContent).toContain("persona-inst-1");
+    expect(sponsored.textContent).toContain("governed_owner_entry_point");
+    expect(screen.getByTestId("proposal-downstream-prop-sponsored-1").textContent).toContain("research_demand:rd-101 (open)");
+    expect(screen.queryByTestId("agora-candidate-decision-prop-sponsored-1")).toBeNull();
+
+    const unsponsored = screen.getByTestId("committee-proposal-prop-unsponsored-1");
+    expect(screen.getByTestId("agora-candidate-decision-prop-unsponsored-1").textContent).toMatch(
+      /Agora candidate decision|Agora 候選決策/,
+    );
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("draft");
+    expect(unsponsored.textContent).toContain("agora_candidate_decision");
+    expect(unsponsored.textContent).toContain("execution_authority");
+
+    fireEvent.click(screen.getByTestId("route-candidate-decision-prop-unsponsored-1"));
+
+    const receipt = await screen.findByTestId("learning-receipt");
+    expect(receipt.textContent).toContain('"proposal_id": "prop-unsponsored-1"');
+    expect(receipt.textContent).toContain('"execution_authority": "none"');
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("rejected");
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("state=review_requested");
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("validation=passed");
+
+    const postCall = calls.find((c) => c.method === "POST" && c.path === "/bff/agora/meetings/mtg-delib-1/proposals/prop-unsponsored-1/candidates");
+    expect(postCall).toBeTruthy();
+    expect(postCall?.headers["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("surfaces owner refusal when routing a meeting candidate decision fails", async () => {
+    on("GET", "/bff/agora/committee/sessions", ownerEnvelope("consultation", [deliberativeMeeting]));
+    on("POST", "/bff/agora/meetings/mtg-delib-1/proposals/prop-unsponsored-1/candidates", () =>
+      json({ detail: { reason: "authoritative_approval_store_unavailable" } }, 503),
+    );
+
+    renderAt(<CommitteePage />);
+    fireEvent.click(await screen.findByText("mtg-delib-1"));
+    fireEvent.click(await screen.findByTestId("route-candidate-decision-prop-unsponsored-1"));
+
+    expect((await screen.findByTestId("learning-unavailable")).textContent).toContain(
+      "authoritative_approval_store_unavailable",
+    );
+    expect(screen.queryByTestId("learning-receipt")).toBeNull();
+  });
 });
 
 describe("memory review page", () => {

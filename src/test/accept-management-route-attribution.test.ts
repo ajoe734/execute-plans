@@ -244,11 +244,122 @@ describe("crawl document attribution and request diagnostics", () => {
     expect(result.dataCheck.reasons).toContain("api_data_failure");
   });
 
-  it("preserves route and settle defaults", () => {
-    const defaults = runInNewContext(source
-      .slice(source.indexOf("const ROUTE_TIMEOUT_MS"), source.indexOf("const CLICK_WRITE_CTAS")) +
-      "({ ROUTE_TIMEOUT_MS, SETTLE_TIMEOUT_MS })", { process: { env: {} } });
-    expect(defaults).toEqual({ ROUTE_TIMEOUT_MS: 20_000, SETTLE_TIMEOUT_MS: 4_000 });
+  it("aligns default settle budget with route-load baseline (15000ms) while honoring env overrides", () => {
+    const baselineSource = readFileSync("scripts/probe-route-load-baseline.mjs", "utf8");
+    const baselineContentTimeout = Number(baselineSource.match(/const CONTENT_TIMEOUT_MS = ([0-9_]+);/)?.[1]?.replace(/_/g, ""));
+    expect(baselineContentTimeout).toBe(15_000);
+
+    const evalTimeouts = (env: Record<string, string>) => runInNewContext(
+      source.slice(source.indexOf("const ROUTE_TIMEOUT_MS"), source.indexOf("const CLICK_WRITE_CTAS")) +
+      "({ ROUTE_TIMEOUT_MS, SETTLE_TIMEOUT_MS })",
+      { process: { env } },
+    );
+    expect(evalTimeouts({})).toEqual({ ROUTE_TIMEOUT_MS: 20_000, SETTLE_TIMEOUT_MS: 15_000 });
+    expect(evalTimeouts({ PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "20000" })).toEqual({
+      ROUTE_TIMEOUT_MS: 20_000,
+      SETTLE_TIMEOUT_MS: 20_000,
+    });
+    expect(evalTimeouts({ PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000", PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "750" })).toEqual({
+      ROUTE_TIMEOUT_MS: 45_000,
+      SETTLE_TIMEOUT_MS: 750,
+    });
+  });
+
+  it("configures pantheon-integration-gate.yml mgmt_hosted_accept with 15m step timeout and 20000ms settle budget", () => {
+    const workflow = readFileSync(".github/workflows/pantheon-integration-gate.yml", "utf8");
+    const stepStart = workflow.indexOf("      - name: Management hosted production acceptance\n");
+    expect(stepStart).toBeGreaterThan(-1);
+    const nextStep = workflow.indexOf("\n      - name:", stepStart + 1);
+    const stepBlock = workflow.slice(stepStart, nextStep);
+    expect(stepBlock).toContain("id: mgmt_hosted_accept");
+    expect(stepBlock).toContain("timeout-minutes: 15");
+    expect(stepBlock).toContain('PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000"');
+    expect(stepBlock).toContain('PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "20000"');
+  });
+
+  it("allows multi-request cross-region fanout settling after 6000ms to pass within the 15000ms default budget while still failing if incomplete at deadline", async () => {
+    const path = "/management/cockpit";
+    let nowMs = 1_000_000;
+    const FakeDate = Object.assign(function (value?: number | string) {
+      return value !== undefined ? new Date(value) : new Date(nowMs);
+    }, { now: () => nowMs });
+
+    const runWithSettleCompletionAt = async (completeAtElapsedMs: number, settleEnv?: string) => {
+      nowMs = 1_000_000;
+      const frame = {};
+      let fanoutDone = false;
+      let secondReq: ReturnType<typeof request> | null = null;
+      const page = Object.assign(new EventEmitter(), {
+        mainFrame: () => frame,
+        waitForTimeout: async () => {
+          nowMs += 2_500;
+          if (!fanoutDone && nowMs - 1_000_000 >= completeAtElapsedMs && secondReq) {
+            fanoutDone = true;
+            page.emit("response", response(secondReq, 200, { items: [{ id: "1" }] }));
+            page.emit("requestfinished", secondReq);
+          }
+        },
+        evaluate: async () => ({
+          path,
+          finalUrl: path,
+          body: fanoutDone ? "Cockpit multi-request fanout data ready" : "Pantheon management navigation shell\nLoading...",
+          content: fanoutDone ? "Cockpit multi-request fanout data ready" : "Loading...",
+          busy: !fanoutDone,
+          login: false,
+          buttons: 1,
+          enabledButtons: 1,
+          disabledButtons: 0,
+        }),
+      });
+      const vm = runInNewContext(`${source
+        .replace(/^#![^\n]*\n/, "")
+        .replace(/^import[\s\S]*?from "[^"]+";\n/gm, "")
+        .replace(/\nmain\(\);\s*$/, "")}
+        ({ crawlRoute, SETTLE_TIMEOUT_MS });`, {
+        process: {
+          argv: ["node", "offline"],
+          env: {
+            PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
+            ...(settleEnv ? { PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: settleEnv } : {}),
+          },
+        },
+        URL, URLSearchParams, Date: FakeDate, Object,
+        BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS,
+        normalizeOptionalBearerToken: () => "",
+      });
+      return vm.crawlRoute(page, { path, kind: "nav" }, {
+        source: "baseline-or-live-nav",
+        transport: {
+          navigate: async () => {
+            commit(page as ReturnType<typeof pageFor>, path);
+            completedRead(page as ReturnType<typeof pageFor>, "/bff/management/cockpit-summary", 200, { ok: true });
+            secondReq = request(page as ReturnType<typeof pageFor>, `${bff}/bff/management/cockpit-detail`);
+            page.emit("request", secondReq);
+            return null;
+          },
+        },
+      });
+    };
+
+    // Completes at 7500ms (past the old 4000ms default and 6000ms CI cap, within 15000ms default):
+    const settled = await runWithSettleCompletionAt(7_500);
+    expect(settled.status).toBe("ok");
+    expect(settled.dataCheck.pass).toBe(true);
+    expect(settled.dataCheck.reasons).toEqual([]);
+    expect(settled.dataCheck.reads).toHaveLength(2);
+
+    // Still incomplete after the 15000ms default settle budget expires:
+    const timedOut = await runWithSettleCompletionAt(18_000);
+    expect(timedOut.status).toBe("datafail");
+    expect(timedOut.dataCheck.pass).toBe(false);
+    expect(timedOut.dataCheck.reasons).toContain("loading_unresolved");
+    expect(timedOut.dataCheck.reasons).toContain("data_reads_incomplete");
+
+    // Completes at 17500ms when CI override PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS=20000 is set:
+    const ciSettled = await runWithSettleCompletionAt(17_500, "20000");
+    expect(ciSettled.status).toBe("ok");
+    expect(ciSettled.dataCheck.pass).toBe(true);
+    expect(ciSettled.dataCheck.reasons).toEqual([]);
   });
 });
 

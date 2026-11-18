@@ -18,6 +18,9 @@ const { resolveLegacyRedirect } = await tsImport(
 
 export const BASELINE_ROUTES = [
   { path: "/management/performance", kind: "nav" },
+  { path: "/management/performance?tab=attribution", kind: "detail-or-alias" },
+  { path: "/management/performance?tab=shadow", kind: "detail-or-alias" },
+  { path: "/management/performance?tab=shadow&decision=dec_001", kind: "detail-or-alias" },
   { path: "/management/rankings", kind: "nav" },
   { path: "/management/governance-decisions", kind: "nav" },
   { path: "/management/cockpit", kind: "nav" },
@@ -44,6 +47,7 @@ export const BASELINE_ROUTES = [
   { path: "/management/ranking", kind: "detail-or-alias" },
   { path: "/management/rebalance", kind: "detail-or-alias" },
   { path: "/management/evolution", kind: "nav" },
+  { path: "/management/meetings", kind: "nav" },
   { path: "/management/experiments", kind: "nav" },
   { path: "/management/artifacts", kind: "nav" },
   { path: "/management/lineage", kind: "nav" },
@@ -87,6 +91,7 @@ export const BASELINE_ROUTES = [
   { path: "/management/ranking/formulas/rf_001", kind: "detail-or-alias", entity: "ranking-formulas" },
   { path: "/management/rebalance/rb_q2_2026", kind: "detail-or-alias", entity: "rebalance" },
   { path: "/management/evolution/ev_001", kind: "detail-or-alias", entity: "evolution" },
+  { path: "/management/meetings/mtg_001", kind: "detail-or-alias", entity: "meetings" },
   { path: "/management/experiments/rx_201", kind: "detail-or-alias", entity: "experiments" },
   { path: "/management/artifacts/art_stg001_v320", kind: "detail-or-alias", entity: "artifacts" },
   { path: "/management/deployments/dp_001", kind: "detail-or-alias", entity: "deployments" },
@@ -150,6 +155,7 @@ export const ENTITY_LIST_ENDPOINTS = {
   "ranking-formulas": "/bff/ranking-formulas",
   rebalance: "/bff/rebalances",
   evolution: "/bff/evolution-programs",
+  meetings: "/bff/management/meetings",
   experiments: "/bff/research-experiments",
   artifacts: "/bff/artifacts",
   deployments: "/bff/deployments",

@@ -1,0 +1,52 @@
+{
+  "task_id": "FE-AGORA-SYSTEM-SUGGESTIONS-20261116",
+  "kind": "source_implementation_evidence",
+  "owner": "Antigravity",
+  "assigned_reviewer": "Antigravity2",
+  "independent_review": "pending",
+  "design": "docs/04/pantheon_persona_meetings_2026-11-15/SD_PERSONA_MEETINGS_2026-11-15.md (§12.7, §12.9)",
+  "prerequisites": [
+    "AGORA-INSTITUTIONAL-KNOWLEDGE-20261116",
+    "BFF-ATTRIBUTION-VIEWS-20261116",
+    "FE-AGORA-MEETINGS-20261115",
+    "FE-MANAGEMENT-ATTRIBUTION-VIEWS-20261116"
+  ],
+  "hosted_behavior_claimed": false,
+  "credentials_present": false,
+  "credentials": "none",
+  "authority": {
+    "environment": "paper",
+    "execution_authority": "none",
+    "model_call_on_trade_path": false,
+    "new_credential_or_route": false
+  },
+  "files": {
+    "workspace": "src/agora/pages/trading-room/TradingRoomWorkspace.tsx",
+    "suggestions_panel": "src/agora/pages/trading-room/SystemSuggestionsPanel.tsx",
+    "suggestions_tests": "src/agora/pages/trading-room/SystemSuggestionsPanel.test.tsx",
+    "shadow_panel": "src/agora/pages/trading-room/ShadowComparisonPanel.tsx",
+    "shadow_tests": "src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx",
+    "bff_client": "src/lib/bff-v1/agora/tradingRoom.ts",
+    "bff_client_tests": "src/lib/bff-v1/agora/tradingRoom.test.ts",
+    "i18n": "src/i18n/locales/en-US.ts, src/i18n/locales/zh-TW.ts"
+  },
+  "acceptance_evidence": {
+    "AC1_validated_system_suggestions_only": "SystemSuggestionsPanel and getTradingRoomSystemSuggestions / getDecisionEventSystemSuggestions render validated system suggestions relevant to the active decision with evidence_refs, validation_result_id/link, and attribution_record_id/link, while strictly filtering out any unvalidated or luck_or_unsupported hypotheses at both client and component boundaries.",
+    "AC2_shadow_comparisons_and_settlement_labels": "ShadowComparisonPanel and getTradingRoomShadowComparison display the trader's own shadow comparisons across all arms (trader, base_strategy, private_servant, institutional_view) with settlement source labels; paper proxy is classified as paper_proxy (data-actual-fill=false) and never shown as an actual fill.",
+    "AC3_advice_only_no_order_or_capital_controls": "Both panels are strictly read-only / advice-only (execution_authority=none, no_order_route_proof=agora_decision_support_only) and expose no control that places an order or changes capital.",
+    "AC4_component_and_regression_tests": "SystemSuggestionsPanel.test.tsx (7 tests), ShadowComparisonPanel.test.tsx (7 tests), tradingRoom.test.ts (60 tests), TradingRoomWorkspace.test.tsx (20 tests), TradingRoomPage.test.tsx (66 tests), i18nParity.test.ts (13 tests), i18n.guard.test.ts (3 tests), and sessionTransportCoverage.test.ts (6 tests) pass against recorded BFF responses.",
+    "AC5_evidence_recorded_no_credentials": "Commands and results recorded below; no credentials or secrets included."
+  },
+  "commands": [
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.app.json --noEmit and tsc -p tsconfig.agora.json --noEmit passed with 0 errors"
+    },
+    {
+      "command": "npx vitest run src/agora/pages/trading-room/SystemSuggestionsPanel.test.tsx src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx src/lib/bff-v1/agora/tradingRoom.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/agora/i18n.guard.test.ts src/lib/bff-v1/__tests__/sessionTransportCoverage.test.ts",
+      "exit_code": 0,
+      "summary": "8 test files passed, 182 tests passed"
+    }
+  ]
+}

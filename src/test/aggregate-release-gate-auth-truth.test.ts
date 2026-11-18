@@ -11,10 +11,21 @@ afterEach(() => {
 });
 
 type Check = { label: string; status: string; note: string };
+type AdvisoryFailure = {
+  gate: string;
+  check: string;
+  name: string;
+  label: string;
+  status: string;
+  owner: string;
+  note: string;
+  evidence: string;
+};
 type Summary = {
   overall: string;
   releaseReadiness: string;
-  advisoryFailures: Array<{ label: string }>;
+  advisoryFailures: AdvisoryFailure[];
+  advisoryFailureChecks: string[];
   gates: Record<string, Check[]>;
 };
 
@@ -32,7 +43,7 @@ function run(opts: {
   );
   if (opts.desktop) writeFileSync(join(dir, "playwright-desktop-results.json"), JSON.stringify(opts.desktop));
   const res = spawnSync("node", [aggregateScript, "--audit-dir", dir, "--json-out", jsonOut], {
-    cwd: process.cwd(),
+    cwd: dir,
     encoding: "utf8",
     env: { ...process.env, PANTHEON_HOSTED_FE_HARD_GATE: opts.hardGate },
   });
@@ -69,20 +80,37 @@ describe("hosted probe truth (failed real probes are never PASS)", () => {
     expect(summary.releaseReadiness).toBe("blocked");
   });
 
-  it("advisory pre-switch mode does NOT soften required authenticated probes: failures fail Gate 7 and exit 1", () => {
-    const { summary, status } = run({ steps: realFailures, desktop: f12("unexpected"), hardGate: "false" });
+  it("advisory pre-switch mode classifies failed hosted probes as advisory_fail and lists them by check name", () => {
+    const { summary } = run({ steps: realFailures, desktop: f12("unexpected"), hardGate: "false" });
     for (const re of [/route-load/, /load gate/, /acceptance step/, /desktop Playwright/, /F12 hosted/]) {
-      expect(labelOf(summary, re)?.status).toBe("fail");
+      expect(labelOf(summary, re)?.status).toBe("advisory_fail");
     }
-    expect(summary.gates["7"][0].status).toBe("fail");
-    expect(summary.releaseReadiness).toBe("blocked");
-    expect(status).toBe(1);
+    for (const expectedCheck of [
+      "Hosted route-load readiness baseline step passed.",
+      "Release load gate manifest step passed.",
+      "Hosted management acceptance step passed (needs genuine short-lived auth).",
+      "Hosted desktop Playwright step passed.",
+      "F12 hosted authenticated approval owner readback passed.",
+    ]) {
+      expect(summary.advisoryFailureChecks).toContain(expectedCheck);
+      expect(summary.advisoryFailures).toContainEqual(
+        expect.objectContaining({
+          gate: "8",
+          check: expectedCheck,
+          name: expectedCheck,
+          label: expectedCheck,
+          status: "advisory_fail",
+        }),
+      );
+    }
   });
 
-  it("absent hosted F12 results in advisory mode is missing and blocks", () => {
-    const { summary, status } = run({ steps: allPass, hardGate: "false" });
-    expect(labelOf(summary, /F12 hosted/)?.status).toBe("missing");
-    expect(status).toBe(1);
+  it("absent hosted F12 results in advisory_fail in advisory mode and missing in hard-gate mode", () => {
+    const { summary } = run({ steps: allPass, hardGate: "false" });
+    expect(labelOf(summary, /F12 hosted/)?.status).toBe("advisory_fail");
+    expect(summary.advisoryFailureChecks).toContain(
+      "F12 hosted authenticated approval owner readback passed.",
+    );
   });
 
   it("missing desktop results or a skipped F12 owner readback is not a pass", () => {
@@ -128,17 +156,26 @@ describe("success, missing-auth and permitted-skip regressions", () => {
     expect(summary.advisoryFailures.some((a) => hostedRe.some((re) => re.test(a.label)))).toBe(false);
   });
 
-  it("missing short-lived auth (acceptance step skipped/failed) blocks and exits non-zero, never pass", () => {
+  it("missing short-lived auth (acceptance step skipped/failed) is advisory_fail in dev mode and blocks in hard-gate mode, never pass", () => {
     for (const outcome of ["skipped", "failure", "cancelled"]) {
-      const { summary, status } = run({
+      const { summary: devSummary } = run({
         steps: { ...allPass, mgmt_hosted_accept: outcome },
         desktop: f12("expected"),
         hardGate: "false",
       });
-      expect(labelOf(summary, /acceptance step/)?.status).not.toBe("pass");
-      expect(["fail", "missing"]).toContain(labelOf(summary, /acceptance step/)?.status);
-      expect(status).toBe(1);
-      expect(summary.releaseReadiness).toBe("blocked");
+      expect(labelOf(devSummary, /acceptance step/)?.status).toBe("advisory_fail");
+      expect(devSummary.advisoryFailureChecks).toContain(
+        "Hosted management acceptance step passed (needs genuine short-lived auth).",
+      );
+
+      const { summary: hardSummary, status: hardStatus } = run({
+        steps: { ...allPass, mgmt_hosted_accept: outcome },
+        desktop: f12("expected"),
+        hardGate: "true",
+      });
+      expect(labelOf(hardSummary, /acceptance step/)?.status).toBe("fail");
+      expect(hardStatus).toBe(1);
+      expect(hardSummary.releaseReadiness).toBe("blocked");
     }
   });
 
@@ -149,6 +186,204 @@ describe("success, missing-auth and permitted-skip regressions", () => {
       hardGate: "false",
     });
     for (const re of hostedRe) expect(labelOf(summary, re)?.status).toBe("pass");
+  });
+});
+
+function runFullReleaseGate(opts: {
+  stepOverrides?: Record<string, string>;
+  hardGate?: "true" | "false";
+  eventName?: string;
+  gitRef?: string;
+}) {
+  const dir = mkdtempSync(join(tmpdir(), "pantheon-full-gate-"));
+  dirs.push(dir);
+  const jsonOut = join(dir, "summary.json");
+
+  const baseSteps: Record<string, string> = {
+    install: "success",
+    release_identity: "success",
+    lint: "success",
+    test: "success",
+    deploy_controller: "success",
+    build: "success",
+    candidate: "success",
+    bundle_budget: "success",
+    contract: "success",
+    mgmt_persona_3000: "success",
+    fixture_e2e: "success",
+    release_identity_final: "success",
+    candidate_final: "success",
+    route_probe: "success",
+    auth_smoke: "skipped",
+    write_probe: "skipped",
+    mgmt_live_deep: "skipped",
+    browser_probe: "failure",
+    route_load: "failure",
+    mgmt_load_gate: "failure",
+    mgmt_hosted_accept: "failure",
+    e2e: "failure",
+    ...opts.stepOverrides,
+  };
+
+  writeFileSync(
+    join(dir, "release-gate-step-outcomes.json"),
+    JSON.stringify(Object.fromEntries(Object.entries(baseSteps).map(([k, v]) => [k, { outcome: v }]))),
+  );
+
+  // Passing Gate 3 anonymous route probe evidence
+  writeFileSync(
+    join(dir, "bff-route-probe-anonymous-2026-11-17.md"),
+    [
+      "# BFF Route Probe",
+      "Canonical 404 count: 0",
+      "Transport errors: 0",
+      "| Status | Method | Path |",
+      "|---|---|---|",
+      "| 200 | GET | /livez |",
+      "| 200 | GET | /openapi.json |",
+      "| 200 | GET | /bff/events/stream |",
+      "| 401 | GET | /bff/me |",
+    ].join("\n"),
+  );
+
+  // Passing Gate 5 & Gate 6 loopback fixture Playwright evidence
+  const fixtureSpecs = [
+    ["01-startup-session.spec.ts", "F01 startup session"],
+    ["02-control-room.spec.ts", "F02 control room"],
+    ["03-execution-loop.spec.ts", "F03 execution loop"],
+    ["04-optimization-loop.spec.ts", "F04 optimization loop"],
+    ["06-entity-registry.spec.ts", "F07 entity registry"],
+    ["08-create-intent.spec.ts", "F08 create write intent"],
+    ["07-high-risk-confirm.spec.ts", "F09 high-risk confirm"],
+    ["10-rollback-saga.spec.ts", "F10 rollback saga"],
+    ["11-handoff-sla.spec.ts", "F11 handoff sla"],
+    ["12-approvals.spec.ts", "F12 approval governance"],
+    ["13-agora.spec.ts", "F13 agora"],
+    ["08-sse-reconnect.spec.ts", "F14 sse reconnect"],
+    ["09-strict-vs-hybrid.spec.ts", "F15 strict hybrid"],
+    ["16-audit-correlation.spec.ts", "F16 audit correlation"],
+    ["17-a11y-v5.spec.ts", "axe control room"],
+    ["17-a11y-v5.spec.ts", "axe research loop"],
+    ["17-a11y-v5.spec.ts", "axe execution loop"],
+    ["17-a11y-v5.spec.ts", "axe optimization loop"],
+    ["17-a11y-v5.spec.ts", "axe sentinel"],
+    ["17-a11y-v5.spec.ts", "axe interventions"],
+    ["17-a11y-v5.spec.ts", "drawer focus returns to trigger"],
+    ["17-a11y-v5.spec.ts", "ESC focus restore"],
+    ["17-a11y-v5.spec.ts", "reduced motion respected"],
+    ["18-perf.spec.ts", "Cockpit load and SSE rerender budget"],
+    ["18-perf.spec.ts", "entity registry first page budget"],
+    ["18-perf.spec.ts", "Sentinel list load budget"],
+    ["18-perf.spec.ts", "LineageGraph node budget"],
+  ];
+  writeFileSync(
+    join(dir, "playwright-results.json"),
+    JSON.stringify({
+      suites: fixtureSpecs.map(([file, title]) => ({
+        file,
+        title: file,
+        specs: [{ file, title, tests: [{ status: "expected", results: [{ status: "passed" }] }] }],
+      })),
+    }),
+  );
+
+  // Failing Gate 8 management 102-page crawl and hosted F12 desktop Playwright evidence
+  writeFileSync(
+    join(dir, "management-hosted-acceptance-2026-11-17.json"),
+    JSON.stringify({
+      result: { pass: false },
+      gateChecks: [
+        {
+          label: "All crawled management routes render complete live data.",
+          status: "fail",
+          note: "2/102 routes timed out",
+        },
+      ],
+    }),
+  );
+  writeFileSync(
+    join(dir, "playwright-desktop-results.json"),
+    JSON.stringify(f12("unexpected")),
+  );
+
+  const res = spawnSync("node", [aggregateScript, "--audit-dir", dir, "--json-out", jsonOut], {
+    cwd: dir,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_EVENT_NAME: opts.eventName ?? "workflow_dispatch",
+      GITHUB_REF: opts.gitRef ?? "refs/heads/dev",
+      PANTHEON_FRONTEND_SHA: "1432118cf0000000000000000000000000000000",
+      PANTHEON_BFF_SHA: "ede3b80350000000000000000000000000000000",
+      PANTHEON_FE_BASE_URL: "https://app.dev.mvl-cap.tw",
+      PANTHEON_BFF_BASE_URL: "https://api.dev.mvl-cap.tw",
+      PANTHEON_HOSTED_FE_HARD_GATE: opts.hardGate ?? "false",
+      BFF_AUTH_TOKEN: "",
+      PANTHEON_BFF_SMOKE_BEARER_TOKEN: "",
+      PANTHEON_TEST_OIDC_PATH: "",
+    },
+  });
+
+  return {
+    summary: JSON.parse(readFileSync(jsonOut, "utf8")) as Summary,
+    status: res.status,
+  };
+}
+
+describe("dev release verdict: advisory-only accepted vs blocking failure rejected (RC1 step 6)", () => {
+  it("accepts a run with only advisory hosted failures (exit 0) and lists every failed check name", () => {
+    const { summary, status } = runFullReleaseGate({ hardGate: "false" });
+
+    expect(status).toBe(0);
+    expect(summary.overall).toBe("advisory_fail");
+    expect(summary.releaseReadiness).toBe("limited");
+    expect(
+      summary.gates["7"].find((c) => c.label === "All critical gates pass.")?.status,
+    ).toBe("pass");
+
+    for (const checkName of [
+      "Hosted acceptance: All crawled management routes render complete live data.",
+      "Hosted route-load readiness baseline step passed.",
+      "Release load gate manifest step passed.",
+      "Hosted management acceptance step passed (needs genuine short-lived auth).",
+      "Hosted desktop Playwright step passed.",
+      "F12 hosted authenticated approval owner readback passed.",
+    ]) {
+      expect(summary.advisoryFailureChecks).toContain(checkName);
+      expect(summary.advisoryFailures).toContainEqual(
+        expect.objectContaining({
+          check: checkName,
+          name: checkName,
+          label: checkName,
+          status: "advisory_fail",
+        }),
+      );
+    }
+  });
+
+  it.each([
+    ["build", "workflow_dispatch"],
+    ["candidate", "workflow_dispatch"],
+    ["deploy_controller", "workflow_dispatch"],
+    ["release_identity", "workflow_dispatch"],
+    ["release_identity_final", "workflow_dispatch"],
+    ["fixture_e2e", "workflow_dispatch"],
+    ["contract", "workflow_dispatch"],
+    ["candidate_final", "push"],
+  ])("rejects a run when blocking check %s fails alongside advisory failures", (blockingKey, eventName) => {
+    const { summary, status } = runFullReleaseGate({
+      hardGate: "false",
+      eventName,
+      gitRef: "refs/heads/dev",
+      stepOverrides: { [blockingKey]: "failure" },
+    });
+
+    expect(status).toBe(1);
+    expect(summary.overall).toBe("fail");
+    expect(summary.releaseReadiness).toBe("blocked");
+    expect(
+      summary.gates["7"].find((c) => c.label === "All critical gates pass.")?.status,
+    ).toBe("fail");
   });
 });
 

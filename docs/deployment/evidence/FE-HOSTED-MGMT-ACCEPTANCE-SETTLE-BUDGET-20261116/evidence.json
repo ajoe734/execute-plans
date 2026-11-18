@@ -1,0 +1,76 @@
+{
+  "task_id": "FE-HOSTED-MGMT-ACCEPTANCE-SETTLE-BUDGET-20261116",
+  "owner": "Antigravity",
+  "reviewer": "Antigravity2",
+  "repository": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "base_commit": "87fc32ab860325573a205500ff381092c2012617",
+  "implementation_commit": "aa1d9251d4fbbde849039d22698b47f7624557dd",
+  "recorded_at_utc": "2026-11-16T11:37:20Z",
+  "hosted_behavior_claimed": false,
+  "review_status": "ready_for_independent_review",
+  "summary": "Align hosted management acceptance per-route settle budget with cross-region BFF fanout and sequential detail read latency (default 15000ms matching probe-route-load-baseline CONTENT_TIMEOUT_MS; CI integration-gate 20000ms and 15m step timeout) while keeping all crawlRoute dataReasons and honestNotFound checks strict and unchanged.",
+  "changes": [
+    "scripts/accept-management-hosted-production.mjs: change default SETTLE_TIMEOUT_MS from 4_000 to 15_000 (matching CONTENT_TIMEOUT_MS = 15_000 in scripts/probe-route-load-baseline.mjs) while preserving process.env.PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS override.",
+    ".github/workflows/pantheon-integration-gate.yml: in step 'Management hosted production acceptance' (id: mgmt_hosted_accept), raise timeout-minutes from 8 to 15 and PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS from 6000 to 20000.",
+    "src/test/accept-management-route-attribution.test.ts: add unit test coverage verifying default SETTLE_TIMEOUT_MS (15000ms) parity with probe-route-load-baseline.mjs CONTENT_TIMEOUT_MS, env override handling, pantheon-integration-gate.yml step contract (timeout-minutes: 15, PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: 20000), and multi-request fanout settle behavior past 6000ms vs incomplete-read failure at deadline."
+  ],
+  "acceptance_evidence": {
+    "ac1_settle_default_and_override": "scripts/accept-management-hosted-production.mjs sets SETTLE_TIMEOUT_MS = Number(process.env.PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS || 15_000), matching CONTENT_TIMEOUT_MS = 15_000 in scripts/probe-route-load-baseline.mjs while honoring explicit PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS overrides.",
+    "ac2_integration_gate_step_budget": ".github/workflows/pantheon-integration-gate.yml step 'Management hosted production acceptance' (id: mgmt_hosted_accept) sets timeout-minutes: 15 and PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: '20000' alongside PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: '45000'.",
+    "ac3_strict_correctness_and_honesty_unchanged": "All dataReasons in crawlRoute (route_or_redirect_unresolved, auth_unresolved, loading_unresolved, rendered_data_error, content_incomplete, no_completed_route_data, api_data_failure, entity_detail_data_missing, data_reads_incomplete), honestNotFound rules, routeRequests completeness checks, mock findings, detail honesty patterns, and transport health checks remain strict and unchanged.",
+    "ac4_unit_and_full_test_suite": "Focused unit tests in src/test/accept-management-route-attribution.test.ts (57 passed) and full npm test suite (270 test files, 3146 tests passed) exited 0; hosted_behavior_claimed is false."
+  },
+  "unchanged_boundaries": [
+    "All dataReasons in crawlRoute (route_or_redirect_unresolved, auth_unresolved, loading_unresolved, rendered_data_error, content_incomplete, no_completed_route_data, api_data_failure, entity_detail_data_missing, data_reads_incomplete)",
+    "honestNotFound definition and shortContentIncomplete(snapshot.content, honestNotFound) check",
+    "routeRequests attribution, complete response body validation, and verdict evidence freezing",
+    "Mock findings, detail honesty patterns, console/CORS error checks, and pinned BFF bearer transport health assertions"
+  ],
+  "validation": {
+    "focused_unit_tests": {
+      "command": "npx --no-install vitest run src/test/accept-management-route-attribution.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 1,
+      "tests_passed": 57,
+      "tests_failed": 0
+    },
+    "honest_not_found_and_attribution": {
+      "command": "npx --no-install vitest run src/test/accept-management-route-attribution.test.ts src/test/accept-management-honest-not-found.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 2,
+      "tests_passed": 64,
+      "tests_failed": 0
+    },
+    "deploy_and_workflow_contracts": {
+      "command": "npx --no-install vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts src/test/aggregate-release-gate-auth-truth.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 4,
+      "tests_passed": 80,
+      "tests_failed": 0
+    },
+    "npm_test": {
+      "command": "timeout 600s npm test",
+      "exit_code": 0,
+      "test_files_passed": 270,
+      "tests_passed": 3146,
+      "tests_failed": 0,
+      "duration_seconds": 373.68
+    },
+    "contract_tests": {
+      "command": "PANTHEON_CONTRACT_ROOT=\"$PANTHEON_COMMAND_ROOT\" npm run test:contract",
+      "exit_code": 0,
+      "test_files_passed": 1,
+      "tests_passed": 11,
+      "tests_failed": 0
+    },
+    "typecheck_lint_and_syntax": {
+      "command": "npm run typecheck:app && npm run typecheck:agora && npx --no-install eslint src/test/accept-management-route-attribution.test.ts scripts/accept-management-hosted-production.mjs && node --check scripts/accept-management-hosted-production.mjs",
+      "exit_code": 0
+    },
+    "production_build_and_credential_scan": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build && npm run scan:bundle-credentials",
+      "exit_code": 0
+    }
+  }
+}

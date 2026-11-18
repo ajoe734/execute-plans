@@ -13,6 +13,83 @@ export type LearningRead<T> =
 
 export const REASON_UNKNOWN = "owner_unavailable";
 
+const PRIVATE_SCOPES = new Set(["persona_private", "private_user", "user_private", "private"]);
+const PRIVATE_SCOPE_KEYS = ["relevance_scope", "memory_layer", "scope", "memory_scope", "visibility_scope", "owner_scope"] as const;
+const PRIVATE_FIELD_KEYS = new Set(["private_memory", "persona_private_memory"]);
+
+export function isPrivateMemoryObject(item: Record<string, unknown>): boolean {
+  for (const key of PRIVATE_SCOPE_KEYS) {
+    const val = item[key];
+    if (typeof val === "string" && PRIVATE_SCOPES.has(val.trim().toLowerCase())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function stripPrivateMemory<T>(value: T): T {
+  if (Array.isArray(value)) {
+    const filtered = value
+      .filter((item) => !(item && typeof item === "object" && !Array.isArray(item) && isPrivateMemoryObject(item as Record<string, unknown>)))
+      .map((item) => stripPrivateMemory(item));
+    return filtered as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    const rec = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rec)) {
+      if (PRIVATE_FIELD_KEYS.has(k)) continue;
+      if (v && typeof v === "object" && !Array.isArray(v) && isPrivateMemoryObject(v as Record<string, unknown>)) {
+        continue;
+      }
+      out[k] = stripPrivateMemory(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
+function extractErrorReason(body: Record<string, unknown>): { reason: string; owner?: string } | null {
+  const topOwner = typeof body.owner === "string" ? body.owner : undefined;
+  if (body.status === "unavailable") {
+    const r = typeof body.reason === "string" && body.reason ? body.reason : REASON_UNKNOWN;
+    return { reason: r, owner: topOwner };
+  }
+  if (typeof body.detail === "string" && body.detail.trim()) {
+    return { reason: body.detail.trim(), owner: topOwner };
+  }
+  if (body.detail && typeof body.detail === "object" && !Array.isArray(body.detail)) {
+    const detail = body.detail as Record<string, unknown>;
+    const detailOwner = typeof detail.owner === "string" ? detail.owner : topOwner;
+    if (typeof detail.reason === "string" && detail.reason.trim()) {
+      return { reason: detail.reason.trim(), owner: detailOwner };
+    }
+    if (detail.error && typeof detail.error === "object" && !Array.isArray(detail.error)) {
+      const errObj = detail.error as Record<string, unknown>;
+      const detailsObj = errObj.details && typeof errObj.details === "object" && !Array.isArray(errObj.details)
+        ? (errObj.details as Record<string, unknown>)
+        : undefined;
+      const r = (typeof errObj.cause === "string" && errObj.cause)
+        || (detailsObj && typeof detailsObj.reason === "string" && detailsObj.reason)
+        || (typeof errObj.code === "string" && errObj.code)
+        || (typeof errObj.message === "string" && errObj.message);
+      if (r) return { reason: r, owner: detailOwner };
+    }
+  }
+  if (body.error && typeof body.error === "object" && !Array.isArray(body.error)) {
+    const errObj = body.error as Record<string, unknown>;
+    const detailsObj = errObj.details && typeof errObj.details === "object" && !Array.isArray(errObj.details)
+      ? (errObj.details as Record<string, unknown>)
+      : undefined;
+    const r = (typeof errObj.cause === "string" && errObj.cause)
+      || (detailsObj && typeof detailsObj.reason === "string" && detailsObj.reason)
+      || (typeof errObj.code === "string" && errObj.code)
+      || (typeof errObj.message === "string" && errObj.message);
+    if (r) return { reason: r, owner: topOwner };
+  }
+  return null;
+}
+
 /** Run a read; HTTP failures and `status: unavailable` envelopes become `unavailable` with a reason. */
 async function read<T>(fn: () => Promise<unknown>, pick: (raw: Record<string, unknown>) => T | undefined): Promise<LearningRead<T>> {
   let raw: unknown;
@@ -20,17 +97,24 @@ async function read<T>(fn: () => Promise<unknown>, pick: (raw: Record<string, un
     raw = await fn();
   } catch (err) {
     if (err instanceof BffError) {
-      return { state: "unavailable", reason: err.envelope.error.cause ?? err.code };
+      const detailReason = err.details && typeof err.details.reason === "string" && err.details.reason
+        ? err.details.reason
+        : undefined;
+      return { state: "unavailable", reason: err.envelope.error.cause ?? detailReason ?? err.code };
     }
     return { state: "unavailable", reason: REASON_UNKNOWN };
   }
   const body = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const owner = typeof body.owner === "string" ? body.owner : undefined;
-  if (body.status === "unavailable") {
-    return { state: "unavailable", reason: typeof body.reason === "string" && body.reason ? body.reason : REASON_UNKNOWN, owner };
+  const errReason = extractErrorReason(body);
+  if (errReason) {
+    return { state: "unavailable", reason: errReason.reason, owner: errReason.owner ?? owner };
   }
   const data = pick(body);
-  if (data === undefined) return { state: "unavailable", reason: "invalid_owner_response", owner };
+  if (data === undefined) {
+    const fallbackReason = typeof body.reason === "string" && body.reason ? body.reason : "invalid_owner_response";
+    return { state: "unavailable", reason: fallbackReason, owner };
+  }
   return { state: "ok", data, owner };
 }
 
@@ -38,17 +122,127 @@ const arr = <T>(v: unknown): T[] | undefined => (Array.isArray(v) ? (v as T[]) :
 const dataObj = <T>(raw: Record<string, unknown>): T | undefined =>
   raw.data && typeof raw.data === "object" && !Array.isArray(raw.data) ? (raw.data as T) : undefined;
 
-// ─── Committee ───────────────────────────────────────────────────────────────
+// ─── Committee & Deliberative Persona Meetings ──────────────────────────────
+
+export type DeliberativeMeetingType =
+  | "MT-1"
+  | "MT-2"
+  | "MT-3"
+  | "MT-4"
+  | "MT-5"
+  | "MT-6"
+  | "pool_evolution_review"
+  | "optimisation_review"
+  | "optimization_review"
+  | "strategy_ideation"
+  | "performance_attribution_review"
+  | "post_mortem"
+  | "regime_interpretation"
+  | "quarterly_review";
+
+export const DELIBERATIVE_MEETING_TYPE_OPTIONS: ReadonlyArray<{ value: DeliberativeMeetingType; label: string }> = [
+  { value: "MT-1", label: "MT-1 · Pool Evolution Review (池子演進會議)" },
+  { value: "MT-2", label: "MT-2 · Optimisation Review (優化會議)" },
+  { value: "MT-3", label: "MT-3 · Strategy Ideation (新策略發想會議)" },
+  { value: "MT-4", label: "MT-4 · Performance Attribution Review (績效歸因檢討)" },
+  { value: "MT-5", label: "MT-5 · Regime Interpretation (盤勢研判會議)" },
+  { value: "MT-6", label: "MT-6 · Quarterly Review (季度檢討會議)" },
+];
+
+export interface CommitteeParticipant {
+  persona_id: string;
+  role?: string;
+  origin?: "institutional" | "agora_advisor" | "private_servant" | string;
+  agora_user_id?: string;
+  [key: string]: unknown;
+}
+
+export interface CommitteePosition {
+  label?: string | null;
+  persona_id?: string | null;
+  role?: string | null;
+  style?: string | null;
+  stance?: string | null;
+  confidence?: number | null;
+  citations?: string[];
+  changed?: boolean;
+  [key: string]: unknown;
+}
+
+export interface CommitteeRound {
+  round: number;
+  mode?: string;
+  positions: CommitteePosition[];
+  [key: string]: unknown;
+}
+
+export interface CommitteeMeetingProposal {
+  proposal_id: string;
+  meeting_id?: string;
+  kind?: string;
+  sponsor_persona_id?: string | null;
+  approval_path?: "agora_candidate_decision" | "governed_owner_entry_point" | string;
+  approval_status?: string;
+  status?: string;
+  payload?: Record<string, unknown>;
+  citations?: string[];
+  downstream?: {
+    target?: string;
+    id?: string | null;
+    status?: string;
+  };
+  execution_authority?: string;
+  [key: string]: unknown;
+}
+
+export interface CommitteeSynthesis {
+  proposals?: CommitteeMeetingProposal[];
+  tally?: {
+    support?: number;
+    oppose?: number;
+    [key: string]: unknown;
+  } | null;
+  dissent_memo_id?: string | null;
+  dissent?: string | Record<string, unknown> | null;
+  outcome?: string | null;
+  summary?: string | null;
+  [key: string]: unknown;
+}
 
 export interface CommitteeSession {
   request_id: string;
+  session_id?: string;
+  meeting_id?: string;
   tenant_id?: string;
-  consultation_type?: string;
+  consultation_type?: "persona_panel" | "persona_meeting" | string;
+  session_class?: "gate_panel" | "deliberative_meeting" | string;
+  meeting_type?: string;
   status?: string;
+  outcome?: string | null;
   topic?: string;
+  agenda?: string;
   question?: string;
   requester_persona_id?: string;
+  from_persona_id?: string;
+  chair_persona_id?: string | null;
+  convened_by?: { kind?: string; id?: string } | null;
+  subject_ref?: string | null;
+  workshop_id?: string | null;
+  participants?: Array<string | CommitteeParticipant>;
+  round?: number;
+  rounds?: CommitteeRound[];
+  case_file_items?: Array<Record<string, unknown>>;
+  case_file_view?: CaseFileView | null;
+  pre_read?: unknown;
+  synthesis?: CommitteeSynthesis | null;
+  proposals?: CommitteeMeetingProposal[];
+  writebacks?: Array<{ persona_id: string; entry_id: string }>;
+  usage?: { rounds?: number; calls?: number } | null;
+  private_items_withheld?: number;
   created_at?: string;
+  closed_at?: string | null;
+  environment_ceiling?: string;
+  execution_authority?: string;
   [key: string]: unknown;
 }
 
@@ -65,11 +259,171 @@ export interface CommitteeMemo {
   [key: string]: unknown;
 }
 
+export interface CandidateDecisionReadback {
+  candidate?: {
+    proposal_id: string;
+    meeting_id?: string;
+    sponsor_persona_id?: string | null;
+    state: string;
+    revision?: number;
+    proposed_value?: unknown;
+    proposal_digest?: string;
+    execution_authority?: string;
+    [key: string]: unknown;
+  };
+  validation_receipts?: Array<{
+    validation_receipt_id?: string;
+    outcome?: string;
+    authority?: string;
+    [key: string]: unknown;
+  }>;
+  formal_approval_receipts?: Array<{
+    approval_decision_id?: string;
+    outcome?: string;
+    reviewer_id?: string;
+    execution_authority?: string;
+    [key: string]: unknown;
+  }>;
+  readiness?: {
+    validation?: { current_passed?: boolean; [key: string]: unknown };
+    reviewer?: { can_link_formal_approval?: boolean; [key: string]: unknown };
+    [key: string]: unknown;
+  };
+  execution_authority?: string;
+  [key: string]: unknown;
+}
+
+export interface ConveneWorkshopMeetingInput {
+  meeting_type: DeliberativeMeetingType | string;
+  topic: string;
+  subject_ref?: string;
+  participants?: string[];
+  evidence_refs?: string[];
+  attribution_record_id?: string;
+  environment?: "research" | "shadow" | "paper";
+  include_private_servant?: boolean;
+}
+
+export interface ConvenedWorkshopMeeting {
+  meeting_id: string;
+  status: string;
+  workshop_id?: string;
+  meeting_type: string;
+  topic?: string;
+  agenda?: string;
+  convened_by?: { kind?: string; id?: string } | null;
+  subject_ref?: string | null;
+  participants: Array<string | CommitteeParticipant>;
+  evidence_refs?: string[];
+  attribution_record_id?: string;
+  round?: number;
+  rounds?: CommitteeRound[];
+  synthesis?: CommitteeSynthesis | null;
+  proposals?: CommitteeMeetingProposal[];
+  outcome?: string | null;
+  created_at?: string;
+  environment_ceiling?: string;
+  execution_authority?: string;
+  [key: string]: unknown;
+}
+
+export function sessionIdOf(session: CommitteeSession): string {
+  return String(session.session_id ?? session.meeting_id ?? session.request_id ?? "");
+}
+
+export function isDeliberativeSession(session: CommitteeSession): boolean {
+  if (session.session_class === "deliberative_meeting" || session.consultation_type === "persona_meeting") {
+    return true;
+  }
+  if (session.session_class === "gate_panel" || session.consultation_type === "persona_panel") {
+    return false;
+  }
+  return Boolean(session.meeting_id || session.meeting_type);
+}
+
+export function isUnsponsoredCandidateProposal(proposal: CommitteeMeetingProposal): boolean {
+  const sponsor = typeof proposal.sponsor_persona_id === "string" ? proposal.sponsor_persona_id.trim() : "";
+  return !sponsor || proposal.approval_path === "agora_candidate_decision" || proposal.kind === "agora_candidate_decision";
+}
+
+export function candidateApprovalStatusOf(
+  proposal: CommitteeMeetingProposal,
+  readback?: CandidateDecisionReadback | null,
+): string {
+  const formalOutcome = readback?.formal_approval_receipts?.[0]?.outcome;
+  if (typeof formalOutcome === "string" && formalOutcome.trim()) {
+    return formalOutcome.trim();
+  }
+  const candidateState = readback?.candidate?.state;
+  if (typeof candidateState === "string" && candidateState.trim()) {
+    return candidateState.trim();
+  }
+  if (typeof proposal.approval_status === "string" && proposal.approval_status.trim()) {
+    return proposal.approval_status.trim();
+  }
+  if (typeof proposal.downstream?.status === "string" && proposal.downstream.status.trim()) {
+    return proposal.downstream.status.trim();
+  }
+  if (typeof proposal.status === "string" && proposal.status.trim()) {
+    return proposal.status.trim();
+  }
+  return "draft";
+}
+
+function normalizeCommitteeSession(raw: CommitteeSession): CommitteeSession {
+  const cleaned = stripPrivateMemory(raw);
+  const id = String(cleaned.request_id ?? cleaned.session_id ?? cleaned.meeting_id ?? "");
+  return {
+    ...cleaned,
+    request_id: id,
+    session_id: String(cleaned.session_id ?? cleaned.meeting_id ?? id),
+  };
+}
+
 export const getCommitteeSessions = () =>
-  read(() => bffFetch({ method: "GET", path: paths.agoraCommitteeSessions() }), (r) => arr<CommitteeSession>(r.data));
+  read(
+    () => bffFetch({ method: "GET", path: paths.agoraCommitteeSessions() }),
+    (r) => {
+      const items = arr<CommitteeSession>(r.data);
+      return items ? items.map(normalizeCommitteeSession) : undefined;
+    },
+  );
 
 export const getCommitteeSession = (sessionId: string) =>
-  read(() => bffFetch({ method: "GET", path: paths.agoraCommitteeSession(sessionId) }), (r) => dataObj<CommitteeSession>(r));
+  read(
+    () => bffFetch({ method: "GET", path: paths.agoraCommitteeSession(sessionId) }),
+    (r) => {
+      const item = dataObj<CommitteeSession>(r);
+      return item ? normalizeCommitteeSession(item) : undefined;
+    },
+  );
+
+export const getCommitteeMeetings = () =>
+  read(
+    () => bffFetch({ method: "GET", path: "/bff/agora/committee/meetings" }),
+    (r) => {
+      const items = arr<CommitteeSession>(r.data);
+      return items ? items.map(normalizeCommitteeSession) : undefined;
+    },
+  );
+
+export const getCommitteeMeeting = (meetingId: string) =>
+  read(
+    () => bffFetch({ method: "GET", path: `/bff/agora/committee/meetings/${encodeURIComponent(meetingId)}` }),
+    (r) => {
+      const item = dataObj<CommitteeSession>(r);
+      return item ? normalizeCommitteeSession(item) : undefined;
+    },
+  );
+
+export const getCommitteeMeetingProposals = (meetingId: string) =>
+  read(
+    () => bffFetch({ method: "GET", path: `/bff/agora/committee/meetings/${encodeURIComponent(meetingId)}/proposals` }),
+    (r) => {
+      const items = arr<CommitteeMeetingProposal>(r.data);
+      return items ? items.map((item) => stripPrivateMemory(item)) : undefined;
+    },
+  );
 
 export const getCommitteeMemos = (sessionId: string) =>
   read(() => bffFetch({ method: "GET", path: paths.agoraCommitteeMemos(sessionId) }), (r) => arr<CommitteeMemo>(r.data));
@@ -77,6 +431,82 @@ export const getCommitteeMemos = (sessionId: string) =>
 /** Receipt is the owner-confirmed published memo (the BFF refuses unless status is `published`). */
 export const publishCommitteeMemo = (sessionId: string, memoId: string) =>
   read(() => bffFetch({ method: "POST", path: paths.agoraCommitteeMemoPublish(sessionId, memoId), body: {} }), (r) => dataObj<CommitteeMemo>(r));
+
+/** Route an unsponsored meeting proposal onto the Agora candidate-decision approval path. */
+export const createMeetingCandidateDecision = (
+  meetingId: string,
+  proposalId: string,
+  idempotencyKey?: string,
+) =>
+  read(
+    () =>
+      bffFetch({
+        method: "POST",
+        path: `/bff/agora/meetings/${encodeURIComponent(meetingId)}/proposals/${encodeURIComponent(proposalId)}/candidates`,
+        body: {},
+        idempotencyKey,
+      }),
+    (r) => dataObj<CandidateDecisionReadback>(r) ?? (r.candidate ? (r as unknown as CandidateDecisionReadback) : undefined),
+  );
+
+export const getCandidateReviewReadiness = (proposalId: string) =>
+  read(
+    () => bffFetch({ method: "GET", path: paths.agoraCandidateReviewReadiness(proposalId) }),
+    (r) => dataObj<CandidateDecisionReadback>(r),
+  );
+
+/** Convene a deliberative meeting from a Strategy Workshop session through the BFF consultation owner adapter. */
+export const conveneWorkshopMeeting = (
+  workshopId: string,
+  input: ConveneWorkshopMeetingInput,
+  idempotencyKey?: string,
+): Promise<LearningRead<ConvenedWorkshopMeeting>> =>
+  read(
+    () =>
+      bffFetch({
+        method: "POST",
+        path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/meetings`,
+        body: {
+          meeting_type: input.meeting_type,
+          topic: input.topic,
+          ...(input.subject_ref ? { subject_ref: input.subject_ref } : {}),
+          ...(input.participants ? { participants: input.participants } : {}),
+          ...(input.evidence_refs ? { evidence_refs: input.evidence_refs } : {}),
+          ...(input.attribution_record_id ? { attribution_record_id: input.attribution_record_id } : {}),
+          ...(input.environment ? { environment: input.environment } : {}),
+          include_private_servant: input.include_private_servant ?? true,
+        },
+        idempotencyKey,
+      }),
+    (r) => {
+      const inner = dataObj<Record<string, unknown>>(r) ?? r;
+      const meetingId = typeof inner.meeting_id === "string" && inner.meeting_id.trim()
+        ? inner.meeting_id.trim()
+        : typeof r.meeting_id === "string" && r.meeting_id.trim()
+          ? r.meeting_id.trim()
+          : undefined;
+      if (!meetingId) return undefined;
+      const status = typeof inner.status === "string" && inner.status.trim()
+        ? inner.status.trim()
+        : typeof r.status === "string" && r.status.trim()
+          ? r.status.trim()
+          : "convened";
+      const cleaned = stripPrivateMemory(inner);
+      return {
+        ...cleaned,
+        meeting_id: meetingId,
+        status,
+        workshop_id: typeof cleaned.workshop_id === "string" ? cleaned.workshop_id : workshopId,
+        meeting_type: typeof cleaned.meeting_type === "string" ? cleaned.meeting_type : String(input.meeting_type),
+        topic: typeof cleaned.topic === "string" ? cleaned.topic : input.topic,
+        participants: Array.isArray(cleaned.participants)
+          ? (cleaned.participants as Array<string | CommitteeParticipant>)
+          : (input.participants ?? []),
+        environment_ceiling: "paper",
+        execution_authority: "none",
+      };
+    },
+  );
 
 // ─── Memory review ───────────────────────────────────────────────────────────
 

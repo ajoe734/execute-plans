@@ -1,0 +1,54 @@
+{
+  "task_id": "FE-MANAGEMENT-MEETINGS-20261115",
+  "kind": "source_implementation_evidence",
+  "owner": "Antigravity",
+  "assigned_reviewer": "Antigravity2",
+  "independent_review": "pending",
+  "design": "docs/04/pantheon_persona_meetings_2026-11-15/SD_PERSONA_MEETINGS_2026-11-15.md (§5, §6, §11, §12)",
+  "prerequisite": "BFF-MEETINGS-VIEWS-R2-20261116",
+  "hosted_behavior_claimed": false,
+  "credentials_present": false,
+  "authority": {
+    "environment": "paper",
+    "execution_authority": "none",
+    "model_call_on_trade_path": false,
+    "new_credential_or_route": false
+  },
+  "files": {
+    "manifest": "src/management/navigation/managementRouteManifest.ts",
+    "routes": "src/App.tsx, src/routes/management/meetings.tsx, scripts/lib/management-routes.mjs",
+    "client": "src/lib/bff-v1/meetings.ts, src/lib/bff-v1/paths.ts, src/lib/bff-v1/index.ts",
+    "pages": "src/management/pages/meetings/MeetingsCenterPage.tsx, src/management/pages/meetings/MeetingDetailPage.tsx, src/management/pages/governance/ConsultRulesPage.tsx, src/management/pages/PersonaDetail.tsx",
+    "components": "src/management/components/persona/PersonaMeetingsPanel.tsx",
+    "inbox": "src/lib/v5/management/humanInbox.ts",
+    "i18n": "src/i18n/locales/en-US.ts, src/i18n/locales/zh-TW.ts",
+    "tests": "src/lib/bff-v1/meetings.test.ts, src/management/pages/meetings/meetings.test.tsx, src/management/components/persona/PersonaMeetingsPanel.test.tsx, src/management/pages/oversight/HumanInboxPage.test.tsx"
+  },
+  "acceptance_evidence": {
+    "AC1_sidebar_and_four_tabs": "groups.researchAndEvolution includes /management/meetings with the four tabs (upcoming, history, proposals, rules/budget) reading only /bff/management/meetings* routes",
+    "AC2_meeting_detail_page": "MeetingDetailPage renders header, MT-4 attribution record above rounds, agenda, shared case-file items, pre-read interpretations, Round 1 and Round 2 with anonymised labels and operator-only reveal, chair synthesis, non-binding tally, dissent memo, proposals with live downstream links, per-participant memory writeback IDs, and usage, while stripping and never rendering private memory text",
+    "AC3_persona_tab_and_consult_rules": "PersonaDetail mounts the meetings tab (/management/personas/:id?tab=meetings) via PersonaMeetingsPanel; ConsultRulesPage separates M1 gate panels from deliberative meetings and links to /management/meetings?tab=rules",
+    "AC4_human_inbox_items": "humanInbox.ts and HumanInboxPage support meeting_review (meetings ending in REVIEW), meeting_refusal (due meetings refused for insufficient_participants), and meeting_proposal (proposals waiting for operator) with links to meeting detail and budget tab",
+    "AC5_convene_write_gated_and_idempotent": "MeetingsCenterPage and conveneMeeting enforce write-gating via useAgoraWriteAccess and liveWriteGated and send an Idempotency-Key header",
+    "AC6_route_manifest_and_crawl_rules": "/management/meetings and /management/meetings/mtg_001 are registered in managementRouteManifest.ts and scripts/lib/management-routes.mjs (with ENTITY_LIST_ENDPOINTS.meetings = '/bff/management/meetings'); empty and unavailable states are explicit and 404 renders an honest not-found",
+    "AC7_component_and_existing_tests": "All new and existing Vitest suites and TypeScript typechecks pass",
+    "AC8_evidence_recorded_no_credentials": "Commands and results recorded below; no credentials or secrets included"
+  },
+  "commands": [
+    {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/meetings.test.tsx src/management/components/persona/PersonaMeetingsPanel.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts src/management/navigation/managementRouteManifest.test.ts src/test/accept-management-honest-not-found.test.ts",
+      "exit_code": 0,
+      "summary": "7 test files passed, 62 tests passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/test/accept-management-route-attribution.test.ts src/lib/v4/__tests__/spec-conflict-g-ui-hygiene.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx",
+      "exit_code": 0,
+      "summary": "3 test files passed, 79 tests passed"
+    },
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.app.json --noEmit and tsc -p tsconfig.agora.json --noEmit passed with 0 errors"
+    }
+  ]
+}
