@@ -1,0 +1,33 @@
+{
+  "task": "FE-BUILD-REPRODUCIBLE-TAILWIND-SOURCES-20261116",
+  "rootCause": "src/index.css used @import \"tailwindcss\" with v4 automatic source detection scanning the whole project root, including the untracked pantheon-contract/ checkout the integration gate places there; backend content changed FE CSS and the artifact digest.",
+  "reproduction_before_fix": {
+    "builds": {
+      "no_pantheon_contract": {"css_bytes": 162424, "dist_digest": "2af64af65467514dde5a861c16df44d7b35c3b54ecec9d884d2139bc4add5bd2"},
+      "pantheon_contract_A": {"css_bytes": 162784, "dist_digest": "78b0631a885ade1752a89bfc25a0d16d9e990d104fab4d386f46d7e3dbb2cab2"},
+      "pantheon_contract_B": {"css_bytes": 162737, "dist_digest": "395897f3a0e09dc2beaaab0f24472ace3c891f1d6ffbd65f15e32cd621b0a17a"}
+    },
+    "result": "all three differ"
+  },
+  "fix": [
+    "src/index.css: @import \"tailwindcss\" source(none); @source \"../index.html\"; @source \"../src\";",
+    ".gitignore: pantheon-contract/, release-candidate/, pantheon-fe-release-candidate*/, audit/, audits/, reports/"
+  ],
+  "after_fix": {
+    "no_pantheon_contract": {"css_bytes": 161836, "dist_digest": "b47fcdb333f4041a352073e1fdc0b5cccc33578216c329b379720768e14cb533"},
+    "pantheon_contract_A": {"css_bytes": 161836, "dist_digest": "b47fcdb333f4041a352073e1fdc0b5cccc33578216c329b379720768e14cb533"},
+    "pantheon_contract_B": {"css_bytes": 161836, "dist_digest": "b47fcdb333f4041a352073e1fdc0b5cccc33578216c329b379720768e14cb533"},
+    "result": "byte-identical dist and digest"
+  },
+  "class_set_comparison": {
+    "before_classes": 1279,
+    "after_classes": 1274,
+    "removed": [".accent-foreground", ".bg-bucket-3", ".ease-out", ".ring", ".select-all"],
+    "added": [],
+    "analysis": "All 5 removed selectors were picked up only from non-FE files (.lovable/ spec/audit markdown, tailwind.config.ts). None appear as class usages in src/ or index.html (accent-foreground occurs only as CSS variable names and as text-/bg-accent-foreground utilities, which are retained). No class used by the FE is lost."
+  },
+  "unchanged": "No change to deploy controller rules or the same-SHA replacement check (scripts/deploy-dev-vm.sh untouched).",
+  "validation": [
+    {"command": "npx vitest run src/test/build-tailwind-sources.test.ts", "result": "1 file, 3/3 tests passed (includes two real vite builds with different pantheon-contract/ contents compared byte-for-byte)"}
+  ]
+}

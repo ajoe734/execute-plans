@@ -1,0 +1,151 @@
+{
+  "task_id": "FE-GATE-HOSTED-CHECKS-ADVISORY-DEV-20261117",
+  "title": "Frontend integration gate: hosted functional checks are advisory for the dev release verdict (RC1 step 6)",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "base_commit": "1432118cfc40c70b5585a902e3998705f693a8f5",
+  "recorded_at_utc": "2026-11-17T02:27:30Z",
+  "hosted_behavior_claimed": false,
+  "delivery_state": "merged_pending_review",
+  "operator_decision": {
+    "date": "2026-11-17",
+    "authority": "Operator decision 2026-11-17 ('依照你的建議來做') in Remediation Plan 2026-11-17 (AGENTS.md PR #7483; docs/deployment/SD_DEV_DEPLOY_ACCEPTANCE_SPLIT_2026-11-17.md PR #7484; docs/operations/problem-register.md class RC1 step 6)",
+    "rule": "For dev only, a deploy is build plus switch plus stack health and only an unhealthy stack rolls back; hosted functional checks and the management page crawl are classified advisory for the dev release verdict, recorded in the gate report in machine-readable form for the post-switch acceptance stage, and do not reject the deployable artifact upload. Staging and production remain gate-before-switch."
+  },
+  "checks_changed_class": [
+    {
+      "gate": "8",
+      "step_key": "route_load",
+      "check_name": "Hosted route-load readiness baseline step passed.",
+      "previous_class_when_hosted_hard_gate_false": "blocking (fail/missing)",
+      "new_class_when_hosted_hard_gate_false": "advisory (advisory_fail)",
+      "class_when_hosted_hard_gate_true": "blocking (fail/missing)",
+      "source": "scripts/aggregate-release-gate.mjs:hostedStepChecks"
+    },
+    {
+      "gate": "8",
+      "step_key": "mgmt_load_gate",
+      "check_name": "Release load gate manifest step passed.",
+      "previous_class_when_hosted_hard_gate_false": "blocking (fail/missing)",
+      "new_class_when_hosted_hard_gate_false": "advisory (advisory_fail)",
+      "class_when_hosted_hard_gate_true": "blocking (fail/missing)",
+      "source": "scripts/aggregate-release-gate.mjs:hostedStepChecks"
+    },
+    {
+      "gate": "8",
+      "step_key": "mgmt_hosted_accept",
+      "check_name": "Hosted management acceptance step passed (needs genuine short-lived auth).",
+      "previous_class_when_hosted_hard_gate_false": "blocking (fail/missing)",
+      "new_class_when_hosted_hard_gate_false": "advisory (advisory_fail)",
+      "class_when_hosted_hard_gate_true": "blocking (fail/missing)",
+      "source": "scripts/aggregate-release-gate.mjs:hostedStepChecks"
+    },
+    {
+      "gate": "8",
+      "step_key": "e2e",
+      "check_name": "Hosted desktop Playwright step passed.",
+      "previous_class_when_hosted_hard_gate_false": "blocking (fail/missing)",
+      "new_class_when_hosted_hard_gate_false": "advisory (advisory_fail)",
+      "class_when_hosted_hard_gate_true": "blocking (fail/missing)",
+      "source": "scripts/aggregate-release-gate.mjs:hostedStepChecks"
+    },
+    {
+      "gate": "8",
+      "step_key": "playwright-desktop-results.json",
+      "check_name": "F12 hosted authenticated approval owner readback passed.",
+      "previous_class_when_hosted_hard_gate_false": "blocking (fail/missing)",
+      "new_class_when_hosted_hard_gate_false": "advisory (advisory_fail)",
+      "class_when_hosted_hard_gate_true": "blocking (fail/missing)",
+      "source": "scripts/aggregate-release-gate.mjs:hostedF12Check"
+    }
+  ],
+  "existing_advisory_hosted_checks_composed": [
+    {
+      "gate": "8",
+      "check_pattern": "Hosted management production-acceptance harness has run. / Hosted management production-acceptance harness reports its gate checks. / Hosted acceptance: *",
+      "class_when_hosted_hard_gate_false": "advisory (advisory_fail)",
+      "note": "Per-check items from the management 102-page crawl (scripts/accept-management-hosted-production.mjs) in buildGate8Core already used hostedStatus(), but a failure of the crawl caused step mgmt_hosted_accept in hostedStepChecks to reject the release before this change."
+    },
+    {
+      "gate": "4",
+      "check_pattern": "Gate 4 Browser Frontend E2E checks (9 checks from scripts/probe-hosted-browser-bff.mjs)",
+      "class_when_hosted_hard_gate_false": "advisory (advisory_fail)"
+    },
+    {
+      "gate": "0",
+      "check_pattern": "No obsolete BFF URL appears in frontend JS bundle. / Auth token or test OIDC path available for authenticated smoke.",
+      "class_when_hosted_hard_gate_false": "advisory (advisory_fail)"
+    }
+  ],
+  "blocking_build_integrity_checks_unchanged": [
+    "Gate 0: `execute-plans` branch is clean and points to release candidate SHA.",
+    "Gate 0: `pantheon` backend/BFF SHA is recorded.",
+    "Gate 0: `PANTHEON_FE_BASE_URL` points to intended frontend target.",
+    "Gate 0: `PANTHEON_BFF_BASE_URL` points to intended BFF.",
+    "Gate 1: `npm ci` completed. (install)",
+    "Gate 1: Release identity was captured before validation. (release_identity)",
+    "Gate 1: `npm run lint` passes. (lint)",
+    "Gate 1: `npm run test` passes. (test)",
+    "Gate 1: `npm run test:deploy-release` passes (deployment controller regression). (deploy_controller)",
+    "Gate 1: `npm run build` passes. (build across read-only, operator-live, and write-proof profiles)",
+    "Gate 1: Immutable release candidate was prepared. (candidate — artifact digest, auth posture, safe write defaults)",
+    "Gate 1: `npm run probe:bundle-budget` passes (bundle-size budget). (bundle_budget)",
+    "Gate 1: `npm run test:contract` passes. (contract)",
+    "Gate 1: `npm run validate:mgmt-persona:3000` passes. (mgmt_persona_3000)",
+    "Gate 1: Isolated loopback fixture E2E passes. (fixture_e2e)",
+    "Gate 1: BFF release identity was revalidated after validation. (release_identity_final)",
+    "Gate 1 & workflow candidate_upload: Immutable release candidate passed final verification. (candidate_final — same-SHA reproducibility and three-profile digest verification)",
+    "Workflow release_admission & candidate_upload: Agora compatibility manifest (pantheon-contract/scripts/agora_compat_manifest.py) and PANTHEON_RELEASE_GATE_SOFT_FAIL != 'true'",
+    "Gate 2: Contract Drift checks (6 checks)",
+    "Gate 3: BFF Route Probes",
+    "Gate 5 & Gate 6: Isolated loopback fixture Playwright User Flows and A11y / Perf checks"
+  ],
+  "machine_readable_gate_report_contract": {
+    "file": ".lovable/audits/current-run/release-gate-summary.json",
+    "overall_when_only_advisory_failures": "advisory_fail",
+    "release_readiness_when_only_advisory_failures": "limited",
+    "exit_code_when_only_advisory_failures": 0,
+    "advisory_failures_field": "advisoryFailures (array of { gate, check, name, label, status, owner, note, evidence })",
+    "advisory_failure_checks_field": "advisoryFailureChecks (array of check name strings)"
+  },
+  "acceptance_criteria_verification": {
+    "ac1_hosted_checks_and_mgmt_crawl_advisory_for_dev": "PASS: hostedStepChecks (route_load, mgmt_load_gate, mgmt_hosted_accept, e2e) and hostedF12Check now apply hostedStatus() and hostedNote(), joining buildGate8Core (management 102-page crawl) and buildGate4 as advisory_fail when PANTHEON_HOSTED_FE_HARD_GATE=false.",
+    "ac2_build_integrity_stays_blocking": "PASS: build, candidate preparation, candidate_final same-SHA digest verification, release_admission Agora compatibility manifest, release_identity/release_identity_final, deploy_controller, fixture_e2e, contract, auth posture and safe write defaults remain blocking.",
+    "ac3_deployable_artifact_uploaded_on_advisory_only_failure": "PASS: when only advisory checks fail, overall is advisory_fail, Gate 7 passes, aggregate-release-gate.mjs exits 0 with PANTHEON_RELEASE_GATE_SOFT_FAIL='false', satisfying steps.aggregate.outcome == 'success' on candidate_upload.",
+    "ac4_machine_readable_advisory_failure_list": "PASS: release-gate-summary.json includes advisoryFailures[] (with check, name, label, gate, status, owner, note, evidence) and advisoryFailureChecks[] listing every advisory failure by check name.",
+    "ac5_tests_cover_advisory_accepted_and_blocking_rejected": "PASS: src/test/aggregate-release-gate-auth-truth.test.ts, aggregate-release-gate-hard-gates.test.ts, aggregate-release-gate-hosted-auth.test.ts, and aggregate-release-gate-playwright-classification.test.ts cover advisory-only runs (exit 0, accepted with failures listed) and blocking-failure runs (exit 1, rejected).",
+    "ac6_documentation_and_evidence": "PASS: .github/workflows/pantheon-integration-gate.yml, scripts/aggregate-release-gate.mjs, and this evidence manifest record the 2026-11-17 operator decision and list every check that changed class. (.lovable/audits/release-gate-exceptions.md is left unmodified in git because scripts/git/check_generated_files.py blocks any non-deleted diff under .lovable/audits/ in the Branch CI 'Generated files guard' job.)",
+    "ac7_focused_tests_and_workflow_lint": "PASS: 9 gate/workflow test files (214 tests) passed, eslint passed with 0 errors/warnings, node --check passed, YAML validation passed, check_generated_files.py passed, and git diff --check passed."
+  },
+  "validation": [
+    {
+      "command": "npx --no-install vitest run src/test/aggregate-release-gate-hard-gates.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-auth-truth.test.ts",
+      "exit_code": 0,
+      "result": "4 test files passed, 81 tests passed"
+    },
+    {
+      "command": "npx --no-install vitest run src/test/accept-management-route-attribution.test.ts src/test/admitted-dev-pair.test.ts src/test/aggregate-release-gate-auth-truth.test.ts src/test/aggregate-release-gate-hard-gates.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/agora-retired-probes.test.ts src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts",
+      "exit_code": 0,
+      "result": "9 test files passed, 214 tests passed"
+    },
+    {
+      "command": "node --check scripts/aggregate-release-gate.mjs && npx --no-install eslint src/test/aggregate-release-gate-hard-gates.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-auth-truth.test.ts && python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/pantheon-integration-gate.yml\"))' && git diff --check",
+      "exit_code": 0,
+      "result": "Syntax check, ESLint, workflow YAML parse, and git diff --check all passed"
+    }
+  ],
+  "residual_findings": [
+    {
+      "class": "RC1",
+      "surface": "scripts/git/check_generated_files.py vs .lovable/audits/release-gate-exceptions.md",
+      "finding": "scripts/git/check_generated_files.py lists '.lovable/audits/' in FORBIDDEN_PREFIXES without an allowlist for the tracked file .lovable/audits/release-gate-exceptions.md, so any edit to .lovable/audits/release-gate-exceptions.md fails Branch CI Gate ('Generated files guard'). Since scripts/git/check_generated_files.py is outside this task's artifact contract, gate documentation was recorded in .github/workflows/pantheon-integration-gate.yml, scripts/aggregate-release-gate.mjs, and this evidence manifest."
+    },
+    {
+      "class": "RC1",
+      "surface": "scripts/aggregate-release-gate.mjs:buildGate3 (mgmt_live_deep)",
+      "finding": "Gate 3 step mgmt_live_deep (scripts/validate-management-live-deep.mjs) opens /bff/events/stream against PANTHEON_BFF_BASE_URL for 65s during the pre-switch integration gate and is evaluated via liveDeepGateStatus rather than hostedStatus. It is outside this task's Gate 8 hosted-check scope and pinned by existing Gate 3 tests, so it was left unchanged; recorded for RC1 step 5 post-deploy acceptance stage follow-up if SSE stream instability occurs during pre-switch builds."
+    }
+  ]
+}

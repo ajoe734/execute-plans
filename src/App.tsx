@@ -55,6 +55,8 @@ const EvidencePacketDetailRoute = lazyNamedRoute(
 );
 const TradeJourneysRoute = lazyNamedRoute(() => import("@/routes/management/tradeJourneys"), "TradeJourneysRoute", "Trade journeys");
 const TradeJourneyDetailRoute = lazyNamedRoute(() => import("@/routes/management/tradeJourneys"), "TradeJourneyDetailRoute", "Trade journey detail");
+const MeetingsCenterRoute = lazyNamedRoute(() => import("@/routes/management/meetings"), "MeetingsCenterRoute", "Meetings center");
+const MeetingDetailRoute = lazyNamedRoute(() => import("@/routes/management/meetings"), "MeetingDetailRoute", "Meeting detail");
 
 // MGMT-PERF-IA-001 — portfolio-book, promotion-allocation, persona-league,
 // performance-attribution, and quarterly-ranking no longer mount their own
@@ -274,6 +276,8 @@ const App = () => (
                 <Route path="rebalances/:id" element={<ManagementDetailAliasRedirect canonicalBase="/management/rebalance" />} />
                 <Route path="evolution" element={<EvolutionListRoute />} />
                 <Route path="evolution/:id" element={<EvolutionDetailRoute />} />
+                <Route path="meetings" element={<MeetingsCenterRoute />} />
+                <Route path="meetings/:id" element={<MeetingDetailRoute />} />
                 <Route path="experiments" element={<ResearchListRoute />} />
                 <Route path="experiments/:id" element={<ResearchDetailRoute />} />
                 <Route path="research" element={<Navigate to="/management/experiments" replace />} />

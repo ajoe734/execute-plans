@@ -202,4 +202,24 @@ describe("release Gate 1 deployment hard gates", () => {
       );
     },
   );
+
+  it.each(hardGateKeys)(
+    "keeps Gate 1 build-integrity check %s blocking even when PANTHEON_HOSTED_FE_HARD_GATE is false",
+    (key) => {
+      const gate = gate1For(
+        {
+          [key]: { outcome: "failure" },
+          route_load: { outcome: "failure" },
+          mgmt_load_gate: { outcome: "failure" },
+          mgmt_hosted_accept: { outcome: "failure" },
+          e2e: { outcome: "failure" },
+        },
+        { PANTHEON_HOSTED_FE_HARD_GATE: "false" },
+      );
+
+      expect(
+        gate.find((check) => check.label === hardGateLabels[key])?.status,
+      ).toBe("fail");
+    },
+  );
 });

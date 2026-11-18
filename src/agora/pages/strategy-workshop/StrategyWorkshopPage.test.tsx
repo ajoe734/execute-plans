@@ -121,6 +121,7 @@ vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
 import { resolveSubmissionTenant } from "./submissionTenant";
 import { pickerParticipants } from "@/agora/participantPicker";
+import { setMockResolver } from "@/lib/bff-v1/client";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import * as researchModule from "@/lib/bff-v1/agora/research";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
@@ -343,6 +344,7 @@ describe("StrategyWorkshopPage", () => {
   });
 
   afterEach(() => {
+    setMockResolver(undefined);
     vi.clearAllMocks();
   });
 
@@ -2131,4 +2133,330 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.click(screen.getByTestId("research-plan-create"));
     expect(researchModule.createWorkshopResearchPlan).not.toHaveBeenCalled();
   });
+
+  it("convenes a deliberative meeting with participants chosen from the eligible list including the user's own private servant and shows the meetings it convened", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(interaction.participants).mockResolvedValue({
+      data: {
+        included: [
+          {
+            persona_id: "persona-inst-1",
+            display_name: "Institutional Momentum",
+            eligible: true,
+            reasons: [],
+            recommended: true,
+            participant_snapshot: {
+              persona_id: "persona-inst-1",
+              persona_version: "v1",
+              session_persona_id: "session-inst-1",
+              display_name: "Institutional Momentum",
+              provider_agent_id: "agent-inst-1",
+              workspace_id: "workspace-inst-1",
+              environment_ceiling: "paper",
+              capability_snapshot: ["persona_opinion"],
+              captured_at: "2026-11-16T12:00:00Z",
+            },
+          },
+          {
+            persona_id: "persona-advisor-1",
+            display_name: "Agora Macro Advisor",
+            eligible: true,
+            reasons: [],
+            recommended: true,
+            participant_snapshot: {
+              persona_id: "persona-advisor-1",
+              persona_version: "v2",
+              session_persona_id: "session-advisor-1",
+              display_name: "Agora Macro Advisor",
+              provider_agent_id: "agent-advisor-1",
+              workspace_id: "workspace-advisor-1",
+              environment_ceiling: "paper",
+              capability_snapshot: ["persona_opinion"],
+              captured_at: "2026-11-16T12:00:00Z",
+            },
+          },
+          {
+            persona_id: "agora-servant-alice",
+            display_name: "Alice Private Servant",
+            eligible: true,
+            reasons: [],
+            recommended: true,
+            participant_snapshot: {
+              persona_id: "agora-servant-alice",
+              persona_version: "v1",
+              session_persona_id: "session-servant-alice",
+              display_name: "Alice Private Servant",
+              provider_agent_id: "agent-servant-alice",
+              workspace_id: "workspace-servant-alice",
+              environment_ceiling: "paper",
+              capability_snapshot: ["persona_opinion"],
+              captured_at: "2026-11-16T12:00:00Z",
+            },
+          },
+          {
+            persona_id: "persona-red-team",
+            display_name: "Red Team Challenger",
+            eligible: true,
+            reasons: [],
+            recommended: false,
+            participant_snapshot: {
+              persona_id: "persona-red-team",
+              persona_version: "v1",
+              session_persona_id: "session-red-team",
+              display_name: "Red Team Challenger",
+              provider_agent_id: "agent-red-team",
+              workspace_id: "workspace-red-team",
+              environment_ceiling: "paper",
+              capability_snapshot: ["persona_opinion"],
+              captured_at: "2026-11-16T12:00:00Z",
+            },
+          },
+        ],
+        excluded: [],
+      },
+    });
+
+    const bffCalls: Array<{ method: string; path: string; body: unknown; headers: Record<string, string> }> = [];
+    const ownerMeetings: Array<Record<string, unknown>> = [
+      {
+        session_id: "mtg-delib-existing",
+        meeting_id: "mtg-delib-existing",
+        request_id: "mtg-delib-existing",
+        workshop_id: "ws-abc",
+        meeting_type: "MT-1",
+        consultation_type: "persona_meeting",
+        session_class: "deliberative_meeting",
+        status: "closed",
+        outcome: "completed",
+        agenda: "Weekly pool evolution review",
+        participants: [
+          { persona_id: "persona-inst-1", role: "chair", origin: "institutional" },
+          { persona_id: "agora-servant-alice", role: "servant", origin: "private_servant", agora_user_id: "alice" },
+        ],
+        environment_ceiling: "paper",
+        execution_authority: "none",
+      },
+    ];
+
+    setMockResolver((method, path) => {
+      if (method === "GET" && path === "/bff/agora/committee/meetings") {
+        return (req) => {
+          bffCalls.push({ method, path, body: req.body, headers: req.headers });
+          return {
+            kind: "json",
+            status: 200,
+            body: {
+              status: "ok",
+              reason: null,
+              owner: "consultation",
+              data: ownerMeetings,
+              fallback_used: false,
+              environment_ceiling: "paper",
+              execution_authority: "none",
+            },
+          };
+        };
+      }
+      if (method === "POST" && path === "/bff/agora/workshops/ws-abc/meetings") {
+        return (req) => {
+          bffCalls.push({ method, path, body: req.body, headers: req.headers });
+          const reqBody = req.body as Record<string, unknown>;
+          const created = {
+            meeting_id: "mtg-convened-1",
+            status: "convened",
+            workshop_id: "ws-abc",
+            meeting_type: reqBody.meeting_type,
+            topic: reqBody.topic,
+            convened_by: { kind: "agora_user", id: "alice" },
+            subject_ref: reqBody.subject_ref ?? "strategy-draft-001",
+            participants: reqBody.participants ?? ["persona-inst-1", "persona-advisor-1", "agora-servant-alice"],
+            evidence_refs: ["workshop:ws-abc"],
+            owner: "consultation",
+            environment_ceiling: "paper",
+            execution_authority: "none",
+          };
+          ownerMeetings.unshift({
+            ...created,
+            session_id: "mtg-convened-1",
+            request_id: "mtg-convened-1",
+            consultation_type: "persona_meeting",
+            session_class: "deliberative_meeting",
+            agenda: reqBody.topic,
+          });
+          return {
+            kind: "json",
+            status: 202,
+            body: {
+              meeting_id: "mtg-convened-1",
+              status: "convened",
+              data: created,
+              environment_ceiling: "paper",
+              execution_authority: "none",
+            },
+          };
+        };
+      }
+      return undefined;
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    // Previously convened meeting for this workshop is shown
+    const existingRow = await screen.findByTestId("workshop-convened-meeting-mtg-delib-existing");
+    expect(existingRow.textContent).toContain("MT-1");
+    expect(existingRow.textContent).toContain("Weekly pool evolution review");
+    expect(existingRow.textContent).toContain("agora-servant-alice (own private servant)");
+
+    // Wait for eligible participants checkboxes including the user's own private servant
+    const servantCheckbox = (await screen.findByTestId("workshop-meeting-participant-agora-servant-alice")) as HTMLInputElement;
+    expect(servantCheckbox.checked).toBe(true);
+    expect(screen.getByTestId("workshop-meeting-participant-label-agora-servant-alice").textContent).toContain(
+      "Own Private Servant",
+    );
+
+    // Uncheck persona-red-team so only persona-inst-1, persona-advisor-1, and agora-servant-alice attend
+    const redCheckbox = screen.getByTestId("workshop-meeting-participant-persona-red-team") as HTMLInputElement;
+    expect(redCheckbox.checked).toBe(true);
+    fireEvent.click(redCheckbox);
+    expect(redCheckbox.checked).toBe(false);
+
+    // Choose meeting type MT-3 and enter topic
+    fireEvent.change(screen.getByTestId("workshop-meeting-type-select"), { target: { value: "MT-3" } });
+    fireEvent.change(screen.getByTestId("workshop-meeting-topic-input"), {
+      target: { value: "Discuss breakout entry filter with my private servant" },
+    });
+
+    const conveneBtn = screen.getByTestId("workshop-convene-meeting-btn");
+    expect(conveneBtn).toBeEnabled();
+    fireEvent.click(conveneBtn);
+
+    const receipt = await screen.findByTestId("workshop-meeting-receipt");
+    expect(receipt.textContent).toContain("mtg-convened-1");
+    expect(receipt.textContent).toContain("MT-3");
+    expect(receipt.textContent).toContain("convened");
+    expect(receipt.textContent).toContain("execution_authority: none");
+
+    const convenedRow = await screen.findByTestId("workshop-convened-meeting-mtg-convened-1");
+    expect(convenedRow.textContent).toContain("Discuss breakout entry filter with my private servant");
+    expect(convenedRow.textContent).toContain("persona-inst-1");
+    expect(convenedRow.textContent).toContain("persona-advisor-1");
+    expect(convenedRow.textContent).toContain("agora-servant-alice (own private servant)");
+
+    const postCall = bffCalls.find((c) => c.method === "POST" && c.path === "/bff/agora/workshops/ws-abc/meetings");
+    expect(postCall).toBeTruthy();
+    expect(postCall?.headers["Idempotency-Key"]).toBeTruthy();
+    expect(postCall?.body).toMatchObject({
+      meeting_type: "MT-3",
+      topic: "Discuss breakout entry filter with my private servant",
+      participants: ["persona-inst-1", "persona-advisor-1", "agora-servant-alice"],
+      include_private_servant: true,
+    });
+  });
+
+  it.each([
+    [
+      "persona_user_mismatch",
+      403,
+      {
+        detail: {
+          error: {
+            code: "FORBIDDEN",
+            message: "Selected private servant belongs to another user",
+            cause: "persona_user_mismatch",
+            details: { reason: "persona_user_mismatch" },
+          },
+        },
+      },
+      "agora-servant-bob",
+    ],
+    [
+      "servant_absent",
+      409,
+      {
+        detail: {
+          error: {
+            code: "RESOURCE_CONFLICT",
+            message: "Requested private servant is absent",
+            cause: "servant_absent",
+            details: { reason: "servant_absent" },
+          },
+        },
+      },
+      "agora-servant-missing",
+    ],
+    [
+      "insufficient_participants",
+      409,
+      {
+        status: "unavailable",
+        owner: "consultation",
+        reason: "insufficient_participants",
+        fallback_used: false,
+      },
+      "",
+    ],
+    [
+      "participant_budget_exceeded",
+      422,
+      {
+        detail: {
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "Deliberative meeting exceeds M9 participant budget cap of 5",
+            cause: "participant_budget_exceeded",
+            details: { reason: "participant_budget_exceeded" },
+          },
+        },
+      },
+      "persona-inst-2,persona-inst-3,persona-inst-4",
+    ],
+  ])(
+    "surfaces recorded BFF refusal (%s) when workshop meeting convening is rejected",
+    async (expectedReason, statusCode, recordedBody, extraParticipantInput) => {
+      vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+
+      setMockResolver((method, path) => {
+        if (method === "GET" && path === "/bff/agora/committee/meetings") {
+          return () => ({
+            kind: "json",
+            status: 200,
+            body: {
+              status: "unavailable",
+              reason: "no_persona_meetings",
+              owner: "consultation",
+              data: [],
+              fallback_used: false,
+            },
+          });
+        }
+        if (method === "POST" && path === "/bff/agora/workshops/ws-abc/meetings") {
+          return () => ({
+            kind: "json",
+            status: statusCode,
+            body: recordedBody,
+          });
+        }
+        return undefined;
+      });
+
+      render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+      await screen.findByTestId("workshop-deliberative-meetings");
+      fireEvent.change(screen.getByTestId("workshop-meeting-topic-input"), {
+        target: { value: `Attempt convene (${expectedReason})` },
+      });
+      if (extraParticipantInput) {
+        fireEvent.change(screen.getByTestId("workshop-meeting-custom-participant-input"), {
+          target: { value: extraParticipantInput },
+        });
+      }
+      fireEvent.click(screen.getByTestId("workshop-convene-meeting-btn"));
+
+      const refusal = await screen.findByTestId("workshop-meeting-refusal");
+      expect(refusal.textContent).toContain(expectedReason);
+      expect(screen.getByTestId("workshop-meeting-refusal-reason").textContent).toBe(expectedReason);
+      expect(screen.queryByTestId("workshop-meeting-receipt")).toBeNull();
+      expect(screen.getByTestId("workshop-convened-meetings-empty")).toBeInTheDocument();
+    },
+  );
 });
