@@ -45,7 +45,7 @@ describe("paired Pantheon release workflow", () => {
     );
     const install = componentJob.indexOf("run: npm ci");
     const chromium = componentJob.indexOf(
-      "run: npx --no-install playwright install --with-deps chromium",
+      "run: npx --no-install playwright install --with-deps chromium chromium-headless-shell",
     );
     const tests = componentJob.indexOf(
       "- name: Release gate unit / integration tests",
@@ -54,6 +54,19 @@ describe("paired Pantheon release workflow", () => {
     expect(chromium).toBeGreaterThan(install);
     expect(tests).toBeGreaterThan(chromium);
     expect(componentJob.slice(chromium, tests)).not.toContain("continue-on-error");
+  });
+
+  it("installs Playwright browsers before npm run test in both workflows", () => {
+    const gateTests = integrationWorkflow.indexOf("      - name: Unit / integration tests\n");
+    const gateInstall = integrationWorkflow.indexOf(
+      "run: npx --no-install playwright install chromium chromium-headless-shell",
+    );
+    expect(gateInstall).toBeGreaterThan(-1);
+    expect(gateTests).toBeGreaterThan(gateInstall);
+    const ciTests = branchWorkflow.indexOf("- name: Release gate unit / integration tests");
+    const ciInstall = branchWorkflow.indexOf("playwright install --with-deps chromium chromium-headless-shell");
+    expect(ciInstall).toBeGreaterThan(-1);
+    expect(ciTests).toBeGreaterThan(ciInstall);
   });
 
   it("runs the release gate's vitest suite and env on every PR", () => {
