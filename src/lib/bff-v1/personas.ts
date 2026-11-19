@@ -81,6 +81,8 @@ export async function listPersonas(): Promise<Persona[]> {
 export interface PersonaManagementSurfaceStatus {
   status?: "ok" | "empty" | "unavailable" | string;
   count?: number;
+  /** Pool version of the cycle observation behind pool_health / member_virtual_books. */
+  observed_pool_version?: number | null;
   source?: string;
   authoritative?: boolean;
   reason?: string | null;
@@ -172,7 +174,22 @@ export interface PoolDemandRecord {
   expires_at?: string;
   [key: string]: unknown;
 }
+/** One row per distinct artifact_ref (BFF-PERSONA-STRATEGY-VISIBILITY-20261119). */
+export interface PoolMemberRuleRow {
+  artifact_ref: string;
+  checksum?: string;
+  status: "ok" | "unavailable" | string;
+  reason?: string | null;
+  strategy_id?: string | null;
+  version?: string | null;
+  strategy_logic?: Record<string, unknown> | null;
+  parameters?: Record<string, unknown> | null;
+  adjustable_controls?: Array<Record<string, unknown>> | null;
+  immutable_parameters?: string[] | null;
+  expression_policy?: Record<string, unknown> | null;
+}
 export interface PersonaStrategyPoolView {
+  memberRules?: PoolMemberRuleRow[] | null;
   current: PoolVersionRecord | null;
   versions: PoolVersionRecord[] | null;
   memberVirtualBooks: PoolMemberBookRow[] | null;

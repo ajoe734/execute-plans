@@ -169,17 +169,41 @@ describe("strategyRuleText", () => {
     };
 
     const zh = formatStrategyRuleResult(unsupportedRule, "zh-TW");
-    expect(zh).toEqual({
+    expect(zh).toMatchObject({
       kind: "unsupported",
       rawKind: "stat_arb_pairs_zscore",
       text: "不支援的規則類型：stat_arb_pairs_zscore",
     });
 
     const en = formatStrategyRuleResult(unsupportedRule, "en-US");
-    expect(en).toEqual({
+    expect(en).toMatchObject({
       kind: "unsupported",
       rawKind: "stat_arb_pairs_zscore",
       text: "Unsupported rule kind: stat_arb_pairs_zscore",
     });
+  });
+
+  it("lists every parameter of an unsupported kind and never labels a pool_member as the baseline", () => {
+    const unsupported: StrategyRule = {
+      ...REAL_TRADING_BUNDLE,
+      strategyLogic: { kind: "stat_arb_pairs_zscore", entry_z: 2 },
+      parameters: { symbols: ["2330.TWSE"], window: 30 },
+    };
+    const r = formatStrategyRuleResult(unsupported, "en-US");
+    expect(r.params).toEqual([
+      { key: "strategy_logic.entry_z", value: "2" },
+      { key: "symbols", value: '["2330.TWSE"]' },
+      { key: "window", value: "30" },
+    ]);
+    const holdMember: StrategyRule = {
+      registryId: "artifact-persona-paper-baseline-x",
+      role: "pool_member",
+      strategyLogic: {
+        kind: "close_to_close_momentum", positive_action: "HOLD", non_positive_action: "HOLD",
+        lookback_parameter: "lookback_bars", threshold_parameter: "momentum_threshold",
+      },
+      parameters: { lookback_bars: 2, momentum_threshold: 0, order_quantity: 0, bar_frequency: "1d", quantity_type: "SHARES" },
+    };
+    expect(formatStrategyRuleResult(holdMember, "zh-TW").kind).toBe("sentence");
   });
 });
