@@ -1,0 +1,19 @@
+{
+  "task_id": "FE-GATE-BROWSER-INSTALL-BEFORE-TESTS-20261119",
+  "frontend_sha": "c0a06d9ccaccdbc25ac081d72b9146360dc6b11d",
+  "gate_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/44478716692",
+  "gate_conclusion": "success",
+  "step_timestamps_utc": {
+    "install_playwright_browsers_started": "2026-11-19T07:20:46Z",
+    "install_playwright_browsers_completed": "2026-11-19T07:20:54Z",
+    "npm_run_test_started": "2026-11-19T07:20:54Z",
+    "npm_run_test_completed": "2026-11-19T07:25:09Z"
+  },
+  "added_install_time_per_gate_run_seconds": 8,
+  "persistent_writers_added": false,
+  "notes": [
+    "An earlier run 44476293364 passed install and tests too, but failed 'Verify live BFF release identity remained stable' because the live backend SHA advanced mid-run (external, unrelated); rerun 44478716692 passed.",
+    "Existing 'Install Playwright' (--with-deps) step later in the gate is unchanged. branch-ci already installed before tests; it now also names chromium-headless-shell.",
+    "Local: focused tests and full npm run test (280 files, 3234 tests) passed."
+  ]
+}
