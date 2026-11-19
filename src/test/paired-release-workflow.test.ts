@@ -1320,3 +1320,115 @@ describe("paired Pantheon release workflow", () => {
     expect(integrationWorkflow).toContain("PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT }}");
   });
 });
+
+describe("release controller admits newest-green (non-tip) controller", () => {
+  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+  const TIP = "a16b4b1fc6d1f170e6cd6882bbed666892b53597";
+  const BACKEND = "57dcdd9d8ebb281581db6d22f754fe5aef418731";
+  const FRONTEND = "6ccca0876dcd84ea38fa945dbdce2572056cc9da";
+  const OTHER = "1".repeat(40);
+  const digest = "a".repeat(64);
+
+  const extract = (workflow: string, stepName: string) => {
+    const start = workflow.indexOf(`- name: ${stepName}`);
+    const scriptAt = workflow.indexOf("          script: |\n", start);
+    const rest = workflow.slice(scriptAt + "          script: |\n".length);
+    const lines: string[] = [];
+    for (const line of rest.split("\n")) {
+      if (line.trim() !== "" && !line.startsWith("            ")) break;
+      lines.push(line.slice(12));
+    }
+    return lines.join("\n");
+  };
+
+  const run = (
+    kind: "gate" | "deploy",
+    controller: Record<string, unknown>,
+    ancestry = "ahead",
+    backend = BACKEND,
+  ) => {
+    const failures: string[] = [];
+    const outputs: Record<string, string> = {};
+    const script =
+      kind === "gate"
+        ? extract(integrationWorkflow, "Validate active Pantheon release controller source")
+        : extract(deployWorkflow, "Validate Pantheon release controller owns the exact pair");
+    const env: Record<string, string> =
+      kind === "gate"
+        ? {
+            RELEASE_CANDIDATE_ID: digest, COMPATIBILITY_MANIFEST_SHA256: digest,
+            RELEASE_CONTROLLER_RUN_ID: "44083921576", EXPECTED_FRONTEND_SHA: FRONTEND,
+            EXPECTED_FRONTEND_REF: "dev", EXPECTED_BACKEND_SHA: backend,
+          }
+        : {
+            REF_DRIFT: "false", FRONTEND_REF: "dev", RELEASE_CONTROLLER_RUN_ID: "44083921576",
+            EXPECTED_BACKEND_SHA: backend, BOOTSTRAP_PREDECESSOR: "false",
+            DEPLOYMENT_PROFILE: "read-only",
+          };
+    const base = {
+      path: ".github/workflows/nonprod-deploy.yml", event: "workflow_dispatch",
+      head_branch: "dev", head_sha: TIP, status: "in_progress", conclusion: null,
+      head_repository: { full_name: "ajoe734/pantheon" },
+      name: `Dev release ${BACKEND} + ${FRONTEND}`, run_attempt: 1,
+      ...controller,
+    };
+    const github = {
+      rest: {
+        git: { getRef: async () => ({ data: { object: { sha: FRONTEND } } }) },
+        actions: { getWorkflowRun: async () => ({ data: base }) },
+        repos: { compareCommits: async () => ({ data: { status: ancestry } }) },
+      },
+    };
+    const core = {
+      setFailed: (m: string) => failures.push(m),
+      setOutput: (k: string, v: string) => (outputs[k] = v),
+    };
+    const context = {
+      eventName: "workflow_dispatch", ref: "refs/heads/dev", sha: TIP,
+      repo: { owner: "ajoe734", repo: "execute_plans" },
+    };
+    const saved = { ...process.env };
+    Object.assign(process.env, env);
+    return new AsyncFunction("github", "context", "core", script)(github, context, core)
+      .then(() => failures)
+      .finally(() => {
+        for (const k of Object.keys(env)) {
+          if (k in saved) process.env[k] = saved[k];
+          else delete process.env[k];
+        }
+      });
+  };
+
+  for (const kind of ["gate", "deploy"] as const) {
+    describe(kind, () => {
+      it("admits the tip case (controller head === backend)", async () => {
+        expect(await run(kind, { head_sha: BACKEND, name: "x" })).toEqual([]);
+      });
+      it("reproduces run 44083921576: non-tip newest-green is admitted via run name + ancestry", async () => {
+        expect(await run(kind, {})).toEqual([]);
+      });
+      it("rejects a backend that is not an ancestor of the controller head", async () => {
+        expect((await run(kind, {}, "diverged")).length).toBe(1);
+        expect((await run(kind, {}, "behind")).length).toBe(1);
+      });
+      it("rejects a run name that names a different backend", async () => {
+        expect((await run(kind, { name: `Dev release ${OTHER} + ${FRONTEND}` })).length).toBe(1);
+      });
+      it("rejects forged run names on a non-nonprod-deploy run or other identity", async () => {
+        for (const o of [
+          { path: ".github/workflows/other.yml" },
+          { head_repository: { full_name: "evil/pantheon" } },
+          { event: "push" },
+          { head_branch: "feature" },
+        ]) {
+          expect((await run(kind, o)).length).toBe(1);
+        }
+      });
+      it("rejects a controller that is neither active nor accepted", async () => {
+        expect(
+          (await run(kind, { status: "completed", conclusion: "cancelled" })).length,
+        ).toBe(1);
+      });
+    });
+  }
+});
