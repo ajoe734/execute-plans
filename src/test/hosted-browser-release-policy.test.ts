@@ -1,5 +1,4 @@
 import {
-  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -7,14 +6,13 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   afterEach,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -54,21 +52,6 @@ import {
 } from "../../scripts/probe-hosted-browser-bff.mjs";
 
 const cleanupRoots: string[] = [];
-
-let chromiumInstallChecked = false;
-
-// CI runs `npm run test` before its separate Playwright browser install step,
-// so a fresh runner has no Chromium executable yet. Provision it lazily and
-// once per process instead of depending on external step ordering.
-async function ensureChromiumInstalled() {
-  if (chromiumInstallChecked) return;
-  chromiumInstallChecked = true;
-  const { chromium } = await import("@playwright/test");
-  if (existsSync(chromium.executablePath())) return;
-  execFileSync("npx", ["--yes", "playwright", "install", "chromium"], {
-    stdio: "inherit",
-  });
-}
 
 function temporaryCandidate() {
   const root = mkdtempSync(join(tmpdir(), "pantheon-fe-candidate-"));
@@ -138,13 +121,6 @@ afterEach(() => {
 });
 
 describe("hosted browser strict release policy", () => {
-  // Runs once, before any test in this file; the CORS comparison tests below
-  // need a real Chromium executable and a 15s testTimeout is too short to
-  // also cover a first-time `playwright install` download.
-  beforeAll(async () => {
-    await ensureChromiumInstalled();
-  }, 180_000);
-
   const safePersonaFleetEvidence = {
     rowCount: 2,
     hasNaN: false,
