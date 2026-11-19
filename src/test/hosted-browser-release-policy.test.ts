@@ -6,7 +6,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
@@ -1818,4 +1818,31 @@ describe("hosted browser strict release policy", () => {
       })));
     }
   }, 15_000);
+});
+
+describe("playwright browsers globalSetup (one-time, pre-worker)", () => {
+  it("in CI fails once naming the missing executable path when the browser cache is empty", () => {
+    const empty = mkdtempSync(join(tmpdir(), "pw-empty-"));
+    try {
+      let output = "";
+      let failed = false;
+      try {
+        execFileSync(
+          resolve("node_modules/.bin/tsx"),
+          ["-e", 'import s from "./src/test/playwright-browsers.global-setup.ts"; s();'],
+          { env: { ...process.env, CI: "true", PLAYWRIGHT_BROWSERS_PATH: empty }, encoding: "utf8", stdio: "pipe" },
+        );
+      } catch (error) {
+        failed = true;
+        const e = error as { stderr?: string; stdout?: string };
+        output = `${e.stderr ?? ""}${e.stdout ?? ""}`;
+      }
+      expect(failed).toBe(true);
+      expect(output).toContain("Playwright browser executable(s) missing");
+      expect(output).toContain(empty);
+      expect(output).not.toMatch(/browserType\.launch/u);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
