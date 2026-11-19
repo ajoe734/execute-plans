@@ -343,11 +343,23 @@ export interface StrategyRuleLogic {
 export interface StrategyRule {
   registryId: string;
   version?: string | null;
-  role: "trading" | "rollback_baseline" | (string & {});
+  role: "trading" | "rollback_baseline" | "pool_envelope" | "pool_member" | (string & {});
   strategyLogic?: StrategyRuleLogic | null;
   parameters?: Record<string, unknown> | null;
   adjustableControls?: StrategyAdjustableControl[];
   immutableParameters?: string[];
+  /** pool_envelope only (BFF-PERSONA-STRATEGY-VISIBILITY-20261119). */
+  combinationRule?: string | null;
+  riskLimits?: Record<string, unknown> | null;
+  members?: StrategyRuleMember[] | null;
+}
+
+export interface StrategyRuleMember {
+  registryId: string;
+  riskWeight?: number | null;
+  strategyLogic?: StrategyRuleLogic | null;
+  parameters?: Record<string, unknown> | null;
+  adjustableControls?: StrategyAdjustableControl[];
 }
 
 /** Allowlisted read-only spec projection from GET /bff/strategies/{id} (data.spec). */

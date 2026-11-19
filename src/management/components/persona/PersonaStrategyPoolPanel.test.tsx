@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { PersonaStrategyPoolPanel } from "./PersonaStrategyPoolPanel";
 import type { PersonaManagementEnvelope } from "@/lib/bff-v1/personas";
@@ -100,5 +101,69 @@ describe("PersonaStrategyPoolPanel", () => {
     unmount();
     render(<PersonaStrategyPoolPanel management={{ data: { persona: { id: "p" } } }} />);
     expect(screen.getByTestId("pool-unavailable-all")).toBeTruthy();
+  });
+
+  describe("member rules (FE-PERSONA-STRATEGY-VISIBILITY-20261119)", () => {
+    const momentumRow = {
+      artifact_ref: "artifact-momentum", checksum: CS, status: "ok", reason: null,
+      strategy_id: "strategy-persona-06d4775a9b6a8f63b311", version: "1.0.0",
+      strategy_logic: { kind: "close_to_close_momentum", positive_action: "BUY", non_positive_action: "SELL",
+        lookback_parameter: "lookback_bars", threshold_parameter: "momentum_threshold" },
+      parameters: { market: "TW", symbols: ["2330.TWSE"], bar_frequency: "1d", lookback_bars: 2,
+        quantity_type: "SHARES", order_quantity: 1, momentum_threshold: 0.0 },
+    };
+    const unknownRow = {
+      artifact_ref: "artifact-old", checksum: CS2, status: "ok", reason: null, strategy_id: "strategy-old",
+      strategy_logic: { kind: "stat_arb_pairs_zscore" }, parameters: { window: 30, symbols: ["2330.TWSE", "2317.TWSE"] },
+    };
+    const renderIt = (env: PersonaManagementEnvelope) =>
+      render(<MemoryRouter><PersonaStrategyPoolPanel management={env} /></MemoryRouter>);
+
+    it("shows the momentum rule in plain language, symbols included, and links to the strategy page", () => {
+      renderIt(envelope({ memberRules: [momentumRow, unknownRow] },
+        { member_rules: { status: "ok", source: "registry_owner", reason: null } }));
+      const text = screen.getByTestId("pool-member-rule-artifact-momentum").textContent ?? "";
+      expect(text).toContain("2330.TWSE");
+      expect(text).toContain("每根日K");
+      expect(text).toContain("買進 1 股");
+      expect(text).not.toContain("不送單回滾基準");
+      expect(screen.getByTestId("pool-member-link-artifact-momentum").getAttribute("href"))
+        .toBe("/management/strategies/strategy-persona-06d4775a9b6a8f63b311");
+    });
+
+    it("shows kind and every parameter for an unknown kind", () => {
+      renderIt(envelope({ memberRules: [momentumRow, unknownRow] }));
+      const text = screen.getByTestId("pool-member-rule-artifact-old").textContent ?? "";
+      expect(text).toContain("stat_arb_pairs_zscore");
+      expect(text).toContain("window");
+      expect(text).toContain("30");
+      expect(text).toContain("2317.TWSE");
+    });
+
+    it("shows 無法讀取 with the BFF reason for an unavailable row and for an absent row", () => {
+      renderIt(envelope({ memberRules: [{ artifact_ref: "artifact-momentum", checksum: CS, status: "unavailable",
+        reason: "registry_entry_checksum_mismatch" }] },
+        { member_rules: { status: "ok", source: "registry_owner", reason: null } }));
+      const bad = screen.getByTestId("pool-member-rule-unavailable-artifact-momentum");
+      expect(bad.textContent).toContain("無法讀取");
+      expect(bad.textContent).toContain("registry_entry_checksum_mismatch");
+      expect(screen.getByTestId("pool-member-rule-unavailable-artifact-old").textContent).toContain("無法讀取");
+      expect(screen.queryByTestId("pool-member-link-artifact-momentum")).toBeNull();
+    });
+
+    it("uses the member_rules surface reason when memberRules is null", () => {
+      renderIt(envelope({ memberRules: null },
+        { member_rules: { status: "unavailable", source: "registry_owner", reason: "registry_http_503" } }));
+      expect(screen.getByTestId("pool-member-rule-unavailable-artifact-momentum").textContent).toContain("registry_http_503");
+    });
+
+    it("shows the observed pool version when it differs from the current version", () => {
+      renderIt(envelope({}, {
+        pool_health: { status: "ok", source: "persona_cycle_owner", observed_pool_version: 1 },
+        member_virtual_books: { status: "ok", source: "persona_cycle_owner", observed_pool_version: 2 },
+      }));
+      expect(screen.getByTestId("observed-pool-version-pool_health").textContent).toContain("v1");
+      expect(screen.queryByTestId("observed-pool-version-member_virtual_books")).toBeNull();
+    });
   });
 });

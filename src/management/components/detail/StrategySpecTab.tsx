@@ -8,6 +8,7 @@ import { VersionDiffViewer } from "./VersionDiffViewer";
 import { StrategyParamsEditor } from "./StrategyParamsEditor";
 import { MetricFreezeBadge } from "./MetricFreezeBadge";
 import { formatStrategyRuleResult } from "./strategyRuleText";
+import { RuleDescription } from "./RuleDescription";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { Lock, Unlock } from "lucide-react";
 import { useT } from "@/platform/hooks";
@@ -89,15 +90,22 @@ export const StrategySpecTab = ({ strategy }: { strategy: Strategy }) => {
           <div className="space-y-3" data-testid="strategy-rules-list">
             {strategy.rules.map((rule) => {
               const formatted = formatStrategyRuleResult(rule, i18n.language);
-              const isBaseline =
-                rule.role === "rollback_baseline" || formatted.kind === "rollback_baseline";
-              const roleLabel = isBaseline
-                ? t("strategyDetail.ruleRole.rollback_baseline")
-                : t("strategyDetail.ruleRole.trading");
+              const isEnvelope = rule.role === "pool_envelope";
+              const isMember = rule.role === "pool_member";
+              const isBaseline = !isEnvelope && !isMember &&
+                (rule.role === "rollback_baseline" || formatted.kind === "rollback_baseline");
+              const roleLabel = isEnvelope
+                ? t("strategyDetail.ruleRole.pool_envelope")
+                : isMember
+                  ? t("strategyDetail.ruleRole.pool_member")
+                  : isBaseline
+                    ? t("strategyDetail.ruleRole.rollback_baseline")
+                    : t("strategyDetail.ruleRole.trading");
               return (
                 <div
                   key={rule.registryId}
                   data-testid={`strategy-rule-${rule.registryId}`}
+                  data-rule-role={rule.role}
                   className="rounded-md border border-border/70 bg-muted/15 p-3 space-y-1.5"
                 >
                   <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -120,13 +128,51 @@ export const StrategySpecTab = ({ strategy }: { strategy: Strategy }) => {
                       </span>
                     )}
                   </div>
-                  <p
-                    data-testid="strategy-rule-text"
-                    data-rule-kind={formatted.kind}
-                    className="text-sm text-foreground leading-relaxed"
-                  >
-                    {formatted.text}
-                  </p>
+                  {isEnvelope ? (
+                    <div className="space-y-2 text-sm" data-testid="strategy-rule-envelope">
+                      <div data-testid="strategy-rule-combination">
+                        <span className="text-muted-foreground">{t("strategyDetail.poolRules.combinationRule")}：</span>
+                        <code className="text-mono">{rule.combinationRule ?? "—"}</code>
+                      </div>
+                      <div data-testid="strategy-rule-risk-limits">
+                        <span className="text-muted-foreground">{t("strategyDetail.poolRules.riskLimits")}：</span>
+                        {rule.riskLimits && Object.keys(rule.riskLimits).length > 0
+                          ? Object.entries(rule.riskLimits).map(([k, v]) => (
+                              <code key={k} className="text-mono mr-3">{k}={String(v)}</code>
+                            ))
+                          : "—"}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {t("strategyDetail.poolRules.members", { count: rule.members?.length ?? 0 })}
+                      </div>
+                      {rule.members && rule.members.length > 0 ? (
+                        <ul className="space-y-2" data-testid="strategy-rule-members">
+                          {rule.members.map((m) => (
+                            <li
+                              key={m.registryId}
+                              data-testid={`strategy-rule-member-${m.registryId}`}
+                              className="rounded border border-border/60 p-2"
+                            >
+                              <div className="text-xs">
+                                <code className="text-mono">{m.registryId}</code>
+                                <span className="ml-3 text-muted-foreground">
+                                  {t("strategyDetail.poolRules.weight")} {m.riskWeight ?? "—"}
+                                </span>
+                              </div>
+                              <RuleDescription
+                                rule={{ role: "pool_member", strategyLogic: m.strategyLogic, parameters: m.parameters }}
+                                testId={`strategy-rule-member-text-${m.registryId}`}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">{t("strategyDetail.poolRules.noMembers")}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <RuleDescription rule={rule} />
+                  )}
                 </div>
               );
             })}
