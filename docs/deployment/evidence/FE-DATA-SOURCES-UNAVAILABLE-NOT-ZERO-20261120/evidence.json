@@ -8,7 +8,7 @@
   },
   "captured_at": "2026-11-20T10:00:00Z",
   "owner": "Antigravity",
-  "reviewer": "Claude",
+  "reviewer": "Claude2",
   "acceptance_1_hosted_reproduction_citation": {
     "source": "coordinator hosted reads 2026-11-20 02:50Z (read-only)",
     "observed_at_utc": "2026-11-20T02:50:00Z",
@@ -65,7 +65,7 @@
       "DataSourceControlCenter.test.tsx": "4 passed (unavailable with read_timeout in zh-TW and en-US, degraded legacy_projection with translated reason and no 0 counts, successful empty list with 0 and 0/0 counts, and nan-free models/UI reading 未回報)",
       "DataSourceManagement.test.tsx": "28 passed",
       "managementDataSources.test.ts": "31 passed",
-      "i18nParity.test.ts": "15 passed",
+      "i18nParity.test.ts": "17 passed",
       "typecheck": "0 errors"
     }
   },
