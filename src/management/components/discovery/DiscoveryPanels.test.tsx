@@ -138,9 +138,34 @@ describe("Discovery panels — fields present", () => {
   });
 });
 
-describe("Discovery panels — fields absent render a dash", () => {
-  it("shows — for every field when the record has no discovery data", () => {
-    wrap(<DiscoverySections record={{ id: "x" }} />);
+describe("Discovery panels — fields absent", () => {
+  it("DiscoverySections renders nothing (no wall of dashes) when the record has no discovery data", () => {
+    const { container } = wrap(<DiscoverySections record={{ id: "x" }} />);
+    expect(container.textContent ?? "").not.toContain("—");
+    expect(screen.queryByTestId("discovery")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("discovery-hypothesis")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("discovery-metrics")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("discovery-lineage")).not.toBeInTheDocument();
+  });
+
+  it("DiscoverySections renders only the sections that are present", () => {
+    wrap(<DiscoverySections record={{ attribution: "gov attribution" }} />);
+    expect(screen.getByTestId("discovery-attribution")).toHaveTextContent("gov attribution");
+    expect(screen.queryByTestId("discovery-hypothesis")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("discovery-metrics")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("discovery-lineage")).not.toBeInTheDocument();
+  });
+
+  it("individual panels still show — for every field when the view is empty", () => {
+    const view = normalizeDiscovery({ id: "x" });
+    wrap(
+      <>
+        <HypothesisCardPanel view={view} />
+        <SampleMetricsPanel view={view} />
+        <LineagePanel view={view} />
+        <AttributionNote view={view} />
+      </>,
+    );
     for (const id of [
       "claim", "mechanism", "horizon", "universe",
       "direction", "rule-sketch", "testability", "signal-inputs",

@@ -9,6 +9,7 @@ import {
   PersonasList,
   RankingFormulasList,
   StrategiesList,
+  extractHiddenNonRealCount,
   extractHiddenRetiredPersonaCount,
   extractHiddenTestPersonaStrategyCount,
   extractIncludeTestPersonas,
@@ -354,6 +355,8 @@ describe("FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120: StrategiesList test-pers
   it("shows how many test-persona strategies are hidden and toggles include_test_personas filter on StrategiesList (AC3)", async () => {
     expect(extractHiddenTestPersonaStrategyCount({ hidden_test_persona_count: 14 })).toBe(14);
     expect(extractHiddenTestPersonaStrategyCount({ hidden_test_strategy_count: 9 })).toBe(9);
+    expect(extractHiddenTestPersonaStrategyCount({ hidden_test_persona_strategy_count: 4, hidden_unbound_stub_strategy_count: 3 })).toBe(7);
+    expect(extractHiddenTestPersonaStrategyCount({ hidden_unbound_stub_strategy_count: 3 })).toBe(3);
     expect(extractIncludeTestPersonas({ include_test_personas: true })).toBe(true);
     expect(resolveStrategyListQuery("default", undefined, { includeTestPersonas: true })).toEqual({
       exclude_state: "draft",
@@ -555,5 +558,17 @@ describe("FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120: StrategiesList test-pers
     expect(screen.getByText("artifact-2330")).toBeInTheDocument();
     expect(screen.getByTestId("artifact-strategy-name-missing")).toBeInTheDocument();
     expect(screen.getByTestId("artifact-persona-name-missing")).toBeInTheDocument();
+  });
+});
+
+describe("extractHiddenNonRealCount", () => {
+  it("reads meta.hidden_non_real_count and ignores invalid values", () => {
+    expect(extractHiddenNonRealCount({ hidden_non_real_count: 5 })).toBe(5);
+    expect(extractHiddenNonRealCount({ hidden_non_real_count: "5" })).toBeUndefined();
+    expect(extractHiddenNonRealCount({ surfaces: { research_tasks: { hidden_non_real_count: 7 } } })).toBe(7);
+    expect(
+      extractHiddenNonRealCount({ hidden_non_real_count: 2, surfaces: { research_tasks: { hidden_non_real_count: 7 } } }),
+    ).toBe(2);
+    expect(extractHiddenNonRealCount(null)).toBeUndefined();
   });
 });

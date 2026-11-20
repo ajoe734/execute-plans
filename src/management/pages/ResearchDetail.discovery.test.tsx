@@ -67,12 +67,14 @@ describe("ResearchDetail discovery fields (FE-DISCOVERY-VIEWS-20261110)", () => 
     expect(screen.getByTestId("research-discovery-attribution")).toHaveTextContent("data.gov.tw attribution");
   });
 
-  it("renders dashes when the BFF has not shipped the fields", async () => {
+  it("renders no discovery cards when the BFF has not shipped the fields", async () => {
     mocks.researchGet.mockResolvedValue(base);
     renderDetail();
-    await waitFor(() => expect(screen.getByTestId("research-discovery")).toBeInTheDocument());
-    expect(screen.getByTestId("research-discovery-hypothesis-claim")).toHaveTextContent(/^—$/);
-    expect(screen.getByTestId("research-discovery-metrics-in-sharpe_ratio")).toHaveTextContent(/^—$/);
-    expect(screen.getByTestId("research-discovery-lineage-evidence-bundle")).toHaveTextContent(/^—$/);
+    await waitFor(() => expect(mocks.researchGet).toHaveBeenCalled());
+    await screen.findAllByText(/./);
+    expect(screen.queryByTestId("research-discovery")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("research-discovery-hypothesis")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("research-discovery-metrics")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("research-discovery-lineage")).not.toBeInTheDocument();
   });
 });
