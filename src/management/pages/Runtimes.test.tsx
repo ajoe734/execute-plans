@@ -397,4 +397,81 @@ describe("RuntimesPage", () => {
     expect(actionBtn).toBeDisabled();
     expect(mocks.runActionSafe).not.toHaveBeenCalled();
   });
+
+  it("renders BFF persona and strategy display names as primary text, moves raw IDs to secondary monospace text, and shows name_missing badge without resolving names client-side (AC1/AC4)", async () => {
+    const rows: RuntimeListItem[] = [
+      {
+        id: "rt-named-01",
+        name: "rt-named-01",
+        kind: "paper" as RuntimeListItem["kind"],
+        env: "paper",
+        status: "active",
+        cpu: Number.NaN,
+        memory: Number.NaN,
+        latencyP95Ms: Number.NaN,
+        uptimePct: Number.NaN,
+        region: "",
+        updatedAt: "2026-11-20T08:00:00Z",
+        runtimeId: "rt-named-01",
+        runtimeBindingId: "rb-named-01",
+        personaId: "persona-be19a1fac471247f2b2a",
+        personaDisplayName: "青禾｜2330 台股 Paper 學習 R2",
+        personaNameMissing: false,
+        strategyId: "strategy-persona-2330",
+        strategyDisplayName: "青禾 2330 動能策略",
+        strategyNameMissing: false,
+      },
+      {
+        id: "rt-missing-02",
+        name: "rt-missing-02",
+        kind: "paper" as RuntimeListItem["kind"],
+        env: "paper",
+        status: "active",
+        cpu: Number.NaN,
+        memory: Number.NaN,
+        latencyP95Ms: Number.NaN,
+        uptimePct: Number.NaN,
+        region: "",
+        updatedAt: "2026-11-20T08:05:00Z",
+        runtimeId: "rt-missing-02",
+        runtimeBindingId: "rb-missing-02",
+        personaId: "persona-orphan-99",
+        personaDisplayName: null,
+        personaNameMissing: true,
+        strategyId: "strategy-orphan-99",
+        strategyDisplayName: null,
+        strategyNameMissing: true,
+      },
+    ];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: vi.fn(),
+      loading: false,
+    });
+
+    await i18n.changeLanguage("en-US");
+    renderRuntimes("/management/runtimes");
+
+    expect(screen.getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+    expect(screen.getByText("青禾 2330 動能策略")).toBeInTheDocument();
+    expect(screen.getByText("persona-be19a1fac471247f2b2a")).toBeInTheDocument();
+    expect(screen.getByText("strategy-persona-2330")).toBeInTheDocument();
+    expect(screen.getByText("rt-named-01")).toBeInTheDocument();
+    expect(screen.getByText("rb-named-01")).toBeInTheDocument();
+
+    expect(screen.getByTestId("runtime-persona-name-missing")).toHaveTextContent(
+      "Name missing",
+    );
+    expect(screen.getByTestId("runtime-strategy-name-missing")).toHaveTextContent(
+      "Name missing",
+    );
+
+    await i18n.changeLanguage("zh-TW");
+    expect(screen.getByTestId("runtime-persona-name-missing")).toHaveTextContent(
+      "名稱未登記",
+    );
+    expect(screen.getByTestId("runtime-strategy-name-missing")).toHaveTextContent(
+      "名稱未登記",
+    );
+  });
 });

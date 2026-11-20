@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { realWritesEnabled, runActionSafe, useLiveListV1 } from "@/lib/bff-v1";
-import { notReportedLabel, sanitizeRawText } from "@/lib/enumLabels";
+import { notReportedLabel, resolveBffSubjectDisplay, sanitizeRawText } from "@/lib/enumLabels";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, RotateCcw, PowerOff, Move, Maximize2, ShieldAlert, ScrollText, Ban, Skull } from "lucide-react";
@@ -46,6 +46,9 @@ const bindingIdOf = (r: RuntimeRow): string | undefined =>
 
 const personaIdOf = (r: RuntimeRow): string | undefined =>
   cleanText(r.personaId, r.persona_id);
+
+const strategyIdOf = (r: RuntimeRow): string | undefined =>
+  cleanText(r.strategyId, r.strategy_id);
 
 const actionTargetId = (r: RuntimeRow): string | undefined =>
   runtimeIdOf(r) ?? cleanText(r.id);
@@ -166,13 +169,108 @@ export const RuntimesPage = () => {
                 const runtimeId = runtimeIdOf(r);
                 const bindingId = bindingIdOf(r);
                 const personaId = personaIdOf(r);
-                const primary = textOrNotReported(r.name, runtimeId, bindingId);
+                const strategyId = strategyIdOf(r);
+                const personaDisplay = resolveBffSubjectDisplay(
+                  {
+                    id: personaId,
+                    displayName: cleanText(r.personaDisplayName, r.persona_display_name, r.personaName),
+                    nameMissing: r.personaNameMissing ?? r.persona_name_missing,
+                  },
+                  t,
+                );
+                const strategyDisplay = resolveBffSubjectDisplay(
+                  {
+                    id: strategyId,
+                    displayName: cleanText(r.strategyDisplayName, r.strategy_display_name),
+                    nameMissing: r.strategyNameMissing ?? r.strategy_name_missing,
+                  },
+                  t,
+                );
+                const hasPersonaSubject = Boolean(
+                  personaId || cleanText(r.personaDisplayName, r.persona_display_name, r.personaName),
+                );
+                const hasStrategySubject = Boolean(
+                  strategyId || cleanText(r.strategyDisplayName, r.strategy_display_name),
+                );
+                const runtimeLabel = textOrNotReported(r.name, runtimeId, bindingId);
+                const hasDistinctDisplayHeadline =
+                  (hasPersonaSubject && personaDisplay.primaryText !== personaId) ||
+                  (hasStrategySubject && strategyDisplay.primaryText !== strategyId);
                 return (
-                  <div className="min-w-[220px]">
-                    <div className="font-medium text-mono text-xs">{primary}</div>
-                    {runtimeId && runtimeId !== primary && <div className="font-mono text-[11px] text-muted-foreground">{runtimeId}</div>}
-                    {bindingId && bindingId !== runtimeId && <div className="font-mono text-[11px] text-muted-foreground">{bindingId}</div>}
-                    {personaId && <div className="font-mono text-[11px] text-muted-foreground">{personaId}</div>}
+                  <div className="min-w-[220px] space-y-0.5">
+                    {hasPersonaSubject && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={
+                            personaDisplay.primaryText !== personaId
+                              ? "font-medium text-xs text-foreground"
+                              : "font-mono text-[11px] text-muted-foreground"
+                          }
+                          data-testid="runtime-persona-display"
+                        >
+                          {personaDisplay.primaryText}
+                        </span>
+                        {personaDisplay.nameMissing && (
+                          <Badge
+                            variant="outline"
+                            data-testid="runtime-persona-name-missing"
+                            data-name-missing="true"
+                            className="border-status-warning/40 text-[10px] text-status-warning"
+                          >
+                            {personaDisplay.nameMissingLabel}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {hasStrategySubject && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={
+                            strategyDisplay.primaryText !== strategyId
+                              ? "font-medium text-xs text-foreground"
+                              : "font-mono text-[11px] text-muted-foreground"
+                          }
+                          data-testid="runtime-strategy-display"
+                        >
+                          {strategyDisplay.primaryText}
+                        </span>
+                        {strategyDisplay.nameMissing && (
+                          <Badge
+                            variant="outline"
+                            data-testid="runtime-strategy-name-missing"
+                            data-name-missing="true"
+                            className="border-status-warning/40 text-[10px] text-status-warning"
+                          >
+                            {strategyDisplay.nameMissingLabel}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    <div
+                      className={
+                        hasDistinctDisplayHeadline
+                          ? "font-mono text-[11px] text-muted-foreground"
+                          : "font-medium text-mono text-xs"
+                      }
+                    >
+                      {runtimeLabel}
+                    </div>
+                    {runtimeId && runtimeId !== runtimeLabel && (
+                      <div className="font-mono text-[11px] text-muted-foreground">{runtimeId}</div>
+                    )}
+                    {bindingId && bindingId !== runtimeId && bindingId !== runtimeLabel && (
+                      <div className="font-mono text-[11px] text-muted-foreground">{bindingId}</div>
+                    )}
+                    {personaDisplay.secondaryId && (
+                      <div className="font-mono text-[11px] text-muted-foreground" data-testid="runtime-persona-id">
+                        {personaDisplay.secondaryId}
+                      </div>
+                    )}
+                    {strategyDisplay.secondaryId && (
+                      <div className="font-mono text-[11px] text-muted-foreground" data-testid="runtime-strategy-id">
+                        {strategyDisplay.secondaryId}
+                      </div>
+                    )}
                     {personaId && (
                       <Link
                         aria-label={`${personaId} trade journeys`}

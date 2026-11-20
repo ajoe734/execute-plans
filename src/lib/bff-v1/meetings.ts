@@ -37,6 +37,8 @@ const PRIVATE_FIELD_KEYS = new Set([
 
 const WRITEBACK_ALLOWED_KEYS = new Set([
   "persona_id",
+  "persona_display_name",
+  "persona_name_missing",
   "entry_id",
   "status",
   "written_at",
@@ -161,6 +163,8 @@ async function readMeetingsSurface<T>(
 
 export interface MeetingParticipant {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   role?: string;
   origin?: "institutional" | "agora_advisor" | "private_servant" | string;
   servant?: boolean;
@@ -188,6 +192,20 @@ export interface MeetingSummaryItem {
   status: string;
   outcome?: string | null;
   chair_persona_id?: string | null;
+  chair_persona_display_name?: string | null;
+  chair_persona_name_missing?: boolean;
+  persona_id?: string | null;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
+  sponsor_persona_id?: string | null;
+  sponsor_persona_display_name?: string | null;
+  sponsor_persona_name_missing?: boolean;
+  subject_persona_id?: string | null;
+  subject_persona_display_name?: string | null;
+  subject_persona_name_missing?: boolean;
+  strategy_id?: string | null;
+  strategy_display_name?: string | null;
+  strategy_name_missing?: boolean;
   convened_by?: MeetingConvenedBy | null;
   subject_ref?: Record<string, unknown> | string | null;
   participants: MeetingParticipant[];
@@ -227,6 +245,14 @@ export interface MeetingProposalItem {
   meeting_href?: string | null;
   kind?: string;
   sponsor_persona_id?: string | null;
+  sponsor_persona_display_name?: string | null;
+  sponsor_persona_name_missing?: boolean;
+  persona_id?: string | null;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
+  strategy_id?: string | null;
+  strategy_display_name?: string | null;
+  strategy_name_missing?: boolean;
   summary?: string;
   title?: string;
   downstream: MeetingProposalDownstream;
@@ -257,6 +283,8 @@ export interface MeetingTypeRule {
 
 export interface MeetingScheduleEntry {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   meeting_type: string;
   last_run_at?: string | null;
   next_due_at?: string | null;
@@ -267,6 +295,8 @@ export interface MeetingScheduleEntry {
 
 export interface MeetingRefusalEntry {
   persona_id?: string | null;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   meeting_type: string;
   reason: string;
   at?: string;
@@ -301,6 +331,8 @@ export interface MeetingCaseFileItem {
 
 export interface MeetingPreReadInterpretation {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   relevance_scope?: string;
   text?: string;
   summary?: string;
@@ -311,6 +343,8 @@ export interface MeetingPreReadInterpretation {
 export interface MeetingRoundPosition {
   label: string;
   persona_id?: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   revealed_persona_id?: string;
   role?: string;
   style?: string;
@@ -350,6 +384,8 @@ export interface MeetingSynthesis {
 
 export interface MeetingWritebackEntry {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   entry_id: string;
   status?: string;
   written_at?: string;

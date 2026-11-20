@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
-import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
+import { reasonCodeDisplay, resolveBffSubjectDisplay, statusLabel } from "@/lib/enumLabels";
 import { CANONICAL_CENTERS } from "@/management/navigation/managementRouteManifest";
 import {
   conveneMeeting,
@@ -92,6 +92,52 @@ function UnavailableSurface({
   );
 }
 
+function BffSubjectInline({
+  id,
+  displayName,
+  nameMissing,
+  testIdPrefix,
+}: {
+  id?: string | null;
+  displayName?: string | null;
+  nameMissing?: boolean | null;
+  testIdPrefix?: string;
+}) {
+  const { t } = useTranslation();
+  const resolved = resolveBffSubjectDisplay({ id, displayName, nameMissing }, t);
+  if (resolved.primaryText === "—") {
+    return <code className="text-foreground">—</code>;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <span
+        className={resolved.hasDisplayName ? "font-sans font-medium text-foreground" : "font-mono text-foreground"}
+        data-testid={testIdPrefix ? `${testIdPrefix}-primary` : undefined}
+      >
+        {resolved.primaryText}
+      </span>
+      {resolved.secondaryId ? (
+        <code
+          className="font-mono text-[11px] text-muted-foreground"
+          data-testid={testIdPrefix ? `${testIdPrefix}-id` : undefined}
+        >
+          ({resolved.secondaryId})
+        </code>
+      ) : null}
+      {resolved.nameMissing ? (
+        <Badge
+          variant="outline"
+          className="text-[10px] py-0 px-1"
+          data-name-missing="true"
+          data-testid={testIdPrefix ? `${testIdPrefix}-name-missing` : undefined}
+        >
+          {resolved.nameMissingBadgeLabel}
+        </Badge>
+      ) : null}
+    </span>
+  );
+}
+
 function MeetingRowCard({
   meeting,
   testId,
@@ -143,9 +189,26 @@ function MeetingRowCard({
       </div>
       {meeting.topic ? <p className="text-sm text-foreground">{meeting.topic}</p> : null}
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span>
-          Chair: <code className="text-foreground">{meeting.chair_persona_id ?? "—"}</code>
+        <span className="inline-flex items-center gap-1">
+          Chair:{" "}
+          <BffSubjectInline
+            id={meeting.chair_persona_id}
+            displayName={meeting.chair_persona_display_name}
+            nameMissing={meeting.chair_persona_name_missing}
+            testIdPrefix={`meeting-chair-${meeting.meeting_id}`}
+          />
         </span>
+        {meeting.strategy_id || meeting.strategy_display_name ? (
+          <span className="inline-flex items-center gap-1">
+            Strategy:{" "}
+            <BffSubjectInline
+              id={meeting.strategy_id}
+              displayName={meeting.strategy_display_name}
+              nameMissing={meeting.strategy_name_missing}
+              testIdPrefix={`meeting-strategy-${meeting.meeting_id}`}
+            />
+          </span>
+        ) : null}
         <span>
           Round: <code className="text-foreground">{meeting.round ?? 1}</code>
         </span>
@@ -156,8 +219,20 @@ function MeetingRowCard({
           </code>
         </span>
         {meeting.participants?.length ? (
-          <span className="font-mono">
-            ({meeting.participants.map((p) => p.persona_id).join(", ")})
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            (
+            {meeting.participants.map((p, idx) => (
+              <span key={`${p.persona_id}-${idx}`} className="inline-flex items-center gap-1">
+                {idx > 0 ? <span>, </span> : null}
+                <BffSubjectInline
+                  id={p.persona_id}
+                  displayName={p.persona_display_name}
+                  nameMissing={p.persona_name_missing}
+                  testIdPrefix={`meeting-row-${meeting.meeting_id}-participant-${p.persona_id}`}
+                />
+              </span>
+            ))}
+            )
           </span>
         ) : null}
       </div>
@@ -214,9 +289,26 @@ function ProposalRowCard({ proposal }: { proposal: MeetingProposalItem }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span>
-          Sponsor: <code className="text-foreground">{proposal.sponsor_persona_id ?? "—"}</code>
+        <span className="inline-flex items-center gap-1">
+          Sponsor:{" "}
+          <BffSubjectInline
+            id={proposal.sponsor_persona_id}
+            displayName={proposal.sponsor_persona_display_name ?? proposal.persona_display_name}
+            nameMissing={proposal.sponsor_persona_name_missing ?? proposal.persona_name_missing}
+            testIdPrefix={`proposal-sponsor-${proposal.proposal_id}`}
+          />
         </span>
+        {proposal.strategy_id || proposal.strategy_display_name ? (
+          <span className="inline-flex items-center gap-1">
+            Strategy:{" "}
+            <BffSubjectInline
+              id={proposal.strategy_id}
+              displayName={proposal.strategy_display_name}
+              nameMissing={proposal.strategy_name_missing}
+              testIdPrefix={`proposal-strategy-${proposal.proposal_id}`}
+            />
+          </span>
+        ) : null}
         <span>
           Downstream Target: <code className="text-foreground">{ds.target ?? "—"}</code>
         </span>
@@ -671,7 +763,13 @@ export const MeetingsCenterPage = () => {
                         key={`${s.persona_id}-${s.meeting_type}-${idx}`}
                         data-testid={`catalogue-schedule-${s.persona_id}-${s.meeting_type}`}
                       >
-                        {s.persona_id} · {s.meeting_type} · last: {s.last_run_at ?? "—"} · next due:{" "}
+                        <BffSubjectInline
+                          id={s.persona_id}
+                          displayName={s.persona_display_name}
+                          nameMissing={s.persona_name_missing}
+                          testIdPrefix={`catalogue-schedule-persona-${s.persona_id}-${s.meeting_type}`}
+                        />{" "}
+                        · {s.meeting_type} · last: {s.last_run_at ?? "—"} · next due:{" "}
                         {s.next_due_at ?? "—"}
                         {s.weekly_count !== undefined
                           ? ` · weekly: ${s.weekly_count}/${s.weekly_limit ?? 3}`
@@ -696,7 +794,17 @@ export const MeetingsCenterPage = () => {
                           key={`${r.persona_id ?? "cross"}-${r.meeting_type}-${idx}`}
                           data-testid={`catalogue-refusal-${r.meeting_type}-${idx}`}
                         >
-                          {r.persona_id ?? "cross-persona"} · {r.meeting_type} · reason:{" "}
+                          {r.persona_id || r.persona_display_name ? (
+                            <BffSubjectInline
+                              id={r.persona_id}
+                              displayName={r.persona_display_name}
+                              nameMissing={r.persona_name_missing}
+                              testIdPrefix={`catalogue-refusal-persona-${r.meeting_type}-${idx}`}
+                            />
+                          ) : (
+                            "cross-persona"
+                          )}{" "}
+                          · {r.meeting_type} · reason:{" "}
                           <span className="text-destructive font-semibold font-sans">{refusalReason.text}</span>
                           {refusalReason.code && refusalReason.code !== refusalReason.text ? (
                             <>

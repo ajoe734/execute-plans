@@ -517,6 +517,23 @@ export interface Deployment extends BaseObject {
   version: string;
   previousVersion?: string;
   strategyId?: string;
+  strategy_id?: string | null;
+  strategyDisplayName?: string | null;
+  strategy_display_name?: string | null;
+  strategyNameMissing?: boolean;
+  strategy_name_missing?: boolean;
+  personaId?: string | null;
+  persona_id?: string | null;
+  personaDisplayName?: string | null;
+  persona_display_name?: string | null;
+  personaNameMissing?: boolean;
+  persona_name_missing?: boolean;
+  sponsorPersonaId?: string | null;
+  sponsor_persona_id?: string | null;
+  sponsorPersonaDisplayName?: string | null;
+  sponsor_persona_display_name?: string | null;
+  sponsorPersonaNameMissing?: boolean;
+  sponsor_persona_name_missing?: boolean;
   promotedAt?: string;
   rollbackAvailable?: boolean;
 }
@@ -539,6 +556,16 @@ export interface Runtime {
   runtime_binding_id?: string;
   personaId?: string;
   persona_id?: string;
+  personaDisplayName?: string;
+  persona_display_name?: string;
+  personaNameMissing?: boolean;
+  persona_name_missing?: boolean;
+  strategyId?: string;
+  strategy_id?: string;
+  strategyDisplayName?: string;
+  strategy_display_name?: string;
+  strategyNameMissing?: boolean;
+  strategy_name_missing?: boolean;
   artifactId?: string;
   artifact_id?: string;
   planId?: string;
@@ -951,6 +978,17 @@ export interface Artifact extends BaseObject {
   artifact_id?: string | null;
   artifact_type?: string | null;
   strategy_id?: string | null;
+  strategyId?: string | null;
+  strategy_display_name?: string | null;
+  strategyDisplayName?: string | null;
+  strategy_name_missing?: boolean;
+  strategyNameMissing?: boolean;
+  persona_id?: string | null;
+  personaId?: string | null;
+  persona_display_name?: string | null;
+  personaDisplayName?: string | null;
+  persona_name_missing?: boolean;
+  personaNameMissing?: boolean;
   artifact_state?: string | null;
   status?: string | null;
   checksum?: string | null;
@@ -1058,16 +1096,69 @@ export interface Alert {
   suggestedAction?: string;
 }
 
+export interface IncidentTimelineEntry {
+  ts: string;
+  timestamp?: string;
+  actor: string;
+  actor_ref?: string | null;
+  note: string;
+  entry_id?: string | null;
+  incident_id?: string | null;
+  entry_type?: string | null;
+  source_ref?: string | null;
+  evidence_ref?: string | null;
+  summary_key?: string | null;
+  summary_params?: Record<string, unknown> | null;
+  summary?: string | null;
+}
+
 export interface Incident {
   id: string;
   severity: RiskLevel;
   title: string;
+  title_display?: string | null;
+  titleDisplay?: string | null;
   status: "open" | "mitigating" | "resolved";
   openedAt: string;
   description?: string;
+  summary?: string | null;
+  summary_key?: string | null;
+  summaryKey?: string | null;
+  summary_params?: Record<string, unknown> | null;
+  summaryParams?: Record<string, unknown> | null;
+  evidence_summary?: string | null;
+  evidenceSummary?: string | null;
+  evidence_refs?: string[];
+  evidenceRefs?: string[];
+  kind?: string | null;
+  metric?: string | null;
+  observed?: unknown;
+  threshold?: unknown;
+  comparator?: string | null;
+  occurrence_count?: number | null;
+  occurrenceCount?: number | null;
+  first_seen_at?: string | null;
+  firstSeenAt?: string | null;
+  last_seen_at?: string | null;
+  lastSeenAt?: string | null;
+  persona_id?: string | null;
+  personaId?: string | null;
+  persona_display_name?: string | null;
+  personaDisplayName?: string | null;
+  persona_name_missing?: boolean;
+  personaNameMissing?: boolean;
+  strategy_id?: string | null;
+  strategyId?: string | null;
+  strategy_display_name?: string | null;
+  strategyDisplayName?: string | null;
+  strategy_name_missing?: boolean;
+  strategyNameMissing?: boolean;
+  binding_id?: string | null;
+  bindingId?: string | null;
   affected?: string[];
   commander?: string;
-  timeline?: { ts: string; actor: string; note: string }[];
+  timeline?: IncidentTimelineEntry[];
+  evidence_timeline?: IncidentTimelineEntry[];
 }
 
 export interface ApprovalStage {

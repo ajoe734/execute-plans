@@ -784,6 +784,169 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
     expect(header.textContent).toMatch(/Insufficient eligible participants to convene meeting|合格參與人數不足，無法召開會議/);
     expect(header.textContent).toContain("insufficient_participants");
   });
+
+  it("renders BFF persona and strategy display names, secondary raw IDs, and name_missing flags on MeetingsCenterPage and MeetingDetailPage without resolving names client-side (AC1/AC4)", async () => {
+    await i18n.changeLanguage("en-US");
+    routes = [];
+    on("GET", "/bff/management/meetings", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        items: [
+          {
+            meeting_id: "mtg-display-01",
+            meeting_type: "MT-1",
+            topic: "Weekly review with display names",
+            status: "open",
+            outcome: "IN_PROGRESS",
+            chair_persona_id: "persona-alpha",
+            chair_persona_display_name: "Alpha Macro Strategist",
+            chair_persona_name_missing: false,
+            strategy_id: "strategy-alpha-2330",
+            strategy_display_name: "Alpha 2330 Core",
+            strategy_name_missing: false,
+            participants: [
+              {
+                persona_id: "persona-alpha",
+                persona_display_name: "Alpha Macro Strategist",
+                persona_name_missing: false,
+                role: "chair",
+              },
+              {
+                persona_id: "persona-orphan-01",
+                persona_display_name: null,
+                persona_name_missing: true,
+                role: "risk",
+              },
+            ],
+            participant_count: 2,
+          },
+        ],
+        summary: { total_items: 1, open_count: 1, closed_count: 0, review_count: 0 },
+      },
+    });
+    on("GET", "/bff/management/meetings/proposals", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        items: [
+          {
+            proposal_id: "prop-display-01",
+            meeting_id: "mtg-display-01",
+            kind: "research_demand",
+            sponsor_persona_id: "persona-alpha",
+            sponsor_persona_display_name: "Alpha Macro Strategist",
+            sponsor_persona_name_missing: false,
+            strategy_id: "strategy-orphan-prop",
+            strategy_display_name: null,
+            strategy_name_missing: true,
+            downstream: { target: "research_demand", id: "rd-101", status: "pending" },
+          },
+        ],
+      },
+    });
+    on("GET", "/bff/management/meetings/catalogue", recordedCatalogueResponse);
+    on("GET", "/bff/management/meetings/mtg-display-01", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        meeting_id: "mtg-display-01",
+        meeting_type: "MT-1",
+        topic: "Weekly review with display names",
+        status: "open",
+        chair_persona_id: "persona-alpha",
+        chair_persona_display_name: "Alpha Macro Strategist",
+        chair_persona_name_missing: false,
+        strategy_id: "strategy-alpha-2330",
+        strategy_display_name: "Alpha 2330 Core",
+        strategy_name_missing: false,
+        participants: [
+          {
+            persona_id: "persona-alpha",
+            persona_display_name: "Alpha Macro Strategist",
+            persona_name_missing: false,
+            role: "chair",
+          },
+          {
+            persona_id: "persona-orphan-01",
+            persona_display_name: null,
+            persona_name_missing: true,
+            role: "risk",
+          },
+        ],
+        pre_read: {
+          interpretations: [
+            {
+              persona_id: "persona-alpha",
+              persona_display_name: "Alpha Macro Strategist",
+              persona_name_missing: false,
+              relevance_scope: "committee",
+              text: "Shared committee interpretation",
+            },
+          ],
+        },
+        rounds: [],
+        proposals: [
+          {
+            proposal_id: "prop-display-01",
+            meeting_id: "mtg-display-01",
+            kind: "research_demand",
+            sponsor_persona_id: "persona-orphan-01",
+            sponsor_persona_display_name: null,
+            sponsor_persona_name_missing: true,
+            downstream: { target: "research_demand", id: "rd-101", status: "pending" },
+          },
+        ],
+        writebacks: [
+          {
+            persona_id: "persona-alpha",
+            persona_display_name: "Alpha Macro Strategist",
+            persona_name_missing: false,
+            entry_id: "wb-display-01",
+          },
+        ],
+      },
+    });
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/management/meetings"]}>
+        <Routes>
+          <Route path="/management/meetings" element={<MeetingsCenterPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByTestId("meeting-chair-mtg-display-01-primary"),
+    ).toHaveTextContent("Alpha Macro Strategist");
+    expect(screen.getByTestId("meeting-chair-mtg-display-01-id")).toHaveTextContent(
+      "(persona-alpha)",
+    );
+    expect(
+      screen.getByTestId("meeting-strategy-mtg-display-01-primary"),
+    ).toHaveTextContent("Alpha 2330 Core");
+    expect(
+      screen.getByTestId(
+        "meeting-row-mtg-display-01-participant-persona-orphan-01-name-missing",
+      ),
+    ).toHaveTextContent("Name missing");
+    unmount();
+
+    renderDetail("/management/meetings/mtg-display-01");
+    expect(
+      await screen.findByTestId("meeting-detail-chair-primary"),
+    ).toHaveTextContent("Alpha Macro Strategist");
+    expect(screen.getByTestId("meeting-detail-chair-id")).toHaveTextContent("(persona-alpha)");
+    expect(
+      screen.getByTestId("participant-persona-orphan-01-name-missing"),
+    ).toHaveTextContent("Name missing");
+    expect(
+      screen.getByTestId("detail-proposal-sponsor-prop-display-01-name-missing"),
+    ).toHaveTextContent("Name missing");
+    expect(
+      screen.getByTestId("writeback-persona-persona-alpha-wb-display-01-primary"),
+    ).toHaveTextContent("Alpha Macro Strategist");
+  });
 });
 
 describe("ConsultRulesPage (AC3 & AC7)", () => {
