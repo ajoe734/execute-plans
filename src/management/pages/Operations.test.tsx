@@ -1122,8 +1122,8 @@ describe("Jobs and incidents server paging (FE-OPS-JOBS-INCIDENTS-PAGING-2026110
     fireEvent.click(await screen.findByText("table_actions.startMitigation"));
     await waitFor(() => expect(m.runAction).toHaveBeenCalled());
     await waitFor(() => expect(m.toast.success).toHaveBeenCalled());
-    // mitigating renders as the "running" status badge; the open row showed the warning badge.
-    expect(screen.getAllByText("status.running").length).toBeGreaterThan(0);
+    // mitigating renders as the "mitigating" status badge; the open row showed the open badge.
+    expect(screen.getAllByText("status.mitigating").length).toBeGreaterThan(0);
   });
 });
 
@@ -1795,5 +1795,49 @@ describe("Jobs and incidents degraded notice and unavailable state (FE-OPS-LIST-
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("Recovered incident row")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("renders resolved incidents as 已解決 (status.resolved) and never 成功 (status.success)", async () => {
+    const zhTW = (await import("@/i18n/locales/zh-TW")).default as unknown as Record<string, unknown>;
+    bindLocale(zhTW);
+    __resetOperationListCacheForTests();
+    const incidentsMock = lists.incidents as unknown as ReturnType<typeof vi.fn>;
+    const resolvedRow = {
+      ...realIncidentRow("inc-resolved-001", "BFF downstream degradation: paper-fleet-reconciler"),
+      status: "resolved",
+    };
+    const openRow = {
+      ...realIncidentRow("inc-open-002", "Active drift incident"),
+      status: "open",
+    };
+    const mitigatingRow = {
+      ...realIncidentRow("inc-mitigating-003", "Mitigating exchange timeout"),
+      status: "mitigating",
+    };
+    incidentsMock.mockResolvedValue(
+      normalizeIncidentListResponse({
+        data: [resolvedRow, openRow, mitigatingRow],
+        items: [resolvedRow, openRow, mitigatingRow],
+        page_info: { next_page_token: null, total: 3 },
+        meta: {
+          snapshot_at: "2026-11-20T00:00:00Z",
+          version: "v1",
+          surfaces: { incidents: { status: "ok", source: "service_store" } },
+          total: 3,
+        },
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/management/incidents"]}>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("BFF downstream degradation: paper-fleet-reconciler")).toBeInTheDocument();
+    expect(screen.getByText("已解決")).toBeInTheDocument();
+    expect(screen.getByText("未結案")).toBeInTheDocument();
+    expect(screen.getByText("緩解中")).toBeInTheDocument();
+    expect(screen.queryByText("成功")).not.toBeInTheDocument();
   });
 });

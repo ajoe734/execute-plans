@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import { CANONICAL_CENTERS } from "@/management/navigation/managementRouteManifest";
 import {
   conveneMeeting,
@@ -63,6 +64,7 @@ function UnavailableSurface({
   testId: string;
 }) {
   const { t } = useTranslation();
+  const reasonDisplay = reasonCodeDisplay(reason, t);
   return (
     <Card
       role="status"
@@ -73,7 +75,13 @@ function UnavailableSurface({
         {t("meetingsCenter.unavailable", { defaultValue: "Consultation meetings surface is unavailable" })}
       </div>
       <div className="font-mono text-xs">
-        reason: <code>{reason}</code>
+        reason: <span className="font-sans text-foreground">{reasonDisplay.text}</span>
+        {reasonDisplay.code && reasonDisplay.code !== reasonDisplay.text ? (
+          <>
+            {" "}
+            <code>{reasonDisplay.code}</code>
+          </>
+        ) : null}
         {owner ? (
           <>
             {" · "}owner: <code>{owner}</code>
@@ -91,10 +99,12 @@ function MeetingRowCard({
   meeting: MeetingSummaryItem;
   testId: string;
 }) {
+  const { t } = useTranslation();
   const href = meeting.href || `/management/meetings/${encodeURIComponent(meeting.meeting_id)}`;
   const isReview =
     String(meeting.outcome ?? "").toUpperCase() === "REVIEW" ||
     String(meeting.status ?? "").toUpperCase() === "REVIEW";
+  const outcomeDisplay = meeting.outcome ? reasonCodeDisplay(meeting.outcome, t) : null;
 
   return (
     <Card className="p-4 space-y-2" data-testid={testId}>
@@ -108,9 +118,17 @@ function MeetingRowCard({
             {meeting.meeting_id}
           </Link>
           <Badge variant="outline">{meeting.meeting_type}</Badge>
-          <Badge variant="outline">{meeting.status}</Badge>
-          {meeting.outcome ? (
-            <Badge variant={isReview ? "destructive" : "secondary"}>{meeting.outcome}</Badge>
+          <Badge variant="outline">{statusLabel(meeting.status, t)}</Badge>
+          {outcomeDisplay ? (
+            <Badge variant={isReview ? "destructive" : "secondary"}>
+              <span>{outcomeDisplay.text}</span>
+              {outcomeDisplay.code && outcomeDisplay.code !== outcomeDisplay.text ? (
+                <>
+                  {" "}
+                  <code className="ml-1 font-mono text-[10px] opacity-80">{outcomeDisplay.code}</code>
+                </>
+              ) : null}
+            </Badge>
           ) : null}
           {meeting.has_agora_participants ? (
             <Badge variant="outline">Agora</Badge>
@@ -148,10 +166,12 @@ function MeetingRowCard({
 }
 
 function ProposalRowCard({ proposal }: { proposal: MeetingProposalItem }) {
+  const { t } = useTranslation();
   const meetingHref =
     proposal.meeting_href ||
     (proposal.meeting_id ? `/management/meetings/${encodeURIComponent(proposal.meeting_id)}` : null);
   const ds = proposal.downstream ?? {};
+  const dsStatusLabel = ds.status ? statusLabel(ds.status, t) : "";
 
   return (
     <Card className="p-4 space-y-2" data-testid={`meeting-proposal-row-${proposal.proposal_id}`}>
@@ -159,7 +179,17 @@ function ProposalRowCard({ proposal }: { proposal: MeetingProposalItem }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-semibold">{proposal.proposal_id}</span>
           {proposal.kind ? <Badge variant="outline">{proposal.kind}</Badge> : null}
-          {ds.status ? <Badge variant="secondary">{ds.status}</Badge> : null}
+          {ds.status ? (
+            <Badge variant="secondary">
+              <span>{dsStatusLabel}</span>
+              {dsStatusLabel !== ds.status ? (
+                <>
+                  {" "}
+                  <code className="ml-1 font-mono text-[10px] opacity-80">{ds.status}</code>
+                </>
+              ) : null}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           {meetingHref && proposal.meeting_id ? (
@@ -659,16 +689,25 @@ export const MeetingsCenterPage = () => {
                   <p className="text-xs text-muted-foreground">No refusals recorded.</p>
                 ) : (
                   <ul className="space-y-1 text-xs font-mono">
-                    {catalogueRead.data.refusals.map((r, idx) => (
-                      <li
-                        key={`${r.persona_id ?? "cross"}-${r.meeting_type}-${idx}`}
-                        data-testid={`catalogue-refusal-${r.meeting_type}-${idx}`}
-                      >
-                        {r.persona_id ?? "cross-persona"} · {r.meeting_type} · reason:{" "}
-                        <span className="text-destructive font-semibold">{r.reason}</span> · at:{" "}
-                        {r.at ?? "—"}
-                      </li>
-                    ))}
+                    {catalogueRead.data.refusals.map((r, idx) => {
+                      const refusalReason = reasonCodeDisplay(r.reason, t);
+                      return (
+                        <li
+                          key={`${r.persona_id ?? "cross"}-${r.meeting_type}-${idx}`}
+                          data-testid={`catalogue-refusal-${r.meeting_type}-${idx}`}
+                        >
+                          {r.persona_id ?? "cross-persona"} · {r.meeting_type} · reason:{" "}
+                          <span className="text-destructive font-semibold font-sans">{refusalReason.text}</span>
+                          {refusalReason.code && refusalReason.code !== refusalReason.text ? (
+                            <>
+                              {" "}
+                              <code className="font-mono text-muted-foreground">({refusalReason.code})</code>
+                            </>
+                          ) : null}{" "}
+                          · at: {r.at ?? "—"}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </Card>

@@ -7,12 +7,20 @@
 //   3. Heuristic candidates for hard-coded English UI strings inside .tsx
 //      (matches >Word Word< style content between JSX tags).
 //
-// Exit code is 0 — informational only, so CI never blocks unintentionally.
+// Exit code is non-zero when missing dictionary keys, locale asymmetry, enum coverage gaps, or strict hardcoded candidates are found.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import en from "../src/i18n/locales/en-US";
 import zh from "../src/i18n/locales/zh-TW";
+import {
+  BFF_ACTION_VALUES,
+  BFF_LINEAGE_EDGE_TYPES,
+  BFF_OUTCOME_VALUES,
+  BFF_REASON_CODES,
+  BFF_RISK_VALUES,
+  BFF_STATUS_VALUES,
+} from "../src/lib/enumLabels";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "src");
@@ -43,12 +51,14 @@ const files = walk(ROOT);
 const usedKeys = new Set<string>();
 const hardCoded: { file: string; line: number; text: string }[] = [];
 const T_RE = /\bt\(\s*["'`]([a-zA-Z0-9_.-]+)["'`]/g;
+const I18N_KEY_PROP_RE = /\b[a-zA-Z0-9_]*[iI]18nKey\s*:\s*["'`]([a-zA-Z0-9_.-]+)["'`]/g;
 const HARD_RE = />([A-Z][A-Za-z][A-Za-z0-9 ,.'?!:/&-]{3,})</g;
 
 for (const f of files) {
   const src = readFileSync(f, "utf8");
   let m: RegExpExecArray | null;
   while ((m = T_RE.exec(src))) usedKeys.add(m[1]);
+  while ((m = I18N_KEY_PROP_RE.exec(src))) usedKeys.add(m[1]);
   if (/\.tsx$/.test(f)) {
     const lines = src.split("\n");
     lines.forEach((line, i) => {
@@ -136,8 +146,23 @@ const STRICT_PREFIXES = [
 ];
 const strictHardCoded = hardCoded.filter((h) => STRICT_PREFIXES.some((p) => h.file.startsWith(p)));
 let strictFail = 0;
+const enumRequiredKeys: string[] = [
+  ...BFF_STATUS_VALUES.map((k) => `status.${k}`),
+  ...BFF_OUTCOME_VALUES.map((k) => `enumLabels.outcomes.${k}`),
+  ...BFF_ACTION_VALUES.map((k) => `enumLabels.actions.${k}`),
+  ...BFF_RISK_VALUES.map((k) => `risk.${k}`),
+  ...BFF_REASON_CODES.map((k) => `enumLabels.reasons.${k.replace(/:/g, "__")}`),
+  ...BFF_LINEAGE_EDGE_TYPES.map((k) => `enumLabels.lineageEdges.${k}`),
+];
+const missingEnumKeys = enumRequiredKeys.filter((k) => !enKeys.has(k) || !zhKeys.has(k));
+
 if (missing.length > 0) {
   console.error(`\n[PM-i18n strict] FAIL: ${missing.length} missing key(s) in dictionaries.`);
+  strictFail++;
+}
+if (missingEnumKeys.length > 0) {
+  console.error(`\n[PM-i18n strict] FAIL: ${missingEnumKeys.length} missing BFF enum label key(s) in dictionaries:`);
+  missingEnumKeys.forEach((k) => console.error(`  - ${k}`));
   strictFail++;
 }
 if (onlyEn.length > 0 || onlyZh.length > 0) {

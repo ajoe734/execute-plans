@@ -591,7 +591,7 @@ export const IncidentsPage = () => {
           <DataTable rows={rows} onRowClick={(r) => setActive(r)} columns={[
             { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
             { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
-            { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
+            { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
             { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
           ]} />
         )}
@@ -618,7 +618,7 @@ export const IncidentsPage = () => {
               <SheetHeader>
                 <div className="flex items-center gap-2 mb-2 pr-6">
                   <RiskBadge level={active.severity} />
-                  <StatusBadge state={active.status === "resolved" ? "success" : active.status === "mitigating" ? "running" : "warning"} />
+                  <StatusBadge state={active.status} />
                   <span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span>
                 </div>
                 <SheetTitle>{active.title}</SheetTitle>

@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import {
   getMeetingDetail,
   stripPrivateMemory,
@@ -79,6 +80,7 @@ export const MeetingDetailPage = () => {
   }
 
   if (read.state === "not_found") {
+    const notFoundReason = reasonCodeDisplay(read.reason, t);
     return (
       <section className="p-6 space-y-4" data-testid="meeting-detail-not-found">
         <Card className="p-6 space-y-3">
@@ -89,7 +91,13 @@ export const MeetingDetailPage = () => {
             })}
           </h1>
           <p className="text-sm text-muted-foreground font-mono">
-            reason: {read.reason}
+            reason: <span className="font-sans text-foreground">{notFoundReason.text}</span>
+            {notFoundReason.code && notFoundReason.code !== notFoundReason.text ? (
+              <>
+                {" "}
+                <code>{notFoundReason.code}</code>
+              </>
+            ) : null}
           </p>
           <div>
             <Button asChild size="sm" variant="outline">
@@ -106,6 +114,7 @@ export const MeetingDetailPage = () => {
   }
 
   if (read.state === "unavailable") {
+    const unavailableReason = reasonCodeDisplay(read.reason, t);
     return (
       <section className="p-6 space-y-4" data-testid="meeting-detail-unavailable" role="status">
         <Card className="border-dashed p-6 space-y-2">
@@ -115,7 +124,13 @@ export const MeetingDetailPage = () => {
             })}
           </h1>
           <p className="text-sm font-mono text-muted-foreground">
-            reason: <code>{read.reason}</code>
+            reason: <span className="font-sans text-foreground">{unavailableReason.text}</span>
+            {unavailableReason.code && unavailableReason.code !== unavailableReason.text ? (
+              <>
+                {" "}
+                <code>{unavailableReason.code}</code>
+              </>
+            ) : null}
             {read.owner ? (
               <>
                 {" · "}owner: <code>{read.owner}</code>
@@ -170,10 +185,21 @@ export const MeetingDetailPage = () => {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold font-mono text-foreground">{m.meeting_id}</h1>
             <Badge variant="outline">{m.meeting_type}</Badge>
-            <Badge variant="outline">{m.status}</Badge>
-            {m.outcome ? (
-              <Badge variant={isReview ? "destructive" : "secondary"}>{m.outcome}</Badge>
-            ) : null}
+            <Badge variant="outline">{statusLabel(m.status, t)}</Badge>
+            {m.outcome ? (() => {
+              const outcomeDisplay = reasonCodeDisplay(m.outcome, t);
+              return (
+                <Badge variant={isReview ? "destructive" : "secondary"}>
+                  <span>{outcomeDisplay.text}</span>
+                  {outcomeDisplay.code && outcomeDisplay.code !== outcomeDisplay.text ? (
+                    <>
+                      {" "}
+                      <code className="ml-1 font-mono text-[10px] opacity-80">{outcomeDisplay.code}</code>
+                    </>
+                  ) : null}
+                </Badge>
+              );
+            })() : null}
             <Badge variant="outline">paper · execution_authority: none</Badge>
           </div>
           <div className="text-xs font-mono text-muted-foreground">
@@ -533,7 +559,23 @@ export const MeetingDetailPage = () => {
         </h2>
         <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
           <span>
-            Outcome: <strong>{m.synthesis?.outcome ?? m.outcome ?? "—"}</strong>
+            Outcome:{" "}
+            {(() => {
+              const rawOutcome = m.synthesis?.outcome ?? m.outcome;
+              if (!rawOutcome) return <strong>—</strong>;
+              const outcomeDisplay = reasonCodeDisplay(rawOutcome, t);
+              return (
+                <>
+                  <strong className="font-sans">{outcomeDisplay.text}</strong>
+                  {outcomeDisplay.code && outcomeDisplay.code !== outcomeDisplay.text ? (
+                    <>
+                      {" "}
+                      <code className="font-mono text-muted-foreground">({outcomeDisplay.code})</code>
+                    </>
+                  ) : null}
+                </>
+              );
+            })()}
           </span>
           {m.synthesis?.tally ? (
             <span data-testid="meeting-synthesis-tally">
@@ -576,9 +618,20 @@ export const MeetingDetailPage = () => {
                   <span>
                     Sponsor: <code className="text-foreground">{p.sponsor_persona_id ?? "—"}</code>
                   </span>
-                  {p.downstream?.status ? (
-                    <Badge variant="secondary">{p.downstream.status}</Badge>
-                  ) : null}
+                  {p.downstream?.status ? (() => {
+                    const dsLabel = statusLabel(p.downstream.status, t);
+                    return (
+                      <Badge variant="secondary">
+                        <span>{dsLabel}</span>
+                        {dsLabel !== p.downstream.status ? (
+                          <>
+                            {" "}
+                            <code className="ml-1 font-mono text-[10px] opacity-80">{p.downstream.status}</code>
+                          </>
+                        ) : null}
+                      </Badge>
+                    );
+                  })() : null}
                 </div>
                 {p.downstream?.href ? (
                   <Link
