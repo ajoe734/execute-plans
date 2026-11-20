@@ -759,6 +759,30 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
     renderDetail("/management/meetings/mtg-offline");
     const unavailable = await screen.findByTestId("meeting-detail-unavailable");
     expect(unavailable.textContent).toContain("consultation_owner_unavailable");
+    expect(unavailable.textContent).toMatch(/Consultation owner service is unavailable|會診主控服務暫時無法使用/);
+  });
+
+  it("renders localized labels and plain-language reasons with secondary code for refused / insufficient_participants meetings", async () => {
+    on("GET", "/bff/management/meetings/mtg-492d824b116f9ace", {
+      status: 200,
+      data: {
+        meeting_id: "mtg-492d824b116f9ace",
+        meeting_type: "MT-3",
+        topic: "Strategy ideation",
+        status: "refused",
+        outcome: "insufficient_participants",
+        participants: [],
+        rounds: [],
+        proposals: [],
+        writebacks: [],
+      },
+    });
+
+    renderDetail("/management/meetings/mtg-492d824b116f9ace");
+    const header = await screen.findByTestId("meeting-detail-header");
+    expect(header.textContent).toMatch(/Refused|已拒絕召開/);
+    expect(header.textContent).toMatch(/Insufficient eligible participants to convene meeting|合格參與人數不足，無法召開會議/);
+    expect(header.textContent).toContain("insufficient_participants");
   });
 });
 

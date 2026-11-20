@@ -10,6 +10,12 @@ import {
   type StrategyListQueryOptions,
 } from "@/lib/bff-v1";
 import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
+import {
+  normalizeStrategyOperationalStatus,
+  rebalanceWorkflowLabel,
+  statusLabel,
+  strategyOperationalStatusClass,
+} from "@/lib/enumLabels";
 import { useT } from "@/platform/hooks";
 import { formulaVersion, formulaWeightSummary } from "./RankingFormulaDetail";
 import { safeDateTime } from "@/lib/utils";
@@ -188,32 +194,7 @@ export function extractHiddenRetiredPersonaCount(meta: unknown): number | undefi
     : undefined;
 }
 
-export function normalizeStrategyOperationalStatus(
-  value: unknown,
-): "running" | "idle" | "retired" | "unbound" | "unknown" | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed) return undefined;
-  if (
-    trimmed === "running" ||
-    trimmed === "idle" ||
-    trimmed === "retired" ||
-    trimmed === "unbound" ||
-    trimmed === "unknown"
-  ) {
-    return trimmed;
-  }
-  return "unknown";
-}
-
-function strategyOperationalStatusClass(
-  status: "running" | "idle" | "retired" | "unbound" | "unknown",
-): string {
-  if (status === "running") return "border-status-success/40 text-status-success";
-  if (status === "unknown") return "border-status-warning/40 text-status-warning";
-  if (status === "idle") return "border-border text-foreground";
-  return "border-muted text-muted-foreground";
-}
+export { normalizeStrategyOperationalStatus, strategyOperationalStatusClass };
 
 export function normalizeStrategyFilterParam(rawStateParam: string | null | undefined): string {
   const trimmed = rawStateParam?.trim().toLowerCase() ?? "";
@@ -747,16 +728,7 @@ export const RankingFormulasList = () => {
 // approval/rejection/expiry/blocked/applied/superseded vocabulary is not all
 // representable by the 6-value LifecycleState, so rejection/expiry are left
 // to the governance decision queue (Human Inbox) rather than fabricated here.
-function rebalanceWorkflowLabel(state: Rebalance["state"], t: (key: string, opts?: Record<string, unknown>) => string): string {
-  const key = state === "draft" ? "recommendation"
-    : state === "review" ? "review"
-    : state === "approved" ? "approved"
-    : state === "deployed" ? "applied"
-    : state === "paused" ? "blocked"
-    : state === "retired" ? "superseded"
-    : state ?? "unknown";
-  return t(`promotionAllocation.rebalanceWorkflow.${key}`, { defaultValue: key });
-}
+// Rebalance workflow label mapping is folded into src/lib/enumLabels.ts (`rebalanceWorkflowLabel`).
 
 export const RebalancesList = () => {
   const t = useT();
@@ -1037,7 +1009,7 @@ export const ResearchList = () => {
         {
           key: "status",
           header: t("table.status"),
-          cell: (r) => <span className="text-mono text-xs uppercase">{r.status || r.state}</span>,
+          cell: (r) => <StatusBadge state={r.status || r.state} />,
         },
         {
           key: "latestRun",
@@ -1055,7 +1027,7 @@ export const ResearchList = () => {
             return (
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 {runId && <span className="text-mono">{runId}</span>}
-                {runStatus && <span className="text-mono uppercase text-muted-foreground">{runStatus}</span>}
+                {runStatus && <span className="text-muted-foreground">{statusLabel(runStatus, t)}</span>}
                 {(adapter || dispatchMode) && (
                   <Badge variant="outline" className="font-mono text-[11px]">
                     {[adapter, dispatchMode].filter(Boolean).join(" / ")}

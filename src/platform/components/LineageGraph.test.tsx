@@ -127,4 +127,22 @@ describe("LineageGraph edge labels stay in column gaps", () => {
       for (const [l, r] of rects) expect(cx + half <= l || cx - half >= r).toBe(true);
     }
   });
+
+  it("localizes lineage edge types and node states via enumLabels", async () => {
+    await i18n.changeLanguage("zh-TW");
+    const ns: LineageNode[] = [
+      { id: "a", label: "Spec A", type: "Artifact", state: "approved" },
+      { id: "b", label: "Strategy B", type: "Strategy", state: "deployed" },
+    ];
+    const es: LineageEdge[] = [{ from: "a", to: "b", label: "source_strategy_spec" }];
+    const { container } = render(
+      <I18nextProvider i18n={i18n}>
+        <LineageGraph nodes={ns} edges={es} />
+      </I18nextProvider>,
+    );
+    const edgeText = container.querySelector("[data-edge-label-text]");
+    expect(edgeText?.textContent).toBe("來源策略規格");
+    expect(container.textContent).toContain("Artifact · 已核准");
+    expect(container.textContent).toContain("Strategy · 已部署");
+  });
 });
