@@ -859,6 +859,7 @@ function analyzeMgmtHostedAccept(stepOutcomes) {
     gateChecks: Array.isArray(report?.gateChecks) ? report.gateChecks : [],
     routeCounts: report?.routeCounts || null,
     totals: report?.totals || null,
+    readability: report?.readability?.summary || null,
     missingStatus: missingEvidenceStatus(step.status),
     missingNote: missingProbeNote(
       "management hosted production acceptance",
@@ -2015,6 +2016,9 @@ function main() {
     "",
     renderSummary(gates),
     "",
+    mgmtHostedAccept.readability
+      ? `Management readability (advisory): ${mgmtHostedAccept.readability.pagesWithFindings}/${mgmtHostedAccept.readability.pages} pages with findings`
+      : "",
     ...Object.entries(gates).map(([gateNo, checks]) =>
       renderGate(gateNo, checks),
     ),
@@ -2029,6 +2033,8 @@ function main() {
     releaseReadiness,
     advisoryFailures,
     advisoryFailureChecks,
+    // Advisory readability summary (never affects overall/releaseReadiness).
+    mgmtReadability: mgmtHostedAccept.readability,
     auditDir: rel(AUDIT_DIR),
     runUrl: RUN_URL,
     checklistOut: CHECKLIST_TEMPLATE_PATH ? rel(CHECKLIST_OUT_PATH) : "",

@@ -23,6 +23,8 @@
 //   node scripts/accept-management-hosted-production.mjs \
 //     [--load-gate-manifest <path>] [--src-scan-dir <path>] [--out-dir <path>]
 //   node scripts/accept-management-hosted-production.mjs --load-gate-only
+//   node scripts/accept-management-hosted-production.mjs --readability-only true  (read-only advisory probe;
+//     PANTHEON_FE_BASE_URL + viewer token via BFF_AUTH_TOKEN; writes management-readability-*.json)
 //
 // Env overrides mirror the sibling hosted probes (see
 // scripts/probe-hosted-browser-bff.mjs / scripts/validate-management-live-deep.mjs):
@@ -37,6 +39,7 @@ import {
   normalizeOptionalBearerToken,
 } from "./lib/bearer-token.mjs";
 import { installPinnedBffBearer, pinnedTargetProblem } from "./lib/pinned-browser-bff-bearer.mjs";
+import { readabilityResult, summarizeReadability, readabilityMarkdown } from "./lib/management-readability.mjs";
 import { BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS } from "./lib/management-routes.mjs";
 
 // An honest not-found message may legitimately be short (zh-TW "找不到策略
@@ -81,6 +84,8 @@ const SETTLE_TIMEOUT_MS = Number(process.env.PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS |
 const CLICK_WRITE_CTAS = argv["click-write-ctas"] === "true" || process.env.PANTHEON_ACCEPT_CLICK_WRITE_CTAS === "1";
 const STRICT_SOURCE_SCAN = process.env.PANTHEON_ACCEPT_STRICT_SOURCE_SCAN === "1";
 const LOAD_GATE_ONLY = argv["load-gate-only"] === "true";
+// FE-GATE-READABILITY-PROBE-20261120: read-only standalone readability probe.
+const READABILITY_ONLY = argv["readability-only"] === "true";
 
 // Let the BFF select the authenticated tenant unless the caller explicitly
 // selects one. Apply that same selection to browser and Node read probes.
@@ -472,6 +477,8 @@ async function crawlRoute(page, route, { source, transport }) {
     mockFindings: findings.mock,
     detailHonestyViolations: findings.honesty,
     textSampleLen: bodyText.trim().length,
+    // typeof guard: the attribution harness evaluates this file with imports stripped.
+    readability: typeof readabilityResult === "function" ? readabilityResult(route.path, bodyText) : null,
   };
 }
 
@@ -740,6 +747,23 @@ async function main() {
   page.setDefaultTimeout(ROUTE_TIMEOUT_MS);
   page.setDefaultNavigationTimeout(ROUTE_TIMEOUT_MS);
 
+  if (READABILITY_ONLY) {
+    const crawled = [];
+    for (const route of BASELINE_ROUTES) {
+      crawled.push((await crawlRoute(page, { path: route.path, kind: route.kind }, { source: "readability-only", transport })).readability);
+    }
+    let closeFailed = false;
+    try { await transport.closeBrowser(browser); } catch { closeFailed = true; }
+    const summary = summarizeReadability(crawled);
+    const report = { schemaVersion: 1, taskId: "FE-GATE-READABILITY-PROBE-20261120", mode: "readability-only", readOnly: true, generatedAt: new Date().toISOString(), feBase: FE_BASE, sha: currentSha(), transportCloseFailed: closeFailed, summary, pages: crawled };
+    fs.mkdirSync(OUT_DIR, { recursive: true });
+    const reportPath = path.join(OUT_DIR, `management-readability-${nowStamp()}.json`);
+    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf8");
+    console.log(readabilityMarkdown(crawled, summary));
+    console.log(`\nJSON: ${reportPath}`);
+    return; // advisory: never fails
+  }
+
   console.log(`[accept-management-hosted-production] discovering live nav at ${FE_BASE}/management/cockpit ...`);
   const liveNavHrefs = await discoverLiveNav(page, transport);
 
@@ -814,6 +838,9 @@ async function main() {
     { buttons: 0, enabledButtons: 0, disabledButtons: 0, links: 0, inputs: 0 },
   );
 
+  // Advisory only (AGENTS.md Remediation Plan 2026-11-17): never a gate check.
+  const readabilitySummary = summarizeReadability(allResults.map((r) => r.readability));
+
   const gateChecks = [
     { label: "No route crashes, is blank, or fails to navigate.", status: crashRoutes.length === 0 ? "pass" : "fail", note: `count:${crashRoutes.length}` },
     { label: "Every route and detail resolves auth/loading and completes its data checks.", status: dataFailRoutes.length === 0 && liveIdDataFailures.length === 0 ? "pass" : "fail", note: `routes:${dataFailRoutes.length}; discovery:${liveIdDataFailures.length}` },
@@ -856,6 +883,7 @@ async function main() {
     liveIdResolution,
     sessionRbac,
     loadGate,
+    readability: { summary: readabilitySummary, pages: allResults.map((r) => r.readability) },
     sourceScan: { ...sourceScan, findings: sourceScan.findings.slice(0, 200) },
     gateChecks,
     pinnedTransport: { pass: !transportFailed, errors: transport.errors, terminatedBeforeSend: transport.terminatedBeforeSend },
@@ -930,6 +958,10 @@ async function main() {
       ? detailHonestyFailRoutes.map((r) => `- \`${r.path}\` (${r.source}): ${r.detailHonestyViolations.join(", ")}`).join("\n")
       : "None",
     ``,
+    `## Readability (advisory, non-blocking)`,
+    ``,
+    readabilityMarkdown(allResults.map((r) => r.readability), readabilitySummary),
+    ``,
     `## Seed-fallback-armed / mock-success claims`,
     ``,
     [...seedFallbackArmedRoutes, ...mockWriteSuccessRoutes].length
@@ -979,6 +1011,11 @@ async function main() {
   const mdPath = path.join(OUT_DIR, `management-hosted-acceptance-${stamp}.md`);
   fs.writeFileSync(mdPath, md, "utf8");
   console.log(md);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try {
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### Management readability (advisory)\n\n${readabilityMarkdown(allResults.map((r) => r.readability), readabilitySummary)}\n`);
+    } catch { /* advisory */ }
+  }
   console.log(`\nJSON: ${jsonPath}\nMarkdown: ${mdPath}`);
 
   if (!pass) process.exitCode = 1;

@@ -1,0 +1,121 @@
+Persona 交易意圖稽核
+
+Debug 檢視：前端不再依 visibility 二次遮蔽，BFF 有送的 normalized 欄位與原始 row 都直接攤開，方便確認資料到底卡在前端還是後端。
+
+Debug 目標
+
+這頁現在以完整如實呈現為主。若畫面仍出現 [redacted] 或空值，代表 BFF / policy engine 回來時已經是那個值，不是前端又藏了一層。
+
+來源
+哪個 persona / session / BFF row 送出這筆資料？
+狀態
+visibility、redaction、policy 只當後端狀態標籤，不再控制前端顯示。
+排查
+直接看 normalized 欄位與 BFF 原始 row，比對欄位是否缺失或被上游改寫。
+稽核紀錄
+14
+redacted 標記
+14
+restricted 標記
+0
+風險旗標
+0
+證據線索
+0
+Agora session
+·
+in_progress
+Risk review of paper envelope publication of pool v3 (live membership changed)
+Persona: persona-ee7112a829d38b9135ac
+Trace ID: agora_session:consult-envelope-publication-98f3c36b851627e3814268877ddb33db
+redacted
+2026/11/19 下午6:06:11
+來源
+Agora session · in_progress
+後端 visibility
+redacted
+政策
+management_persona_intent_public_summary
+可追查線索
+風險 0 / 證據 0
+NORMALIZED 欄位
+title
+Risk review of paper envelope publication of pool v3 (live membership changed)
+userIntentSummary / summary
+Risk review of paper envelope publication of pool v3 (live membership changed)
+personaInterpretation
+—
+proposedAction
+—
+toolsUsed
+[]
+consultedPersonas
+persona-ee7112a829d38b9135ac
+風險旗標
+[]
+policyViolations
+[]
+證據線索
+[]
+BFF / POLICY 狀態
+sourceId
+consult-envelope-publication-98f3c36b851627e3814268877ddb33db
+ringBearerId
+consult-envelope-publication-98f3c36b851627e3814268877ddb33db
+redactedBy
+保護層
+redaction.status
+redacted
+createdAt
+2026-11-19T10:06:11Z
+BFF 原始 ROW
+{
+  "id": "agora_session:consult-envelope-publication-98f3c36b851627e3814268877ddb33db",
+  "intent_id": "agora_session:consult-envelope-publication-98f3c36b851627e3814268877ddb33db",
+  "source_type": "agora_session",
+  "source_id": "consult-envelope-publication-98f3c36b851627e3814268877ddb33db",
+  "persona_id": "persona-ee7112a829d38b9135ac",
+  "persona_ids": [
+    "persona-ee7112a829d38b9135ac"
+  ],
+  "intent": "persona_panel",
+  "title": "Risk review of paper envelope publication of pool v3 (live membership changed)",
+  "summary": "Risk review of paper envelope publication of pool v3 (live membership changed)",
+  "status": "in_progress",
+  "created_at": "2026-11-19T10:06:11Z",
+  "updated_at": "2026-11-19T10:06:11Z",
+  "occurred_at": "2026-11-19T10:06:11Z",
+  "agora": {
+    "session_id": "consult-envelope-publication-98f3c36b851627e3814268877ddb33db",
+    "mode": "persona_panel",
+    "status": "in_progress",
+    "topic": "Risk review of paper envelope publication of pool v3 (live membership changed)",
+    "participant_count": 0,
+    "context_ref_count": 0,
+    "message_count": 0,
+    "latest_message_at": null,
+    "persona_ids": [
+      "persona-ee7112a829d38b9135ac"
+    ],
+    "sse_topic": null
+  },
+  "redacted": true,
+  "redaction": {
+    "is_redacted": true,
+    "redacted": true,
+    "policy": "management_persona_intent_public_summary",
+    "redacted_fields": [
+      "messages",
+      "message_content",
+      "raw_transcript"
+    ]
+  },
+  "route": "/management/persona-intent?source_type=agora_session",
+  "bff_detail_path": null
+}
+Agora session
+·
+submitted
+Optimisation review for persona-6507750312870d03a241: lessons:5
+Persona: persona-6507750312870d03a241
+Trace ID: agora_session:mtg-16d42d0b44df
