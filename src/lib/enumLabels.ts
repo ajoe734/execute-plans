@@ -240,6 +240,10 @@ export const BFF_OUTCOME_VALUES = [
   "canceled",
   "cancelled",
   "executed",
+  "approved_for_paper_execution",
+  "submit_reweight_proposal",
+  "propose_harness_patch",
+  "recorded",
 ] as const;
 
 export const BFF_ACTION_VALUES = [
@@ -371,6 +375,11 @@ export const BFF_REASON_CODES = [
   "policy_redacted",
   "permission_denied",
   "capability_missing",
+  "private_memory_withheld",
+  "private_interpretation_withheld",
+  "raw_control_diff_withheld",
+  "sd_persona_meetings_12_2_private_memory_boundary",
+  "management_persona_intent_public_summary",
 ] as const;
 
 export const BFF_LINEAGE_EDGE_TYPES = [
@@ -437,6 +446,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   neutral: "neutral",
   not_evaluated: "neutral",
   inconclusive: "neutral",
+  recorded: "neutral",
 
   // Info / Review / Cycle stages / Deliberation
   review: "info",
@@ -455,6 +465,9 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   round_2: "info",
   synthesizing: "info",
   info: "info",
+  submit_reweight_proposal: "info",
+  propose_harness_patch: "info",
+  sd_persona_meetings_12_2_private_memory_boundary: "info",
 
   // Accent / Approved / Resolved
   approved: "accent",
@@ -468,6 +481,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   concluded: "accent",
   proposals_issued: "accent",
   candidate_created: "accent",
+  approved_for_paper_execution: "accent",
 
   // Success / Healthy / Completed / Executed
   live_running: "success",
@@ -594,6 +608,10 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   not_running: "paused",
   idle: "paused",
   unbound: "paused",
+  private_memory_withheld: "paused",
+  private_interpretation_withheld: "paused",
+  raw_control_diff_withheld: "paused",
+  management_persona_intent_public_summary: "paused",
 };
 
 const KNOWN_STATUS_SET = new Set<string>(BFF_STATUS_VALUES);
@@ -778,6 +796,10 @@ const EN_FALLBACK_OUTCOMES: Record<string, string> = {
   canceled: "Canceled",
   cancelled: "Cancelled",
   executed: "Executed",
+  approved_for_paper_execution: "Approved for Paper Execution",
+  submit_reweight_proposal: "Submit Reweight Proposal",
+  propose_harness_patch: "Propose Harness Patch",
+  recorded: "Recorded",
 };
 
 const EN_FALLBACK_ACTIONS: Record<string, string> = {
@@ -910,6 +932,11 @@ const EN_FALLBACK_REASONS: Record<string, string> = {
   policy_redacted: "Redacted by governance policy",
   permission_denied: "Permission denied",
   capability_missing: "Required capability missing",
+  private_memory_withheld: "Persona private memory is withheld per governance boundary (SD §12.2)",
+  private_interpretation_withheld: "Persona private interpretation is withheld per governance boundary (SD §12.2)",
+  raw_control_diff_withheld: "Raw trainer control diff is withheld from audit summary",
+  sd_persona_meetings_12_2_private_memory_boundary: "Only session facts are shown; private memory and private interpretations are withheld (SD §12.2)",
+  management_persona_intent_public_summary: "Public summary policy applied",
 };
 
 const EN_FALLBACK_LINEAGE_EDGES: Record<string, string> = {

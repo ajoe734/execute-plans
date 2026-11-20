@@ -401,6 +401,56 @@ describe("Pack PM-i18n parity", () => {
     expect(en.status.resolved).toBe("Resolved");
   });
 
+  it("includes readable persona intent audit keys and withhold reason translations in both locales", () => {
+    const personaIntentKeys = [
+      "mgmt.personaIntent.title",
+      "mgmt.personaIntent.subtitle",
+      "mgmt.personaIntent.purposeTitle",
+      "mgmt.personaIntent.purposeBody",
+      "mgmt.personaIntent.purposeQuestionLabel",
+      "mgmt.personaIntent.purposeQuestionIntent",
+      "mgmt.personaIntent.purposeProtectionLabel",
+      "mgmt.personaIntent.purposeQuestionProtection",
+      "mgmt.personaIntent.purposeFollowupLabel",
+      "mgmt.personaIntent.purposeQuestionFollowup",
+      "mgmt.personaIntent.kindFilterLabel",
+      "mgmt.personaIntent.kinds.trade_intent",
+      "mgmt.personaIntent.kinds.consultation",
+      "mgmt.personaIntent.kinds.meeting",
+      "mgmt.personaIntent.kinds.trainer",
+      "mgmt.personaIntent.kinds.all",
+      "mgmt.personaIntent.kindBadges.trade_intent",
+      "mgmt.personaIntent.kindBadges.consultation",
+      "mgmt.personaIntent.kindBadges.meeting",
+      "mgmt.personaIntent.kindBadges.trainer",
+      "mgmt.personaIntent.topicLabel",
+      "mgmt.personaIntent.proposedActionLabel",
+      "mgmt.personaIntent.outcomeLabel",
+      "mgmt.personaIntent.toolsUsedLabel",
+      "mgmt.personaIntent.consultedPersonasLabel",
+      "mgmt.personaIntent.withheldFieldsLabel",
+      "mgmt.personaIntent.withheldFieldsMap.private_memory",
+      "mgmt.personaIntent.withheldFieldsMap.persona_interpretation",
+      "mgmt.personaIntent.withheldFieldsMap.raw_control_diff",
+      "enumLabels.reasons.private_memory_withheld",
+      "enumLabels.reasons.private_interpretation_withheld",
+      "enumLabels.reasons.raw_control_diff_withheld",
+      "enumLabels.outcomes.approved_for_paper_execution",
+      "enumLabels.outcomes.submit_reweight_proposal",
+      "enumLabels.outcomes.propose_harness_patch",
+    ];
+    for (const k of personaIntentKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+    expect(enKeys.has("mgmt.personaIntent.normalizedFieldsLabel")).toBe(false);
+    expect(zhKeys.has("mgmt.personaIntent.normalizedFieldsLabel")).toBe(false);
+    expect(enKeys.has("mgmt.personaIntent.backendStateLabel")).toBe(false);
+    expect(zhKeys.has("mgmt.personaIntent.backendStateLabel")).toBe(false);
+    expect(enKeys.has("mgmt.personaIntent.rawRecordLabel")).toBe(false);
+    expect(zhKeys.has("mgmt.personaIntent.rawRecordLabel")).toBe(false);
+  });
+
   it("includes display name missing, localized incident summary and timeline, and test-persona strategy filter keys in both locales (FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120)", () => {
     const newKeys = [
       "common.nameMissing",

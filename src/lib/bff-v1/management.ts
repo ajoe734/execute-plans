@@ -4731,7 +4731,174 @@ export function adaptQuarterlyRankingRows(raw: unknown): QuarterlyRankingRow[] |
 
 // ---------- Persona Intent ----------
 
+export type PersonaIntentKind = "trade_intent" | "consultation" | "meeting" | "trainer";
+
+export interface PersonaIntentPersonaRef {
+  id: string;
+  name: string;
+}
+
+export interface PersonaIntentWithheldField {
+  field: string;
+  reasonCode: string;
+}
+
+export interface PersonaIntentAuditRecord extends PersonaIntentTrace {
+  kind: PersonaIntentKind;
+  personaName: string;
+  topic: string;
+  outcome?: string;
+  decision?: string;
+  consultedPersonaEntries: PersonaIntentPersonaRef[];
+  withheldFields: PersonaIntentWithheldField[];
+  withheldReasonCodes: string[];
+}
+
 const PERSONA_INTENT_VISIBILITIES = new Set(["summary", "redacted", "restricted"]);
+
+const PERSONA_INTENT_KIND_ALIASES: Record<string, PersonaIntentKind> = {
+  trade: "trade_intent",
+  trade_intent: "trade_intent",
+  trade_intents: "trade_intent",
+  intent: "trade_intent",
+  intents: "trade_intent",
+  persona_trace: "trade_intent",
+  persona_traces: "trade_intent",
+  consult: "consultation",
+  consultation: "consultation",
+  consultations: "consultation",
+  persona_panel: "consultation",
+  gate_panel: "consultation",
+  panel: "consultation",
+  panels: "consultation",
+  meeting: "meeting",
+  meetings: "meeting",
+  persona_meeting: "meeting",
+  persona_meetings: "meeting",
+  deliberative_meeting: "meeting",
+  trainer: "trainer",
+  trainers: "trainer",
+  trainer_session: "trainer",
+  trainer_sessions: "trainer",
+  teaching: "trainer",
+  teaching_session: "trainer",
+  teaching_sessions: "trainer",
+};
+
+const BUILTIN_PERSONA_NAMES: Record<string, string> = {
+  "persona-risk-officer": "Risk Officer",
+  "persona-red-team": "Red Team",
+  "persona-risk-chief": "Risk Chief",
+  "persona-execution-sponsor": "Execution Sponsor",
+  "p-risk-analyst": "Risk Analyst Persona",
+};
+
+const DEFAULT_WITHHELD_FIELD_REASONS: Record<string, string> = {
+  private_memory: "private_memory_withheld",
+  private_memories: "private_memory_withheld",
+  private_memory_text: "private_memory_withheld",
+  persona_private_memory: "private_memory_withheld",
+  memory_trace: "private_memory_withheld",
+  private_bank: "private_memory_withheld",
+  private_memory_entries: "private_memory_withheld",
+  private_text: "private_memory_withheld",
+  private_content: "private_memory_withheld",
+  persona_interpretation: "private_interpretation_withheld",
+  persona_interpretations: "private_interpretation_withheld",
+  private_interpretation: "private_interpretation_withheld",
+  private_interpretations: "private_interpretation_withheld",
+  interpretation_turn: "private_interpretation_withheld",
+  reasoning_trace: "private_interpretation_withheld",
+  raw_control_diff: "raw_control_diff_withheld",
+};
+
+export function formatPersonaDisplayName(personaId: string, hintName?: string): string {
+  const cleanId = asString(personaId).trim();
+  const cleanHint = asString(hintName).trim();
+  if (cleanHint && cleanHint !== cleanId) return cleanHint;
+  if (!cleanId) return cleanHint || "";
+  if (BUILTIN_PERSONA_NAMES[cleanId]) return BUILTIN_PERSONA_NAMES[cleanId];
+  const hexMatch = /^(?:persona|p)[-_]([0-9a-f]{16,})$/i.exec(cleanId);
+  if (hexMatch) {
+    return `Persona ${hexMatch[1].slice(0, 8)}`;
+  }
+  if (/^(?:persona|p)[-_]/i.test(cleanId)) {
+    const parts = cleanId.replace(/_/g, "-").split("-").filter(Boolean);
+    return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+  }
+  return cleanHint || cleanId;
+}
+
+export function normalizePersonaIntentKind(record: Record<string, unknown>): PersonaIntentKind {
+  const agora = isObject(record.agora) ? record.agora : {};
+  const explicit = asString(record.kind ?? agora.kind).trim().toLowerCase();
+  if (explicit && PERSONA_INTENT_KIND_ALIASES[explicit]) {
+    return PERSONA_INTENT_KIND_ALIASES[explicit];
+  }
+  const sourceType = asString(record.sourceType ?? record.source_type ?? record.type).trim().toLowerCase();
+  if (sourceType === "trainer_session") return "trainer";
+
+  const id = asString(record.id ?? record.intent_id ?? record.source_id ?? record.sourceId).trim().toLowerCase();
+  const mode = asString(
+    record.intent ??
+    record.mode ??
+    record.consultation_type ??
+    record.meeting_type ??
+    agora.mode,
+  ).trim().toLowerCase();
+
+  if (
+    mode === "persona_meeting" ||
+    mode === "meeting" ||
+    mode === "deliberative_meeting" ||
+    Boolean(record.meeting_type) ||
+    id.startsWith("mtg-") ||
+    id.includes(":mtg-")
+  ) {
+    return "meeting";
+  }
+
+  if (
+    mode === "trainer" ||
+    mode === "trainer_session" ||
+    mode === "teaching" ||
+    mode === "teaching_session" ||
+    mode === "persona_teaching_advisory" ||
+    id.startsWith("teach-") ||
+    id.includes(":teach-") ||
+    id.includes("creq-teach-")
+  ) {
+    return "trainer";
+  }
+
+  if (sourceType === "agora_session") {
+    if (
+      mode === "trade_intent" ||
+      mode === "trading_room" ||
+      mode === "decision_lock" ||
+      mode === "trade_proposal" ||
+      mode === "order_intent"
+    ) {
+      return "trade_intent";
+    }
+    return "consultation";
+  }
+
+  if (
+    mode === "consult" ||
+    mode === "consultation" ||
+    mode === "persona_panel" ||
+    mode === "gate_panel" ||
+    mode === "committee" ||
+    mode === "committee_review" ||
+    mode === "strategy_review" ||
+    mode === "pre_deployment"
+  ) {
+    return "consultation";
+  }
+
+  return "trade_intent";
+}
 
 const normalizePersonaIntentVisibility = (record: Record<string, unknown>): PersonaIntentVisibility => {
   const explicit = asString(record.visibility).toLowerCase();
@@ -4771,7 +4938,20 @@ const normalizePersonaIntentStringList = (...values: unknown[]): string[] => {
     const items = Array.isArray(value) ? value : [];
     for (const rawItem of items) {
       const item = isObject(rawItem)
-        ? asString(rawItem.id ?? rawItem.ref ?? rawItem.evidence_ref ?? rawItem.ref_id ?? rawItem.href ?? rawItem.route)
+        ? asString(
+            rawItem.tool_name ??
+            rawItem.toolName ??
+            rawItem.display_name ??
+            rawItem.displayName ??
+            rawItem.name ??
+            rawItem.tool ??
+            rawItem.id ??
+            rawItem.ref ??
+            rawItem.evidence_ref ??
+            rawItem.ref_id ??
+            rawItem.href ??
+            rawItem.route,
+          )
         : asString(rawItem);
       if (!item) continue;
       if (!seen.has(item)) {
@@ -4783,7 +4963,198 @@ const normalizePersonaIntentStringList = (...values: unknown[]): string[] => {
   return out;
 };
 
-function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaIntentTrace | null {
+const extractPersonaDisplayNameMap = (record: Record<string, unknown>): Record<string, string> => {
+  const map: Record<string, string> = {};
+  const addMapping = (idRaw: unknown, nameRaw: unknown) => {
+    const id = asString(idRaw).trim();
+    const name = asString(nameRaw).trim();
+    if (id && name) {
+      map[id] = name;
+    }
+  };
+
+  const directMap = isObject(record.persona_display_names)
+    ? record.persona_display_names
+    : isObject(record.personaDisplayNames)
+      ? record.personaDisplayNames
+      : null;
+  if (directMap) {
+    for (const [k, v] of Object.entries(directMap)) {
+      addMapping(k, v);
+    }
+  }
+
+  const agora = isObject(record.agora) ? record.agora : {};
+  for (const listCandidate of [record.personas, agora.personas, record.consulted_personas, agora.consulted_personas]) {
+    if (!Array.isArray(listCandidate)) continue;
+    for (const entry of listCandidate) {
+      if (!isObject(entry)) continue;
+      addMapping(
+        entry.persona_id ?? entry.personaId ?? entry.id,
+        entry.display_name ?? entry.displayName ?? entry.name ?? entry.label,
+      );
+    }
+  }
+
+  const consultedIds = Array.isArray(record.consulted_persona_ids) ? record.consulted_persona_ids : [];
+  const consultedNames = Array.isArray(record.consulted_persona_names) ? record.consulted_persona_names : [];
+  if (consultedIds.length > 0 && consultedIds.length === consultedNames.length) {
+    for (let i = 0; i < consultedIds.length; i += 1) {
+      addMapping(consultedIds[i], consultedNames[i]);
+    }
+  }
+
+  addMapping(
+    record.persona_id ?? record.personaId ?? record.ringPersonaId ?? record.ring_persona_id,
+    record.persona_display_name ??
+      record.personaDisplayName ??
+      record.persona_name ??
+      record.personaName ??
+      record.persona_label ??
+      record.personaLabel,
+  );
+
+  return map;
+};
+
+const normalizeConsultedPersonas = (
+  record: Record<string, unknown>,
+  displayMap: Record<string, string>,
+): PersonaIntentPersonaRef[] => {
+  const agora = isObject(record.agora) ? record.agora : {};
+  const rawSources = [
+    record.consultedPersonaEntries,
+    record.consulted_personas,
+    record.consultedPersonas,
+    agora.consulted_personas,
+    record.consulted_persona_names,
+    record.consultedPersonaNames,
+  ];
+  const entries: PersonaIntentPersonaRef[] = [];
+  const seen = new Set<string>();
+
+  for (const source of rawSources) {
+    if (!Array.isArray(source) || source.length === 0) continue;
+    for (const rawItem of source) {
+      if (isObject(rawItem)) {
+        const id = asString(
+          rawItem.persona_id ??
+          rawItem.personaId ??
+          rawItem.id ??
+          rawItem.actor_id ??
+          rawItem.actorId,
+        ).trim();
+        const rawName = asString(
+          rawItem.display_name ??
+          rawItem.displayName ??
+          rawItem.name ??
+          rawItem.label,
+        ).trim();
+        const name = formatPersonaDisplayName(id, rawName || (id ? displayMap[id] : ""));
+        const key = (id || name).toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        entries.push({ id: id || name, name: name || id });
+      } else {
+        const token = asString(rawItem).trim();
+        if (!token) continue;
+        const mappedName = displayMap[token];
+        const name = mappedName || formatPersonaDisplayName(token);
+        const key = token.toLowerCase();
+        if (seen.has(key) || seen.has(name.toLowerCase())) continue;
+        seen.add(key);
+        seen.add(name.toLowerCase());
+        entries.push({ id: token, name });
+      }
+    }
+    if (entries.length > 0) break;
+  }
+
+  return entries;
+};
+
+const normalizeWithheldFields = (
+  record: Record<string, unknown>,
+  redaction: Record<string, unknown>,
+): { withheldFields: PersonaIntentWithheldField[]; withheldReasonCodes: string[] } => {
+  const withheldFields: PersonaIntentWithheldField[] = [];
+  const seenFields = new Set<string>();
+  const defaultReason = asString(
+    redaction.reason_code ??
+    redaction.reasonCode ??
+    (Array.isArray(record.withheld_reason_codes) ? record.withheld_reason_codes[0] : undefined) ??
+    (Array.isArray(redaction.reason_codes) ? redaction.reason_codes[0] : undefined),
+  ).trim();
+
+  const addField = (fieldRaw: unknown, reasonRaw?: unknown) => {
+    const field = asString(fieldRaw).trim();
+    if (!field) return;
+    const normField = field.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+    if (seenFields.has(normField)) return;
+    seenFields.add(normField);
+    const reasonCode =
+      asString(reasonRaw).trim() ||
+      DEFAULT_WITHHELD_FIELD_REASONS[normField] ||
+      DEFAULT_WITHHELD_FIELD_REASONS[field] ||
+      defaultReason ||
+      "private_memory_withheld";
+    withheldFields.push({ field: normField, reasonCode });
+  };
+
+  const fieldReasons = isObject(redaction.field_reasons)
+    ? redaction.field_reasons
+    : isObject(redaction.fieldReasons)
+      ? redaction.fieldReasons
+      : {};
+
+  for (const listCandidate of [
+    record.withheldFields,
+    record.withheld_fields,
+    redaction.withheld_fields,
+    redaction.withheldFields,
+    redaction.redacted_fields,
+    redaction.redactedFields,
+  ]) {
+    if (!Array.isArray(listCandidate)) continue;
+    for (const item of listCandidate) {
+      if (isObject(item)) {
+        addField(item.field ?? item.name, item.reason_code ?? item.reasonCode ?? item.reason);
+      } else {
+        const f = asString(item).trim();
+        if (f) addField(f, fieldReasons[f]);
+      }
+    }
+  }
+
+  for (const [f, r] of Object.entries(fieldReasons)) {
+    addField(f, r);
+  }
+
+  const reasonSet = new Set<string>();
+  for (const wf of withheldFields) {
+    if (wf.reasonCode) reasonSet.add(wf.reasonCode);
+  }
+  for (const rcList of [
+    record.withheldReasonCodes,
+    record.withheld_reason_codes,
+    redaction.reason_codes,
+    redaction.reasonCodes,
+  ]) {
+    if (!Array.isArray(rcList)) continue;
+    for (const rc of rcList) {
+      const clean = asString(rc).trim();
+      if (clean) reasonSet.add(clean);
+    }
+  }
+  if (defaultReason) reasonSet.add(defaultReason);
+
+  return {
+    withheldFields,
+    withheldReasonCodes: [...reasonSet],
+  };
+};
+
+export function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaIntentAuditRecord | null {
   const id = asString(record.id ?? record.intent_id ?? record.intentId);
   if (!id) return null;
 
@@ -4807,6 +5178,21 @@ function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaI
     "unknown",
   );
 
+  const displayMap = extractPersonaDisplayNameMap(record);
+  const personaName = formatPersonaDisplayName(
+    ringPersonaId,
+    asString(
+      record.personaName ??
+      record.persona_display_name ??
+      record.personaDisplayName ??
+      record.persona_name ??
+      record.persona_label ??
+      record.personaLabel ??
+      displayMap[ringPersonaId],
+    ),
+  );
+  const kind = normalizePersonaIntentKind(record);
+
   const visibility = normalizePersonaIntentVisibility(record);
   const redaction = isObject(record.redaction) ? record.redaction : {};
   const redactionPolicy = asString(
@@ -4823,7 +5209,53 @@ function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaI
     record.title ??
     record.intent,
   );
-  const title = asString(record.title ?? record.intent, id);
+  const title = asString(record.title ?? record.topic ?? record.intent, id);
+  const agora = isObject(record.agora) ? record.agora : {};
+  const trainer = isObject(record.trainer) ? record.trainer : {};
+  const traceObj = isObject(record.trace) ? record.trace : {};
+  const topic = asString(
+    record.topic ??
+    agora.topic ??
+    trainer.topic ??
+    trainer.objective ??
+    record.title ??
+    rawSummary,
+    title,
+  );
+  const proposedAction = asString(
+    record.proposedAction ??
+    record.proposed_action ??
+    agora.proposed_action ??
+    record.recommendation ??
+    record.action,
+  );
+  const outcome = asString(
+    record.outcome ??
+    agora.outcome ??
+    record.decision ??
+    agora.decision ??
+    trainer.latest_outcome_signal ??
+    record.status ??
+    record.source_status ??
+    record.sourceStatus,
+  );
+  const decision = asString(
+    record.decision ??
+    agora.decision ??
+    record.outcome ??
+    agora.outcome,
+  );
+  const toolsUsed = normalizePersonaIntentStringList(
+    record.toolsUsed,
+    record.tools_used,
+    record.tool_path,
+    record.toolPath,
+    traceObj.tools_used,
+    agora.tools_used,
+  );
+  const consultedPersonaEntries = normalizeConsultedPersonas(record, displayMap);
+  const { withheldFields, withheldReasonCodes } = normalizeWithheldFields(record, redaction);
+
   const redactedBy = normalizePersonaIntentRedactedBy(
     redaction.redactedBy ??
     redaction.redacted_by ??
@@ -4834,17 +5266,25 @@ function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaI
   return {
     id,
     title,
+    kind,
+    personaName,
+    topic,
+    outcome: outcome || undefined,
+    decision: decision || undefined,
     sourceType,
     sourceId,
-    sourceStatus: asString(record.status ?? record.source_status),
+    sourceStatus: asString(record.status ?? record.source_status ?? record.sourceStatus),
     detailHref: asString(record.route ?? record.bff_detail_path ?? record.detailHref ?? record.detail_href),
     ringPersonaId,
     ringBearerId,
     userIntentSummary: rawSummary || (visibility === "summary" ? title : "[redacted by policy]"),
     personaInterpretation: asString(record.personaInterpretation ?? record.persona_interpretation),
-    proposedAction: asString(record.proposedAction ?? record.proposed_action),
-    toolsUsed: normalizePersonaIntentStringList(record.toolsUsed, record.tools_used),
-    consultedPersonas: normalizePersonaIntentStringList(record.consultedPersonas, record.consulted_personas, personaIds),
+    proposedAction: proposedAction || undefined,
+    toolsUsed,
+    consultedPersonas: consultedPersonaEntries.map((entry) => entry.name),
+    consultedPersonaEntries,
+    withheldFields,
+    withheldReasonCodes,
     visibility,
     redaction: {
       status: visibility === "summary" ? "not_required" : visibility,
@@ -4859,7 +5299,7 @@ function normalizePersonaIntentRecord(record: Record<string, unknown>): PersonaI
   };
 }
 
-export function adaptPersonaIntent(raw: unknown): PersonaIntentTrace[] | null {
+export function adaptPersonaIntent(raw: unknown): PersonaIntentAuditRecord[] | null {
   const root = isObject(raw) ? raw : {};
   const data = unwrap(raw);
   const rows = asArray<unknown>(data) ??
@@ -4869,7 +5309,7 @@ export function adaptPersonaIntent(raw: unknown): PersonaIntentTrace[] | null {
   return rows
     .filter(isObject)
     .map(normalizePersonaIntentRecord)
-    .filter((row): row is PersonaIntentTrace => row !== null);
+    .filter((row): row is PersonaIntentAuditRecord => row !== null);
 }
 
 // ---------- Readiness ----------
@@ -5526,13 +5966,40 @@ export const mgmt = {
   },
 
   personaIntent: {
-    list: (seedFn: () => PersonaIntentTrace[]): Promise<PersonaIntentTrace[]> =>
-      mgmtRead("mgmt.personaIntent.list", { method: "GET", path: paths.mgmtPersonaIntent() }, seedFn, adaptPersonaIntent),
-    listLiveOnly: (opts?: { signal?: AbortSignal }): Promise<PersonaIntentTrace[]> =>
-      liveOnlyList<PersonaIntentTrace>(
-        { method: "GET", path: paths.mgmtPersonaIntent(), signal: opts?.signal },
+    list: (
+      seedFn: () => PersonaIntentTrace[],
+      opts?: { kind?: PersonaIntentKind | "all" | string; sourceType?: string; personaId?: string; status?: string },
+    ): Promise<PersonaIntentTrace[]> => {
+      const base = paths.mgmtPersonaIntent();
+      const params = new URLSearchParams();
+      if (opts?.kind) params.set("kind", opts.kind);
+      if (opts?.sourceType) params.set("source_type", opts.sourceType);
+      if (opts?.personaId) params.set("persona_id", opts.personaId);
+      if (opts?.status) params.set("status", opts.status);
+      const qs = params.toString();
+      const path = qs ? `${base}?${qs}` : base;
+      return mgmtRead("mgmt.personaIntent.list", { method: "GET", path }, seedFn, adaptPersonaIntent);
+    },
+    listLiveOnly: (opts?: {
+      kind?: PersonaIntentKind | "all" | string;
+      sourceType?: string;
+      personaId?: string;
+      status?: string;
+      signal?: AbortSignal;
+    }): Promise<PersonaIntentAuditRecord[]> => {
+      const base = paths.mgmtPersonaIntent();
+      const params = new URLSearchParams();
+      if (opts?.kind) params.set("kind", opts.kind);
+      if (opts?.sourceType) params.set("source_type", opts.sourceType);
+      if (opts?.personaId) params.set("persona_id", opts.personaId);
+      if (opts?.status) params.set("status", opts.status);
+      const qs = params.toString();
+      const path = qs ? `${base}?${qs}` : base;
+      return liveOnlyList<PersonaIntentAuditRecord>(
+        { method: "GET", path, signal: opts?.signal },
         adaptPersonaIntent,
-      ),
+      );
+    },
   },
 
   readiness: {
