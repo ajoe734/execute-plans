@@ -1,0 +1,42 @@
+{
+  "task_id": "FE-PERSONA-INTENT-READABLE-20261120",
+  "title": "Persona intent audit page is a readable audit view, not a debug view",
+  "owner": "Antigravity",
+  "reviewer": "Claude2",
+  "problem_register_ref": "docs/operations/problem-register.md#RC6-WP6.1",
+  "delivery_state": "in_review",
+  "reproduction_2026_11_20": {
+    "source": "Coordinator hosted read-only sweep of 67 Management pages on 2026-11-20 (01:00Z-01:30Z, BFF fb8ed951d)",
+    "cited_file": "/home/chloe_ong_dev_cctech_support_com/claude-evidence/mgmt-readability-sweep-20261120/full/text/persona-intent.txt",
+    "observed_defects": [
+      "Since execute-plans commit f5db9972f (MGMT-PERSONA-INTENT-DEBUG-TRANSPARENCY-20260703), /management/persona-intent rendered a debug view with subtitle 'Debug 檢視：前端不再依 visibility 二次遮蔽...', sections 'NORMALIZED 欄位', 'BFF / POLICY 狀態', and 'BFF 原始 ROW' with a raw JSON dump of every item.",
+      "Cards rendered internal camelCase field names (userIntentSummary / summary, personaInterpretation, proposedAction, toolsUsed, consultedPersonas, policyViolations, sourceId, ringBearerId, redactedBy, redaction.status, createdAt), empty '[]' arrays, and repeated raw IDs (persona-ee7112a829d38b9135ac, consult-envelope-publication-98f3c36b851627e3814268877ddb33db).",
+      "The page had no kind filter and mixed Agora consultations (e.g. pool v3 envelope risk review consult-envelope-publication-98f3c36b851627e3814268877ddb33db) and deliberative meetings (mtg-16d42d0b44dfeab5) with trade intents."
+    ]
+  },
+  "acceptance_verification": {
+    "ac1_no_debug_or_raw_json_and_page_question_subtitle": "Removed CodeBlock raw JSON dump, Normalized fields section, and BFF / policy state section from PersonaIntentTraces.tsx. Updated subtitle and PurposePanel copy in en-US.ts and zh-TW.ts to state the page questions (which persona left a trade-relevant intent; what was proposed and what was the outcome; what tools, consulted personas, risk flags, and evidence links to cross-check).",
+    "ac2_readable_audit_cards_and_withheld_reasons": "Each AuditCard renders the persona display name (linked to persona detail, without raw hex IDs), localized kind badge, localized status badge, topic, proposed action, localized outcome/decision, tools used badges, consulted personas by display name, risk flags, and evidence links to /management/evidence/:ref. Withheld fields render both translated field labels and translated reason codes via enumLabels.reasonCodeLabel.",
+    "ac3_kind_filter_defaults_to_trade_intents": "Added kind filter bar defaulting to trade_intent ('Trade intents' / '交易意圖') with options to inspect consultations ('Consultations' / '風險與治理會診'), meetings ('Meetings' / '審議會議'), trainer sessions ('Trainer sessions' / '訓練課程'), and all kinds, wiring selectedKind into mgmt.personaIntent.listLiveOnly({ kind, signal }) and client-side filtering."
+  },
+  "changes_summary": {
+    "src/management/pages/oversight/PersonaIntentTraces.tsx": "Replaced debug view (DebugField, DebugJson, CodeBlock, normalizedFields, backendState) with AuditCard and kind filter defaulting to trade_intent.",
+    "src/lib/bff-v1/management.ts": "Extended normalizePersonaIntentRecord and adaptPersonaIntent to extract kind, personaName, topic, proposedAction, outcome, decision, toolsUsed, consultedPersonaEntries (by display name), and withheldFields with reason codes; added optional kind/filter query params to mgmt.personaIntent.list and listLiveOnly.",
+    "src/lib/enumLabels.ts": "Added BFF persona-intent withhold reason codes (private_memory_withheld, private_interpretation_withheld, raw_control_diff_withheld, sd_persona_meetings_12_2_private_memory_boundary, management_persona_intent_public_summary) and outcome codes (approved_for_paper_execution, submit_reweight_proposal, propose_harness_patch, recorded).",
+    "src/i18n/locales/en-US.ts & src/i18n/locales/zh-TW.ts": "Replaced debug personaIntent strings with readable audit copy, kind filter labels, withheld field labels, and enumLabels translations with 1:1 locale parity.",
+    "src/management/pages/oversight/PersonaIntentTraces.test.tsx & src/lib/v5/management/__tests__/i18nParity.test.ts": "Added component and i18n parity tests covering AC1, AC2, and AC3 in both en-US and zh-TW."
+  },
+  "verification": {
+    "commands": [
+      "npx vitest run src/management/pages/oversight/PersonaIntentTraces.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/__tests__/enumLabels.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/v5/management/__tests__/management.test.ts",
+      "npm run typecheck:app && npm run typecheck:agora"
+    ],
+    "results": {
+      "focused_vitest": "6 test files passed, 129 tests passed",
+      "typecheck_app": "0 errors",
+      "typecheck_agora": "0 errors"
+    }
+  },
+  "residual_findings": [],
+  "hosted_behavior_claimed": false
+}
