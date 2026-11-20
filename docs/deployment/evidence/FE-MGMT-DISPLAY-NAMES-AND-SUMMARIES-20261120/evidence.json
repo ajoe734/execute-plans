@@ -8,11 +8,12 @@
   "merge_target": "dev",
   "branch": "task/FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120",
   "status": "ready_for_review",
-  "timestamp": "2026-11-20T10:36:00Z",
+  "timestamp": "2026-11-20T11:08:00Z",
   "scope": {
     "delivered": [
       "Added resolveBffSubjectDisplay, formatLocalizedIncidentSummary, formatLocalizedIncidentTimelineNote, and isRawEvidenceSummaryText in src/lib/enumLabels.ts along with symmetric en-US and zh-TW i18n keys",
       "Extended DTOs and read normalizers (src/lib/bff-v1/dto.ts, src/lib/bff-v1/domainReads.ts, src/lib/bff-v1/meetings.ts, src/lib/bff-v1/management.ts, src/lib/v5/management/humanInbox.ts) to preserve BFF persona_display_name, strategy_display_name, persona_name_missing, strategy_name_missing, title_display, summary_key, summary_params, occurrence_count, first_seen_at, last_seen_at, timeline, and hidden_test_persona_count / hidden_test_strategy_count",
+      "Preserved plain string summary on adaptInboxRecord (src/lib/bff-v1/management.ts) and tracked evidenceSummary on HumanInboxItem (src/lib/v5/management/humanInbox.ts) so adaptHumanInboxList preserves owner incident summary compatibility while HumanInboxPage never renders evidence_summary as the card body",
       "Updated RuntimesPage (src/management/pages/Runtimes.tsx) and removed client-side matchingFleet name lookup in src/management/pages/runtimeFleetFallback.ts so runtimes show BFF persona and strategy display names with secondary IDs and name_missing badges without resolving names from raw IDs client-side",
       "Updated ObjectListPage (src/management/pages/ObjectListPage.tsx), DeploymentsList, ArtifactsList, and StrategiesList (src/management/pages/Lists.tsx) to show BFF persona and strategy display names, secondary IDs, name_missing badges, and the hidden test-persona strategy count banner + include_test_personas filter toggle",
       "Updated MeetingsCenterPage and MeetingDetailPage (src/management/pages/meetings/MeetingsCenterPage.tsx, src/management/pages/meetings/MeetingDetailPage.tsx) to show BFF persona and strategy display names, secondary IDs, and name_missing flags across chairs, participants, sponsors, pre-read interpretations, catalogue schedules/refusals, and writebacks",
@@ -55,7 +56,8 @@
   "verification": {
     "typecheck_app": "npm run typecheck:app (passed with 0 errors)",
     "typecheck_agora": "npm run typecheck:agora (passed with 0 errors)",
-    "i18n_parity": "vitest run src/lib/v5/management/__tests__/i18nParity.test.ts (15/15 passed; 4987 en-US keys = 4987 zh-TW keys)",
+    "management_bff_tests": "vitest run src/lib/bff-v1/__tests__/management.test.ts (68/68 passed)",
+    "i18n_parity": "vitest run src/lib/v5/management/__tests__/i18nParity.test.ts (16/16 passed; 4987 en-US keys = 4987 zh-TW keys)",
     "domain_reads_tests": "vitest run src/lib/bff-v1/__tests__/domainReads.allPages.test.ts (8/8 passed)",
     "meetings_client_tests": "vitest run src/lib/bff-v1/meetings.test.ts (6/6 passed)",
     "runtimes_page_tests": "vitest run src/management/pages/Runtimes.test.tsx (8/8 passed)",
@@ -64,7 +66,7 @@
     "meetings_page_tests": "vitest run src/management/pages/meetings/meetings.test.tsx (9/9 passed)",
     "human_inbox_page_tests": "vitest run src/management/pages/oversight/HumanInboxPage.test.tsx (15/15 passed)",
     "operations_page_tests": "vitest run src/management/pages/Operations.test.tsx (50/50 passed)",
-    "total_vitest": "150/150 passed across 9 test suites"
+    "total_vitest": "219/219 passed across 10 focused test suites; 281/283 full repo suites (3262 tests) passed"
   },
   "acceptance_checklist": {
     "ac1_display_names_secondary_ids_and_name_missing_flags": true,

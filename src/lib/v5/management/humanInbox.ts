@@ -64,6 +64,7 @@ export interface HumanInboxItem {
   rawTitle?: string;
   /** Live BFF items carry a one-line summary instead of the mock consequence triplet. */
   summary?: string;
+  evidenceSummary?: string;
   summaryKey?: string;
   summaryParams?: Record<string, unknown>;
   requiredRole: string;

@@ -846,14 +846,44 @@ describe("HumanInboxPage", () => {
             evidence_summary: "alerts=alert-orphan-99",
             route: "/management/incidents/inc-orphan-99",
           },
+          {
+            id: "incident:inc-owner-prose-evidence",
+            inboxType: "incident",
+            source_type: "incident",
+            source_id: "inc-owner-prose-evidence",
+            status: "open",
+            title: "Deployment compensation entered safe mode",
+            evidence_summary: "Compensation saga entered safe mode after broker validation timeout.",
+            route: "/management/incidents/inc-owner-prose-evidence",
+          },
+          {
+            id: "incident:inc-plain-summary",
+            inboxType: "incident",
+            source_type: "incident",
+            source_id: "inc-plain-summary",
+            status: "open",
+            title: "Deployment incident on paper",
+            summary: "Deployment incident (stage: paper) across 2 occurrences.",
+            evidence_summary: "alerts=alert-deploy-01,alert-deploy-02",
+            route: "/management/incidents/inc-plain-summary",
+          },
         ],
       },
     };
 
     const adapted = adaptHumanInboxList(rawPayload)!;
-    expect(adapted).toHaveLength(2);
+    expect(adapted).toHaveLength(4);
     expect(adapted[0].summary ?? "").not.toContain("alerts=alert-drift-001");
     expect(adapted[1].summary ?? "").toBe("");
+    expect(adapted[2].summary).toBe(
+      "Compensation saga entered safe mode after broker validation timeout.",
+    );
+    expect(adapted[2].evidenceSummary).toBe(
+      "Compensation saga entered safe mode after broker validation timeout.",
+    );
+    expect(adapted[3].summary).toBe(
+      "Deployment incident (stage: paper) across 2 occurrences.",
+    );
 
     mocks.useV5Live.mockReturnValue({
       data: adapted,
@@ -902,6 +932,12 @@ describe("HumanInboxPage", () => {
       screen.queryByTestId("inbox-summary-incident:inc-orphan-99"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/alerts=alert-orphan-99/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("inbox-summary-incident:inc-owner-prose-evidence"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("inbox-summary-incident:inc-plain-summary"),
+    ).toHaveTextContent("Deployment incident (stage: paper) across 2 occurrences.");
     unmount();
 
     await i18n.changeLanguage("zh-TW");

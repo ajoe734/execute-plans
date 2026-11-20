@@ -1762,7 +1762,11 @@ export const HumanInboxPage = () => {
           ? formatLocalizedIncidentSummary(it, t)
           : "";
         const safeFallbackSummary =
-          it.summary && !isRawEvidenceSummaryText(it.summary) ? it.summary : "";
+          it.summary &&
+          it.summary !== it.evidenceSummary &&
+          !isRawEvidenceSummaryText(it.summary)
+            ? it.summary
+            : "";
         const cardSummary = localizedIncidentSummary || safeFallbackSummary;
 
         return (

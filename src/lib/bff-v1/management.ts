@@ -3149,19 +3149,23 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
       (kind === "incident" && incidentTargetId ? `/management/incidents/${encodeURIComponent(incidentTargetId)}` : undefined) ??
       (kind === "approval" && approvalTargetId ? `/management/approvals?approval=${encodeURIComponent(approvalTargetId)}` : undefined);
   const allowedActions = adaptInboxAllowedActions(it.allowedActions ?? it.allowed_actions, canDecide);
-  const rawEvidenceSummary = asOptionalString(it.evidence_summary ?? it.evidenceSummary);
-  const rawSummaryCandidate = asOptionalString(it.summary ?? it.rationale);
-  const summary =
-    rawSummaryCandidate &&
-    rawSummaryCandidate !== rawEvidenceSummary &&
-    !isRawEvidenceSummaryText(rawSummaryCandidate)
-      ? rawSummaryCandidate
-      : undefined;
   const summaryKey = asOptionalString(it.summary_key ?? it.summaryKey);
   const rawSummaryParams = it.summary_params ?? it.summaryParams;
   const summaryParams = isObject(rawSummaryParams)
     ? { ...(rawSummaryParams as Record<string, unknown>) }
     : undefined;
+  const rawEvidenceSummary = asOptionalString(it.evidence_summary ?? it.evidenceSummary);
+  const rawSummaryCandidate = asOptionalString(
+    it.summary ??
+      it.rationale ??
+      (!summaryKey && !isRawEvidenceSummaryText(rawEvidenceSummary)
+        ? rawEvidenceSummary
+        : undefined),
+  );
+  const summary =
+    rawSummaryCandidate && !isRawEvidenceSummaryText(rawSummaryCandidate)
+      ? rawSummaryCandidate
+      : undefined;
   const approvalTargetType = kind === "approval" ? asOptionalString(it.decision_type ?? it.target_type) : undefined;
   const titleDisplay = asOptionalString(it.title_display ?? it.titleDisplay);
   const rawTitle = asOptionalString(it.title);
@@ -3204,6 +3208,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     ...(titleDisplay ? { titleDisplay } : {}),
     ...(rawTitle ? { rawTitle } : {}),
     summary,
+    ...(rawEvidenceSummary ? { evidenceSummary: rawEvidenceSummary } : {}),
     ...(summaryKey ? { summaryKey } : {}),
     ...(summaryParams ? { summaryParams } : {}),
     requiredRole: asString(it.requiredRole ?? it.required_role ?? it.actor_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
