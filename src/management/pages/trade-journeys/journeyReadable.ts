@@ -15,6 +15,9 @@ export const KNOWN_REASON_CODES = [
   "reason_not_recorded",
 ] as const;
 
+/** Expression-policy choice codes: how the order was expressed, not why it was rejected. */
+export const EXPRESSION_CHOICE_CODES = ["long_cash", "long_lever", "short_via_future", "close_leg"] as const;
+
 export function formatAmount(value: unknown): string {
   const n = typeof value === "number" ? value : Number(value);
   if (value === null || value === undefined || value === "" || !Number.isFinite(n)) return "—";
@@ -50,8 +53,8 @@ const asRecord = (value: unknown): Detail | undefined => value && typeof value =
 
 export function reasonText(code: string | null | undefined, detail: JourneyOutcome["reason_detail"], t: T): string {
   if (!code) return "";
-  // The recorded hosted timeline stamps the paper-runtime rejection as `long_cash`; it is the cash-shortfall reason.
-  if (code === "long_cash") code = "insufficient_cash";
+  // Expression-policy choice codes (long_cash, long_lever, short_via_future, close_leg) are never a rejection reason.
+  if ((EXPRESSION_CHOICE_CODES as readonly string[]).includes(code)) return t("tradeJourneys.reasons.reason_not_recorded");
   if (!(KNOWN_REASON_CODES as readonly string[]).includes(code)) return t("tradeJourneys.reasons.unknown", { code });
   const record = asRecord(detail);
   const params = record

@@ -51,6 +51,10 @@ describe("recorded hosted bodies (post-deploy 12:40Z)", () => {
     expect(document.body.textContent).not.toContain("未知來源");
     expect(screen.getAllByText(/· 成功/).length).toBe(2);
     expect(screen.getByText(/· 失敗/)).toBeInTheDocument();
+    // long_cash is an expression choice code, not a rejection reason: never read as a cash shortfall.
+    expect(document.body.textContent).toContain("此筆記錄沒有保存原因");
+    expect(document.body.textContent).not.toContain("現金不足");
+    expect(document.body.textContent).not.toContain("long_cash");
   });
 
   it("variance journey: eight stages read 成功 except reconciliation 失敗", async () => {
