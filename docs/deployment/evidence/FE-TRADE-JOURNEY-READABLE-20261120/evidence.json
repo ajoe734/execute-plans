@@ -11,11 +11,16 @@
     "5_detail_panel": "summary panel (發生什麼 / 誰在處理 / 你要做什麼) with next_step link and no buttons; stage rail and timeline carry reasons; raw JSON collapsed under 原始資料",
     "6_lineage_gap": "upstream_lineage_unlinked renders one muted line and is not listed under 需要處理",
     "7_tests": "zh-TW/en-US parity (src/lib/v5/management/__tests__/i18nParity.test.ts) passes",
-    "8_screenshots": ["src/management/pages/trade-journeys/__evidence__/list.png", "src/management/pages/trade-journeys/__evidence__/rejected-detail.png", "src/management/pages/trade-journeys/__evidence__/variance-detail.png"]
+    "8_screenshots": [
+      "src/management/pages/trade-journeys/__evidence__/list.png",
+      "src/management/pages/trade-journeys/__evidence__/rejected-detail.png",
+      "src/management/pages/trade-journeys/__evidence__/variance-detail.png"
+    ]
   },
   "verification": {
     "vitest": "src/management src/lib/bff-v1 src/i18n src/lib/v5/management: 157 files, 1616 tests (one pre-existing test needed raw partially_filled status text, kept by not adding a status label)",
     "typecheck": "tsc --noEmit -p tsconfig.app.json: clean"
   },
-  "notes": "Screenshots were rendered from the fixtures through the mock BFF registry in a local Vite dev server (placeholder public GCP config, mock mode); the harness was not committed."
+  "notes": "Screenshots were rendered from the fixtures through the mock BFF registry in a local Vite dev server (placeholder public GCP config, mock mode); the harness was not committed.",
+  "rework_20261120": "PR 1046 coordinator rejection: next_step.action_needed is a code from the BFF (review_open_incident, review_cash_and_risk_limits, review_reconciliation_variance; recorded in hosted_probe_list_*_20261120T0918Z.json). SummaryPanel now translates via tradeJourneys.actions.* in zh-TW and en-US with an unknown-code fallback; fixtures use the recorded codes; a test asserts no raw code reaches the DOM. Full npm test: 282 files, 3269 tests passed; one vitest-worker onTaskUpdate RPC timeout error was reported under load, with no failing test."
 }
