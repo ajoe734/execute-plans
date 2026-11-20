@@ -11,7 +11,7 @@
     "5_detail_panel": "summary panel (發生什麼 / 誰在處理 / 你要做什麼) with next_step link and no buttons; stage rail and timeline carry reasons; raw JSON collapsed under 原始資料",
     "6_lineage_gap": "upstream_lineage_unlinked renders one muted line and is not listed under 需要處理",
     "7_tests": "zh-TW/en-US parity (src/lib/v5/management/__tests__/i18nParity.test.ts) passes",
-    "8_screenshots": ["list.png", "rejected-detail.png", "variance-detail.png"]
+    "8_screenshots": ["src/management/pages/trade-journeys/__evidence__/list.png", "src/management/pages/trade-journeys/__evidence__/rejected-detail.png", "src/management/pages/trade-journeys/__evidence__/variance-detail.png"]
   },
   "verification": {
     "vitest": "src/management src/lib/bff-v1 src/i18n src/lib/v5/management: 157 files, 1616 tests (one pre-existing test needed raw partially_filled status text, kept by not adding a status label)",
