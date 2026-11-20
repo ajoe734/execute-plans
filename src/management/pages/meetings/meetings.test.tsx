@@ -1015,11 +1015,17 @@ describe("MeetingsCenterPage failed meetings (FE-RISK-STRATEGY-RESEARCH-UI-20261
           meeting_id: "mtg-real-1",
           meeting_type: "MT-1",
           topic: "池子演進檢討",
-          topic_summary: "池子演進檢討",
+          topic_summary: {
+            kind: "pool_evolution_review",
+            subject_persona_id: "persona-alpha",
+            period: "2026-Q3",
+            lesson_count: 4,
+          },
           status: "open",
-          execution_state: "convened",
+          execution_state: { status: "convened", attempt_count: 1, max_attempts: 3, last_error: null, updated_at: "2026-11-20T10:00:00Z" },
           chair_persona_id: "persona-alpha",
           chair_persona_display_name: "青禾",
+          persona_display_name: "青禾",
           participants: [],
           round: 2,
           created_at: "2026-11-20T10:00:00Z",
@@ -1032,10 +1038,21 @@ describe("MeetingsCenterPage failed meetings (FE-RISK-STRATEGY-RESEARCH-UI-20261
                 meeting_id: "mtg-dead-1",
                 meeting_type: "MT-2",
                 topic: "優化會議",
-                topic_summary: "優化會議",
+                topic_summary: {
+                  kind: "optimisation_review",
+                  subject_persona_id: "persona-beta",
+                  period: "2026-Q3",
+                  lesson_count: 2,
+                },
                 status: "convened",
-                execution_state: "dead_letter",
-                last_error: "provider_unavailable",
+                effective_status: "execution_failed",
+                execution_state: {
+                  status: "dead_letter",
+                  attempt_count: 3,
+                  max_attempts: 3,
+                  last_error: "provider_unavailable",
+                  updated_at: "2026-11-20T09:05:00Z",
+                },
                 chair_persona_id: "persona-beta",
                 chair_persona_display_name: "墨竹",
                 participants: [],
@@ -1064,7 +1081,7 @@ describe("MeetingsCenterPage failed meetings (FE-RISK-STRATEGY-RESEARCH-UI-20261
     renderCenter("/management/meetings?tab=upcoming");
     expect(await screen.findByTestId("meeting-row-mtg-real-1")).toBeInTheDocument();
     expect(screen.getByTestId("meeting-title-mtg-real-1")).toHaveTextContent("池子演進會議 · 青禾");
-    expect(screen.getByTestId("meeting-topic-mtg-real-1")).toHaveTextContent("池子演進檢討");
+    expect(screen.getByTestId("meeting-topic-mtg-real-1")).toHaveTextContent("池子演進檢討：青禾（2026-Q3，4 則教訓）");
     expect(screen.getByTestId("meetings-authority-badge")).not.toHaveTextContent("execution_authority");
     expect(screen.queryByTestId("meeting-row-mtg-dead-1")).not.toBeInTheDocument();
     expect(screen.getByTestId("meetings-failed-text")).toHaveTextContent("3");

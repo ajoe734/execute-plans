@@ -211,8 +211,10 @@ export interface MeetingSummaryItem {
   participants: MeetingParticipant[];
   participant_count?: number;
   /** BFF-STRATEGY-SYNTHETIC-STUBS-20261120: plain-language topic and execution outcome. */
-  topic_summary?: string | null;
-  execution_state?: string | null;
+  topic_summary?: MeetingTopicSummary | string | null;
+  execution_state?: MeetingExecutionState | string | null;
+  /** 'execution_failed' when dead-lettered at round 0. */
+  effective_status?: string | null;
   last_error?: string | null;
   has_agora_participants?: boolean;
   has_private_servant?: boolean;
@@ -221,6 +223,22 @@ export interface MeetingSummaryItem {
   closed_at?: string | null;
   href?: string;
   [key: string]: unknown;
+}
+
+export interface MeetingTopicSummary {
+  kind?: "pool_evolution_review" | "optimisation_review" | string | null;
+  subject_persona_id?: string | null;
+  subject_persona_display_name?: string | null;
+  period?: string | null;
+  lesson_count?: number | null;
+}
+
+export interface MeetingExecutionState {
+  status?: string | null;
+  attempt_count?: number | null;
+  max_attempts?: number | null;
+  last_error?: string | null;
+  updated_at?: string | null;
 }
 
 export interface MeetingsListData {

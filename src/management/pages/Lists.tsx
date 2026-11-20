@@ -210,7 +210,10 @@ export function extractHiddenTestPersonaStrategyCount(meta: unknown): number | u
     hiddenTestStrategyCount?: unknown;
     hidden_test_persona_count?: unknown;
     hiddenTestPersonaCount?: unknown;
+    hidden_unbound_stub_strategy_count?: unknown;
   };
+  const stub = record.hidden_unbound_stub_strategy_count;
+  const stubCount = typeof stub === "number" && Number.isFinite(stub) && stub >= 0 ? stub : undefined;
   const count =
     record.hidden_test_persona_strategy_count ??
     record.hiddenTestPersonaStrategyCount ??
@@ -218,9 +221,9 @@ export function extractHiddenTestPersonaStrategyCount(meta: unknown): number | u
     record.hiddenTestStrategyCount ??
     record.hidden_test_persona_count ??
     record.hiddenTestPersonaCount;
-  return typeof count === "number" && Number.isFinite(count) && count >= 0
-    ? count
-    : undefined;
+  const testCount = typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
+  if (testCount === undefined && stubCount === undefined) return undefined;
+  return (testCount ?? 0) + (stubCount ?? 0);
 }
 
 export function extractIncludeTestPersonas(meta: unknown): boolean | undefined {
@@ -1286,7 +1289,11 @@ function recordedRunValue(v: string | null | undefined): string {
 
 export function extractHiddenNonRealCount(meta: unknown): number | undefined {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
-  const count = (meta as { hidden_non_real_count?: unknown }).hidden_non_real_count;
+  const record = meta as {
+    hidden_non_real_count?: unknown;
+    surfaces?: { research_tasks?: { hidden_non_real_count?: unknown } | null } | null;
+  };
+  const count = record.hidden_non_real_count ?? record.surfaces?.research_tasks?.hidden_non_real_count;
   return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
 }
 

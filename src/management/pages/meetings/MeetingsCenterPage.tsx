@@ -44,8 +44,27 @@ const MEETING_TYPES = [
 
 const FAILED_EXECUTION_STATES = new Set(["dead_letter", "execution_failed"]);
 
-export function isFailedMeeting(meeting: Pick<MeetingSummaryItem, "execution_state">): boolean {
-  return FAILED_EXECUTION_STATES.has(String(meeting.execution_state ?? "").trim().toLowerCase());
+export function meetingExecutionStatus(meeting: Pick<MeetingSummaryItem, "execution_state">): string {
+  const state = meeting.execution_state;
+  const raw = state && typeof state === "object" ? state.status : state;
+  return String(raw ?? "").trim().toLowerCase();
+}
+
+export function meetingLastError(
+  meeting: Pick<MeetingSummaryItem, "execution_state" | "last_error">,
+): string {
+  const state = meeting.execution_state;
+  const nested = state && typeof state === "object" ? state.last_error : null;
+  return String(nested ?? meeting.last_error ?? "").trim();
+}
+
+export function isFailedMeeting(
+  meeting: Pick<MeetingSummaryItem, "execution_state" | "effective_status">,
+): boolean {
+  return (
+    FAILED_EXECUTION_STATES.has(meetingExecutionStatus(meeting)) ||
+    FAILED_EXECUTION_STATES.has(String(meeting.effective_status ?? "").trim().toLowerCase())
+  );
 }
 
 const CLOSED_STATUSES = new Set(["closed", "completed"]);
@@ -167,12 +186,32 @@ function MeetingRowCard({
     },
     t,
   );
-  const topicRaw = (meeting.topic_summary ?? meeting.topic ?? "").trim();
-  const topicText = topicRaw
-    ? t(`meetingsCenter.topicSummary.${topicRaw}`, { defaultValue: topicRaw })
-    : "";
+  const topicObj =
+    meeting.topic_summary && typeof meeting.topic_summary === "object" ? meeting.topic_summary : null;
+  let topicText = "";
+  if (topicObj) {
+    const kind = String(topicObj.kind ?? "").trim();
+    const personaName =
+      topicObj.subject_persona_display_name ||
+      meeting.subject_persona_display_name ||
+      meeting.persona_display_name ||
+      topicObj.subject_persona_id ||
+      "";
+    if (kind) {
+      topicText = t(`meetingsCenter.topicSummary.${kind}`, {
+        persona: personaName,
+        period: topicObj.period ?? "",
+        count: topicObj.lesson_count ?? 0,
+        defaultValue: kind.replace(/_/g, " "),
+      });
+    }
+  } else {
+    const topicRaw = String(meeting.topic_summary ?? meeting.topic ?? "").trim();
+    topicText = topicRaw ? t(`meetingsCenter.topicSummary.${topicRaw}`, { defaultValue: topicRaw }) : "";
+  }
   const titleParts = [typeLabel, chair.primaryText !== "—" ? chair.primaryText : ""].filter(Boolean);
-  const lastErrorText = meeting.last_error ? reasonCodeDisplay(meeting.last_error, t).text : "";
+  const lastErrorRaw = meetingLastError(meeting);
+  const lastErrorText = lastErrorRaw ? reasonCodeDisplay(lastErrorRaw, t).text : "";
 
   return (
     <Card className="p-4 space-y-2" data-testid={testId} data-execution-failed={failed ? "true" : undefined}>

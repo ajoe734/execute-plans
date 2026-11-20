@@ -247,6 +247,10 @@ export default {
     showFailedWithCount: "Show failed meetings ({{count}})",
     showingFailed: "Including meetings that failed to execute (did not convene).",
     hideFailed: "Hide failed meetings",
+    topicSummary: {
+      pool_evolution_review: "Pool evolution review: {{persona}} ({{period}}, {{count}} lessons)",
+      optimisation_review: "Optimisation review: {{persona}} ({{period}}, {{count}} lessons)",
+    },
     typeName: {
       "MT-1": "Pool Evolution Review",
       "MT-2": "Optimisation Review",
@@ -3423,6 +3427,9 @@ export default {
       unspecified: "marked by the backend as synthetic or placeholder data",
       no_rules: "no trading rules have been configured",
       synthetic: "synthetic test data",
+      raw_market_seed_without_rules: "seed data only, no trading rules (raw market seed)",
+      simulation_fixture: "simulation fixture",
+      test_persona_probe: "test persona probe",
       test_probe: "test probe",
     },
     rulesSummary: {

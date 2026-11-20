@@ -240,6 +240,10 @@ export default {
     showFailedWithCount: "顯示執行失敗會議（{{count}}）",
     showingFailed: "目前包含執行失敗（未開成）的會議。",
     hideFailed: "隱藏執行失敗會議",
+    topicSummary: {
+      pool_evolution_review: "池子演進檢討：{{persona}}（{{period}}，{{count}} 則教訓）",
+      optimisation_review: "優化檢討：{{persona}}（{{period}}，{{count}} 則教訓）",
+    },
     typeName: {
       "MT-1": "池子演進會議",
       "MT-2": "優化會議",
@@ -3405,6 +3409,9 @@ export default {
       unspecified: "後端標記為合成或占位資料",
       no_rules: "尚未設定任何交易規則",
       synthetic: "合成測試資料",
+      raw_market_seed_without_rules: "僅有原始市場種子資料，沒有交易規則",
+      simulation_fixture: "模擬測試資料",
+      test_persona_probe: "測試 Persona 探針",
       test_probe: "測試探針",
     },
     rulesSummary: {

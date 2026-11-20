@@ -138,6 +138,11 @@ function metaCount(meta: Record<string, unknown>, ...keys: string[]): number | u
   return undefined;
 }
 
+function sumDefined(...values: Array<number | undefined>): number | undefined {
+  const defined = values.filter((v): v is number => typeof v === "number");
+  return defined.length ? defined.reduce((a, b) => a + b, 0) : undefined;
+}
+
 /** Hidden-row counts the BFF reports in `meta` for the default (non-draft) strategy slice. */
 export interface NonDraftStrategiesHiddenCounts {
   retiredPersona?: number;
@@ -162,12 +167,15 @@ export async function getNonDraftStrategiesHiddenCounts(
   const meta = rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta) ? (rawMeta as Record<string, unknown>) : {};
   return {
     retiredPersona: metaCount(meta, "hidden_retired_persona_count"),
-    testOrSynthetic: metaCount(
-      meta,
-      "hidden_test_persona_strategy_count",
-      "hidden_test_strategy_count",
-      "hidden_synthetic_or_stub_count",
-      "hidden_synthetic_count",
+    testOrSynthetic: sumDefined(
+      metaCount(
+        meta,
+        "hidden_test_persona_strategy_count",
+        "hidden_test_strategy_count",
+        "hidden_synthetic_or_stub_count",
+        "hidden_synthetic_count",
+      ),
+      metaCount(meta, "hidden_unbound_stub_strategy_count"),
     ),
   };
 }
