@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { adaptDataSource, adaptDataSourceV2OrLegacy } from "@/lib/bff-v1/managementConsoleReads";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import type { ManagementDataSourceV2DTO } from "@/lib/bff-v1/managementDataSources";
 import type { SystemDataSourceRecord } from "@/lib/v5/management/systemDataSources";
@@ -228,6 +229,122 @@ describe("DataSourceControlCenter — unavailable, degraded legacy, and nan-free
     expect(screen.queryByText("0/1")).not.toBeInTheDocument();
     expect(screen.queryByText("0/0")).not.toBeInTheDocument();
     expect(screen.getAllByText("未回報").length).toBeGreaterThan(0);
+  });
+
+  it("shows generic degraded copy for a non-legacy degraded service_client response without claiming legacy projection mode or showing 0 counts", async () => {
+    const nonLegacyDegradedResponse = {
+      items: [],
+      meta: {
+        status: "degraded",
+        source: "service_client",
+        surfaces: {
+          data_sources: {
+            status: "degraded",
+            source: "service_client",
+            reason: "read_timeout",
+          },
+        },
+      },
+    };
+
+    mocks.useV5Live.mockImplementation(
+      (_loader: unknown, _deps: unknown, opts?: { cacheKey?: string }) => {
+        if (opts?.cacheKey === "oversight.dataSources") {
+          return {
+            data: nonLegacyDegradedResponse,
+            loading: false,
+            refresh: vi.fn(),
+          };
+        }
+        return {
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        };
+      },
+    );
+
+    renderControlCenter();
+
+    expect(screen.getByTestId("data-sources-header-state")).toHaveTextContent("降級");
+    expect(screen.getByTestId("data-sources-header-reason")).toHaveTextContent("原因：上游讀取逾時");
+    expect(screen.queryByTestId("data-sources-header-source")).not.toBeInTheDocument();
+
+    const banner = screen.getByTestId("degraded-legacy-banner");
+    expect(banner).toHaveTextContent("資料源表面降級");
+    expect(banner).toHaveTextContent("原因：上游讀取逾時");
+    expect(banner).not.toHaveTextContent("舊版相容投影模式");
+    expect(banner).not.toHaveTextContent("legacy_projection");
+
+    const tableBar = screen.getByTestId("instances-table-surface-status");
+    expect(tableBar).toHaveTextContent("降級");
+    expect(tableBar).toHaveTextContent("原因：上游讀取逾時");
+    expect(tableBar).not.toHaveTextContent("legacy_projection");
+
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+    expect(screen.queryByText("0/0")).not.toBeInTheDocument();
+    expect(screen.queryByText(/舊版相容投影/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/legacy_projection/i)).not.toBeInTheDocument();
+
+    await i18n.changeLanguage("en-US");
+    expect(screen.getByTestId("degraded-legacy-banner")).toHaveTextContent(
+      "Data Source Surface Degraded",
+    );
+    expect(screen.getByTestId("degraded-legacy-banner")).not.toHaveTextContent(
+      "Legacy Compatibility Projection Mode",
+    );
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+    expect(screen.queryByText("0/0")).not.toBeInTheDocument();
+  });
+
+  it("renders 未回報 instead of unknown when real adaptDataSourceV2OrLegacy or adaptDataSource omits provider and lifecycle/status fields", () => {
+    const adaptedV2 = adaptDataSourceV2OrLegacy(
+      {
+        source_instance_id: "source-known",
+        connector_id: "connector-known",
+        definition: {},
+        instance: {},
+        desired: {},
+        observed: {},
+      },
+      0,
+    ) as ManagementDataSourceV2DTO;
+
+    const legacyFromAdapted = v2ToLegacyRecord(adaptedV2);
+    expect(legacyFromAdapted.providerKey).toBe("connector-known");
+    expect(legacyFromAdapted.provider).toBe("未回報");
+    expect(legacyFromAdapted.status).toBe("未回報");
+
+    const adaptedLegacy = adaptDataSource({}, 0);
+
+    mocks.useV5Live
+      .mockReturnValueOnce({
+        data: {
+          items: [adaptedV2, adaptedLegacy],
+          meta: {
+            status: "ok",
+            source: "service_client",
+          },
+        },
+        loading: false,
+        refresh: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        data: [],
+        loading: false,
+        refresh: vi.fn(),
+      });
+
+    renderControlCenter();
+
+    const table = screen.getByRole("table", { name: "資料源管理" });
+    expect(within(table).getByText("source-known")).toBeInTheDocument();
+    // 6 未回報 labels on the V2 row (provider, definition_state, desired_lifecycle, health_state, reconciliation_status, credential_state)
+    // plus 5 未回報 labels on the legacy row (provider, providerKey, desired status, observed status, credentialState)
+    expect(within(table).getAllByText("未回報").length).toBeGreaterThanOrEqual(6);
+    expect(within(table).queryByText(/^unknown$/i)).not.toBeInTheDocument();
+    expect(within(table).queryByText(/^nan$/i)).not.toBeInTheDocument();
+    expect(within(table).queryByText(/^data-source-1$/i)).not.toBeInTheDocument();
   });
 
   it("shows 0 and 0/0 counts only when the BFF returns a successful empty list", () => {

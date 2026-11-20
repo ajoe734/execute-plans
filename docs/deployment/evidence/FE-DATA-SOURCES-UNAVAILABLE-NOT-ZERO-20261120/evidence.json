@@ -6,9 +6,9 @@
     "work_package": "WP6.3",
     "register_path": "docs/operations/problem-register.md"
   },
-  "captured_at": "2026-11-20T10:00:00Z",
+  "captured_at": "2026-11-20T23:26:00Z",
   "owner": "Antigravity",
-  "reviewer": "Claude2",
+  "reviewer": "Codex2",
   "acceptance_1_hosted_reproduction_citation": {
     "source": "coordinator hosted reads 2026-11-20 02:50Z (read-only)",
     "observed_at_utc": "2026-11-20T02:50:00Z",
@@ -45,16 +45,16 @@
   "acceptance_3_degraded_legacy_projection_label": {
     "source_token": "legacy_projection",
     "labelled_locations": [
-      "Header badge (data-testid='data-sources-header-source'): 舊版相容投影 (legacy_projection) / Legacy projection (legacy_projection)",
-      "Degraded legacy banner (data-testid='degraded-legacy-banner'): 舊版相容投影模式 + 降級 + legacy_projection + translated reason",
-      "Table surface status bar (data-testid='instances-table-surface-status'): 降級 + 舊版相容投影 (legacy_projection) + translated reason",
+      "Header badge (data-testid='data-sources-header-source'): 舊版相容投影 (legacy_projection) / Legacy projection (legacy_projection) rendered only when surfaceState.isLegacyProjection is true",
+      "Degraded banner (data-testid='degraded-legacy-banner'): renders 舊版相容投影模式 / Legacy Compatibility Projection Mode + legacy_projection badge when surfaceState.isLegacyProjection is true, and generic 資料源表面降級 / Data Source Surface Degraded copy when degraded with a non-legacy source (e.g. service_client)",
+      "Table surface status bar (data-testid='instances-table-surface-status'): 降級 + 舊版相容投影 (legacy_projection) (only when legacy_projection) + translated reason",
       "Table row Support / Deployment badge: legacy_projection on both LegacyDataSourceRow and V2DataSourceRow when source=legacy_projection"
     ]
   },
   "acceptance_4_nan_free_models_and_missing_fields": {
     "missing_field_label": "未回報",
-    "sanitization": "cleanSourceToken (via sanitizeRawText from src/lib/enumLabels.ts) strips undefined, null, empty strings, and case-insensitive 'nan', 'undefined', and 'null' across DataSourceControlCenter.tsx, DataSourceInstancesTable.tsx, dataSourceModels.ts, and managementDataSources.ts.",
-    "verified_fallbacks": "personaSourceRecord, fallbackPersonaSourceRecord, personaDataSourceRecords, v2ToLegacyRecord, V2DataSourceRow, LegacyDataSourceRow, and PersonaDataSourceRow fall back to 未回報 for missing or nan provider, providerKey, and status."
+    "sanitization": "cleanSourceToken (via sanitizeRawText from src/lib/enumLabels.ts plus adapter missing sentinels 'unknown', 'unknown-source', 'unknown_source', and synthetic 'data-source-N'/'source-N'/'connector-N' fallbacks) strips undefined, null, empty strings, nan, and adapter missing sentinels across DataSourceControlCenter.tsx, DataSourceInstancesTable.tsx, dataSourceModels.ts, and managementDataSources.ts.",
+    "verified_fallbacks": "personaSourceRecord, fallbackPersonaSourceRecord, personaDataSourceRecords, v2ToLegacyRecord, V2DataSourceRow, LegacyDataSourceRow, and PersonaDataSourceRow fall back to 未回報 for missing, nan, or adapter-synthesized unknown provider, providerKey, and lifecycle/health/reconciliation/credential/definition status."
   },
   "acceptance_5_tests": {
     "commands": [
@@ -62,7 +62,7 @@
       "npm run typecheck:app && npm run typecheck:agora"
     ],
     "results": {
-      "DataSourceControlCenter.test.tsx": "4 passed (unavailable with read_timeout in zh-TW and en-US, degraded legacy_projection with translated reason and no 0 counts, successful empty list with 0 and 0/0 counts, and nan-free models/UI reading 未回報)",
+      "DataSourceControlCenter.test.tsx": "6 passed (unavailable with read_timeout in zh-TW and en-US, degraded legacy_projection with translated reason and no 0 counts, non-legacy degraded service_client with generic degraded copy and no legacy claim or 0 counts, real adaptDataSourceV2OrLegacy/adaptDataSource omitted provider & lifecycle fields reading 未回報 instead of unknown, successful empty list with 0 and 0/0 counts, and nan-free models/UI reading 未回報)",
       "DataSourceManagement.test.tsx": "28 passed",
       "managementDataSources.test.ts": "31 passed",
       "i18nParity.test.ts": "17 passed",

@@ -206,9 +206,8 @@ function V2DataSourceRow({
     MISSING_DATA_SOURCE_FIELD_LABEL;
   const providerLabel =
     cleanSourceToken(dto.provider) ||
+    cleanSourceToken(dto.instance?.provider) ||
     cleanSourceToken(dto.definition?.provider) ||
-    cleanSourceToken(dto.source_instance_id) ||
-    cleanSourceToken(dto.connector_id) ||
     MISSING_DATA_SOURCE_FIELD_LABEL;
   const divergence = hasDivergence(dto);
   const allowedActions = dto.allowed_actions || dto.allowedActions;

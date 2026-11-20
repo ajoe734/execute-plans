@@ -654,7 +654,7 @@ describe("managementDataSources client", () => {
       const projected = v2ToLegacyRecord(partialV2Dto);
       expect(projected.providerKey).toBe("conn-partial");
       expect(projected.provider).toBe("PartialProvider");
-      expect(projected.status).toBe("unknown");
+      expect(projected.status).toBe("未回報");
       expect(projected.tone).toBe("muted");
       expect(projected.credentialState).toBe("unknown");
       expect(projected.liveIngestionEnabled).toBe(false);

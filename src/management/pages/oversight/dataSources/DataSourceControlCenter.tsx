@@ -140,7 +140,6 @@ export function personaSourceRecord(
     MISSING_DATA_SOURCE_FIELD_LABEL;
   const provider =
     cleanSourceToken(source.provider) ||
-    cleanSourceToken(source.providerKey) ||
     MISSING_DATA_SOURCE_FIELD_LABEL;
   return {
     providerKey,
@@ -295,7 +294,16 @@ export function DataSourceControlCenter() {
   const v2Sources = useMemo(() => rawItems.filter(isV2), [rawItems]);
 
   const legacyRecords: SystemDataSourceRecord[] = useMemo(() => {
-    return rawItems.map((item) => (isV2(item) ? v2ToLegacyRecord(item) : (item as SystemDataSourceRecord)));
+    return rawItems.map((item) => {
+      if (isV2(item)) return v2ToLegacyRecord(item);
+      const rec = item as SystemDataSourceRecord;
+      return {
+        ...rec,
+        providerKey: cleanSourceToken(rec.providerKey) || MISSING_DATA_SOURCE_FIELD_LABEL,
+        provider: cleanSourceToken(rec.provider) || MISSING_DATA_SOURCE_FIELD_LABEL,
+        status: cleanSourceToken(rec.status) || MISSING_DATA_SOURCE_FIELD_LABEL,
+      };
+    });
   }, [rawItems]);
 
   const focusedPersona = useMemo(
@@ -769,7 +777,9 @@ export function DataSourceControlCenter() {
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-foreground">
-                      {t("mgmt.dataSources.degradedLegacyBannerTitle")}
+                      {surfaceState.isLegacyProjection
+                        ? t("mgmt.dataSources.degradedLegacyBannerTitle")
+                        : t("mgmt.dataSources.degradedBannerTitle")}
                     </span>
                     <Badge variant="outline" className={toneClass.warn}>
                       {translatedSurfaceStatus}
@@ -786,7 +796,9 @@ export function DataSourceControlCenter() {
                     </div>
                   )}
                   <p className="text-muted-foreground">
-                    {t("mgmt.dataSources.degradedLegacyBannerDesc")}
+                    {surfaceState.isLegacyProjection
+                      ? t("mgmt.dataSources.degradedLegacyBannerDesc")
+                      : t("mgmt.dataSources.degradedBannerDesc")}
                   </p>
                 </div>
               </Card>

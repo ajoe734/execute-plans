@@ -404,6 +404,10 @@ describe("Pack PM-i18n parity", () => {
   it("includes data source surface status, reason, legacy_projection, and notReported keys in both locales", () => {
     const dataSourceSurfaceKeys = [
       "mgmt.dataSources.notReported",
+      "mgmt.dataSources.degradedBannerTitle",
+      "mgmt.dataSources.degradedBannerDesc",
+      "mgmt.dataSources.degradedLegacyBannerTitle",
+      "mgmt.dataSources.degradedLegacyBannerDesc",
       "mgmt.dataSources.surfaceStateFmt",
       "mgmt.dataSources.surfaceReasonFmt",
       "mgmt.dataSources.surfaceSourceFmt",
@@ -422,6 +426,8 @@ describe("Pack PM-i18n parity", () => {
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
     expect(zh.mgmt.dataSources.notReported).toBe("未回報");
+    expect(zh.mgmt.dataSources.degradedBannerTitle).toBe("資料源表面降級");
+    expect(en.mgmt.dataSources.degradedBannerTitle).toBe("Data Source Surface Degraded");
     expect(zh.enumLabels.reasons.read_timeout).toBe("上游讀取逾時");
     expect(en.enumLabels.reasons.read_timeout).toBe("Upstream read timed out");
   });

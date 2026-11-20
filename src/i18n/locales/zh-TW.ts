@@ -4095,6 +4095,8 @@ export default {
       emptyBody: "此環境目前尚未設定任何資料源。點擊「新增資料源」以註冊新的連接器實例。",
       liveDataUnavailableTitle: "目前沒有 live 資料源資料",
       liveDataUnavailableBody: "此頁不顯示 demo、seed 或非正式資料源列。",
+      degradedBannerTitle: "資料源表面降級",
+      degradedBannerDesc: "資料源表面目前處於降級狀態；在完成即時驗證前，未確認的計數不會顯示為 0。",
       degradedLegacyBannerTitle: "舊版相容投影模式",
       degradedLegacyBannerDesc: "部分資料源紀錄來自舊版 Fleet 狀態投影，未包含完整 V2 生命週期屬性。",
       notReported: "未回報",

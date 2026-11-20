@@ -55,11 +55,25 @@ export const toneClass: Record<HealthTone, string> = {
   muted: "bg-muted text-muted-foreground border-border",
 };
 
+const ADAPTER_MISSING_SENTINELS = new Set([
+  "unknown",
+  "unknown-source",
+  "unknown_source",
+]);
+const ADAPTER_SYNTHETIC_ID_RE = /^(?:data-source|source|connector)-\d+$/i;
+
 export function cleanSourceToken(value?: string | null): string | undefined {
-  return sanitizeRawText(value);
+  const cleaned = sanitizeRawText(value);
+  if (!cleaned) return undefined;
+  if (ADAPTER_MISSING_SENTINELS.has(cleaned.toLowerCase())) return undefined;
+  if (ADAPTER_SYNTHETIC_ID_RE.test(cleaned)) return undefined;
+  return cleaned;
 }
 
-export function fmtToken(value?: string | null, fallback = "—"): string {
+export function fmtToken(
+  value?: string | null,
+  fallback = MISSING_DATA_SOURCE_FIELD_LABEL,
+): string {
   const cleaned = cleanSourceToken(value);
   if (!cleaned) return fallback;
   return cleaned.replace(/_/g, " ");
@@ -192,12 +206,12 @@ export function receiptStatusTone(status?: string): HealthTone {
 }
 
 export function hasDivergence(dto: ManagementDataSourceV2DTO): boolean {
-  const desiredLife = dto.desired?.desired_lifecycle?.toLowerCase();
-  const effectiveLife = dto.observed?.effective_lifecycle?.toLowerCase();
+  const desiredLife = cleanSourceToken(dto.desired?.desired_lifecycle)?.toLowerCase();
+  const effectiveLife = cleanSourceToken(dto.observed?.effective_lifecycle)?.toLowerCase();
   if (desiredLife && effectiveLife && desiredLife !== effectiveLife) {
     return true;
   }
-  const recon = dto.observed?.reconciliation_status?.toLowerCase();
+  const recon = cleanSourceToken(dto.observed?.reconciliation_status)?.toLowerCase();
   if (recon === "diverged" || recon === "failed") {
     return true;
   }
@@ -224,6 +238,7 @@ export function v2ToLegacyRecord(
   const status =
     cleanSourceToken(v2.observed?.effective_lifecycle) ||
     cleanSourceToken(v2.instance?.lifecycle_state) ||
+    cleanSourceToken(v2.desired?.desired_lifecycle) ||
     fallbackLabel;
   const health = cleanSourceToken(v2.observed?.health_state) || "unknown";
   const tone: HealthTone =
@@ -247,8 +262,8 @@ export function v2ToLegacyRecord(
     fallbackLabel;
   const provider =
     cleanSourceToken(v2.provider) ||
+    cleanSourceToken(v2.instance?.provider) ||
     cleanSourceToken(v2.definition?.provider) ||
-    cleanSourceToken(v2.source_instance_id) ||
     fallbackLabel;
   const sourceClass = cleanSourceToken(v2.source_class);
 

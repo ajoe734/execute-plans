@@ -4114,6 +4114,8 @@ export default {
       emptyBody: "No data source instances are currently configured in this environment. Click 'Add Data Source' to register a new connector instance.",
       liveDataUnavailableTitle: "Live data sources unavailable",
       liveDataUnavailableBody: "This page does not render demo, seed, or non-production data source rows.",
+      degradedBannerTitle: "Data Source Surface Degraded",
+      degradedBannerDesc: "The data source surface is currently degraded; unverified counts are not shown as 0 until live readback recovers.",
       degradedLegacyBannerTitle: "Legacy Compatibility Projection Mode",
       degradedLegacyBannerDesc: "Data source rows are projected from legacy fleet state without full V2 lifecycle attributes.",
       notReported: "未回報",
