@@ -23,6 +23,7 @@ import { OpenClawLlmAuthPanel } from "@/management/components/openclaw/OpenClawL
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
+import { reasonCodeDisplay, resolveEnumLabel, statusLabel } from "@/lib/enumLabels";
 import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxList,
 } from "@/lib/v5/management/humanInbox";
@@ -1284,22 +1285,59 @@ export const PersonaFleetPage = () => {
                     })()}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2" data-testid={`fleet-cycle-health-${r.personaId}`}>
-                    {r.personaCycleHealth && r.personaCycleHealth.status !== "unavailable" ? (
-                      <span title={r.personaCycleHealth.failureReason ?? undefined}>
-                        <Badge variant="outline">{r.personaCycleHealth.status}</Badge>
-                        {r.personaCycleHealth.stage ? (
-                          <span className="ml-1 font-mono text-xs text-muted-foreground">{r.personaCycleHealth.stage}</span>
-                        ) : null}
-                        {r.personaCycleHealth.failureReason ? (
-                          <span className="ml-1 font-mono text-xs text-destructive">({r.personaCycleHealth.failureReason})</span>
-                        ) : null}
-                      </span>
-                    ) : (
+                    {r.personaCycleHealth && r.personaCycleHealth.status !== "unavailable" ? (() => {
+                      const cycleStatus = resolveEnumLabel("status", r.personaCycleHealth.status, t);
+                      const cycleStage = r.personaCycleHealth.stage
+                        ? statusLabel(r.personaCycleHealth.stage, t)
+                        : "";
+                      const failureReason = r.personaCycleHealth.failureReason
+                        ? reasonCodeDisplay(r.personaCycleHealth.failureReason, t)
+                        : null;
+                      return (
+                        <span title={r.personaCycleHealth.failureReason ?? undefined}>
+                          <Badge variant="outline" className={cycleStatus.badgeClass}>
+                            {cycleStatus.label}
+                          </Badge>
+                          {cycleStage ? (
+                            <>
+                              {" "}
+                              <span className="ml-1 text-xs text-muted-foreground">{cycleStage}</span>
+                            </>
+                          ) : null}
+                          {failureReason ? (
+                            <>
+                              {" "}
+                              <span className="ml-1 text-xs text-destructive">{failureReason.text}</span>
+                              {failureReason.code && (
+                                <>
+                                  {" "}
+                                  <code className="ml-1 font-mono text-[11px] text-muted-foreground">
+                                    ({failureReason.code})
+                                  </code>
+                                </>
+                              )}
+                            </>
+                          ) : null}
+                        </span>
+                      );
+                    })() : (
                       <span className="text-xs text-muted-foreground">
                         {t("mgmt.fleet.cycleUnavailable", { defaultValue: "無法讀取" })}
-                        {r.personaCycleHealth?.failureReason ? (
-                          <span className="ml-1 font-mono">({r.personaCycleHealth.failureReason})</span>
-                        ) : null}
+                        {r.personaCycleHealth?.failureReason ? (() => {
+                          const failureReason = reasonCodeDisplay(r.personaCycleHealth.failureReason, t);
+                          return (
+                            <>
+                              {" "}
+                              <span className="ml-1">{failureReason.text}</span>
+                              {failureReason.code && (
+                                <>
+                                  {" "}
+                                  <code className="ml-1 font-mono text-[11px]">({failureReason.code})</code>
+                                </>
+                              )}
+                            </>
+                          );
+                        })() : null}
                       </span>
                     )}
                   </td>
@@ -1373,6 +1411,9 @@ export const HumanInboxPage = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const [expandedSummaries, setExpandedSummaries] = useState<Record<string, boolean>>({});
+  const toggleSummary = (id: string) =>
+    setExpandedSummaries((prev) => ({ ...prev, [id]: !prev[id] }));
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
@@ -1574,7 +1615,30 @@ export const HumanInboxPage = () => {
               <Badge variant="outline">{t("mgmt.inbox.requiredRoleFmt", { role: it.requiredRole })}</Badge>
             )}
           </div>
-          {it.summary && <p className="mt-2 text-sm text-muted-foreground">{it.summary}</p>}
+          {it.summary && (() => {
+            const isExpanded = Boolean(expandedSummaries[it.id]);
+            return (
+              <div className="mt-2">
+                <p
+                  data-testid={`inbox-summary-${it.id}`}
+                  className={`text-sm text-muted-foreground break-words ${isExpanded ? "" : "line-clamp-3"}`}
+                >
+                  {it.summary}
+                </p>
+                <button
+                  type="button"
+                  data-testid={`inbox-summary-toggle-${it.id}`}
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleSummary(it.id)}
+                  className="mt-1 text-xs font-medium text-primary hover:underline"
+                >
+                  {isExpanded
+                    ? t("mgmt.inbox.collapseSummary", { defaultValue: "Show less" })
+                    : t("mgmt.inbox.expandSummary", { defaultValue: "Show more" })}
+                </button>
+              </div>
+            );
+          })()}
           {/* The consequence triplet only exists on the legacy shape; live
               governance items carry a summary instead. */}
           {(it.consequenceIfApproved || it.consequenceIfRejected || it.consequenceIfIgnored) && (

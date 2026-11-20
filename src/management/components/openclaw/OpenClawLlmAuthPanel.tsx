@@ -24,7 +24,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import { cn } from "@/lib/utils";
+import { useT } from "@/platform/hooks";
 import {
   activateAssistantControlMode,
   fetchAssistantModeStatus,
@@ -880,6 +882,7 @@ function ProviderCard({
   onSubmitReauthCode: (key: string, session: AssistantProviderReauthSession, code: string) => Promise<void>;
 }) {
   const id = providerId(provider);
+  const t = useT();
   const key = reauthStateKey(provider);
   const authStatus = providerAuthStatus(provider);
   const authSuccessful = isSuccessfulStatus(authStatus, provider.ready);
@@ -926,12 +929,12 @@ function ProviderCard({
             )}
             <Info label="limit" value={formatMetric(usageValue(usage, "limit"), unit)} />
             <Info label="reset" value={usageReset(usage)} />
-            <Info className="col-span-2" label="quota source" value={usageValue(usage, "source", "status", "reason") || "unknown"} />
+            <ReasonInfo className="col-span-2" label="quota source" rawReason={usageValue(usage, "source", "status", "reason") || "unknown"} t={t} />
             <Info className="col-span-2" label="checked" value={provider.checkedAt ?? "unknown"} />
           </>
         )}
         {providerReason(provider) && (
-          <Info className="col-span-2" label="reason" value={providerReason(provider)} />
+          <ReasonInfo className="col-span-2" label="reason" rawReason={providerReason(provider)} t={t} />
         )}
       </dl>
 
@@ -1116,6 +1119,7 @@ function ProviderReauthPanel({
 }
 
 function AdapterStatusCard({ provider }: { provider: AssistantProviderReadinessStatus }) {
+  const t = useT();
   const status = providerAuthStatus(provider);
   const successful = isSuccessfulStatus(status, provider.ready);
   const pending = isPendingStatus(status);
@@ -1141,9 +1145,9 @@ function AdapterStatusCard({ provider }: { provider: AssistantProviderReadinessS
         <Info label="status" value={provider.status ?? "unknown"} />
         <Info label="mount" value={provider.mountMode ?? "unknown"} />
         <Info label="checked" value={provider.checkedAt ?? "unknown"} />
-        <Info label="source" value={provider.source ?? "unknown"} />
+        <ReasonInfo label="source" rawReason={provider.source ?? "unknown"} t={t} />
         {providerReason(provider) && (
-          <Info className="col-span-2 sm:col-span-4" label="reason" value={providerReason(provider)} />
+          <ReasonInfo className="col-span-2 sm:col-span-4" label="reason" rawReason={providerReason(provider)} t={t} />
         )}
       </dl>
     </article>
@@ -1213,6 +1217,7 @@ function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummary
 }
 
 function UsageHistoryRow({ provider }: { provider: AssistantProviderUsageSummaryRow }) {
+  const t = useT();
   const quota = recordFrom(provider.quota);
   const observed = recordFrom(provider.observedUsage);
   const models = provider.models ?? [];
@@ -1247,7 +1252,7 @@ function UsageHistoryRow({ provider }: { provider: AssistantProviderUsageSummary
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
         <Info label="usage source" value={observedSource} />
         <Info label="observed at" value={observedAt} />
-        <Info label="quota source" value={usageValue(quota, "source") || "unknown"} />
+        <ReasonInfo label="quota source" rawReason={usageValue(quota, "source") || "unknown"} t={t} />
         <Info label="remaining" value={usageRemaining(quota)} />
         <Info label="quota used" value={formatMetric(usageValue(quota, "used"), usageValue(quota, "unit"))} />
         <Info label="prompt bytes" value={formatNumber(provider.promptBytes)} />
@@ -1274,6 +1279,35 @@ function Info({ label, value, className }: { label: string; value: string; class
     <div className={className}>
       <dt className="text-[10px] font-medium uppercase tracking-normal text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 break-words text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function ReasonInfo({
+  label,
+  rawReason,
+  t,
+  className,
+}: {
+  label: string;
+  rawReason: string;
+  t: ReturnType<typeof useT>;
+  className?: string;
+}) {
+  const display = reasonCodeDisplay(rawReason, t);
+  const showCode = Boolean(display.code && display.code !== display.text);
+  return (
+    <div className={className}>
+      <dt className="text-[10px] font-medium uppercase tracking-normal text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-words text-foreground">
+        <span>{display.text}</span>
+        {showCode && (
+          <>
+            {" "}
+            <code className="ml-1 font-mono text-[11px] text-muted-foreground">{display.code}</code>
+          </>
+        )}
+      </dd>
     </div>
   );
 }

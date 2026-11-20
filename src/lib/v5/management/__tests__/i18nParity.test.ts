@@ -371,4 +371,33 @@ describe("Pack PM-i18n parity", () => {
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
   });
+
+  it("includes capabilities.actions.disabledReason, common.notReported, inbox summary toggle, and enumLabels keys in both locales", () => {
+    const labelKeys = [
+      "capabilities.actions.disabledReason",
+      "common.notReported",
+      "mgmt.inbox.expandSummary",
+      "mgmt.inbox.collapseSummary",
+      "status.resolved",
+      "status.completed",
+      "status.executed",
+      "status.canceled",
+      "status.refused",
+      "status.convened",
+      "enumLabels.reasons.tool_record_unavailable__no_proposal_submitted",
+      "enumLabels.reasons.insufficient_participants",
+      "enumLabels.reasons.codex_mount_missing_credentials",
+      "enumLabels.reasons.claude_mount_missing_credentials",
+      "enumLabels.reasons.answer_probe_not_run",
+      "enumLabels.lineageEdges.source_strategy_spec",
+      "enumLabels.lineageEdges.source_run",
+      "enumLabels.lineageEdges.capital_pool",
+    ];
+    for (const k of labelKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+    expect(zh.status.resolved).toBe("已解決");
+    expect(en.status.resolved).toBe("Resolved");
+  });
 });

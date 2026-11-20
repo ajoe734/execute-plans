@@ -114,10 +114,10 @@ function fleetRowToRuntime(row: ManagementPersonaFleetRow): FleetRuntimeRow | nu
   if (!runtimeId && !bindingId) return null;
   const deploymentStage = fleetDeploymentStage(row);
   const id = runtimeId ?? bindingId ?? row.personaId;
-  const kind = deploymentStage ?? "nan";
+  const kind = deploymentStage ?? "";
   return {
     id,
-    name: runtimeId ?? bindingId ?? "nan",
+    name: runtimeId ?? bindingId ?? "",
     kind: kind as RuntimeListItem["kind"],
     runtimeKind: kind,
     runtime_kind: kind,

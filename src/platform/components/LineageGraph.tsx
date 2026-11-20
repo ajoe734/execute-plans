@@ -2,6 +2,7 @@
 // Auto-layouts nodes by depth (BFS layer) and renders SVG. No external deps.
 import { useMemo } from "react";
 import type { RiskLevel } from "@/lib/bff-v1";
+import { lineageEdgeLabel, statusLabel } from "@/lib/enumLabels";
 import { LINEAGE_NODE_LIMITS } from "@/lib/v4/uiBudgets";
 import { useT } from "@/platform/hooks";
 
@@ -140,14 +141,23 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
 }
 
 export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Props) => {
-  const { positions, width, height, colGap } = useMemo(() => layout(nodes, edges), [nodes, edges]);
-  const h = Math.max(minH, height);
   const t = useT();
+  const displayEdges = useMemo(
+    () =>
+      edges.map((e) => ({
+        ...e,
+        rawLabel: e.label,
+        label: e.label ? lineageEdgeLabel(e.label, t) : e.label,
+      })),
+    [edges, t],
+  );
+  const { positions, width, height, colGap } = useMemo(() => layout(nodes, displayEdges), [nodes, displayEdges]);
+  const h = Math.max(minH, height);
   const textMaxPx = NODE_W - 2 * NODE_PAD_X;
 
   const labelPos = useMemo(() => {
     const items: { key: number; cx: number; cy: number; label: string }[] = [];
-    edges.forEach((e, i) => {
+    displayEdges.forEach((e, i) => {
       const a = positions.get(e.from); const b = positions.get(e.to);
       if (!a || !b || !e.label) return;
       items.push({
@@ -160,7 +170,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
       });
     });
     return placeEdgeLabels(items);
-  }, [edges, positions, colGap]);
+  }, [displayEdges, positions, colGap]);
 
   if (nodes.length === 0) {
     return (
@@ -206,7 +216,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
           </marker>
         </defs>
 
-        {edges.map((e, i) => {
+        {displayEdges.map((e, i) => {
           const a = positions.get(e.from); const b = positions.get(e.to);
           if (!a || !b) return null;
           const lp = labelPos.get(i);
@@ -220,7 +230,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
               data-testid={`lineage-edge-${e.from}-${e.to}`}
               data-edge-from={e.from}
               data-edge-to={e.to}
-              data-edge-label={e.label ?? ""}
+              data-edge-label={e.rawLabel ?? ""}
             >
               <path d={d} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="1.25" markerEnd="url(#lin-arrow)" opacity={0.6} />
               {e.label && (
@@ -239,6 +249,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
           const p = positions.get(n.id); if (!p) return null;
           const fill = n.risk ? (riskFill[n.risk] ?? "hsl(var(--card))") : "hsl(var(--card))";
           const typeLabel = n.type || "unknown";
+          const displayState = n.state ? statusLabel(n.state, t) : "";
           return (
             <g key={n.id} transform={`translate(${p.x},${p.y})`}
                data-testid={`lineage-node-${n.id}`}
@@ -254,7 +265,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
                 strokeWidth={n.highlight ? 1.6 : 1} />
               <title>{`${n.label}\n${n.id}`}</title>
               <text x={NODE_PAD_X} y={18} fontSize="10" className="fill-muted-foreground"
-                style={{ fontFamily: "ui-monospace, monospace" }}>{fitText(`${typeLabel}${n.state ? ` · ${n.state}` : ""}`, textMaxPx, MONO_CHAR_PX)}</text>
+                style={{ fontFamily: "ui-monospace, monospace" }}>{fitText(`${typeLabel}${displayState ? ` · ${displayState}` : ""}`, textMaxPx, MONO_CHAR_PX)}</text>
               <text x={NODE_PAD_X} y={36} fontSize="12" className="fill-foreground" fontWeight={500}
                 data-node-label>
                 {fitText(n.label, textMaxPx, LABEL_CHAR_PX)}
