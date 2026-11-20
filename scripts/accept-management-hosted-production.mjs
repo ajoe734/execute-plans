@@ -477,7 +477,8 @@ async function crawlRoute(page, route, { source, transport }) {
     mockFindings: findings.mock,
     detailHonestyViolations: findings.honesty,
     textSampleLen: bodyText.trim().length,
-    readability: readabilityResult(route.path, bodyText),
+    // typeof guard: the attribution harness evaluates this file with imports stripped.
+    readability: typeof readabilityResult === "function" ? readabilityResult(route.path, bodyText) : null,
   };
 }
 
