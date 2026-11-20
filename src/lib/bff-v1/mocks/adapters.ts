@@ -92,11 +92,15 @@ export function bootstrapMockAdapters(): void {
         items: [
           {
             journey_id: "tj_001",
-            symbol: "AAPL",
-            side: "BUY",
+            persona_id: "persona-mock-1",
+            persona_name: "澄川｜2317 台股 Paper 學習 R2",
+            symbol: "2317.TWSE",
+            side: "buy",
             quantity: 100,
-            current_stage: "fill",
+            current_stage: "reconciliation",
             status: "completed",
+            outcome: { kind: "normal", reason_code: null, reason_detail: null },
+            next_step: null,
             updated_at: new Date().toISOString(),
           },
         ],
