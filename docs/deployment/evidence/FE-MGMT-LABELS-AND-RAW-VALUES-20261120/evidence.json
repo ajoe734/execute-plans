@@ -54,11 +54,34 @@
     "lineage": "LineageGraph.tsx localizes edge labels and node states via enumLabels while keeping column-gap layout synchronized with displayed label width."
   },
   "verification": {
-    "typecheck": "tsc --noEmit (0 errors)",
+    "typecheck": "npm run typecheck:app && npm run typecheck:agora (0 errors)",
+    "full_suite_totals": "npm run test: 281 test files passed (281), 3256 tests passed (3256)",
+    "four_test_failure_decisions": [
+      {
+        "test": "src/management/pages/PersonaDetail.test.ts — renders canonical lifecycleStatus research_only instead of contradictory legacy draft state while preserving paper readiness",
+        "decision": "display_text_only (updated expectation in test)",
+        "rationale": "StatusBadge now localizes research_only to 僅供研究 (zh-TW) / Research Only (en-US) via enumLabels instead of printing the raw untranslated enum research_only. Canonical lifecycleStatus still wins over legacy draft (草稿) and paper readiness (0/5, 未升級) is preserved."
+      },
+      {
+        "test": "src/test/governance-owner-readonly-detail.test.tsx — displays canonical state as unknown and renders decision buttons non-actionable for unknown owner states",
+        "decision": "display_text_only (updated expectation in test)",
+        "rationale": "In en-US, StatusBadge now renders localized Unknown (capitalized, matching Pending/Approved) for state='unknown' while the Canonical State mono field renders unknown and the decision panel renders 'Already unknown.' with approve/reject buttons non-actionable. Updated getAllByText to /^unknown$/i (>= 2)."
+      },
+      {
+        "test": "src/management/pages/CapitalPoolDetail.test.tsx — renders unavailable badges and placeholders when status and currency are missing or unknown",
+        "decision": "behaviour_regression_fixed_in_code (fixed StatusBadge.tsx; test unchanged)",
+        "rationale": "StatusBadge.tsx had replaced the empty/missing state fallback with '—' instead of the unavailable label. Restored label ?? statusLabel('unavailable', t) ('無資料' in zh-TW, 'Unavailable' in en-US) when !cleanState so missing/unknown status and risk each render an Unavailable badge (2 total) and CapitalPoolDetail.test.tsx passes unchanged."
+      },
+      {
+        "test": "src/management/pages/phase2/LineageExplorer.test.tsx — filters Strategy, Persona, Artifact, CapitalPool, Experiment, and Dataset nodes and removes incident edges while keeping unknown types visible and labelled",
+        "decision": "display_text_only (updated expectation in test)",
+        "rationale": "LineageGraph.tsx localizes node state ('draft' -> '草稿' in zh-TW / 'Draft' in en-US) while keeping unknown node type feature_set visible and labelled (data-node-type='feature_set', text 'feature_set · 草稿'). Updated expectation to /feature_set · (草稿|Draft)/i."
+      }
+    ],
     "unit_tests": [
+      "npm run test (281 test files passed, 3256 tests passed)",
       "vitest run src/lib/__tests__/enumLabels.test.ts src/platform/components/StatusBadge.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/platform/components/LineageGraph.test.tsx src/management/pages/Runtimes.test.tsx src/management/components/openclaw/OpenClawLlmAuthPanel.test.tsx src/management/pages/meetings/meetings.test.tsx (7 test files, 61 tests passed)",
-      "vitest run src/management/pages/Operations.test.tsx src/management/pages/ObjectListPage.test.tsx src/management/pages/Lists.test.tsx src/lib/bff-v1/__tests__/domainReads.allPages.test.ts (4 test files, 92 tests passed)",
-      "vitest run src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/oversight/PersonaFleetPage.test.tsx src/management/pages/oversight/EvolutionJournalPage.test.tsx src/management/pages/oversight/_core.test.ts src/management/pages/centers/GovernanceDecisionsPage.test.tsx (5 test files, 115 tests passed)"
+      "vitest run src/management/pages/PersonaDetail.test.ts src/test/governance-owner-readonly-detail.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/phase2/LineageExplorer.test.tsx (4 test files, 45 tests passed)"
     ]
   },
   "residual_findings": [

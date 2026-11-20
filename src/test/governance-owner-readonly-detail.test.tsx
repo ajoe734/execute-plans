@@ -221,7 +221,7 @@ describe("GovernanceReview owner-bound read-only detail", () => {
     renderReview(caseId);
 
     expect(await screen.findByText("Unknown State Case")).toBeInTheDocument();
-    expect(screen.getAllByText("unknown").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/^unknown$/i).length).toBeGreaterThanOrEqual(2);
     // Approve and reject buttons MUST NOT be rendered
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reject/i })).not.toBeInTheDocument();

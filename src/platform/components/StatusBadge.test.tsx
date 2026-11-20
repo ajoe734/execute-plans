@@ -104,7 +104,7 @@ describe("StatusBadge and RiskBadge one-line layout classes", () => {
         <StatusBadge state="nan" />
       </I18nextProvider>,
     );
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("無資料")).toBeInTheDocument();
     expect(screen.queryByText(/nan/i)).not.toBeInTheDocument();
   });
 });

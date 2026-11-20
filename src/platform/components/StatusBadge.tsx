@@ -11,7 +11,7 @@ export const StatusBadge = ({ state, label, className }: { state?: string; label
         variant="outline"
         className={`whitespace-nowrap font-medium border-dashed bg-muted/40 text-muted-foreground ${className || ""}`}
       >
-        {label ?? "—"}
+        {label ?? statusLabel("unavailable", t)}
       </Badge>
     );
   }
