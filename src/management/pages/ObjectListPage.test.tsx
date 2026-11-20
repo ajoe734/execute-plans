@@ -2614,4 +2614,28 @@ describe("ObjectListPage", () => {
     );
     expect(container.textContent).not.toContain("capabilities.actions.disabledReason");
   });
+
+  it("renders the entity display name as primary text and moves the raw id to secondary monospace text when id differs from name", () => {
+    mocks.useLiveListV1.mockReturnValue({
+      items: [
+        {
+          id: "persona-be19a1fac471247f2b2a",
+          name: "青禾｜2330 台股 Paper 學習 R2",
+          state: "approved",
+          risk: "low",
+          owner: "operator",
+          updatedAt: "2026-11-20T08:00:00Z",
+        },
+      ],
+      pending: 0,
+      refresh: vi.fn(),
+      meta: {},
+    });
+
+    renderObjectList();
+
+    expect(screen.getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+    const idCode = screen.getByText("persona-be19a1fac471247f2b2a");
+    expect(idCode).toHaveClass("font-mono", "text-xs", "text-muted-foreground");
+  });
 });

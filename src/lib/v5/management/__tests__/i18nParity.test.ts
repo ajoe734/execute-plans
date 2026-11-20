@@ -475,4 +475,49 @@ describe("Pack PM-i18n parity", () => {
     expect(enKeys.has("mgmt.personaIntent.rawRecordLabel")).toBe(false);
     expect(zhKeys.has("mgmt.personaIntent.rawRecordLabel")).toBe(false);
   });
+
+  it("includes display name missing, localized incident summary and timeline, and test-persona strategy filter keys in both locales (FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120)", () => {
+    const newKeys = [
+      "common.nameMissing",
+      "common.copyId",
+      "strategy.list.hiddenTestPersonaStrategiesWithCount",
+      "strategy.list.hiddenTestPersonaStrategiesNoCount",
+      "strategy.list.showingTestPersonaStrategies",
+      "strategy.list.showTestPersonaStrategiesWithCount",
+      "strategy.list.showTestPersonaStrategiesNoCount",
+      "strategy.list.hideTestPersonaStrategies",
+      "incident.evidenceTimeline",
+      "incident.humanSummary.drift_threshold_breach",
+      "incident.humanSummary.drift_detected",
+      "incident.humanSummary.threshold_breach",
+      "incident.humanSummary.infrastructure_degradation",
+      "incident.humanSummary.agent_finding",
+      "incident.humanSummary.deployment",
+      "incident.humanSummary.generic",
+      "incident.humanSummary.deltaFmt",
+      "incident.humanSummary.occurrencesManyWithLatestFmt",
+      "incident.humanSummary.occurrencesManyFmt",
+      "incident.humanSummary.occurrencesSingleFmt",
+      "incident.humanSummary.occurrencesCountOnlyFmt",
+      "incident.timelineSummary.drift_occurrence",
+      "incident.timelineSummary.agent_finding_occurrence",
+      "incident.timelineSummary.infrastructure_occurrence",
+      "incident.timelineSummary.occurrence",
+      "incident.timelineSummary.resolved",
+      "mgmt.attribution.hiddenTestPersonaStrategiesFmt",
+      "mgmt.attribution.hiddenTestPersonaStrategiesOnlyFmt",
+      "mgmt.attribution.showingTestPersonasNotice",
+      "mgmt.attribution.showTestPersonasFmt",
+      "mgmt.attribution.showTestPersonas",
+      "mgmt.attribution.hideTestPersonas",
+    ];
+    for (const k of newKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+    expect(en.common.nameMissing).toBe("Name missing");
+    expect(zh.common.nameMissing).toBe("名稱未登記");
+    expect(en.incident.evidenceTimeline).toBe("Evidence timeline");
+    expect(zh.incident.evidenceTimeline).toBe("證據時間軸");
+  });
 });

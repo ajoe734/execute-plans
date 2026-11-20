@@ -10,7 +10,7 @@
 // (jobs, runtimes, alerts, incidents, approvals, audit, mcpTools) so all
 // canonical Management read surfaces have a real adapter when live mode is on.
 
-import type { Alert, Incident } from "./dto";
+import type { Alert, Incident, ResearchTask } from "./dto";
 import type { ListEnvelope } from "./dto";
 import { bffFetch } from "./client";
 import { paths } from "./paths";
@@ -442,6 +442,27 @@ export const LIST_CLASS_BY_KEY = {
   approvals: "governanceQueue",
   audit: "auditFeed",
 } as const satisfies Record<string, ListClass>;
+
+export interface ResearchListOptions {
+  includeNonReal?: boolean;
+}
+
+export async function listResearchTasksEnvelope(
+  options?: ResearchListOptions,
+): Promise<ListEnvelope<ResearchTask>> {
+  const data = await bffFetch<unknown>({
+    method: "GET",
+    path: paths.researchTasks(),
+    query: { include_non_real: options?.includeNonReal ? "true" : "false" },
+  });
+  const env = normalizeLiveListResponse<unknown>(data, "entityRegistry");
+  const all = env.items
+    .map((item) => normalizeResearchTask(item))
+    .filter((item): item is ResearchTask => Boolean(item));
+  const items = options?.includeNonReal ? all : all.filter((row) => row.is_non_real !== true);
+  return { ...env, items, pageSize: items.length } as ListEnvelope<ResearchTask>;
+}
+
 
 /** Canonical entity → loader map.
  *  BFF-LUV-FE-002 covers all Management Console route families with real
