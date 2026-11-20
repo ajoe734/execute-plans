@@ -950,6 +950,9 @@ jobs:
           set -o pipefail
           npm run lint 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-lint.log"
 
+      - name: Install Playwright browsers before unit tests
+        run: npx --no-install playwright install chromium chromium-headless-shell
+
       - name: Unit / integration tests
         id: test
         continue-on-error: true

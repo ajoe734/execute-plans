@@ -9,6 +9,38 @@ export interface StrategyRuleDisplayResult {
   kind: StrategyRuleDisplayKind;
   text: string;
   rawKind?: string;
+  /** For unsupported kinds: every parameter key and value, so nothing is hidden. */
+  params?: Array<{ key: string; value: string }>;
+}
+
+function stringifyValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/** Every key/value of the rule's strategy_logic (beyond kind) and parameters, verbatim. */
+export function listRuleParameters(
+  rule: Partial<StrategyRule> | null | undefined,
+): Array<{ key: string; value: string }> {
+  const out: Array<{ key: string; value: string }> = [];
+  const logic = rule?.strategyLogic && typeof rule.strategyLogic === "object" ? rule.strategyLogic : null;
+  const params = rule?.parameters && typeof rule.parameters === "object" ? rule.parameters : null;
+  for (const [k, v] of Object.entries(logic ?? {})) {
+    if (k === "kind") continue;
+    out.push({ key: `strategy_logic.${k}`, value: stringifyValue(v) });
+  }
+  for (const [k, v] of Object.entries(params ?? {})) out.push({ key: k, value: stringifyValue(v) });
+  return out;
+}
+
+/** Symbols the rule trades (parameters.symbols), for display beside the sentence. */
+export function ruleSymbols(rule: Partial<StrategyRule> | null | undefined): string[] {
+  const s = rule?.parameters?.symbols;
+  return Array.isArray(s) ? s.filter((x): x is string => typeof x === "string") : [];
 }
 
 const ZH_ACTION_LABELS: Readonly<Record<string, string>> = {
@@ -36,6 +68,7 @@ export function isRollbackBaselineRule(
   rule: Partial<StrategyRule> | null | undefined,
 ): boolean {
   if (!rule) return false;
+  if (rule.role === "pool_member" || rule.role === "pool_envelope") return false;
   if (rule.role === "rollback_baseline") return true;
   const logic =
     rule.strategyLogic && typeof rule.strategyLogic === "object"
@@ -93,6 +126,7 @@ export function formatStrategyRuleResult(
     return {
       kind: "unsupported",
       rawKind,
+      params: listRuleParameters(rule),
       text: isZh
         ? `不支援的規則類型：${rawKind}`
         : `Unsupported rule kind: ${rawKind}`,
@@ -139,6 +173,7 @@ export function formatStrategyRuleResult(
     return {
       kind: "unsupported",
       rawKind,
+      params: listRuleParameters(rule),
       text: isZh
         ? `不支援的規則類型：${rawKind}`
         : `Unsupported rule kind: ${rawKind}`,
