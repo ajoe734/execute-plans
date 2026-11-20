@@ -1,3 +1,4 @@
+import { statusLabel, statusTone, type EnumTone } from "@/lib/enumLabels";
 import type { JourneyOutcome, JourneyRow } from "@/lib/bff-v1/tradeJourneys";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
@@ -13,6 +14,9 @@ export const KNOWN_REASON_CODES = [
   "broker_record_missing", "broker_fill_mismatch", "position_variance", "cash_variance", "broker_unavailable_at_reconciliation",
   "reason_not_recorded",
 ] as const;
+
+/** Expression-policy choice codes: how the order was expressed, not why it was rejected. */
+export const EXPRESSION_CHOICE_CODES = ["long_cash", "long_lever", "short_via_future", "close_leg"] as const;
 
 export function formatAmount(value: unknown): string {
   const n = typeof value === "number" ? value : Number(value);
@@ -49,6 +53,8 @@ const asRecord = (value: unknown): Detail | undefined => value && typeof value =
 
 export function reasonText(code: string | null | undefined, detail: JourneyOutcome["reason_detail"], t: T): string {
   if (!code) return "";
+  // Expression-policy choice codes (long_cash, long_lever, short_via_future, close_leg) are never a rejection reason.
+  if ((EXPRESSION_CHOICE_CODES as readonly string[]).includes(code)) return t("tradeJourneys.reasons.reason_not_recorded");
   if (!(KNOWN_REASON_CODES as readonly string[]).includes(code)) return t("tradeJourneys.reasons.unknown", { code });
   const record = asRecord(detail);
   const params = record
@@ -112,4 +118,24 @@ export const KNOWN_ACTION_CODES = ["review_open_incident", "review_cash_and_risk
 export function actionText(code: string, t: T): string {
   if ((KNOWN_ACTION_CODES as readonly string[]).includes(code)) return t(`tradeJourneys.actions.${code}`);
   return t("tradeJourneys.actions.unknown", { code });
+}
+
+/** Stage and timeline statuses in words and tone, through the shared enum helper. */
+export function stageStatusView(status: string | null | undefined, t: T): { label: string; tone: EnumTone } {
+  return { label: statusLabel(status, t), tone: statusTone(status) };
+}
+
+/** Producers with a plain-name entry under `tradeJourneys.sources`. */
+export const KNOWN_SOURCES = ["execution.paper_runtime", "broker.paper_sidecar", "reconciliation-drift.scheduled", "canonical.lifecycle_projector", "canonical.telemetry"] as const;
+
+/** A producer's plain name; "" (render nothing) when the source is missing or not one we can name. */
+export function sourceText(source: string | null | undefined, t: T): string {
+  if (!source || !(KNOWN_SOURCES as readonly string[]).includes(source)) return "";
+  return t(`tradeJourneys.sources.${source.replaceAll(".", "_").replaceAll("-", "_")}`);
+}
+
+/** Row/page read_state in words; never the raw partial/degraded word. */
+export function readStateText(state: string | null | undefined, t: T): string {
+  const key = String(state || "").toLowerCase();
+  return ["partial", "degraded", "unavailable"].includes(key) ? t(`tradeJourneys.readStates.${key}`) : t("tradeJourneys.readStates.other");
 }

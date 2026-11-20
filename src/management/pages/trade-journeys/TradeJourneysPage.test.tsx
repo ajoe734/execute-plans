@@ -201,7 +201,7 @@ describe("Trade Journeys workbench", () => {
     vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue({ data: { items: [] }, page_info: { total: 0, page_size: 100 }, meta });
     vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta });
     render(<MemoryRouter initialEntries={["/management/trade-journeys/recon-1"]}><Routes><Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage/>}/></Routes></MemoryRouter>);
-    expect(await screen.findByRole("status")).toHaveTextContent("degraded data");
+    expect(await screen.findByRole("status")).toHaveTextContent("Data read is degraded");
     expect(screen.getByRole("status")).toHaveTextContent("ledger unavailable");
     expect(screen.getByText(/Missing Ledger booking/)).toBeInTheDocument();
     expect(screen.getByLabelText("Journey stages")).toBeInTheDocument();
