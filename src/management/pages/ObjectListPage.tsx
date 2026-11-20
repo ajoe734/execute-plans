@@ -299,7 +299,19 @@ export function ObjectListPage<T extends BaseObject>({
       key: "name",
       header: t("common.name"),
       className: nameCell ? "min-w-[320px]" : undefined,
-      cell: (r) => nameCell ? nameCell(r) : <div className="font-medium">{r.name}</div>,
+      cell: (r) =>
+        nameCell ? (
+          nameCell(r)
+        ) : (
+          <div>
+            <div className="font-medium">{r.name}</div>
+            {r.id && r.name && r.id !== r.name && (
+              <div className="font-mono text-xs text-muted-foreground" data-testid="object-secondary-id">
+                {r.id}
+              </div>
+            )}
+          </div>
+        ),
     },
     { key: "state", header: t("common.state"), cell: (r) => <StatusBadge state={r.state} /> },
     { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },

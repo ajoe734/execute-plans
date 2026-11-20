@@ -4,8 +4,12 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import { adaptHumanInboxList } from "@/lib/bff-v1/management";
-import { HumanInboxPage } from "./_core";
+import { adaptHumanInboxList, adaptPerformanceAttributionResult } from "@/lib/bff-v1/management";
+import {
+  HumanInboxPage,
+  PerformanceAttributionTestPersonaBanner,
+  extractAttributionHiddenTestCounts,
+} from "./_core";
 import type { HumanInboxItem, HumanInboxList } from "@/lib/v5/management/humanInbox";
 
 const mocks = vi.hoisted(() => ({
@@ -791,5 +795,172 @@ describe("HumanInboxPage", () => {
     fireEvent.click(toggle);
     expect(body).toHaveClass("line-clamp-3");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("renders BFF persona and strategy display names, localized incident summary from summary_key and summary_params, and never uses evidence_summary as the card body (AC1/AC2/AC4)", async () => {
+    const rawPayload = {
+      data: {
+        id: "human_inbox",
+        items: [
+          {
+            id: "incident:inc-drift-2330",
+            inboxType: "incident",
+            source_type: "incident",
+            source_id: "inc-drift-2330",
+            status: "open",
+            title: "inc-drift-2330",
+            title_display: "青禾｜2330 台股 Paper 學習 R2 · Drift threshold breach",
+            persona_id: "persona-be19a1fac471247f2b2a",
+            persona_display_name: "青禾｜2330 台股 Paper 學習 R2",
+            persona_name_missing: false,
+            strategy_id: "strategy-persona-2330",
+            strategy_display_name: "青禾 2330 動能策略",
+            strategy_name_missing: false,
+            binding_id: "bind-2330-paper",
+            evidence_summary: "alerts=alert-drift-001,alert-drift-002",
+            summary_key: "incident.summary.drift_threshold_breach",
+            summary_params: {
+              metric: "rolling_drawdown_multiple",
+              observed: 9.6093,
+              threshold: 1.25,
+              comparator: "gt",
+              occurrence_count: 4,
+              first_seen_at: "2026-11-19T08:00:00Z",
+              last_seen_at: "2026-11-20T09:30:00Z",
+            },
+            route: "/management/incidents/inc-drift-2330",
+          },
+          {
+            id: "incident:inc-orphan-99",
+            inboxType: "incident",
+            source_type: "incident",
+            source_id: "inc-orphan-99",
+            status: "open",
+            title: "inc-orphan-99",
+            persona_id: "persona-orphan-99",
+            persona_display_name: null,
+            persona_name_missing: true,
+            strategy_id: "strategy-orphan-99",
+            strategy_display_name: null,
+            strategy_name_missing: true,
+            evidence_summary: "alerts=alert-orphan-99",
+            route: "/management/incidents/inc-orphan-99",
+          },
+        ],
+      },
+    };
+
+    const adapted = adaptHumanInboxList(rawPayload)!;
+    expect(adapted).toHaveLength(2);
+    expect(adapted[0].summary ?? "").not.toContain("alerts=alert-drift-001");
+    expect(adapted[1].summary ?? "").toBe("");
+
+    mocks.useV5Live.mockReturnValue({
+      data: adapted,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = renderInbox();
+
+    expect(
+      screen.getByTestId("inbox-title-incident:inc-drift-2330"),
+    ).toHaveTextContent("青禾｜2330 台股 Paper 學習 R2 · Drift threshold breach");
+    expect(
+      screen.getByTestId("inbox-secondary-id-incident:inc-drift-2330"),
+    ).toHaveTextContent("inc-drift-2330");
+    expect(
+      screen.getByTestId("inbox-persona-incident:inc-drift-2330"),
+    ).toHaveTextContent("青禾｜2330 台股 Paper 學習 R2");
+    expect(
+      screen.getByTestId("inbox-persona-incident:inc-drift-2330"),
+    ).toHaveTextContent("(persona-be19a1fac471247f2b2a)");
+    expect(
+      screen.getByTestId("inbox-strategy-incident:inc-drift-2330"),
+    ).toHaveTextContent("青禾 2330 動能策略");
+    expect(
+      screen.getByTestId("inbox-strategy-incident:inc-drift-2330"),
+    ).toHaveTextContent("(strategy-persona-2330)");
+
+    const summaryEl = screen.getByTestId("inbox-summary-incident:inc-drift-2330");
+    expect(summaryEl.textContent).toContain("rolling_drawdown_multiple");
+    expect(summaryEl.textContent).toContain("9.6093");
+    expect(summaryEl.textContent).toContain("1.25");
+    expect(summaryEl.textContent).toContain("+8.3593");
+    expect(summaryEl.textContent).toContain("4 times since 2026-11-19T08:00:00Z");
+    expect(summaryEl.textContent).not.toContain("alerts=alert-drift-001");
+
+    expect(
+      screen.getByTestId("inbox-persona-name-missing-incident:inc-orphan-99"),
+    ).toHaveTextContent("Name missing");
+    expect(
+      screen.getByTestId("inbox-strategy-name-missing-incident:inc-orphan-99"),
+    ).toHaveTextContent("Name missing");
+    expect(
+      screen.queryByTestId("inbox-summary-incident:inc-orphan-99"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/alerts=alert-orphan-99/)).not.toBeInTheDocument();
+    unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = renderInbox();
+    const zhSummary = screen.getByTestId("inbox-summary-incident:inc-drift-2330");
+    expect(zhSummary.textContent).toContain("模擬與實盤偏離超過門檻");
+    expect(zhSummary.textContent).toContain("超出門檻 +8.3593");
+    expect(zhSummary.textContent).toContain("累計發生 4 次");
+    expect(
+      screen.getByTestId("inbox-persona-name-missing-incident:inc-orphan-99"),
+    ).toHaveTextContent("名稱未登記");
+    unmountZh();
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("extracts and renders hidden test-persona strategy count and toggle filter for performance attribution (AC3)", async () => {
+    await i18n.changeLanguage("en-US");
+    const adaptedAttr = adaptPerformanceAttributionResult({
+      data: {
+        id: "performance_attribution",
+        dimension: "strategy",
+        window: "30d",
+        items: [],
+        summary: {
+          hidden_test_persona_count: 5,
+          hidden_test_strategy_count: 8,
+          include_test_personas: false,
+        },
+      },
+      meta: {
+        hidden_test_persona_count: 5,
+        hidden_test_strategy_count: 8,
+      },
+    });
+    expect(adaptedAttr?.hiddenTestPersonaCount).toBe(5);
+    expect(adaptedAttr?.hiddenTestStrategyCount).toBe(8);
+    expect(adaptedAttr?.includeTestPersonas).toBe(false);
+    expect(extractAttributionHiddenTestCounts(adaptedAttr)).toEqual({
+      hiddenPersonaCount: 5,
+      hiddenStrategyCount: 8,
+      includeTestPersonas: false,
+    });
+
+    const onToggle = vi.fn();
+    render(
+      <I18nextProvider i18n={i18n}>
+        <PerformanceAttributionTestPersonaBanner
+          attribution={adaptedAttr}
+          onToggleIncludeTestPersonas={onToggle}
+        />
+      </I18nextProvider>,
+    );
+
+    expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(
+      "8 test-persona strategies (5 test personas) are hidden by default.",
+    );
+    const toggleBtn = screen.getByTestId("attribution-toggle-test-personas-button");
+    expect(toggleBtn).toHaveTextContent("Show test strategies (8)");
+    fireEvent.click(toggleBtn);
+    expect(onToggle).toHaveBeenCalledWith(true);
   });
 });

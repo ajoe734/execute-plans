@@ -5,6 +5,7 @@ import {
   MAX_PAGINATED_LIST_PAGES,
   NON_TERMINAL_INCIDENT_STATUS_FILTER,
   PAGINATED_LIST_PAGE_SIZE,
+  normalizeArtifactFields,
   normalizeDeploymentFields,
 } from "@/lib/bff-v1";
 import { BffError } from "@/lib/bff-v1/errors";
@@ -624,6 +625,113 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
       artifactId: "artifact-persona-298e138c136c9840b0e4",
       sponsorPersonaId: "persona-be19a1fac471247f2b2a",
       state: "active",
+    });
+  });
+
+  it("preserves BFF persona/strategy display names and name_missing flags on artifacts, deployments, and runtimes without resolving names client-side (FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120)", async () => {
+    enableStrictLiveMode();
+
+    const artifact = normalizeArtifactFields({
+      id: "artifact-persona-2330",
+      strategy_id: "strategy-persona-2330",
+      strategy_display_name: "青禾 2330 動能策略",
+      strategy_name_missing: false,
+      persona_id: "persona-be19a1fac471247f2b2a",
+      persona_display_name: "青禾｜2330 台股 Paper 學習 R2",
+      persona_name_missing: false,
+      version: "1.0.0",
+      digest: "sha256:abc123",
+      state: "approved",
+    });
+    expect(artifact).toMatchObject({
+      id: "artifact-persona-2330",
+      strategyId: "strategy-persona-2330",
+      strategyDisplayName: "青禾 2330 動能策略",
+      strategyNameMissing: false,
+      personaId: "persona-be19a1fac471247f2b2a",
+      personaDisplayName: "青禾｜2330 台股 Paper 學習 R2",
+      personaNameMissing: false,
+    });
+
+    const deploymentWithMissingName = normalizeDeploymentFields({
+      plan_id: "plan-missing-001",
+      strategy_id: "strategy-unregistered-001",
+      strategy_display_name: null,
+      strategy_name_missing: true,
+      sponsor_persona_id: "persona-unregistered-001",
+      persona_display_name: null,
+      persona_name_missing: true,
+      target_stage: "paper",
+      status: "active",
+    });
+    expect(deploymentWithMissingName).toMatchObject({
+      id: "plan-missing-001",
+      strategyId: "strategy-unregistered-001",
+      strategyNameMissing: true,
+      personaId: "persona-unregistered-001",
+      personaNameMissing: true,
+    });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === `/bff/runtimes?page_size=${PAGINATED_LIST_PAGE_SIZE}`) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "rb-named-01",
+                runtime_binding_id: "rb-named-01",
+                runtime_id: "rt-named-01",
+                runtime_kind: "paper",
+                execution_mode: "paper",
+                status: "active",
+                persona_id: "persona-be19a1fac471247f2b2a",
+                persona_display_name: "青禾｜2330 台股 Paper 學習 R2",
+                persona_name_missing: false,
+                strategy_id: "strategy-persona-2330",
+                strategy_display_name: "青禾 2330 動能策略",
+                strategy_name_missing: false,
+              },
+              {
+                id: "rb-missing-02",
+                runtime_binding_id: "rb-missing-02",
+                runtime_id: "rt-missing-02",
+                runtime_kind: "paper",
+                execution_mode: "paper",
+                status: "active",
+                persona_id: "persona-orphan-99",
+                persona_display_name: null,
+                persona_name_missing: true,
+                strategy_id: "strategy-orphan-99",
+                strategy_display_name: null,
+                strategy_name_missing: true,
+              },
+            ],
+            page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 2, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    const runtimes = await bffV1.runtimes.list();
+    expect(runtimes).toHaveLength(2);
+    expect(runtimes[0]).toMatchObject({
+      runtimeId: "rt-named-01",
+      personaId: "persona-be19a1fac471247f2b2a",
+      personaDisplayName: "青禾｜2330 台股 Paper 學習 R2",
+      personaNameMissing: false,
+      strategyId: "strategy-persona-2330",
+      strategyDisplayName: "青禾 2330 動能策略",
+      strategyNameMissing: false,
+    });
+    expect(runtimes[1]).toMatchObject({
+      runtimeId: "rt-missing-02",
+      personaId: "persona-orphan-99",
+      personaNameMissing: true,
+      strategyId: "strategy-orphan-99",
+      strategyNameMissing: true,
     });
   });
 });

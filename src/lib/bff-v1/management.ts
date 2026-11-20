@@ -67,6 +67,7 @@ import {
   type EvolutionQualificationDecisionItem,
   type EvolutionQualificationReport,
 } from "./dto";
+import { isRawEvidenceSummaryText } from "@/lib/enumLabels";
 
 export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
 
@@ -3148,19 +3149,63 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
       (kind === "incident" && incidentTargetId ? `/management/incidents/${encodeURIComponent(incidentTargetId)}` : undefined) ??
       (kind === "approval" && approvalTargetId ? `/management/approvals?approval=${encodeURIComponent(approvalTargetId)}` : undefined);
   const allowedActions = adaptInboxAllowedActions(it.allowedActions ?? it.allowed_actions, canDecide);
-  const summary = asOptionalString(it.summary ?? it.evidence_summary ?? it.rationale);
+  const rawEvidenceSummary = asOptionalString(it.evidence_summary ?? it.evidenceSummary);
+  const rawSummaryCandidate = asOptionalString(it.summary ?? it.rationale);
+  const summary =
+    rawSummaryCandidate &&
+    rawSummaryCandidate !== rawEvidenceSummary &&
+    !isRawEvidenceSummaryText(rawSummaryCandidate)
+      ? rawSummaryCandidate
+      : undefined;
+  const summaryKey = asOptionalString(it.summary_key ?? it.summaryKey);
+  const rawSummaryParams = it.summary_params ?? it.summaryParams;
+  const summaryParams = isObject(rawSummaryParams)
+    ? { ...(rawSummaryParams as Record<string, unknown>) }
+    : undefined;
   const approvalTargetType = kind === "approval" ? asOptionalString(it.decision_type ?? it.target_type) : undefined;
+  const titleDisplay = asOptionalString(it.title_display ?? it.titleDisplay);
+  const rawTitle = asOptionalString(it.title);
   const title = asString(
-    it.title ??
+    titleDisplay ??
+      rawTitle ??
       (approvalTargetType ? `${approvalTargetType} approval` : undefined) ??
       summary ??
       id,
   );
+  const personaDisplayName = asOptionalString(it.persona_display_name ?? it.personaDisplayName);
+  const personaNameMissing =
+    typeof it.persona_name_missing === "boolean"
+      ? it.persona_name_missing
+      : typeof it.personaNameMissing === "boolean"
+        ? it.personaNameMissing
+        : undefined;
+  const strategyId = asOptionalString(it.strategy_id ?? it.strategyId);
+  const strategyDisplayName = asOptionalString(it.strategy_display_name ?? it.strategyDisplayName);
+  const strategyNameMissing =
+    typeof it.strategy_name_missing === "boolean"
+      ? it.strategy_name_missing
+      : typeof it.strategyNameMissing === "boolean"
+        ? it.strategyNameMissing
+        : undefined;
+  const bindingId = asOptionalString(
+    it.binding_id ?? it.bindingId ?? it.runtime_binding_id ?? it.runtimeBindingId,
+  );
+  const occurrenceCount = optionalFiniteNumber(it.occurrence_count ?? it.occurrenceCount);
+  const firstSeenAt = asOptionalString(it.first_seen_at ?? it.firstSeenAt);
+  const lastSeenAt = asOptionalString(it.last_seen_at ?? it.lastSeenAt);
+  const metric = asOptionalString(it.metric);
+  const observed = it.observed;
+  const threshold = it.threshold;
+  const comparator = asOptionalString(it.comparator);
   return {
     id,
     kind,
     title,
+    ...(titleDisplay ? { titleDisplay } : {}),
+    ...(rawTitle ? { rawTitle } : {}),
     summary,
+    ...(summaryKey ? { summaryKey } : {}),
+    ...(summaryParams ? { summaryParams } : {}),
     requiredRole: asString(it.requiredRole ?? it.required_role ?? it.actor_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
     consequenceIfApproved: asString(it.consequenceIfApproved ?? it.consequence_if_approved ?? ""),
     consequenceIfRejected: asString(it.consequenceIfRejected ?? it.consequence_if_rejected ?? ""),
@@ -3171,6 +3216,19 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     status,
     sourceId,
     personaId,
+    ...(personaDisplayName !== undefined ? { personaDisplayName } : {}),
+    ...(personaNameMissing !== undefined ? { personaNameMissing } : {}),
+    ...(strategyId !== undefined ? { strategyId } : {}),
+    ...(strategyDisplayName !== undefined ? { strategyDisplayName } : {}),
+    ...(strategyNameMissing !== undefined ? { strategyNameMissing } : {}),
+    ...(bindingId !== undefined ? { bindingId } : {}),
+    ...(occurrenceCount !== undefined ? { occurrenceCount } : {}),
+    ...(firstSeenAt !== undefined ? { firstSeenAt } : {}),
+    ...(lastSeenAt !== undefined ? { lastSeenAt } : {}),
+    ...(metric !== undefined ? { metric } : {}),
+    ...(observed !== undefined ? { observed } : {}),
+    ...(threshold !== undefined ? { threshold } : {}),
+    ...(comparator !== undefined ? { comparator } : {}),
     reviewId,
     reviewType,
     decisionHref,
@@ -4394,12 +4452,99 @@ export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttrib
   return rawRows ? rawRows.map(normalizePerformanceAttributionRow) : null;
 }
 
-export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
+export type PerformanceAttributionExtendedResult = PerformanceAttributionResult & {
+  hidden_test_persona_count?: number;
+  hiddenTestPersonaCount?: number;
+  hidden_test_strategy_count?: number;
+  hiddenTestStrategyCount?: number;
+  include_test_personas?: boolean;
+  includeTestPersonas?: boolean;
+  summary?: NonNullable<PerformanceAttributionResult["summary"]> & {
+    hidden_test_persona_count?: number;
+    hiddenTestPersonaCount?: number;
+    hidden_test_strategy_count?: number;
+    hiddenTestStrategyCount?: number;
+    include_test_personas?: boolean;
+    includeTestPersonas?: boolean;
+  };
+};
+
+export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionExtendedResult {
   const rows = adaptPerformanceAttributionRows(raw) ?? [];
-  const summary = adaptAttributionSummary(raw);
-  return summary
-    ? { rows, period: adaptAttributionPeriodState(raw), summary }
-    : { rows, period: adaptAttributionPeriodState(raw) };
+  const baseSummary = adaptAttributionSummary(raw);
+  const root = isObject(raw) ? raw : {};
+  const data = isObject(root.data) ? root.data : root;
+  const rawSummary = isObject(data.summary)
+    ? data.summary
+    : isObject(root.summary)
+      ? root.summary
+      : {};
+  const rawMeta = isObject(root.meta)
+    ? root.meta
+    : isObject(data.meta)
+      ? data.meta
+      : {};
+
+  const hiddenTestPersonaCount = optionalFiniteNumber(
+    rawSummary.hidden_test_persona_count ??
+      rawSummary.hiddenTestPersonaCount ??
+      rawMeta.hidden_test_persona_count ??
+      rawMeta.hiddenTestPersonaCount,
+  );
+  const hiddenTestStrategyCount = optionalFiniteNumber(
+    rawSummary.hidden_test_strategy_count ??
+      rawSummary.hiddenTestStrategyCount ??
+      rawMeta.hidden_test_strategy_count ??
+      rawMeta.hiddenTestStrategyCount,
+  );
+  const rawInclude =
+    rawSummary.include_test_personas ??
+    rawSummary.includeTestPersonas ??
+    rawMeta.include_test_personas ??
+    rawMeta.includeTestPersonas;
+  const includeTestPersonas =
+    typeof rawInclude === "boolean" ? rawInclude : undefined;
+
+  const hasHiddenFields =
+    hiddenTestPersonaCount !== undefined ||
+    hiddenTestStrategyCount !== undefined ||
+    includeTestPersonas !== undefined;
+
+  const hiddenPayload = {
+    ...(hiddenTestPersonaCount !== undefined
+      ? {
+          hidden_test_persona_count: hiddenTestPersonaCount,
+          hiddenTestPersonaCount,
+        }
+      : {}),
+    ...(hiddenTestStrategyCount !== undefined
+      ? {
+          hidden_test_strategy_count: hiddenTestStrategyCount,
+          hiddenTestStrategyCount,
+        }
+      : {}),
+    ...(includeTestPersonas !== undefined
+      ? {
+          include_test_personas: includeTestPersonas,
+          includeTestPersonas,
+        }
+      : {}),
+  };
+
+  const summary =
+    baseSummary || hasHiddenFields
+      ? {
+          ...(baseSummary ?? {}),
+          ...hiddenPayload,
+        }
+      : undefined;
+
+  return {
+    rows,
+    period: adaptAttributionPeriodState(raw),
+    ...(summary ? { summary } : {}),
+    ...hiddenPayload,
+  };
 }
 
 
@@ -5601,8 +5746,12 @@ export const mgmt = {
     getLiveOnly: (
       dimension?: AttributionDimension | string,
       period?: AttributionPeriod,
-      opts?: { signal?: AbortSignal },
-    ): Promise<PerformanceAttributionResult> => {
+      opts?: {
+        signal?: AbortSignal;
+        includeTestPersonas?: boolean;
+        include_test_personas?: boolean;
+      },
+    ): Promise<PerformanceAttributionExtendedResult> => {
       if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
         return Promise.resolve({
           rows: [],
@@ -5618,22 +5767,42 @@ export const mgmt = {
       if (detectMode() === "mock") {
         return Promise.resolve({ rows: [], period: adaptAttributionPeriodState(undefined) });
       }
-      return strictLiveRead<PerformanceAttributionResult>(
-        `mgmt.${paths.mgmtPerformanceAttribution(dimension, period)}`,
-        { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period), signal: opts?.signal },
+      const includeTest =
+        opts?.includeTestPersonas ??
+        opts?.include_test_personas ??
+        (typeof window !== "undefined" &&
+        new URLSearchParams(window.location?.search ?? "").get("include_test_personas") === "true"
+          ? true
+          : undefined);
+      const basePath = paths.mgmtPerformanceAttribution(dimension, period);
+      const path = includeTest
+        ? `${basePath}${basePath.includes("?") ? "&" : "?"}include_test_personas=true`
+        : basePath;
+      return strictLiveRead<PerformanceAttributionExtendedResult>(
+        `mgmt.${path}`,
+        { method: "GET", path, signal: opts?.signal },
         adaptPerformanceAttributionResult,
       );
     },
     listLiveOnly: (
       dimension?: AttributionDimension | string,
       period?: AttributionPeriod,
-      opts?: { signal?: AbortSignal },
+      opts?: {
+        signal?: AbortSignal;
+        includeTestPersonas?: boolean;
+        include_test_personas?: boolean;
+      },
     ): Promise<PerformanceAttributionRow[]> => {
       if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
         return Promise.resolve([]);
       }
+      const includeTest = opts?.includeTestPersonas ?? opts?.include_test_personas;
+      const basePath = paths.mgmtPerformanceAttribution(dimension, period);
+      const path = includeTest
+        ? `${basePath}${basePath.includes("?") ? "&" : "?"}include_test_personas=true`
+        : basePath;
       return liveOnlyList<PerformanceAttributionRow>(
-        { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period), signal: opts?.signal },
+        { method: "GET", path, signal: opts?.signal },
         adaptPerformanceAttributionRows,
       );
     },
@@ -5641,11 +5810,20 @@ export const mgmt = {
       dimension: AttributionDimension | string | undefined,
       period: AttributionPeriod | undefined,
       seedFn: () => PerformanceAttributionRow[],
+      opts?: {
+        includeTestPersonas?: boolean;
+        include_test_personas?: boolean;
+      },
     ): Promise<PerformanceAttributionRow[]> => {
       if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
         return Promise.resolve([]);
       }
-      return mgmtRead("mgmt.performanceAttribution.list", { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) }, seedFn, adaptPerformanceAttributionRows);
+      const includeTest = opts?.includeTestPersonas ?? opts?.include_test_personas;
+      const basePath = paths.mgmtPerformanceAttribution(dimension, period);
+      const path = includeTest
+        ? `${basePath}${basePath.includes("?") ? "&" : "?"}include_test_personas=true`
+        : basePath;
+      return mgmtRead("mgmt.performanceAttribution.list", { method: "GET", path }, seedFn, adaptPerformanceAttributionRows);
     },
   },
 

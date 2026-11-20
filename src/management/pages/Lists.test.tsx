@@ -1,14 +1,17 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { lists, type Deployment, type Persona, type Strategy } from "@/lib/bff-v1";
+import { lists, type Artifact, type Deployment, type Persona, type Strategy } from "@/lib/bff-v1";
 import {
+  ArtifactsList,
   DeploymentsList,
   PersonasList,
   RankingFormulasList,
   StrategiesList,
   extractHiddenRetiredPersonaCount,
+  extractHiddenTestPersonaStrategyCount,
+  extractIncludeTestPersonas,
   extractStrategyPageInfoTotal,
   extractStrategyStateCounts,
   normalizeStrategyFilterParam,
@@ -344,5 +347,213 @@ describe("RankingFormulasList real payload", () => {
     expect(await screen.findByText("pm12-default-v1")).toBeInTheDocument();
     expect(screen.getByText("PnL 35% · Risk 25% · Execution 25% · Activity 15%")).toBeInTheDocument();
     document.querySelectorAll("tbody td").forEach((td) => expect(td.textContent?.trim()).not.toBe(""));
+  });
+});
+
+describe("FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120: StrategiesList test-persona filter and Artifacts/Deployments display names", () => {
+  it("shows how many test-persona strategies are hidden and toggles include_test_personas filter on StrategiesList (AC3)", async () => {
+    expect(extractHiddenTestPersonaStrategyCount({ hidden_test_persona_count: 14 })).toBe(14);
+    expect(extractHiddenTestPersonaStrategyCount({ hidden_test_strategy_count: 9 })).toBe(9);
+    expect(extractIncludeTestPersonas({ include_test_personas: true })).toBe(true);
+    expect(resolveStrategyListQuery("default", undefined, { includeTestPersonas: true })).toEqual({
+      exclude_state: "draft",
+      hide_retired_personas: true,
+      include_test_personas: true,
+      page_size: 20,
+    });
+
+    const strategySpy = vi.spyOn(lists, "strategies").mockImplementation(async (query) => {
+      const q = (query ?? {}) as { include_test_personas?: boolean };
+      return {
+        items: [
+          {
+            id: "strategy-prod-1",
+            name: "Prod Momentum Strategy",
+            owner: "operator",
+            updatedAt: "2026-11-20T08:00:00Z",
+            state: "approved",
+            risk: "low",
+            alpha: "",
+            capitalPoolId: "",
+            personaIds: ["persona-prod-1"],
+            personaStates: [{ personaId: "persona-prod-1", state: "paper_running" }],
+            operationalStatus: "running",
+            symbols: ["2330.TW"],
+            pnl: 0,
+            pnl30d: 0,
+            sharpe: null,
+            drawdown: null,
+          },
+        ],
+        cursor: {},
+        pageSize: 1,
+        estimatedTotal: 1,
+        totalCountExact: true,
+        meta: {
+          state_counts: { draft: 0, approved: 1 },
+          hidden_test_persona_count: 12,
+          include_test_personas: Boolean(q.include_test_personas),
+          page_info: { page_size: 20, total: 1, next_page_token: null },
+        },
+      };
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies"]}>
+        <StrategiesList />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Prod Momentum Strategy")).toBeInTheDocument();
+    });
+
+    const banner = screen.getByTestId("strategy-test-personas-banner");
+    expect(banner.textContent).toMatch(/12/);
+    const toggleBtn = screen.getByTestId("strategy-toggle-test-personas-button");
+    expect(toggleBtn).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(toggleBtn);
+
+    await waitFor(() => {
+      expect(strategySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include_test_personas: true,
+        }),
+      );
+      expect(screen.getByTestId("strategy-toggle-test-personas-button")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+  });
+
+  it("renders BFF persona and strategy display names on DeploymentsList and ArtifactsList with secondary raw IDs and name_missing badges (AC1/AC4)", async () => {
+    const deploymentRows: Deployment[] = [
+      {
+        id: "plan-named-001",
+        name: "plan-named-001",
+        owner: "operator",
+        updatedAt: "2026-11-20T08:00:00Z",
+        state: "deployed",
+        risk: "low",
+        target: "paper",
+        artifactId: "artifact-2330",
+        version: "1.0.0",
+        persona_id: "persona-be19a1fac471247f2b2a",
+        persona_display_name: "青禾｜2330 台股 Paper 學習 R2",
+        persona_name_missing: false,
+        strategy_id: "strategy-persona-2330",
+        strategy_display_name: "青禾 2330 動能策略",
+        strategy_name_missing: false,
+      },
+      {
+        id: "plan-missing-002",
+        name: "plan-missing-002",
+        owner: "operator",
+        updatedAt: "2026-11-20T08:05:00Z",
+        state: "deployed",
+        risk: "low",
+        target: "paper",
+        artifactId: "artifact-orphan",
+        version: "1.0.0",
+        persona_id: "persona-unregistered-77",
+        persona_display_name: null,
+        persona_name_missing: true,
+        strategy_id: "strategy-unregistered-77",
+        strategy_display_name: null,
+        strategy_name_missing: true,
+      },
+    ];
+
+    vi.spyOn(lists, "deployments").mockResolvedValue({
+      items: deploymentRows,
+      cursor: {},
+      pageSize: deploymentRows.length,
+      estimatedTotal: deploymentRows.length,
+      totalCountExact: true,
+    });
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/management/deployments"]}>
+        <DeploymentsList />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+      expect(screen.getByText("青禾 2330 動能策略")).toBeInTheDocument();
+    });
+    expect(screen.getByText("plan-named-001")).toBeInTheDocument();
+    expect(screen.getByText("persona-be19a1fac471247f2b2a")).toBeInTheDocument();
+    expect(screen.getByText("strategy-persona-2330")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("deployment-persona-name-missing"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("deployment-strategy-name-missing"),
+    ).toBeInTheDocument();
+    unmount();
+
+    const artifactRows: Artifact[] = [
+      {
+        id: "artifact-2330",
+        name: "artifact-2330",
+        kind: "bundle",
+        owner: "operator",
+        updatedAt: "2026-11-20T08:00:00Z",
+        state: "approved",
+        risk: "low",
+        strategy_id: "strategy-persona-2330",
+        strategyId: "strategy-persona-2330",
+        strategy_display_name: "青禾 2330 動能策略",
+        strategy_name_missing: false,
+        persona_id: "persona-be19a1fac471247f2b2a",
+        persona_display_name: "青禾｜2330 台股 Paper 學習 R2",
+        persona_name_missing: false,
+        version: "1.0.0",
+        hash: "sha256:abc123",
+      },
+      {
+        id: "artifact-orphan",
+        name: "artifact-orphan",
+        kind: "bundle",
+        owner: "operator",
+        updatedAt: "2026-11-20T08:05:00Z",
+        state: "approved",
+        risk: "low",
+        strategy_id: "strategy-orphan-88",
+        strategyId: "strategy-orphan-88",
+        strategy_display_name: null,
+        strategy_name_missing: true,
+        persona_id: "persona-orphan-88",
+        persona_display_name: null,
+        persona_name_missing: true,
+        version: "1.0.0",
+        hash: "sha256:def456",
+      },
+    ];
+
+    vi.spyOn(lists, "artifacts").mockResolvedValue({
+      items: artifactRows,
+      cursor: {},
+      pageSize: artifactRows.length,
+      estimatedTotal: artifactRows.length,
+      totalCountExact: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/management/artifacts"]}>
+        <ArtifactsList />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("青禾 2330 動能策略")).toBeInTheDocument();
+      expect(screen.getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+    });
+    expect(screen.getByText("artifact-2330")).toBeInTheDocument();
+    expect(screen.getByTestId("artifact-strategy-name-missing")).toBeInTheDocument();
+    expect(screen.getByTestId("artifact-persona-name-missing")).toBeInTheDocument();
   });
 });

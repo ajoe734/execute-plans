@@ -724,6 +724,8 @@ export default {
     focusMissingObjectFmt: "找不到 {{id}} 的 {{label}} row，目前顯示全部資料。",
     showAllObjects: "顯示全部{{label}}",
     notReported: "未回報",
+    nameMissing: "名稱未登記",
+    copyId: "複製 ID",
     cancel: "取消",
     error: "錯誤",
     unavailable: "無資料",
@@ -1057,6 +1059,12 @@ export default {
       hiddenDraftsNoCount: "預設已隱藏草稿策略。",
       showDraftsWithCount: "顯示草稿（{{count}}）",
       showDraftsNoCount: "顯示草稿",
+      hiddenTestPersonaStrategiesWithCount: "預設已隱藏 {{count}} 筆測試 Persona 策略。",
+      hiddenTestPersonaStrategiesNoCount: "預設已隱藏測試 Persona 策略。",
+      showingTestPersonaStrategies: "目前包含測試 Persona 策略。",
+      showTestPersonaStrategiesWithCount: "顯示測試策略（{{count}}）",
+      showTestPersonaStrategiesNoCount: "顯示測試策略",
+      hideTestPersonaStrategies: "隱藏測試策略",
       pagination: {
         label: "策略列表分頁",
         showingRange: "顯示第 {{start}}–{{end}} 筆，共 {{total}} 筆",
@@ -1219,6 +1227,40 @@ export default {
       add: "建立演化限制",
       placeholder: "限制摘要（例如：在情境 X 下限制槓桿）…",
       created: "演化限制已建立",
+    },
+    evidenceTimeline: "證據時間軸",
+    humanSummary: {
+      drift_threshold_breach:
+        "模擬與實盤偏離超過門檻：{{metric}} 觀測值 {{observed}} {{comparator}} 門檻 {{threshold}}{{deltaClause}}。{{occurrenceClause}}",
+      drift_detected:
+        "偵測到模擬與實盤偏離：{{metric}} 觀測值 {{observed}}。{{occurrenceClause}}",
+      threshold_breach:
+        "{{metric}} 超過門檻：觀測值 {{observed}} {{comparator}} 門檻 {{threshold}}{{deltaClause}}。{{occurrenceClause}}",
+      infrastructure_degradation:
+        "{{service}} 基礎設施健康降級。{{occurrenceClause}}",
+      agent_finding:
+        "監控代理發現異常：{{rationale}}。{{occurrenceClause}}",
+      deployment:
+        "部署事件（階段：{{stage}}）。{{occurrenceClause}}",
+      generic:
+        "營運事件需進行治理審查。{{occurrenceClause}}",
+      deltaFmt: "（超出門檻 {{delta}}）",
+      occurrencesManyWithLatestFmt: "自 {{firstSeen}} 起累計發生 {{count}} 次（最近一次：{{lastSeen}}）。",
+      occurrencesManyFmt: "自 {{firstSeen}} 起累計發生 {{count}} 次。",
+      occurrencesSingleFmt: "自 {{firstSeen}} 起發生 1 次。",
+      occurrencesCountOnlyFmt: "累計發生 {{count}} 次。",
+    },
+    timelineSummary: {
+      drift_occurrence:
+        "{{metric}} 偏離觸發：觀測值 {{observed}} {{comparator}} 門檻 {{threshold}}{{deltaClause}}",
+      agent_finding_occurrence:
+        "監控代理記錄發現：{{rationale}}",
+      infrastructure_occurrence:
+        "{{service}} 探針記錄降級狀態",
+      occurrence:
+        "記錄事件觸發（第 {{count}} 次）",
+      resolved:
+        "事件已解決：{{reason}}",
     },
   },
   governance: {
@@ -4897,6 +4939,14 @@ export default {
         quarter: "季度",
         ytd: "本年至今",
       },
+      hiddenTestPersonaStrategiesFmt:
+        "預設已隱藏 {{strategyCount}} 筆測試策略（{{personaCount}} 個測試 Persona）。",
+      hiddenTestPersonaStrategiesOnlyFmt:
+        "預設已隱藏 {{count}} 筆測試 Persona 策略。",
+      showingTestPersonasNotice: "目前包含測試 Persona 與測試策略歸因。",
+      showTestPersonasFmt: "顯示測試策略（{{count}}）",
+      showTestPersonas: "顯示測試策略",
+      hideTestPersonas: "隱藏測試策略",
     },
   },
   capabilities: {

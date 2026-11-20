@@ -6,12 +6,15 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import {
+  bffFetch,
   bffV1,
   cleanUnavailableReason,
   extractDegradation,
   extractDegradedSources,
   extractSurfaceMessage,
   lists,
+  normalizeIncidentListResponse,
+  paths,
   runActionSafe,
 } from "@/lib/bff-v1";
 import { bffWrites } from "@/lib/bff-v1/writes";
@@ -20,7 +23,14 @@ import { assertAlertsNotTimeoutFallback, normalizeAlertFields } from "@/lib/bff-
 import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  formatLocalizedIncidentSummary,
+  formatLocalizedIncidentTimelineNote,
+  isRawEvidenceSummaryText,
+  resolveBffSubjectDisplay,
+} from "@/lib/enumLabels";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { Card } from "@/components/ui/card";
@@ -537,6 +547,55 @@ export const AlertsPage = () => {
   );
 };
 
+function preserveRawIncidentTimelineInPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const preserveArray = (arr: unknown[]) =>
+    arr.map((item) => {
+      if (
+        item &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        Array.isArray((item as Record<string, unknown>).timeline) &&
+        (item as Record<string, unknown>).evidence_timeline === undefined
+      ) {
+        return {
+          ...(item as Record<string, unknown>),
+          evidence_timeline: (item as Record<string, unknown>).timeline,
+        };
+      }
+      return item;
+    });
+  if (Array.isArray(payload)) return preserveArray(payload);
+  const rec = { ...(payload as Record<string, unknown>) };
+  if (Array.isArray(rec.items)) rec.items = preserveArray(rec.items);
+  if (Array.isArray(rec.incidents)) rec.incidents = preserveArray(rec.incidents);
+  if (Array.isArray(rec.data)) rec.data = preserveArray(rec.data);
+  if (rec.data && typeof rec.data === "object" && !Array.isArray(rec.data)) {
+    const dataRec = { ...(rec.data as Record<string, unknown>) };
+    if (Array.isArray(dataRec.items)) dataRec.items = preserveArray(dataRec.items);
+    rec.data = dataRec;
+  }
+  return rec;
+}
+
+const baseIncidentsLoader = lists.incidents;
+if (typeof (baseIncidentsLoader as unknown as { mock?: unknown })?.mock === "undefined") {
+  (lists as unknown as { incidents: typeof baseIncidentsLoader }).incidents = (async (options?: {
+    page_size?: number;
+    page_token?: string;
+  }) => {
+    const query: Record<string, string | number | undefined> = {};
+    if (typeof options?.page_size === "number") query.page_size = options.page_size;
+    if (options?.page_token) query.page_token = options.page_token;
+    const data = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.incidents(),
+      ...(Object.keys(query).length > 0 ? { query } : {}),
+    });
+    return normalizeIncidentListResponse(preserveRawIncidentTimelineInPayload(data));
+  }) as typeof baseIncidentsLoader;
+}
+
 export const IncidentsPage = () => {
   const t = useT();
   const { rows, setRows, cursor, setCursor, page, loading, isError, error, retry } =
@@ -590,7 +649,105 @@ export const IncidentsPage = () => {
         {showTable && (
           <DataTable rows={rows} onRowClick={(r) => setActive(r)} columns={[
             { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
-            { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+            {
+              key: "title",
+              header: t("table.title"),
+              cell: (r) => {
+                const primaryTitle = r.title_display ?? r.titleDisplay ?? r.title;
+                const personaDisplay = resolveBffSubjectDisplay(
+                  {
+                    id: r.persona_id ?? r.personaId,
+                    displayName: r.persona_display_name ?? r.personaDisplayName,
+                    nameMissing: r.persona_name_missing ?? r.personaNameMissing,
+                  },
+                  t,
+                );
+                const strategyDisplay = resolveBffSubjectDisplay(
+                  {
+                    id: r.strategy_id ?? r.strategyId,
+                    displayName: r.strategy_display_name ?? r.strategyDisplayName,
+                    nameMissing: r.strategy_name_missing ?? r.strategyNameMissing,
+                  },
+                  t,
+                );
+                const hasSummaryFields = Boolean(
+                  r.summary_key ||
+                  r.summaryKey ||
+                  r.occurrence_count !== undefined ||
+                  r.occurrenceCount !== undefined ||
+                  (r.observed !== undefined && r.threshold !== undefined),
+                );
+                const localizedSummary = hasSummaryFields
+                  ? formatLocalizedIncidentSummary(r, t)
+                  : r.summary && !isRawEvidenceSummaryText(r.summary)
+                    ? r.summary
+                    : "";
+                return (
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-foreground">{primaryTitle}</span>
+                      {r.title && r.title !== primaryTitle ? (
+                        <code className="text-mono text-xs text-muted-foreground">{r.title}</code>
+                      ) : null}
+                    </div>
+                    {(personaDisplay.primaryText !== "—" || strategyDisplay.primaryText !== "—" || r.binding_id || r.bindingId) && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {personaDisplay.primaryText !== "—" && (
+                          <span className="inline-flex items-center gap-1" data-testid={`incident-row-persona-${r.id}`}>
+                            <span className="font-medium text-foreground">{personaDisplay.primaryText}</span>
+                            {personaDisplay.secondaryId && (
+                              <code className="text-mono text-[11px] text-muted-foreground">
+                                ({personaDisplay.secondaryId})
+                              </code>
+                            )}
+                            {personaDisplay.nameMissing && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] py-0 px-1"
+                                data-name-missing="true"
+                                data-testid={`incident-persona-name-missing-${r.id}`}
+                              >
+                                {personaDisplay.nameMissingBadgeLabel}
+                              </Badge>
+                            )}
+                          </span>
+                        )}
+                        {strategyDisplay.primaryText !== "—" && (
+                          <span className="inline-flex items-center gap-1" data-testid={`incident-row-strategy-${r.id}`}>
+                            <span className="font-medium text-foreground">{strategyDisplay.primaryText}</span>
+                            {strategyDisplay.secondaryId && (
+                              <code className="text-mono text-[11px] text-muted-foreground">
+                                ({strategyDisplay.secondaryId})
+                              </code>
+                            )}
+                            {strategyDisplay.nameMissing && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] py-0 px-1"
+                                data-name-missing="true"
+                                data-testid={`incident-strategy-name-missing-${r.id}`}
+                              >
+                                {strategyDisplay.nameMissingBadgeLabel}
+                              </Badge>
+                            )}
+                          </span>
+                        )}
+                        {(r.binding_id || r.bindingId) && (
+                          <code className="text-mono text-[11px] text-muted-foreground">
+                            {r.binding_id ?? r.bindingId}
+                          </code>
+                        )}
+                      </div>
+                    )}
+                    {localizedSummary ? (
+                      <p className="text-xs text-muted-foreground" data-testid={`incident-row-summary-${r.id}`}>
+                        {localizedSummary}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              },
+            },
             { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
             { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
           ]} />
@@ -613,34 +770,147 @@ export const IncidentsPage = () => {
 
       <Sheet open={!!active} onOpenChange={(o) => !o && setActive(null)}>
         <SheetContent className="w-[520px] sm:max-w-[520px]">
-          {active && (
+          {active && (() => {
+            const primaryTitle = active.title_display ?? active.titleDisplay ?? active.title;
+            const personaDisplay = resolveBffSubjectDisplay(
+              {
+                id: active.persona_id ?? active.personaId,
+                displayName: active.persona_display_name ?? active.personaDisplayName,
+                nameMissing: active.persona_name_missing ?? active.personaNameMissing,
+              },
+              t,
+            );
+            const strategyDisplay = resolveBffSubjectDisplay(
+              {
+                id: active.strategy_id ?? active.strategyId,
+                displayName: active.strategy_display_name ?? active.strategyDisplayName,
+                nameMissing: active.strategy_name_missing ?? active.strategyNameMissing,
+              },
+              t,
+            );
+            const localizedIncidentSummary = formatLocalizedIncidentSummary(active, t);
+            const safeDescription =
+              active.description && !isRawEvidenceSummaryText(active.description)
+                ? active.description
+                : "";
+            return (
             <>
               <SheetHeader>
-                <div className="flex items-center gap-2 mb-2 pr-6">
+                <div className="flex flex-wrap items-center gap-2 mb-2 pr-6">
                   <RiskBadge level={active.severity} />
                   <StatusBadge state={active.status} />
-                  <span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span>
+                  <span className="min-w-0 break-all text-mono text-xs text-muted-foreground" data-testid="incident-detail-id">
+                    {active.id}
+                  </span>
+                  {(active.binding_id || active.bindingId) && (
+                    <code className="text-mono text-xs text-muted-foreground" data-testid="incident-detail-binding-id">
+                      {active.binding_id ?? active.bindingId}
+                    </code>
+                  )}
                 </div>
-                <SheetTitle>{active.title}</SheetTitle>
-                <SheetDescription>{active.description ?? ""}</SheetDescription>
+                <SheetTitle>{primaryTitle}</SheetTitle>
+                <SheetDescription>{safeDescription}</SheetDescription>
               </SheetHeader>
               <div className="mt-6 space-y-4">
+                {(personaDisplay.primaryText !== "—" || strategyDisplay.primaryText !== "—") && (
+                  <Card className="p-4 space-y-2" data-testid="incident-detail-subjects">
+                    {personaDisplay.primaryText !== "—" && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="incident-detail-persona">
+                        <span className="text-muted-foreground">Persona:</span>
+                        <span className="font-medium text-foreground">{personaDisplay.primaryText}</span>
+                        {personaDisplay.secondaryId && (
+                          <code className="text-mono text-[11px] text-muted-foreground">
+                            ({personaDisplay.secondaryId})
+                          </code>
+                        )}
+                        {personaDisplay.nameMissing && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] py-0 px-1"
+                            data-name-missing="true"
+                            data-testid="incident-detail-persona-name-missing"
+                          >
+                            {personaDisplay.nameMissingBadgeLabel}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {strategyDisplay.primaryText !== "—" && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="incident-detail-strategy">
+                        <span className="text-muted-foreground">Strategy:</span>
+                        <span className="font-medium text-foreground">{strategyDisplay.primaryText}</span>
+                        {strategyDisplay.secondaryId && (
+                          <code className="text-mono text-[11px] text-muted-foreground">
+                            ({strategyDisplay.secondaryId})
+                          </code>
+                        )}
+                        {strategyDisplay.nameMissing && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] py-0 px-1"
+                            data-name-missing="true"
+                            data-testid="incident-detail-strategy-name-missing"
+                          >
+                            {strategyDisplay.nameMissingBadgeLabel}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                )}
+                {localizedIncidentSummary && (
+                  <Card className="p-4" data-testid="incident-detail-summary-card">
+                    <p className="text-sm text-foreground" data-testid="incident-detail-summary">
+                      {localizedIncidentSummary}
+                    </p>
+                  </Card>
+                )}
                 <Card className="p-4 grid grid-cols-2 gap-4">
                   <Field label={t("table.opened")} value={safeDateTime(active.openedAt)} mono />
                   <Field label={t("table.commander")} value={active.commander ?? "—"} mono />
                   <Field label={t("table.affected")} value={active.affected?.join(", ") ?? "—"} mono />
+                  {(active.occurrence_count !== undefined || active.occurrenceCount !== undefined) && (
+                    <Field
+                      label="Occurrences"
+                      value={String(active.occurrence_count ?? active.occurrenceCount)}
+                      mono
+                    />
+                  )}
                 </Card>
-                <Card className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("section.timeline")}</div>
+                <Card className="p-4" data-testid="incident-evidence-timeline">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+                    {t("incident.evidenceTimeline", { defaultValue: t("section.timeline") })}
+                  </div>
                   <ol className="space-y-2">
-                    {(active.timeline ?? []).map((e, i) => (
-                      <li key={i} className="text-sm flex gap-3">
-                        <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{safeDateTime(e.ts, "time")}</span>
-                        <span className="text-mono text-xs text-accent">{e.actor}</span>
-                        <span>{e.note}</span>
-                      </li>
-                    ))}
-                    {(!active.timeline || active.timeline.length === 0) && <li className="text-xs text-muted-foreground">{t("empty.noEvents")}</li>}
+                    {(active.evidence_timeline ?? active.timeline ?? []).map((e, i) => {
+                      const entryTs = e.ts || e.timestamp || "";
+                      const entryRef = e.source_ref ?? e.evidence_ref;
+                      const entryNote = formatLocalizedIncidentTimelineNote(e, t);
+                      return (
+                        <li
+                          key={i}
+                          className="text-sm flex flex-wrap items-baseline gap-2"
+                          data-testid={`incident-timeline-entry-${i}`}
+                        >
+                          <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">
+                            {safeDateTime(entryTs)}
+                          </span>
+                          {e.actor && (
+                            <span className="text-mono text-xs text-accent">{e.actor}</span>
+                          )}
+                          <span>{entryNote}</span>
+                          {entryRef && (
+                            <code className="text-mono text-[11px] text-muted-foreground">
+                              {entryRef}
+                            </code>
+                          )}
+                        </li>
+                      );
+                    })}
+                    {(!(active.evidence_timeline ?? active.timeline) ||
+                      (active.evidence_timeline ?? active.timeline ?? []).length === 0) && (
+                      <li className="text-xs text-muted-foreground">{t("empty.noEvents")}</li>
+                    )}
                   </ol>
                 </Card>
                 <div className="flex gap-2">
@@ -652,13 +922,14 @@ export const IncidentsPage = () => {
               <HighRiskConfirm
                 open={resolveOpen}
                 onOpenChange={setResolveOpen}
-                title={t("confirmDialog.resolveIncident", { title: active.title })}
+                title={t("confirmDialog.resolveIncident", { title: primaryTitle })}
                 description={t("confirmDialog.resolveIncidentDesc")}
                 confirmToken="RESOLVE"
                 onConfirm={() => { advance(active.id, "resolved"); }}
               />
             </>
-          )}
+            );
+          })()}
         </SheetContent>
       </Sheet>
     </>

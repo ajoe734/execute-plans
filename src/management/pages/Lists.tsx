@@ -3,8 +3,13 @@ import { useSearchParams } from "react-router-dom";
 import { ObjectListPage } from "./ObjectListPage";
 import { ServerPager, freshServerPageCursor, useServerPageCursor } from "@/platform/components/ServerPager";
 import {
+  bffFetch,
   lists,
   mgmt,
+  paths,
+  LIST_CLASS_BY_KEY,
+  normalizeBaseObjectFields,
+  normalizeLiveListResponse,
   EVOLUTION_QUALIFICATION_CRITERIA,
   type EvolutionQualificationReport,
   type StrategyListQueryOptions,
@@ -13,6 +18,7 @@ import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
 import {
   normalizeStrategyOperationalStatus,
   rebalanceWorkflowLabel,
+  resolveBffSubjectDisplay,
   statusLabel,
   strategyOperationalStatusClass,
 } from "@/lib/enumLabels";
@@ -194,6 +200,117 @@ export function extractHiddenRetiredPersonaCount(meta: unknown): number | undefi
     : undefined;
 }
 
+export function extractHiddenTestPersonaStrategyCount(meta: unknown): number | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const record = meta as {
+    hidden_test_persona_strategy_count?: unknown;
+    hiddenTestPersonaStrategyCount?: unknown;
+    hidden_test_strategy_count?: unknown;
+    hiddenTestStrategyCount?: unknown;
+    hidden_test_persona_count?: unknown;
+    hiddenTestPersonaCount?: unknown;
+  };
+  const count =
+    record.hidden_test_persona_strategy_count ??
+    record.hiddenTestPersonaStrategyCount ??
+    record.hidden_test_strategy_count ??
+    record.hiddenTestStrategyCount ??
+    record.hidden_test_persona_count ??
+    record.hiddenTestPersonaCount;
+  return typeof count === "number" && Number.isFinite(count) && count >= 0
+    ? count
+    : undefined;
+}
+
+export function extractIncludeTestPersonas(meta: unknown): boolean | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const record = meta as {
+    include_test_personas?: unknown;
+    includeTestPersonas?: unknown;
+  };
+  const flag = record.include_test_personas ?? record.includeTestPersonas;
+  return typeof flag === "boolean" ? flag : undefined;
+}
+
+export type ExtendedStrategyListQueryOptions = StrategyListQueryOptions & {
+  include_test_personas?: boolean;
+  includeTestPersonas?: boolean;
+};
+
+const baseStrategiesLoader = lists.strategies;
+(lists as unknown as { strategies: (options?: ExtendedStrategyListQueryOptions) => Promise<ListEnvelope<unknown>> }).strategies =
+  async (options?: ExtendedStrategyListQueryOptions) => {
+    const includeTest = options?.include_test_personas ?? options?.includeTestPersonas;
+    if (typeof includeTest !== "boolean") {
+      return baseStrategiesLoader(options);
+    }
+    const query: Record<string, string | number | undefined> = {};
+    const state = options?.state?.trim();
+    const excludeState = (options?.exclude_state ?? options?.excludeState)?.trim();
+    const hideRetiredPersonas =
+      options?.hide_retired_personas ?? options?.hideRetiredPersonas;
+    const personaId = (options?.persona_id ?? options?.personaId)?.trim();
+    const pageSize = options?.page_size ?? options?.pageSize;
+    const pageToken = (options?.page_token ?? options?.pageToken)?.trim();
+    if (state) query.state = state;
+    if (excludeState) query.exclude_state = excludeState;
+    if (typeof hideRetiredPersonas === "boolean") {
+      query.hide_retired_personas = hideRetiredPersonas ? "true" : "false";
+    }
+    query.include_test_personas = includeTest ? "true" : "false";
+    if (personaId) query.persona_id = personaId;
+    if (typeof pageSize === "number" && Number.isFinite(pageSize) && pageSize > 0) {
+      query.page_size = pageSize;
+    }
+    if (pageToken) query.page_token = pageToken;
+    const data = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.strategies(),
+      query,
+    });
+    const env = normalizeLiveListResponse<unknown>(data, LIST_CLASS_BY_KEY.strategies);
+    const record =
+      typeof data === "object" && data !== null && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : null;
+    const asRec = (v: unknown) =>
+      typeof v === "object" && v !== null && !Array.isArray(v)
+        ? (v as Record<string, unknown>)
+        : null;
+    const rawPageInfo =
+      asRec(record?.page_info) ??
+      asRec(asRec(record?.data)?.page_info) ??
+      asRec(asRec(record?.meta)?.page_info);
+    const envMeta = asRec(env.meta);
+    const meta =
+      envMeta || rawPageInfo
+        ? {
+            ...(envMeta ?? {}),
+            ...(rawPageInfo && envMeta?.page_info === undefined
+              ? { page_info: rawPageInfo }
+              : {}),
+          }
+        : undefined;
+    const adapted = env.items
+      .map((item) => normalizeBaseObjectFields(item as Record<string, unknown>))
+      .filter((item): item is Record<string, unknown> => Boolean(item));
+    const lowerExclude = excludeState?.toLowerCase();
+    const stateFiltered = lowerExclude
+      ? adapted.filter((item) => String(item?.state ?? "").trim().toLowerCase() !== lowerExclude)
+      : adapted;
+    const items = hideRetiredPersonas
+      ? stateFiltered.filter(
+          (item) => String(item?.operationalStatus ?? "").trim().toLowerCase() !== "retired",
+        )
+      : stateFiltered;
+    return {
+      ...env,
+      items,
+      pageSize: items.length,
+      ...(meta ? { meta } : {}),
+    };
+  };
+
 export { normalizeStrategyOperationalStatus, strategyOperationalStatusClass };
 
 export function normalizeStrategyFilterParam(rawStateParam: string | null | undefined): string {
@@ -205,26 +322,39 @@ export function normalizeStrategyFilterParam(rawStateParam: string | null | unde
 export function resolveStrategyListQuery(
   activeFilter: string,
   pageToken?: string,
-  pageSize: number = STRATEGY_PAGE_SIZE,
-): StrategyListQueryOptions {
+  pageSizeOrOpts: number | { includeTestPersonas?: boolean } = STRATEGY_PAGE_SIZE,
+  includeTestPersonasOrOpts?: boolean | { includeTestPersonas?: boolean },
+): ExtendedStrategyListQueryOptions {
+  const pageSize =
+    typeof pageSizeOrOpts === "number" ? pageSizeOrOpts : STRATEGY_PAGE_SIZE;
+  const includeTestPersonas =
+    typeof pageSizeOrOpts === "object" && pageSizeOrOpts !== null
+      ? pageSizeOrOpts.includeTestPersonas
+      : typeof includeTestPersonasOrOpts === "object" && includeTestPersonasOrOpts !== null
+        ? includeTestPersonasOrOpts.includeTestPersonas
+        : includeTestPersonasOrOpts;
+  const testOpt = includeTestPersonas === true ? { include_test_personas: true } : {};
   if (activeFilter === "default") {
     return {
       exclude_state: "draft",
       hide_retired_personas: true,
       page_size: pageSize,
       ...(pageToken ? { page_token: pageToken } : {}),
+      ...testOpt,
     };
   }
   if (activeFilter === "all") {
     return {
       page_size: pageSize,
       ...(pageToken ? { page_token: pageToken } : {}),
+      ...testOpt,
     };
   }
   return {
     state: activeFilter,
     page_size: pageSize,
     ...(pageToken ? { page_token: pageToken } : {}),
+    ...testOpt,
   };
 }
 
@@ -233,24 +363,45 @@ export const StrategiesList = () => {
   const noData = t("common.noData");
   const [searchParams, setSearchParams] = useSearchParams();
   const activeFilter = normalizeStrategyFilterParam(searchParams.get("state"));
+  const includeTestPersonas = searchParams.get("include_test_personas") === "true";
+  const cursorScope = includeTestPersonas ? `${activeFilter}:include_test` : activeFilter;
 
-  const [effectivePageCursor, setPageCursorState] = useServerPageCursor(activeFilter);
+  const [effectivePageCursor, setPageCursorState] = useServerPageCursor(cursorScope);
 
   const loadStrategiesPage = useCallback(() => {
-    const query = resolveStrategyListQuery(activeFilter, effectivePageCursor.currentToken, STRATEGY_PAGE_SIZE);
-    return asEntityLoader<Strategy>(() => lists.strategies(query))();
-  }, [activeFilter, effectivePageCursor.currentToken]);
+    const query = resolveStrategyListQuery(
+      activeFilter,
+      effectivePageCursor.currentToken,
+      STRATEGY_PAGE_SIZE,
+      includeTestPersonas,
+    );
+    return asEntityLoader<Strategy>(() => (lists.strategies as (q?: ExtendedStrategyListQueryOptions) => Promise<ListEnvelope<unknown>>)(query))();
+  }, [activeFilter, effectivePageCursor.currentToken, includeTestPersonas]);
 
-  const reloadKey = `strategies:${activeFilter}:${effectivePageCursor.currentToken ?? ""}`;
+  const reloadKey = `strategies:${cursorScope}:${effectivePageCursor.currentToken ?? ""}`;
 
   const selectStateFilter = (targetFilter: string) => {
     const normalized = normalizeStrategyFilterParam(targetFilter);
-    setPageCursorState(freshServerPageCursor(normalized));
+    const nextScope = includeTestPersonas ? `${normalized}:include_test` : normalized;
+    setPageCursorState(freshServerPageCursor(nextScope));
     const nextParams = new URLSearchParams(searchParams);
     if (normalized === "default") {
       nextParams.delete("state");
     } else {
       nextParams.set("state", normalized);
+    }
+    setSearchParams(nextParams);
+  };
+
+  const toggleIncludeTestPersonas = () => {
+    const nextInclude = !includeTestPersonas;
+    const nextScope = nextInclude ? `${activeFilter}:include_test` : activeFilter;
+    setPageCursorState(freshServerPageCursor(nextScope));
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextInclude) {
+      nextParams.set("include_test_personas", "true");
+    } else {
+      nextParams.delete("include_test_personas");
     }
     setSearchParams(nextParams);
   };
@@ -266,6 +417,10 @@ export const StrategiesList = () => {
         const stateCounts = extractStrategyStateCounts(ctx.meta);
         const pageInfoTotal = extractStrategyPageInfoTotal(ctx.meta);
         const hiddenRetiredCount = extractHiddenRetiredPersonaCount(ctx.meta);
+        const hiddenTestPersonaStrategyCount = extractHiddenTestPersonaStrategyCount(ctx.meta);
+        const hasHiddenTestPersonaStrategyCount =
+          typeof hiddenTestPersonaStrategyCount === "number" &&
+          Number.isFinite(hiddenTestPersonaStrategyCount);
         const baseIds: string[] = [...STRATEGY_BASE_FILTER_OPTIONS];
         if (!baseIds.includes(activeFilter)) {
           baseIds.push(activeFilter);
@@ -355,6 +510,40 @@ export const StrategiesList = () => {
                 </Button>
               </Card>
             )}
+            {!ctx.isInitialLoading &&
+              !ctx.isDegradedEmpty &&
+              (hasHiddenTestPersonaStrategyCount || includeTestPersonas) && (
+                <Card
+                  data-testid="strategy-test-personas-banner"
+                  className="mb-3 flex flex-wrap items-center justify-between gap-2 border-border/70 bg-muted/20 p-3 text-sm"
+                >
+                  <span className="text-foreground" data-testid="strategy-hidden-test-personas-text">
+                    {includeTestPersonas
+                      ? t("strategy.list.showingTestPersonaStrategies")
+                      : hasHiddenTestPersonaStrategyCount
+                        ? t("strategy.list.hiddenTestPersonaStrategiesWithCount", {
+                            count: hiddenTestPersonaStrategyCount,
+                          })
+                        : t("strategy.list.hiddenTestPersonaStrategiesNoCount")}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={includeTestPersonas ? "default" : "outline"}
+                    aria-pressed={includeTestPersonas}
+                    data-testid="strategy-toggle-test-personas-button"
+                    onClick={toggleIncludeTestPersonas}
+                  >
+                    {includeTestPersonas
+                      ? t("strategy.list.hideTestPersonaStrategies")
+                      : hasHiddenTestPersonaStrategyCount
+                        ? t("strategy.list.showTestPersonaStrategiesWithCount", {
+                            count: hiddenTestPersonaStrategyCount,
+                          })
+                        : t("strategy.list.showTestPersonaStrategiesNoCount")}
+                  </Button>
+                </Card>
+              )}
           </>
         );
       }}
@@ -764,6 +953,106 @@ export const DeploymentsList = () => {
       loader={asEntityLoader<Deployment>(lists.deployments)}
       basePath="/management/deployments" liveKinds={["Deployment","DeploymentStage"]}
       createBehavior={{ kind: "drawer", entity: "deployment" }}
+      nameCell={(r) => {
+        const personaId =
+          r.persona_id ?? r.personaId ?? r.sponsor_persona_id ?? r.sponsorPersonaId ?? undefined;
+        const personaDisplayName =
+          r.persona_display_name ??
+          r.personaDisplayName ??
+          r.sponsor_persona_display_name ??
+          r.sponsorPersonaDisplayName ??
+          undefined;
+        const personaNameMissing =
+          r.persona_name_missing ??
+          r.personaNameMissing ??
+          r.sponsor_persona_name_missing ??
+          r.sponsorPersonaNameMissing;
+        const strategyId = r.strategy_id ?? r.strategyId ?? undefined;
+        const strategyDisplayName =
+          r.strategy_display_name ?? r.strategyDisplayName ?? undefined;
+        const strategyNameMissing =
+          r.strategy_name_missing ?? r.strategyNameMissing;
+
+        const personaDisplay = resolveBffSubjectDisplay(
+          {
+            id: personaId,
+            displayName: personaDisplayName,
+            nameMissing: personaNameMissing,
+          },
+          t,
+        );
+        const strategyDisplay = resolveBffSubjectDisplay(
+          {
+            id: strategyId,
+            displayName: strategyDisplayName,
+            nameMissing: strategyNameMissing,
+          },
+          t,
+        );
+        const hasPersona = Boolean(personaId || personaDisplayName);
+        const hasStrategy = Boolean(strategyId || strategyDisplayName);
+        const planText = r.name || r.id;
+        return (
+          <div className="space-y-0.5">
+            {hasPersona && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-medium text-foreground" data-testid="deployment-persona-display">
+                  {personaDisplay.primaryText}
+                </span>
+                {personaDisplay.nameMissing && (
+                  <Badge
+                    variant="outline"
+                    data-testid="deployment-persona-name-missing"
+                    data-name-missing="true"
+                    className="border-status-warning/40 text-[10px] text-status-warning"
+                  >
+                    {personaDisplay.nameMissingLabel}
+                  </Badge>
+                )}
+              </div>
+            )}
+            {hasStrategy && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-medium text-foreground" data-testid="deployment-strategy-display">
+                  {strategyDisplay.primaryText}
+                </span>
+                {strategyDisplay.nameMissing && (
+                  <Badge
+                    variant="outline"
+                    data-testid="deployment-strategy-name-missing"
+                    data-name-missing="true"
+                    className="border-status-warning/40 text-[10px] text-status-warning"
+                  >
+                    {strategyDisplay.nameMissingLabel}
+                  </Badge>
+                )}
+              </div>
+            )}
+            <div
+              className={
+                hasPersona || hasStrategy
+                  ? "font-mono text-xs text-muted-foreground"
+                  : "font-medium"
+              }
+            >
+              {planText}
+            </div>
+            {r.id && r.id !== planText && (
+              <div className="font-mono text-xs text-muted-foreground">{r.id}</div>
+            )}
+            {personaDisplay.secondaryId && (
+              <div className="font-mono text-xs text-muted-foreground" data-testid="deployment-persona-id">
+                {personaDisplay.secondaryId}
+              </div>
+            )}
+            {strategyDisplay.secondaryId && (
+              <div className="font-mono text-xs text-muted-foreground" data-testid="deployment-strategy-id">
+                {strategyDisplay.secondaryId}
+              </div>
+            )}
+          </div>
+        );
+      }}
       extraColumns={[
         { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target || noData}</span> },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
@@ -1116,7 +1405,109 @@ export const ArtifactsList = () => {
           minWidth: 170,
           className: "px-3",
           header: t("common.name"),
-          cell: (r) => <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>,
+          cell: (r) => {
+            const strategyId = r.strategy_id ?? r.strategyId ?? undefined;
+            const strategyDisplayName =
+              r.strategy_display_name ?? r.strategyDisplayName ?? undefined;
+            const strategyNameMissing =
+              r.strategy_name_missing ?? r.strategyNameMissing;
+            const personaId = r.persona_id ?? r.personaId ?? undefined;
+            const personaDisplayName =
+              r.persona_display_name ?? r.personaDisplayName ?? undefined;
+            const personaNameMissing =
+              r.persona_name_missing ?? r.personaNameMissing;
+
+            const strategyDisplay = resolveBffSubjectDisplay(
+              {
+                id: strategyId || r.name || r.id,
+                displayName: strategyDisplayName,
+                nameMissing: strategyNameMissing,
+              },
+              t,
+            );
+            const personaDisplay = resolveBffSubjectDisplay(
+              {
+                id: personaId,
+                displayName: personaDisplayName,
+                nameMissing: personaNameMissing,
+              },
+              t,
+            );
+            const hasStrategyMeta = Boolean(
+              strategyDisplayName || strategyNameMissing === true,
+            );
+            const hasPersonaMeta = Boolean(
+              personaId || personaDisplayName || personaNameMissing === true,
+            );
+            const primaryTitle = hasStrategyMeta
+              ? strategyDisplay.primaryText
+              : r.name || r.id;
+
+            return (
+              <div className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div
+                    className="font-medium line-clamp-2 break-words"
+                    title={primaryTitle}
+                    data-testid="artifact-primary-name"
+                  >
+                    {primaryTitle}
+                  </div>
+                  {strategyDisplay.nameMissing && (
+                    <Badge
+                      variant="outline"
+                      data-testid="artifact-strategy-name-missing"
+                      data-name-missing="true"
+                      className="border-status-warning/40 text-[10px] text-status-warning"
+                    >
+                      {strategyDisplay.nameMissingLabel}
+                    </Badge>
+                  )}
+                </div>
+                {hasPersonaMeta && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-medium text-foreground" data-testid="artifact-persona-display">
+                      {personaDisplay.primaryText}
+                    </span>
+                    {personaDisplay.nameMissing && (
+                      <Badge
+                        variant="outline"
+                        data-testid="artifact-persona-name-missing"
+                        data-name-missing="true"
+                        className="border-status-warning/40 text-[10px] text-status-warning"
+                      >
+                        {personaDisplay.nameMissingLabel}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                {strategyDisplay.secondaryId && (
+                  <div
+                    className="font-mono text-xs text-muted-foreground"
+                    data-testid="artifact-strategy-id"
+                  >
+                    {strategyDisplay.secondaryId}
+                  </div>
+                )}
+                {personaDisplay.secondaryId && (
+                  <div
+                    className="font-mono text-xs text-muted-foreground"
+                    data-testid="artifact-persona-id"
+                  >
+                    {personaDisplay.secondaryId}
+                  </div>
+                )}
+                {r.id && r.id !== primaryTitle && r.id !== strategyDisplay.secondaryId && (
+                  <div
+                    className="font-mono text-xs text-muted-foreground"
+                    data-testid="artifact-id"
+                  >
+                    {r.id}
+                  </div>
+                )}
+              </div>
+            );
+          },
         },
         {
           key: "source",

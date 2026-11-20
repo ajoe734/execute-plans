@@ -1440,3 +1440,417 @@ export function strategyOperationalStatusClass(
   if (status === "idle") return "border-border text-foreground";
   return "border-muted text-muted-foreground";
 }
+
+// --- BFF-owned display names & localized incident summaries (RC6 WP6.1/6.2) ---
+// Per docs/bff/KW-02-research-notes.md, the frontend never resolves a display
+// name from a raw id itself; it consumes only the display name and name_missing
+// flag returned by the BFF.
+
+export interface BffSubjectDisplayInput {
+  id?: string | null;
+  displayName?: string | null;
+  nameMissing?: boolean | null;
+}
+
+export interface ResolvedBffSubjectDisplay {
+  primaryText: string;
+  secondaryId?: string;
+  rawId?: string;
+  hasDisplayName: boolean;
+  nameMissing: boolean;
+  nameMissingLabel?: string;
+  nameMissingBadgeLabel?: string;
+}
+
+function translateOrFallback(
+  t: TranslateFn | undefined,
+  key: string,
+  fallback: string,
+  params: Record<string, unknown> = {},
+): string {
+  if (!t) return fallback;
+  const out = t(key, { ...params, defaultValue: fallback });
+  if (typeof out === "string" && out.trim() && out !== key) return out;
+  return fallback;
+}
+
+export function nameMissingLabel(t?: TranslateFn): string {
+  return translateOrFallback(t, "common.nameMissing", "Name missing");
+}
+
+export function resolveBffSubjectDisplay(
+  input: BffSubjectDisplayInput,
+  t?: TranslateFn,
+): ResolvedBffSubjectDisplay {
+  const rawId = sanitizeRawText(input.id) || undefined;
+  const cleanDisplay = sanitizeRawText(input.displayName) || undefined;
+  const isMissing = input.nameMissing === true;
+
+  if (!rawId && !cleanDisplay) {
+    return {
+      primaryText: "—",
+      secondaryId: undefined,
+      rawId: undefined,
+      hasDisplayName: false,
+      nameMissing: false,
+    };
+  }
+
+  if (isMissing) {
+    const primaryText = rawId || cleanDisplay || "—";
+    const secondaryId =
+      cleanDisplay && rawId && cleanDisplay !== rawId ? rawId : undefined;
+    const badge = nameMissingLabel(t);
+    return {
+      primaryText,
+      secondaryId,
+      rawId: rawId || cleanDisplay,
+      hasDisplayName: false,
+      nameMissing: true,
+      nameMissingLabel: badge,
+      nameMissingBadgeLabel: badge,
+    };
+  }
+
+  const primaryText = cleanDisplay || rawId || "—";
+  const secondaryId =
+    cleanDisplay && rawId && cleanDisplay !== rawId ? rawId : undefined;
+  return {
+    primaryText,
+    secondaryId,
+    rawId: rawId || cleanDisplay,
+    hasDisplayName: Boolean(cleanDisplay && (!rawId || cleanDisplay !== rawId)),
+    nameMissing: false,
+  };
+}
+
+export function isRawEvidenceSummaryText(value: unknown): boolean {
+  const text = sanitizeRawText(value);
+  if (!text) return false;
+  return /^alerts=[A-Za-z0-9_.:-]+(?:,[A-Za-z0-9_.:-]+)*$/i.test(text);
+}
+
+const COMPARATOR_SYMBOLS: Record<string, string> = {
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+  eq: "=",
+  neq: "!=",
+  abs_gt: "|x| >",
+  abs_gte: "|x| >=",
+};
+
+function formatNumericMetricValue(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const abs = Math.abs(value);
+    if (abs > 0 && abs < 0.0001) return value.toExponential(2);
+    return Number(value.toFixed(4)).toString();
+  }
+  const text = sanitizeRawText(value);
+  if (!text) return "";
+  const parsed = Number(text);
+  if (Number.isFinite(parsed)) {
+    return Number(parsed.toFixed(4)).toString();
+  }
+  return text;
+}
+
+function parseFiniteMetricNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value.trim());
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function computeThresholdDeltaText(
+  observed: unknown,
+  threshold: unknown,
+  t?: TranslateFn,
+): string {
+  const obsNum = parseFiniteMetricNumber(observed);
+  const thrNum = parseFiniteMetricNumber(threshold);
+  if (obsNum === null || thrNum === null) return "";
+  const rawDiff = Math.abs(obsNum) - Math.abs(thrNum);
+  const diff = Number.isFinite(rawDiff) && rawDiff > 0 ? rawDiff : Math.abs(obsNum - thrNum);
+  if (!Number.isFinite(diff) || diff <= 0) return "";
+  const formattedDelta = `+${Number(diff.toFixed(4)).toString()}`;
+  return translateOrFallback(
+    t,
+    "incident.humanSummary.deltaFmt",
+    ` (${formattedDelta} past threshold)`,
+    { delta: formattedDelta },
+  );
+}
+
+function buildOccurrenceClause(
+  occurrenceCount: unknown,
+  firstSeenAt: unknown,
+  lastSeenAt: unknown,
+  t?: TranslateFn,
+): string {
+  const countNum = parseFiniteMetricNumber(occurrenceCount);
+  const count = countNum !== null && countNum >= 1 ? Math.floor(countNum) : null;
+  const firstSeen = sanitizeRawText(firstSeenAt);
+  const lastSeen = sanitizeRawText(lastSeenAt);
+
+  if (count !== null && firstSeen) {
+    if (count > 1 && lastSeen && lastSeen !== firstSeen) {
+      return translateOrFallback(
+        t,
+        "incident.humanSummary.occurrencesManyWithLatestFmt",
+        `Occurred ${count} times since ${firstSeen} (latest ${lastSeen}).`,
+        { count, firstSeen, lastSeen },
+      );
+    }
+    if (count > 1) {
+      return translateOrFallback(
+        t,
+        "incident.humanSummary.occurrencesManyFmt",
+        `Occurred ${count} times since ${firstSeen}.`,
+        { count, firstSeen },
+      );
+    }
+    return translateOrFallback(
+      t,
+      "incident.humanSummary.occurrencesSingleFmt",
+      `Occurred 1 time since ${firstSeen}.`,
+      { firstSeen },
+    );
+  }
+
+  if (count !== null) {
+    return translateOrFallback(
+      t,
+      "incident.humanSummary.occurrencesCountOnlyFmt",
+      `Occurred ${count} time(s).`,
+      { count },
+    );
+  }
+
+  return "";
+}
+
+export interface IncidentSummaryInput {
+  summary_key?: string | null;
+  summaryKey?: string | null;
+  summary_params?: Record<string, unknown> | null;
+  summaryParams?: Record<string, unknown> | null;
+  summary?: string | null;
+  evidence_summary?: string | null;
+  evidenceSummary?: string | null;
+  rationale?: string | null;
+  kind?: string | null;
+  metric?: string | null;
+  observed?: unknown;
+  threshold?: unknown;
+  comparator?: string | null;
+  occurrence_count?: number | null;
+  occurrenceCount?: number | null;
+  first_seen_at?: string | null;
+  firstSeenAt?: string | null;
+  last_seen_at?: string | null;
+  lastSeenAt?: string | null;
+}
+
+export function formatLocalizedIncidentSummary(
+  input: IncidentSummaryInput | null | undefined,
+  t?: TranslateFn,
+): string {
+  if (!input) return "";
+  const params =
+    (input.summary_params && typeof input.summary_params === "object"
+      ? input.summary_params
+      : input.summaryParams && typeof input.summaryParams === "object"
+        ? input.summaryParams
+        : {}) as Record<string, unknown>;
+
+  const rawKey = sanitizeRawText(input.summary_key ?? input.summaryKey) ?? "";
+  const metric =
+    sanitizeRawText(params.metric ?? input.metric) || "metric";
+  const observedText = formatNumericMetricValue(params.observed ?? input.observed);
+  const thresholdText = formatNumericMetricValue(params.threshold ?? input.threshold);
+  const rawComparator =
+    sanitizeRawText(
+      params.comparator_symbol ?? params.comparator ?? input.comparator,
+    ) ?? "";
+  const comparator =
+    COMPARATOR_SYMBOLS[rawComparator.toLowerCase()] || rawComparator || ">";
+  const deltaClause = computeThresholdDeltaText(
+    params.observed ?? input.observed,
+    params.threshold ?? input.threshold,
+    t,
+  );
+  const occurrenceClause = buildOccurrenceClause(
+    params.occurrence_count ?? input.occurrence_count ?? input.occurrenceCount,
+    params.first_seen_at ?? input.first_seen_at ?? input.firstSeenAt,
+    params.last_seen_at ?? input.last_seen_at ?? input.lastSeenAt,
+    t,
+  );
+  const service =
+    sanitizeRawText(params.service_name ?? params.service) || "runtime";
+  const rationale =
+    sanitizeRawText(params.rationale ?? input.rationale) || "threshold signal";
+  const stage =
+    sanitizeRawText(params.deployment_stage ?? params.stage) || "paper";
+
+  const shortKey = rawKey.startsWith("incident.summary.")
+    ? rawKey.slice("incident.summary.".length)
+    : rawKey;
+
+  if (shortKey) {
+    const i18nKey = `incident.humanSummary.${shortKey}`;
+    if (shortKey === "drift_threshold_breach") {
+      const fallback = `Paper vs live drift exceeded threshold: ${metric} observed ${observedText} ${comparator} threshold ${thresholdText}${deltaClause}.${occurrenceClause ? ` ${occurrenceClause}` : ""}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        metric,
+        observed: observedText,
+        comparator,
+        threshold: thresholdText,
+        deltaClause,
+        occurrenceClause,
+      }).trim();
+    }
+    if (shortKey === "drift_detected") {
+      const fallback = `Paper vs live drift detected: ${metric} observed ${observedText}.${occurrenceClause ? ` ${occurrenceClause}` : ""}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        metric,
+        observed: observedText,
+        occurrenceClause,
+      }).trim();
+    }
+    if (shortKey === "threshold_breach") {
+      const fallback = `${metric} exceeded threshold: observed ${observedText} ${comparator} threshold ${thresholdText}${deltaClause}.${occurrenceClause ? ` ${occurrenceClause}` : ""}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        metric,
+        observed: observedText,
+        comparator,
+        threshold: thresholdText,
+        deltaClause,
+        occurrenceClause,
+      }).trim();
+    }
+    if (shortKey === "infrastructure_degradation") {
+      const fallback = `${service} reported infrastructure health degradation.${occurrenceClause ? ` ${occurrenceClause}` : ""}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        service,
+        occurrenceClause,
+      }).trim();
+    }
+    if (shortKey === "agent_finding") {
+      const fallback = `Monitor agent reported a finding: ${rationale}.${occurrenceClause ? ` ${occurrenceClause}` : ""}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        rationale,
+        occurrenceClause,
+      }).trim();
+    }
+    if (shortKey === "deployment") {
+      const fallback = `Deployment incident (stage: ${stage}).${occurrenceClause ? ` ${occurrenceClause}` : ""}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        stage,
+        occurrenceClause,
+      }).trim();
+    }
+    if (shortKey === "generic") {
+      const fallback = `Operational incident requiring governance review.${occurrenceClause ? ` ${occurrenceClause}` : ""}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        occurrenceClause,
+      }).trim();
+    }
+  }
+
+  // Fallback when summary_key is absent: never return evidence_summary.
+  const rawEvidence = sanitizeRawText(input.evidence_summary ?? input.evidenceSummary);
+  const candidateSummary = sanitizeRawText(input.summary);
+  if (
+    candidateSummary &&
+    candidateSummary !== rawEvidence &&
+    !isRawEvidenceSummaryText(candidateSummary)
+  ) {
+    return candidateSummary;
+  }
+  const candidateRationale = sanitizeRawText(input.rationale);
+  if (
+    candidateRationale &&
+    candidateRationale !== rawEvidence &&
+    !isRawEvidenceSummaryText(candidateRationale)
+  ) {
+    return candidateRationale;
+  }
+  return "";
+}
+
+export interface IncidentTimelineEntryInput {
+  summary_key?: string | null;
+  summaryKey?: string | null;
+  summary_params?: Record<string, unknown> | null;
+  summaryParams?: Record<string, unknown> | null;
+  summary?: string | null;
+  note?: string | null;
+  entry_type?: string | null;
+  entryType?: string | null;
+}
+
+export function formatLocalizedIncidentTimelineNote(
+  entry: IncidentTimelineEntryInput | null | undefined,
+  t?: TranslateFn,
+): string {
+  if (!entry) return "";
+  const params =
+    (entry.summary_params && typeof entry.summary_params === "object"
+      ? entry.summary_params
+      : entry.summaryParams && typeof entry.summaryParams === "object"
+        ? entry.summaryParams
+        : {}) as Record<string, unknown>;
+  const rawKey = sanitizeRawText(entry.summary_key ?? entry.summaryKey) ?? "";
+  const shortKey = rawKey.startsWith("incident.timeline.")
+    ? rawKey.slice("incident.timeline.".length)
+    : rawKey;
+
+  const metric = sanitizeRawText(params.metric) || "metric";
+  const observedText = formatNumericMetricValue(params.observed);
+  const thresholdText = formatNumericMetricValue(params.threshold);
+  const rawComparator =
+    sanitizeRawText(params.comparator_symbol ?? params.comparator) ?? "";
+  const comparator =
+    COMPARATOR_SYMBOLS[rawComparator.toLowerCase()] || rawComparator || ">";
+  const deltaClause = computeThresholdDeltaText(params.observed, params.threshold, t);
+  const rationale = sanitizeRawText(params.rationale) || "threshold signal";
+  const service = sanitizeRawText(params.service_name ?? params.service) || "runtime";
+  const count = parseFiniteMetricNumber(params.occurrence_count) ?? 1;
+  const reason = sanitizeRawText(params.reason) || "resolved";
+
+  if (shortKey) {
+    const i18nKey = `incident.timelineSummary.${shortKey}`;
+    if (shortKey === "drift_occurrence") {
+      const fallback = `${metric} drift occurrence: observed ${observedText} ${comparator} threshold ${thresholdText}${deltaClause}`;
+      return translateOrFallback(t, i18nKey, fallback, {
+        metric,
+        observed: observedText,
+        comparator,
+        threshold: thresholdText,
+        deltaClause,
+      });
+    }
+    if (shortKey === "agent_finding_occurrence") {
+      const fallback = `Monitor agent finding recorded: ${rationale}`;
+      return translateOrFallback(t, i18nKey, fallback, { rationale });
+    }
+    if (shortKey === "infrastructure_occurrence") {
+      const fallback = `${service} health probe recorded degraded status`;
+      return translateOrFallback(t, i18nKey, fallback, { service });
+    }
+    if (shortKey === "occurrence") {
+      const fallback = `Incident occurrence #${count} recorded`;
+      return translateOrFallback(t, i18nKey, fallback, { count });
+    }
+    if (shortKey === "resolved") {
+      const fallback = `Incident resolved: ${reason}`;
+      return translateOrFallback(t, i18nKey, fallback, { reason });
+    }
+  }
+
+  return sanitizeRawText(entry.summary) || sanitizeRawText(entry.note) || "";
+}

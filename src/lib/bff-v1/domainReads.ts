@@ -18,30 +18,44 @@ export const firstArray = <T>(...values: unknown[]): T[] => {
   return [];
 };
 
+const attachRawIncidentTimeline = <T>(items: T[]): T[] =>
+  items.map((item) => {
+    const rec = asRecord(item);
+    if (!rec || !Array.isArray(rec.timeline) || rec.evidence_timeline !== undefined) {
+      return item;
+    }
+    return {
+      ...rec,
+      evidence_timeline: rec.timeline,
+    } as T;
+  });
+
 export const liveItemsFrom = <T>(body: unknown): T[] => {
-  if (Array.isArray(body)) return body as T[];
+  if (Array.isArray(body)) return attachRawIncidentTimeline(body as T[]);
   const record = asRecord(body);
   const data = asRecord(record?.data);
-  return firstArray<T>(
-    record?.items,
-    record?.data,
-    data?.items,
-    record?.alerts,
-    record?.approvals,
-    record?.artifacts,
-    record?.channels,
-    record?.events,
-    record?.incidents,
-    record?.jobs,
-    record?.mcp_servers,
-    record?.mcpServers,
-    record?.mcp_tools,
-    record?.mcpTools,
-    record?.results,
-    record?.runtimes,
-    record?.search_results,
-    record?.skills,
-    record?.tools,
+  return attachRawIncidentTimeline(
+    firstArray<T>(
+      record?.items,
+      record?.data,
+      data?.items,
+      record?.alerts,
+      record?.approvals,
+      record?.artifacts,
+      record?.channels,
+      record?.events,
+      record?.incidents,
+      record?.jobs,
+      record?.mcp_servers,
+      record?.mcpServers,
+      record?.mcp_tools,
+      record?.mcpTools,
+      record?.results,
+      record?.runtimes,
+      record?.search_results,
+      record?.skills,
+      record?.tools,
+    ),
   );
 };
 
@@ -286,6 +300,48 @@ export function normalizeArtifactFields<T>(raw: T | undefined): T | undefined {
     patched.format = null;
   }
 
+  const strategyId = recordString(inputRecord, "strategy_id", "strategyId");
+  if (strategyId !== undefined) {
+    patched.strategy_id = strategyId;
+    patched.strategyId = strategyId;
+  }
+  const strategyDisplayName = recordString(inputRecord, "strategy_display_name", "strategyDisplayName");
+  if (strategyDisplayName !== undefined) {
+    patched.strategy_display_name = strategyDisplayName;
+    patched.strategyDisplayName = strategyDisplayName;
+  }
+  const strategyNameMissing =
+    typeof inputRecord.strategy_name_missing === "boolean"
+      ? inputRecord.strategy_name_missing
+      : typeof inputRecord.strategyNameMissing === "boolean"
+        ? inputRecord.strategyNameMissing
+        : undefined;
+  if (strategyNameMissing !== undefined) {
+    patched.strategy_name_missing = strategyNameMissing;
+    patched.strategyNameMissing = strategyNameMissing;
+  }
+
+  const personaId = recordString(inputRecord, "persona_id", "personaId");
+  if (personaId !== undefined) {
+    patched.persona_id = personaId;
+    patched.personaId = personaId;
+  }
+  const personaDisplayName = recordString(inputRecord, "persona_display_name", "personaDisplayName");
+  if (personaDisplayName !== undefined) {
+    patched.persona_display_name = personaDisplayName;
+    patched.personaDisplayName = personaDisplayName;
+  }
+  const personaNameMissing =
+    typeof inputRecord.persona_name_missing === "boolean"
+      ? inputRecord.persona_name_missing
+      : typeof inputRecord.personaNameMissing === "boolean"
+        ? inputRecord.personaNameMissing
+        : undefined;
+  if (personaNameMissing !== undefined) {
+    patched.persona_name_missing = personaNameMissing;
+    patched.personaNameMissing = personaNameMissing;
+  }
+
   return patched as T;
 }
 
@@ -465,6 +521,81 @@ export function normalizeDeploymentFields<T>(raw: T | undefined): T | undefined 
     const value = recordString(inputRecord, ...aliases);
     if (value !== undefined) patched[canonical] = value;
   }
+  const strategyId = recordString(inputRecord, "strategyId", "strategy_id");
+  if (strategyId !== undefined) {
+    patched.strategyId = strategyId;
+    patched.strategy_id = strategyId;
+  }
+  const strategyDisplayName = recordString(inputRecord, "strategy_display_name", "strategyDisplayName");
+  if (strategyDisplayName !== undefined) {
+    patched.strategy_display_name = strategyDisplayName;
+    patched.strategyDisplayName = strategyDisplayName;
+  }
+  const strategyNameMissing =
+    typeof inputRecord.strategy_name_missing === "boolean"
+      ? inputRecord.strategy_name_missing
+      : typeof inputRecord.strategyNameMissing === "boolean"
+        ? inputRecord.strategyNameMissing
+        : undefined;
+  if (strategyNameMissing !== undefined) {
+    patched.strategy_name_missing = strategyNameMissing;
+    patched.strategyNameMissing = strategyNameMissing;
+  }
+  const personaId = recordString(
+    inputRecord,
+    "persona_id",
+    "personaId",
+    "sponsor_persona_id",
+    "sponsorPersonaId",
+  );
+  if (personaId !== undefined) {
+    patched.persona_id = personaId;
+    patched.personaId = personaId;
+  }
+  const personaDisplayName = recordString(
+    inputRecord,
+    "persona_display_name",
+    "personaDisplayName",
+    "sponsor_persona_display_name",
+    "sponsorPersonaDisplayName",
+  );
+  if (personaDisplayName !== undefined) {
+    patched.persona_display_name = personaDisplayName;
+    patched.personaDisplayName = personaDisplayName;
+  }
+  const personaNameMissing =
+    typeof inputRecord.persona_name_missing === "boolean"
+      ? inputRecord.persona_name_missing
+      : typeof inputRecord.personaNameMissing === "boolean"
+        ? inputRecord.personaNameMissing
+        : typeof inputRecord.sponsor_persona_name_missing === "boolean"
+          ? inputRecord.sponsor_persona_name_missing
+          : typeof inputRecord.sponsorPersonaNameMissing === "boolean"
+            ? inputRecord.sponsorPersonaNameMissing
+            : undefined;
+  if (personaNameMissing !== undefined) {
+    patched.persona_name_missing = personaNameMissing;
+    patched.personaNameMissing = personaNameMissing;
+  }
+  const sponsorPersonaDisplayName = recordString(
+    inputRecord,
+    "sponsor_persona_display_name",
+    "sponsorPersonaDisplayName",
+  );
+  if (sponsorPersonaDisplayName !== undefined) {
+    patched.sponsor_persona_display_name = sponsorPersonaDisplayName;
+    patched.sponsorPersonaDisplayName = sponsorPersonaDisplayName;
+  }
+  const sponsorPersonaNameMissing =
+    typeof inputRecord.sponsor_persona_name_missing === "boolean"
+      ? inputRecord.sponsor_persona_name_missing
+      : typeof inputRecord.sponsorPersonaNameMissing === "boolean"
+        ? inputRecord.sponsorPersonaNameMissing
+        : undefined;
+  if (sponsorPersonaNameMissing !== undefined) {
+    patched.sponsor_persona_name_missing = sponsorPersonaNameMissing;
+    patched.sponsorPersonaNameMissing = sponsorPersonaNameMissing;
+  }
   return patched as T;
 }
 
@@ -479,6 +610,16 @@ export type RuntimeListItem = Runtime & {
   runtime_binding_id?: string;
   personaId?: string;
   persona_id?: string;
+  personaDisplayName?: string;
+  persona_display_name?: string;
+  personaNameMissing?: boolean;
+  persona_name_missing?: boolean;
+  strategyId?: string;
+  strategy_id?: string;
+  strategyDisplayName?: string;
+  strategy_display_name?: string;
+  strategyNameMissing?: boolean;
+  strategy_name_missing?: boolean;
   artifactId?: string;
   artifact_id?: string;
   planId?: string;
@@ -550,6 +691,31 @@ export function adaptRuntimeRow(value: unknown, index: number): RuntimeListItem 
   const id = runtimeId ?? runtimeBindingId ?? stringFrom(row.id) ?? `runtime-${index + 1}`;
   const name = stringFrom(row.name, row.displayName, row.display_name, runtimeId, runtimeBindingId) ?? id;
   const personaId = stringFrom(row.personaId, row.persona_id, metadata?.personaId, metadata?.persona_id);
+  const personaDisplayName = stringFrom(
+    row.personaDisplayName,
+    row.persona_display_name,
+    metadata?.personaDisplayName,
+    metadata?.persona_display_name,
+  );
+  const personaNameMissing =
+    typeof row.persona_name_missing === "boolean"
+      ? row.persona_name_missing
+      : typeof row.personaNameMissing === "boolean"
+        ? row.personaNameMissing
+        : undefined;
+  const strategyId = stringFrom(row.strategyId, row.strategy_id, metadata?.strategyId, metadata?.strategy_id);
+  const strategyDisplayName = stringFrom(
+    row.strategyDisplayName,
+    row.strategy_display_name,
+    metadata?.strategyDisplayName,
+    metadata?.strategy_display_name,
+  );
+  const strategyNameMissing =
+    typeof row.strategy_name_missing === "boolean"
+      ? row.strategy_name_missing
+      : typeof row.strategyNameMissing === "boolean"
+        ? row.strategyNameMissing
+        : undefined;
   const artifactId = stringFrom(row.artifactId, row.artifact_id);
   const planId = stringFrom(row.planId, row.plan_id, row.deploymentPlanId, row.deployment_plan_id);
   const runtimeKind = stringFrom(row.kind, row.runtimeKind, row.runtime_kind, row.deploymentMode, row.deployment_mode);
@@ -574,6 +740,21 @@ export function adaptRuntimeRow(value: unknown, index: number): RuntimeListItem 
     runtime_binding_id: runtimeBindingId,
     personaId,
     persona_id: personaId,
+    ...(personaDisplayName !== undefined
+      ? { personaDisplayName, persona_display_name: personaDisplayName }
+      : {}),
+    ...(personaNameMissing !== undefined
+      ? { personaNameMissing, persona_name_missing: personaNameMissing }
+      : {}),
+    ...(strategyId !== undefined
+      ? { strategyId, strategy_id: strategyId }
+      : {}),
+    ...(strategyDisplayName !== undefined
+      ? { strategyDisplayName, strategy_display_name: strategyDisplayName }
+      : {}),
+    ...(strategyNameMissing !== undefined
+      ? { strategyNameMissing, strategy_name_missing: strategyNameMissing }
+      : {}),
     artifactId,
     artifact_id: artifactId,
     planId,

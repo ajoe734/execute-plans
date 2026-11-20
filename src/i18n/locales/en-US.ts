@@ -733,6 +733,8 @@ export default {
     focusMissingObjectFmt: "No {{label}} row found for {{id}}. Showing all rows.",
     showAllObjects: "Show all {{label}}",
     notReported: "Not reported",
+    nameMissing: "Name missing",
+    copyId: "Copy ID",
     cancel: "Cancel",
     error: "Error",
     unavailable: "Unavailable",
@@ -1072,6 +1074,12 @@ export default {
       hiddenDraftsNoCount: "Draft strategies are hidden by default.",
       showDraftsWithCount: "Show drafts ({{count}})",
       showDraftsNoCount: "Show drafts",
+      hiddenTestPersonaStrategiesWithCount: "{{count}} test-persona strategies are hidden by default.",
+      hiddenTestPersonaStrategiesNoCount: "Test-persona strategies are hidden by default.",
+      showingTestPersonaStrategies: "Currently showing test-persona strategies.",
+      showTestPersonaStrategiesWithCount: "Show test strategies ({{count}})",
+      showTestPersonaStrategiesNoCount: "Show test strategies",
+      hideTestPersonaStrategies: "Hide test strategies",
       pagination: {
         label: "Strategy list pagination",
         showingRange: "Showing {{start}}–{{end}} of {{total}}",
@@ -1234,6 +1242,40 @@ export default {
       add: "Create evolution constraint",
       placeholder: "Constraint summary (e.g. cap leverage in regime X)…",
       created: "Evolution constraint created",
+    },
+    evidenceTimeline: "Evidence timeline",
+    humanSummary: {
+      drift_threshold_breach:
+        "Paper vs live drift exceeded threshold: {{metric}} observed {{observed}} {{comparator}} threshold {{threshold}}{{deltaClause}}. {{occurrenceClause}}",
+      drift_detected:
+        "Paper vs live drift detected: {{metric}} observed {{observed}}. {{occurrenceClause}}",
+      threshold_breach:
+        "{{metric}} exceeded threshold: observed {{observed}} {{comparator}} threshold {{threshold}}{{deltaClause}}. {{occurrenceClause}}",
+      infrastructure_degradation:
+        "{{service}} reported infrastructure health degradation. {{occurrenceClause}}",
+      agent_finding:
+        "Monitor agent reported a finding: {{rationale}}. {{occurrenceClause}}",
+      deployment:
+        "Deployment incident (stage: {{stage}}). {{occurrenceClause}}",
+      generic:
+        "Operational incident requiring governance review. {{occurrenceClause}}",
+      deltaFmt: " ({{delta}} past threshold)",
+      occurrencesManyWithLatestFmt: "Occurred {{count}} times since {{firstSeen}} (latest {{lastSeen}}).",
+      occurrencesManyFmt: "Occurred {{count}} times since {{firstSeen}}.",
+      occurrencesSingleFmt: "Occurred 1 time since {{firstSeen}}.",
+      occurrencesCountOnlyFmt: "Occurred {{count}} time(s).",
+    },
+    timelineSummary: {
+      drift_occurrence:
+        "{{metric}} drift occurrence: observed {{observed}} {{comparator}} threshold {{threshold}}{{deltaClause}}",
+      agent_finding_occurrence:
+        "Monitor agent finding recorded: {{rationale}}",
+      infrastructure_occurrence:
+        "{{service}} health probe recorded degraded status",
+      occurrence:
+        "Incident occurrence #{{count}} recorded",
+      resolved:
+        "Incident resolved: {{reason}}",
     },
   },
   governance: {
@@ -4916,6 +4958,14 @@ export default {
         quarter: "Quarter",
         ytd: "Year-to-date",
       },
+      hiddenTestPersonaStrategiesFmt:
+        "{{strategyCount}} test-persona strategies ({{personaCount}} test personas) are hidden by default.",
+      hiddenTestPersonaStrategiesOnlyFmt:
+        "{{count}} test-persona strategies are hidden by default.",
+      showingTestPersonasNotice: "Showing test-persona and test-strategy attribution.",
+      showTestPersonasFmt: "Show test strategies ({{count}})",
+      showTestPersonas: "Show test strategies",
+      hideTestPersonas: "Hide test strategies",
     },
   },
   capabilities: {
