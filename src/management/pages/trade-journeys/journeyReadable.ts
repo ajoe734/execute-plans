@@ -1,3 +1,4 @@
+import { statusLabel, statusTone, type EnumTone } from "@/lib/enumLabels";
 import type { JourneyOutcome, JourneyRow } from "@/lib/bff-v1/tradeJourneys";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
@@ -49,6 +50,8 @@ const asRecord = (value: unknown): Detail | undefined => value && typeof value =
 
 export function reasonText(code: string | null | undefined, detail: JourneyOutcome["reason_detail"], t: T): string {
   if (!code) return "";
+  // The recorded hosted timeline stamps the paper-runtime rejection as `long_cash`; it is the cash-shortfall reason.
+  if (code === "long_cash") code = "insufficient_cash";
   if (!(KNOWN_REASON_CODES as readonly string[]).includes(code)) return t("tradeJourneys.reasons.unknown", { code });
   const record = asRecord(detail);
   const params = record
@@ -112,4 +115,24 @@ export const KNOWN_ACTION_CODES = ["review_open_incident", "review_cash_and_risk
 export function actionText(code: string, t: T): string {
   if ((KNOWN_ACTION_CODES as readonly string[]).includes(code)) return t(`tradeJourneys.actions.${code}`);
   return t("tradeJourneys.actions.unknown", { code });
+}
+
+/** Stage and timeline statuses in words and tone, through the shared enum helper. */
+export function stageStatusView(status: string | null | undefined, t: T): { label: string; tone: EnumTone } {
+  return { label: statusLabel(status, t), tone: statusTone(status) };
+}
+
+/** Producers with a plain-name entry under `tradeJourneys.sources`. */
+export const KNOWN_SOURCES = ["execution.paper_runtime", "broker.paper_sidecar", "reconciliation-drift.scheduled", "canonical.lifecycle_projector", "canonical.telemetry"] as const;
+
+/** A producer's plain name; "" (render nothing) when the source is missing or not one we can name. */
+export function sourceText(source: string | null | undefined, t: T): string {
+  if (!source || !(KNOWN_SOURCES as readonly string[]).includes(source)) return "";
+  return t(`tradeJourneys.sources.${source.replaceAll(".", "_").replaceAll("-", "_")}`);
+}
+
+/** Row/page read_state in words; never the raw partial/degraded word. */
+export function readStateText(state: string | null | undefined, t: T): string {
+  const key = String(state || "").toLowerCase();
+  return ["partial", "degraded", "unavailable"].includes(key) ? t(`tradeJourneys.readStates.${key}`) : t("tradeJourneys.readStates.other");
 }

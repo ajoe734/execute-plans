@@ -1,0 +1,18 @@
+{
+  "task_id": "FE-TRADE-JOURNEY-READABLE-RESIDUALS-20261120",
+  "owner": "Claude2",
+  "fixtures": "src/management/pages/trade-journeys/__fixtures__/recorded/ — verbatim copies of the post-deploy 12:40Z hosted bodies (detail and timeline of tj_79726064 and tj_29473e86; list_default trimmed to its two journeys, items only)",
+  "acceptance": {
+    "1_stage_status": "Stage cells and timeline entries use statusLabel/statusTone from src/lib/enumLabels.ts via stageStatusView; succeeded reads 成功 (status.succeeded zh-TW changed from 已完成 to 成功) with a green check, failed red, skipped gray",
+    "2_source": "sourceText names execution.paper_runtime, broker.paper_sidecar, reconciliation-drift.scheduled and the canonical producers under tradeJourneys.sources; unknown or missing source renders nothing; the unknownSource key was removed. The recorded timeline bodies carry no source field at all",
+    "3_read_state": "row read_state renders tradeJourneys.readStates.* phrases; list banner says 本頁有 N 筆旅程缺少階段記錄 (tradeJourneys.rowsLackStages); the detail banner no longer prints the raw state word. long_cash (recorded timeline reason code) is treated as insufficient_cash",
+    "4_tests": "TradeJourneysPage.recorded.test.tsx feeds the recorded bodies and asserts no raw succeeded/failed/skipped/rejected/partial/degraded and no 未知來源 in the readable DOM; TradeJourneysPage.test.tsx expectation of the raw 'degraded data' banner updated",
+    "5_full_test": "npm test: 286 files, 3301 tests passed (exit 0); tsc --noEmit -p tsconfig.app.json clean",
+    "screenshots": [
+      "src/management/pages/trade-journeys/__evidence__/recorded-rejected-detail.png",
+      "src/management/pages/trade-journeys/__evidence__/recorded-variance-detail.png",
+      "src/management/pages/trade-journeys/__evidence__/recorded-list.png"
+    ]
+  },
+  "notes": "Screenshots were rendered by Playwright against the built app with the recorded bodies served through route interception and the loopback auth fixture; the harness spec was not committed. Not changed (out of scope): the detail header still shows raw side 'buy'/'sell'. Canonical producer names for sources are best-effort labels; only the three named producers were specified."
+}
