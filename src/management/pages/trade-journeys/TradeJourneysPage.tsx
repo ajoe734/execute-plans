@@ -5,7 +5,7 @@ import { useT } from "@/platform/hooks";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { signedTenantId } from "@/lib/auth/bffBrowserSession";
 import { getAuthProvider } from "@/lib/bff-v1/headers";
-import { failedChecks, journeyTitle, nextStepHref, outcomeView, reasonText, UPSTREAM_STAGES, type OutcomeTone } from "./journeyReadable";
+import { actionText, failedChecks, journeyTitle, nextStepHref, outcomeView, reasonText, UPSTREAM_STAGES, type OutcomeTone } from "./journeyReadable";
 import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, subscribeTradeJourneys, type JourneyDetailEnvelope, type JourneyListEnvelope, type JourneyLiveState, type JourneyMeta, type JourneyRow, type JourneyTimelineEnvelope } from "@/lib/bff-v1/tradeJourneys";
 
 function useTradeJourneyTenant(params: URLSearchParams): string {
@@ -157,7 +157,7 @@ function SummaryPanel({ row }: { row: JourneyRow }) {
     : step ? (step.href.includes("/incidents/") ? t("tradeJourneys.summary.whoIncident") : t("tradeJourneys.summary.whoNobody"))
     : t("tradeJourneys.summary.whoNone");
   const adverse = kind === "rejected" || kind === "variance";
-  const todo = step ? <>{step.action_needed} <Link className="inline-flex items-center gap-1 text-primary hover:underline" to={nextStepHref(step.href)}>{t("tradeJourneys.summary.todoOpen")} <ExternalLink size={13}/></Link></>
+  const todo = step ? <>{actionText(step.action_needed, t)} <Link className="inline-flex items-center gap-1 text-primary hover:underline" to={nextStepHref(step.href)}>{t("tradeJourneys.summary.todoOpen")} <ExternalLink size={13}/></Link></>
     : kind === "reconciliation_deferred" ? t("tradeJourneys.summary.todoWait") : t("tradeJourneys.summary.todoNone");
   return <section aria-label={t("tradeJourneys.summary.label")} className={`rounded-lg border p-4 ${adverse ? "border-red-500/40 bg-red-500/5" : view ? "border-amber-500/40 bg-amber-500/5" : "bg-card"}`}>
     <dl className="grid gap-3 md:grid-cols-3">

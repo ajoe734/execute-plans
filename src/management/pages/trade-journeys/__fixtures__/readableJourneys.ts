@@ -26,7 +26,7 @@ export const rejectedRow: JourneyRow = {
   persona_id: "persona-6507750312870d03a241", persona_name: "澄川｜2317 台股 Paper 學習 R2", persona_is_probe: false,
   symbol: "2317.TWSE", side: "buy", quantity: 452, filled_quantity: null, flags: { ...noFlags, rejected: true },
   outcome: { kind: "rejected", reason_code: "insufficient_cash", reason_detail: { required: 100034.3461, available: 100000.0, limit: 100000.0 }, rejected_stage: "order_submission" },
-  next_step: { action_needed: "確認該 persona 的資金池額度", href: "/personas/persona-6507750312870d03a241" },
+  next_step: { action_needed: "review_cash_and_risk_limits", href: "/personas/persona-6507750312870d03a241" },
 };
 
 export const rejectedUnrecordedRow: JourneyRow = {
@@ -58,7 +58,7 @@ export const varianceRow: JourneyRow = {
       { check: "cash_change", status: "failed", detail: "cash moved differently from the fill", expected: 2165, actual: 0, difference: 2165 },
     ],
   },
-  next_step: { action_needed: "核對部位與現金帳務", href: "/incidents/inc-recon-3823397e" },
+  next_step: { action_needed: "review_open_incident", href: "/incidents/inc-drift-3025dd61c462" },
 };
 
 export const deferredRow: JourneyRow = {

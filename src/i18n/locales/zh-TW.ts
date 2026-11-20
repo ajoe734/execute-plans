@@ -858,6 +858,12 @@ export default {
       todoWait: "等待下次排程對帳，無需動作。",
       todoOpen: "開啟",
     },
+    actions: {
+      review_open_incident: "查看已開立的事件單",
+      review_cash_and_risk_limits: "檢查該 persona 的現金與風控額度",
+      review_reconciliation_variance: "核對對帳差異（部位與現金）",
+      unknown: "待辦代碼 {{code}}",
+    },
     stages: {
       signal_generation: "訊號產生",
       trade_decision: "交易決策",

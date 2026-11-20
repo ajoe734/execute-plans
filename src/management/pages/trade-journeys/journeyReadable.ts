@@ -105,3 +105,11 @@ export function nextStepHref(href: string): string {
   if (!href.startsWith("/") || href.startsWith("/management/")) return href;
   return `/management${href}`;
 }
+
+export const KNOWN_ACTION_CODES = ["review_open_incident", "review_cash_and_risk_limits", "review_reconciliation_variance"] as const;
+
+/** The BFF sends next_step.action_needed as a code; show words, and name the code when it is unknown. */
+export function actionText(code: string, t: T): string {
+  if ((KNOWN_ACTION_CODES as readonly string[]).includes(code)) return t(`tradeJourneys.actions.${code}`);
+  return t("tradeJourneys.actions.unknown", { code });
+}

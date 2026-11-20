@@ -108,7 +108,7 @@ describe("readable trade journey detail (zh-TW)", () => {
     const panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
     expect(within(panel).getByText(/被拒絕：現金不足：需要 100,034、可用 100,000/)).toBeInTheDocument();
     expect(within(panel).getByText("目前沒有事件單，也沒有人被指派。")).toBeInTheDocument();
-    expect(within(panel).getByText(/確認該 persona 的資金池額度/)).toBeInTheDocument();
+    expect(within(panel).getByText(/檢查該 persona 的現金與風控額度/)).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: /開啟/ })).toHaveAttribute("href", "/management/personas/persona-6507750312870d03a241");
     expect(within(panel).queryByRole("button")).toBeNull();
     // stage rail and timeline both carry the reason in words
@@ -119,8 +119,18 @@ describe("readable trade journey detail (zh-TW)", () => {
     renderDetail(varianceRow, varianceTimeline);
     const panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
     expect(within(panel).getByText("已有事件單追蹤。")).toBeInTheDocument();
-    expect(within(panel).getByRole("link", { name: /開啟/ })).toHaveAttribute("href", "/management/incidents/inc-recon-3823397e");
+    expect(within(panel).getByRole("link", { name: /開啟/ })).toHaveAttribute("href", "/management/incidents/inc-drift-3025dd61c462");
+    expect(within(panel).getByText(/查看已開立的事件單/)).toBeInTheDocument();
     expect(screen.getAllByText("對帳差異：部位變動、現金變動").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("never lets a raw action_needed code reach the DOM, and names an unknown code", async () => {
+    renderDetail(rejectedRow, rejectedTimeline);
+    await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(document.body.textContent).not.toMatch(/review_(cash_and_risk_limits|open_incident|reconciliation_variance)/);
+    cleanup();
+    renderDetail({ ...rejectedRow, next_step: { action_needed: "page_the_oncall_9", href: "/personas/p1" } }, rejectedTimeline);
+    expect(await screen.findByText(/待辦代碼 page_the_oncall_9/)).toBeInTheDocument();
   });
 
   it("says nothing is needed for a held day and waits for a deferred reconciliation", async () => {

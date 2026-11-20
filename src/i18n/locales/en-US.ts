@@ -867,6 +867,12 @@ export default {
       todoWait: "Wait for the next scheduled reconciliation; no action needed.",
       todoOpen: "Open",
     },
+    actions: {
+      review_open_incident: "Review the open incident",
+      review_cash_and_risk_limits: "Check this persona's cash and risk limits",
+      review_reconciliation_variance: "Review the reconciliation variance (position and cash)",
+      unknown: "Action code {{code}}",
+    },
     stages: {
       signal_generation: "Signal generation",
       trade_decision: "Trade decision",
