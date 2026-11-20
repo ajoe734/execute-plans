@@ -38,10 +38,16 @@ import {
 } from "../personaFleetDataSources";
 
 import {
+  MISSING_DATA_SOURCE_FIELD_LABEL,
+  cleanSourceToken,
+  extractDataSourceEnvelopeItems,
   fmtToken,
   isV2,
   joinOrDash,
+  resolveDataSourceSurfaceState,
   toneClass,
+  translateDataSourceSurfaceReason,
+  translateDataSourceSurfaceStatus,
   v2ToLegacyRecord,
   type ControlCenterTab,
 } from "./dataSourceModels";
@@ -60,7 +66,13 @@ function matchesToken(needle: string, values: string[]): boolean {
 }
 
 function unique(values: Array<string | undefined>): string[] {
-  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+  return Array.from(
+    new Set(
+      values
+        .map((v) => cleanSourceToken(v))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
 }
 
 function sourceMatchesRecord(record: SystemDataSourceRecord, sourceFocus: string): boolean {
@@ -80,7 +92,9 @@ function sourceMatchesV2(dto: ManagementDataSourceV2DTO, sourceFocus: string): b
     dto.source_class,
     ...(dto.instance?.markets ?? []),
     ...(dto.instance?.datasets ?? []),
-  ].filter((v): v is string => Boolean(v));
+  ]
+    .map((v) => cleanSourceToken(v))
+    .filter((v): v is string => Boolean(v));
   return matchesToken(sourceFocus, values);
 }
 
@@ -93,8 +107,11 @@ function credentialStateFor(status: string, source?: ManagementDataSource): Syst
 
 function refsForProvider(refs: string[] | undefined, providerKey: string): string[] {
   const normalized = providerKey.toLowerCase();
-  const matches = (refs ?? []).filter((ref) => ref.toLowerCase().includes(normalized));
-  return matches.length > 0 ? matches : refs ?? [];
+  const cleanedRefs = (refs ?? [])
+    .map((r) => cleanSourceToken(r))
+    .filter((r): r is string => Boolean(r));
+  const matches = cleanedRefs.filter((ref) => ref.toLowerCase().includes(normalized));
+  return matches.length > 0 ? matches : cleanedRefs;
 }
 
 function tonePriority(state: string): number {
@@ -111,13 +128,23 @@ function firstStatusCount(row: ManagementPersonaFleetRow): string | undefined {
     .sort(([left], [right]) => tonePriority(left) - tonePriority(right) || left.localeCompare(right))[0]?.[0];
 }
 
-function personaSourceRecord(persona: ManagementPersonaFleetRow, source: ManagementDataSource): SystemDataSourceRecord {
+export function personaSourceRecord(
+  persona: ManagementPersonaFleetRow,
+  source: ManagementDataSource,
+): SystemDataSourceRecord {
   const status = dataSourceStatus(persona);
-  const providerKey = source.providerKey || "nan";
-  const sourceStatus = source.status || dataSourceState(persona) || "nan";
+  const providerKey = cleanSourceToken(source.providerKey) || MISSING_DATA_SOURCE_FIELD_LABEL;
+  const sourceStatus =
+    cleanSourceToken(source.status) ||
+    cleanSourceToken(dataSourceState(persona)) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
+  const provider =
+    cleanSourceToken(source.provider) ||
+    cleanSourceToken(source.providerKey) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
   return {
     providerKey,
-    provider: source.provider || providerKey || "nan",
+    provider,
     markets: unique([source.market, ...(persona.marketScope ?? [])]),
     sourceClasses: unique([source.sourceClass]),
     status: sourceStatus,
@@ -129,7 +156,7 @@ function personaSourceRecord(persona: ManagementPersonaFleetRow, source: Managem
     capitalSideEffectsAllowed: Boolean(source.capitalSideEffectsAllowed ?? status?.capitalSideEffectsAllowed),
     liveIngestionEnabled: Boolean(status?.liveIngestionEnabled),
     consumerPersonaIds: [persona.personaId],
-    consumerPersonaNames: [persona.personaName || persona.personaId],
+    consumerPersonaNames: [cleanSourceToken(persona.personaName) || persona.personaId],
     evidenceRefs: unique([
       source.evidenceRef,
       ...refsForProvider(status?.readbackRefs, providerKey),
@@ -137,19 +164,24 @@ function personaSourceRecord(persona: ManagementPersonaFleetRow, source: Managem
       status?.researchDatasetManifestRef,
     ]),
     unavailableRefs: refsForProvider(status?.unavailableRefs, providerKey),
-    lastReadbackAt: status?.readbackCapturedAt,
+    lastReadbackAt: cleanSourceToken(status?.readbackCapturedAt),
     reasons: unique([source.reason, status?.summary]),
   };
 }
 
-function fallbackPersonaSourceRecord(persona: ManagementPersonaFleetRow): SystemDataSourceRecord | null {
+export function fallbackPersonaSourceRecord(
+  persona: ManagementPersonaFleetRow,
+): SystemDataSourceRecord | null {
   const status = dataSourceStatus(persona);
   if (!status) return null;
-  const sourceStatus = dataSourceState(persona) || firstStatusCount(persona) || "nan";
+  const sourceStatus =
+    cleanSourceToken(dataSourceState(persona)) ||
+    cleanSourceToken(firstStatusCount(persona)) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
   return {
-    providerKey: "nan",
-    provider: "nan",
-    markets: persona.marketScope ?? [],
+    providerKey: MISSING_DATA_SOURCE_FIELD_LABEL,
+    provider: MISSING_DATA_SOURCE_FIELD_LABEL,
+    markets: unique(persona.marketScope ?? []),
     sourceClasses: ["not_declared"],
     status: sourceStatus,
     tone: dataSourceTone(sourceStatus),
@@ -160,19 +192,19 @@ function fallbackPersonaSourceRecord(persona: ManagementPersonaFleetRow): System
     capitalSideEffectsAllowed: status.capitalSideEffectsAllowed ?? false,
     liveIngestionEnabled: status.liveIngestionEnabled ?? false,
     consumerPersonaIds: [persona.personaId],
-    consumerPersonaNames: [persona.personaName || persona.personaId],
+    consumerPersonaNames: [cleanSourceToken(persona.personaName) || persona.personaId],
     evidenceRefs: unique([
       ...(status.readbackRefs ?? []),
       status.researchDatasetRef,
       status.researchDatasetManifestRef,
     ]),
-    unavailableRefs: status.unavailableRefs ?? [],
-    lastReadbackAt: status.readbackCapturedAt,
+    unavailableRefs: unique(status.unavailableRefs ?? []),
+    lastReadbackAt: cleanSourceToken(status.readbackCapturedAt),
     reasons: unique([status.summary]),
   };
 }
 
-function personaDataSourceRecords(persona: ManagementPersonaFleetRow): SystemDataSourceRecord[] {
+export function personaDataSourceRecords(persona: ManagementPersonaFleetRow): SystemDataSourceRecord[] {
   const records = personaFleetDataSources(persona).map((source) => personaSourceRecord(persona, source));
   if (records.length > 0) return records;
   const fallback = fallbackPersonaSourceRecord(persona);
@@ -253,7 +285,10 @@ export function DataSourceControlCenter() {
   const { data: fleetRows, loading: fleetLoading } = liveFleetRes;
 
   const rawItems = useMemo(
-    () => (data?.items ?? []) as Array<ManagementDataSourceV2DTO | SystemDataSourceRecord>,
+    () =>
+      extractDataSourceEnvelopeItems<
+        ManagementDataSourceV2DTO | SystemDataSourceRecord
+      >(data),
     [data],
   );
 
@@ -302,35 +337,27 @@ export function DataSourceControlCenter() {
   const focusCount = visibleRecords.length;
   const sourceLabel = sourceFocus || t("mgmt.dataSources.allSources");
 
-  const meta = data?.meta;
-  const metaStatus = (meta?.status ?? "").toLowerCase();
-  const metaSource = (meta?.source ?? "").toLowerCase();
+  const hasLegacyItems = useMemo(
+    () => !personaFocus && visibleRecords.length > 0 && visibleRecords.some((r) => !isV2(r)),
+    [personaFocus, visibleRecords],
+  );
 
-  const isAuthoritativeEmpty = useMemo(() => {
-    if (loading || focusLoading) return false;
-    if (visibleRecords.length > 0) return false;
-    if (!data) return false;
-    if (metaStatus === "unavailable" || metaStatus === "error" || metaStatus === "failed") return false;
-    return (
-      metaStatus === "ok" ||
-      metaStatus === "empty" ||
-      metaStatus === "converged" ||
-      metaSource === "service_client" ||
-      metaSource === "live" ||
-      Array.isArray(data?.items)
-    );
-  }, [loading, focusLoading, visibleRecords.length, data, metaStatus, metaSource]);
+  const surfaceState = useMemo(
+    () =>
+      resolveDataSourceSurfaceState(data, {
+        loading: loading || focusLoading,
+        itemCount: visibleRecords.length,
+        hasLegacyItems,
+      }),
+    [data, loading, focusLoading, visibleRecords.length, hasLegacyItems],
+  );
 
-  const isUnavailable = useMemo(() => {
-    if (loading || focusLoading) return false;
-    if (visibleRecords.length > 0) return false;
-    return !data || metaStatus === "unavailable" || metaStatus === "error" || metaStatus === "failed";
-  }, [loading, focusLoading, visibleRecords.length, data, metaStatus]);
-
-  const isDegradedLegacy = useMemo(() => {
-    if (metaStatus === "degraded" || metaSource === "legacy_projection") return true;
-    return visibleRecords.length > 0 && visibleRecords.some((r) => !isV2(r));
-  }, [metaStatus, metaSource, visibleRecords]);
+  const isAuthoritativeEmpty = surfaceState.isAuthoritativeEmpty;
+  const isUnavailable = surfaceState.isUnavailable;
+  const isDegraded = surfaceState.isDegraded;
+  const isDegradedLegacy = surfaceState.isDegraded || surfaceState.isLegacyProjection;
+  const translatedSurfaceStatus = translateDataSourceSurfaceStatus(surfaceState.status, t);
+  const translatedSurfaceReason = translateDataSourceSurfaceReason(surfaceState.reasonCode, t);
 
   const writesLive = realWritesEnabled();
 
@@ -359,12 +386,113 @@ export function DataSourceControlCenter() {
     setWizardOpen(true);
   };
 
+  const showSurfaceNonOk = !personaFocus && !loading && !focusLoading && (isUnavailable || isDegraded);
+
+  const metricsDisplay = useMemo(() => {
+    if (!personaFocus && (loading || focusLoading) && visibleRecords.length === 0) {
+      return {
+        total: "—",
+        totalSubtext: undefined,
+        totalTone: undefined as "ok" | "warn" | "bad" | undefined,
+        readable: "—",
+        readableSubtext: undefined,
+        readableTone: undefined as "ok" | "warn" | "bad" | undefined,
+        degraded: "—",
+        degradedSubtext: undefined,
+        degradedTone: undefined as "ok" | "warn" | "bad" | undefined,
+        credentials: "—",
+        credentialsTone: undefined as "ok" | "warn" | "bad" | undefined,
+        consumers: "—",
+        markets: "—",
+      };
+    }
+
+    if (!personaFocus && (isUnavailable || (isDegraded && summary.total === 0))) {
+      const tone: "warn" | "bad" = isUnavailable ? "bad" : "warn";
+      return {
+        total: translatedSurfaceStatus,
+        totalSubtext: translatedSurfaceReason,
+        totalTone: tone,
+        readable: translatedSurfaceStatus,
+        readableSubtext: translatedSurfaceReason,
+        readableTone: "warn" as const,
+        degraded: translatedSurfaceStatus,
+        degradedSubtext: translatedSurfaceReason,
+        degradedTone: "warn" as const,
+        credentials: MISSING_DATA_SOURCE_FIELD_LABEL,
+        credentialsTone: "warn" as const,
+        consumers: MISSING_DATA_SOURCE_FIELD_LABEL,
+        markets: MISSING_DATA_SOURCE_FIELD_LABEL,
+      };
+    }
+
+    if (!personaFocus && isDegraded) {
+      return {
+        total: String(summary.total),
+        totalSubtext: surfaceState.isLegacyProjection
+          ? t("mgmt.dataSources.legacyProjectionSource")
+          : translatedSurfaceReason,
+        totalTone: "warn" as const,
+        readable:
+          summary.readable > 0 && summary.total > 0
+            ? `${summary.readable}/${summary.total}`
+            : MISSING_DATA_SOURCE_FIELD_LABEL,
+        readableSubtext: surfaceState.isLegacyProjection
+          ? t("mgmt.dataSources.legacyProjectionSource")
+          : undefined,
+        readableTone: "warn" as const,
+        degraded:
+          summary.degraded > 0 ? String(summary.degraded) : translatedSurfaceStatus,
+        degradedSubtext: translatedSurfaceReason,
+        degradedTone: "warn" as const,
+        credentials:
+          summary.credentialMissing > 0
+            ? String(summary.credentialMissing)
+            : MISSING_DATA_SOURCE_FIELD_LABEL,
+        credentialsTone: (summary.credentialMissing > 0 ? "bad" : "warn") as "bad" | "warn",
+        consumers:
+          summary.consumerPersonas > 0
+            ? String(summary.consumerPersonas)
+            : MISSING_DATA_SOURCE_FIELD_LABEL,
+        markets: summary.markets.join(" / ") || MISSING_DATA_SOURCE_FIELD_LABEL,
+      };
+    }
+
+    return {
+      total: String(summary.total),
+      totalSubtext: undefined,
+      totalTone: undefined as "ok" | "warn" | "bad" | undefined,
+      readable: `${summary.readable}/${summary.total}`,
+      readableSubtext: undefined,
+      readableTone: (summary.readable === summary.total && summary.total > 0 ? "ok" : "warn") as "ok" | "warn",
+      degraded: String(summary.degraded),
+      degradedSubtext: undefined,
+      degradedTone: (summary.degraded > 0 ? "warn" : "ok") as "ok" | "warn",
+      credentials: String(summary.credentialMissing),
+      credentialsTone: (summary.credentialMissing > 0 ? "bad" : "ok") as "ok" | "bad",
+      consumers: String(summary.consumerPersonas),
+      markets: summary.markets.join(" / ") || "—",
+    };
+  }, [
+    personaFocus,
+    loading,
+    focusLoading,
+    visibleRecords.length,
+    isUnavailable,
+    isDegraded,
+    summary,
+    translatedSurfaceStatus,
+    translatedSurfaceReason,
+    surfaceState.isLegacyProjection,
+    t,
+  ]);
+
   return (
     <section className="p-6 space-y-5" aria-label={t("mgmt.dataSources.title")}>
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Database className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold text-foreground tracking-tight">
               {t("mgmt.dataSources.title")}
@@ -386,8 +514,34 @@ export function DataSourceControlCenter() {
                 ? t("mgmt.dataSources.header.realWritesOn")
                 : t("mgmt.dataSources.header.realWritesOff")}
             </Badge>
+            {showSurfaceNonOk && (
+              <Badge
+                variant="outline"
+                className={isUnavailable ? toneClass.bad : toneClass.warn}
+                data-testid="data-sources-header-state"
+              >
+                {translatedSurfaceStatus}
+              </Badge>
+            )}
+            {showSurfaceNonOk && surfaceState.isLegacyProjection && (
+              <Badge
+                variant="outline"
+                className="font-mono text-xs"
+                data-testid="data-sources-header-source"
+              >
+                {t("mgmt.dataSources.legacyProjectionBadge")}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mt-1">{t("mgmt.dataSources.subtitle")}</p>
+          {showSurfaceNonOk && translatedSurfaceReason && (
+            <p
+              className="text-xs text-status-warning mt-1"
+              data-testid="data-sources-header-reason"
+            >
+              {t("mgmt.dataSources.surfaceReasonFmt", { reason: translatedSurfaceReason })}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -424,15 +578,18 @@ export function DataSourceControlCenter() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-foreground">
               {focusLoading
-                ? t("mgmt.dataSources.focusLoadingFmt", { persona: personaFocus, source: sourceLabel })
+                ? t("mgmt.dataSources.focusLoadingFmt", {
+                    persona: cleanSourceToken(personaFocus) || MISSING_DATA_SOURCE_FIELD_LABEL,
+                    source: sourceLabel,
+                  })
                 : focusMatched
                   ? t("mgmt.dataSources.focusedFmt", {
-                      persona: personaFocus || "nan",
+                      persona: cleanSourceToken(personaFocus) || MISSING_DATA_SOURCE_FIELD_LABEL,
                       source: sourceLabel,
                       count: focusCount,
                     })
                   : t("mgmt.dataSources.focusMissingFmt", {
-                      persona: personaFocus || "nan",
+                      persona: cleanSourceToken(personaFocus) || MISSING_DATA_SOURCE_FIELD_LABEL,
                       source: sourceLabel,
                     })}
             </span>
@@ -454,24 +611,37 @@ export function DataSourceControlCenter() {
 
       {/* Metrics Row */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 text-xs">
-        <MetricCard label={t("mgmt.dataSources.total")} value={String(summary.total)} />
+        <MetricCard
+          label={t("mgmt.dataSources.total")}
+          value={metricsDisplay.total}
+          subtext={metricsDisplay.totalSubtext}
+          tone={metricsDisplay.totalTone}
+        />
         <MetricCard
           label={t("mgmt.dataSources.readable")}
-          value={`${summary.readable}/${summary.total}`}
-          tone={summary.readable === summary.total && summary.total > 0 ? "ok" : "warn"}
+          value={metricsDisplay.readable}
+          subtext={metricsDisplay.readableSubtext}
+          tone={metricsDisplay.readableTone}
         />
         <MetricCard
           label={t("mgmt.dataSources.degraded")}
-          value={String(summary.degraded)}
-          tone={summary.degraded > 0 ? "warn" : "ok"}
+          value={metricsDisplay.degraded}
+          subtext={metricsDisplay.degradedSubtext}
+          tone={metricsDisplay.degradedTone}
         />
         <MetricCard
           label={t("mgmt.dataSources.credentials")}
-          value={String(summary.credentialMissing)}
-          tone={summary.credentialMissing > 0 ? "bad" : "ok"}
+          value={metricsDisplay.credentials}
+          tone={metricsDisplay.credentialsTone}
         />
-        <MetricCard label={t("mgmt.dataSources.consumers")} value={String(summary.consumerPersonas)} />
-        <MetricCard label={t("mgmt.dataSources.markets")} value={summary.markets.join(" / ") || "—"} />
+        <MetricCard
+          label={t("mgmt.dataSources.consumers")}
+          value={metricsDisplay.consumers}
+        />
+        <MetricCard
+          label={t("mgmt.dataSources.markets")}
+          value={metricsDisplay.markets}
+        />
       </div>
 
       {/* When Persona focus is active, show persona focus table */}
@@ -533,7 +703,7 @@ export function DataSourceControlCenter() {
             )}
 
             {/* Authoritative Empty State */}
-            {!loading && visibleRecords.length === 0 && isAuthoritativeEmpty && !isUnavailable && (
+            {!loading && visibleRecords.length === 0 && isAuthoritativeEmpty && !isUnavailable && !isDegraded && (
               <Card className="p-8 text-center text-sm space-y-3" data-testid="data-sources-authoritative-empty">
                 <div className="mx-auto w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                   <Database className="h-5 w-5" />
@@ -562,13 +732,23 @@ export function DataSourceControlCenter() {
             )}
 
             {/* Unavailable State */}
-            {!loading && visibleRecords.length === 0 && (isUnavailable || !isAuthoritativeEmpty) && (
+            {!loading && visibleRecords.length === 0 && isUnavailable && (
               <Card className="p-8 text-center text-sm space-y-3 border-status-warning/30 bg-status-warning/5" data-testid="data-sources-unavailable">
                 <div className="mx-auto w-10 h-10 rounded-full bg-status-warning/10 flex items-center justify-center text-status-warning">
                   <Shield className="h-5 w-5" />
                 </div>
                 <div className="font-semibold text-foreground text-base">
                   {t("mgmt.dataSources.liveDataUnavailableTitle")}
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+                  <Badge variant="outline" className={toneClass.bad}>
+                    {translatedSurfaceStatus}
+                  </Badge>
+                  {translatedSurfaceReason && (
+                    <span className="text-muted-foreground">
+                      {t("mgmt.dataSources.surfaceReasonFmt", { reason: translatedSurfaceReason })}
+                    </span>
+                  )}
                 </div>
                 <p className="text-muted-foreground text-xs max-w-md mx-auto">
                   {t("mgmt.dataSources.liveDataUnavailableBody")}
@@ -582,14 +762,29 @@ export function DataSourceControlCenter() {
               </Card>
             )}
 
-            {/* Degraded Legacy Projection Banner */}
-            {visibleRecords.length > 0 && isDegradedLegacy && (
+            {/* Degraded / Legacy Projection Banner */}
+            {!loading && isDegradedLegacy && (
               <Card className="p-3.5 border-status-warning/40 bg-status-warning/10 text-xs flex items-start gap-2.5 text-status-warning" data-testid="degraded-legacy-banner">
                 <Shield className="h-4 w-4 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <div className="font-semibold text-foreground">
-                    {t("mgmt.dataSources.degradedLegacyBannerTitle")}
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-foreground">
+                      {t("mgmt.dataSources.degradedLegacyBannerTitle")}
+                    </span>
+                    <Badge variant="outline" className={toneClass.warn}>
+                      {translatedSurfaceStatus}
+                    </Badge>
+                    {surfaceState.isLegacyProjection && (
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {t("mgmt.dataSources.legacyProjectionSource")}
+                      </Badge>
+                    )}
                   </div>
+                  {translatedSurfaceReason && (
+                    <div className="text-foreground">
+                      {t("mgmt.dataSources.surfaceReasonFmt", { reason: translatedSurfaceReason })}
+                    </div>
+                  )}
                   <p className="text-muted-foreground">
                     {t("mgmt.dataSources.degradedLegacyBannerDesc")}
                   </p>
@@ -598,9 +793,13 @@ export function DataSourceControlCenter() {
             )}
 
             {/* Instances Table */}
-            {visibleRecords.length > 0 && (
+            {!loading && (visibleRecords.length > 0 || isUnavailable || isDegraded) && (
               <DataSourceInstancesTable
                 records={visibleRecords}
+                surfaceStatus={surfaceState.status}
+                surfaceSource={surfaceState.source}
+                surfaceReason={translatedSurfaceReason}
+                isLegacyProjection={surfaceState.isLegacyProjection}
                 onSelectSource={handleSelectSource}
                 onExecuteAction={handleExecuteAction}
               />
@@ -673,23 +872,33 @@ function PersonaSourceContext({
 }) {
   const { t } = useTranslation();
   const status = dataSourceStatus(persona);
-  const refs = [...(status?.readbackRefs ?? []), ...(status?.unavailableRefs ?? [])].slice(0, 4);
+  const refs = [...(status?.readbackRefs ?? []), ...(status?.unavailableRefs ?? [])]
+    .map((r) => cleanSourceToken(r))
+    .filter((r): r is string => Boolean(r))
+    .slice(0, 4);
+  const stateToken = cleanSourceToken(dataSourceState(persona));
 
   return (
     <Card className="border-primary/20 px-3 py-3 text-xs space-y-1">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-foreground">{persona.personaName ?? persona.personaId}</span>
-        <code className="text-muted-foreground">{persona.personaId}</code>
+        <span className="font-medium text-foreground">
+          {cleanSourceToken(persona.personaName) || cleanSourceToken(persona.personaId) || MISSING_DATA_SOURCE_FIELD_LABEL}
+        </span>
+        <code className="text-muted-foreground">
+          {cleanSourceToken(persona.personaId) || MISSING_DATA_SOURCE_FIELD_LABEL}
+        </code>
         <Badge
           variant="outline"
           className={records.length > 0 ? "bg-status-success/10 text-status-success" : "bg-status-warning/10 text-status-warning"}
         >
           {records.length} {t("mgmt.dataSources.total").toLowerCase()}
         </Badge>
-        {sourceFocus && <Badge variant="outline">{sourceFocus}</Badge>}
-        {dataSourceState(persona) && <Badge variant="outline">{fmtToken(dataSourceState(persona))}</Badge>}
+        {cleanSourceToken(sourceFocus) && <Badge variant="outline">{cleanSourceToken(sourceFocus)}</Badge>}
+        {stateToken && <Badge variant="outline">{fmtToken(stateToken, MISSING_DATA_SOURCE_FIELD_LABEL)}</Badge>}
       </div>
-      {status?.summary && <p className="mt-1 text-muted-foreground">{status.summary}</p>}
+      {cleanSourceToken(status?.summary) && (
+        <p className="mt-1 text-muted-foreground">{cleanSourceToken(status?.summary)}</p>
+      )}
       {refs.length > 0 && (
         <div className="mt-2 space-y-1">
           {refs.map((ref) => (
@@ -719,9 +928,12 @@ function PersonaDataSourceTable({ records }: { records: SystemDataSourceRecord[]
               <th className="px-3 py-2">{t("mgmt.dataSources.controls")}</th>
             </tr>
           </thead>
-          <tbody>
-            {records.map((record) => (
-              <PersonaDataSourceRow key={record.providerKey} record={record} />
+          <tbody className="divide-y divide-border/50">
+            {records.map((record, index) => (
+              <PersonaDataSourceRow
+                key={`${record.providerKey}-${index}`}
+                record={record}
+              />
             ))}
           </tbody>
         </table>
@@ -732,38 +944,53 @@ function PersonaDataSourceTable({ records }: { records: SystemDataSourceRecord[]
 
 function PersonaDataSourceRow({ record }: { record: SystemDataSourceRecord }) {
   const { t } = useTranslation();
-  const refs = [...record.evidenceRefs, ...record.unavailableRefs].slice(0, 2);
+  const refs = [...record.evidenceRefs, ...record.unavailableRefs]
+    .map((r) => cleanSourceToken(r))
+    .filter((r): r is string => Boolean(r))
+    .slice(0, 2);
   const sideEffectsOn = record.orderSideEffectsAllowed || record.capitalSideEffectsAllowed;
+  const providerLabel = cleanSourceToken(record.provider) || MISSING_DATA_SOURCE_FIELD_LABEL;
+  const providerKeyLabel = cleanSourceToken(record.providerKey) || MISSING_DATA_SOURCE_FIELD_LABEL;
+  const statusLabelText = fmtToken(record.status, MISSING_DATA_SOURCE_FIELD_LABEL);
+  const credentialLabelText = fmtToken(record.credentialState, MISSING_DATA_SOURCE_FIELD_LABEL);
 
   return (
     <tr className="border-b border-border/50 align-top text-xs">
       <td className="px-3 py-3 min-w-[220px]">
-        <div className="font-medium text-foreground">{record.provider}</div>
-        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{record.providerKey}</div>
+        <div className="font-medium text-foreground">{providerLabel}</div>
+        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{providerKeyLabel}</div>
         <div className="mt-1 flex flex-wrap gap-1">
-          {record.markets.map((market) => (
-            <Badge key={market} variant="outline" className="text-[10px]">
-              {market}
-            </Badge>
-          ))}
-          {record.sourceClasses.map((sourceClass) => (
-            <Badge key={sourceClass} variant="outline" className="text-[10px]">
-              {fmtToken(sourceClass)}
-            </Badge>
-          ))}
+          {record.markets
+            .map((m) => cleanSourceToken(m))
+            .filter((m): m is string => Boolean(m))
+            .map((market) => (
+              <Badge key={market} variant="outline" className="text-[10px]">
+                {market}
+              </Badge>
+            ))}
+          {record.sourceClasses
+            .map((sc) => cleanSourceToken(sc))
+            .filter((sc): sc is string => Boolean(sc))
+            .map((sourceClass) => (
+              <Badge key={sourceClass} variant="outline" className="text-[10px]">
+                {fmtToken(sourceClass, MISSING_DATA_SOURCE_FIELD_LABEL)}
+              </Badge>
+            ))}
         </div>
       </td>
       <td className="px-3 py-3 min-w-[180px]">
         <Badge variant="outline" className={toneClass[record.tone]}>
-          {fmtToken(record.status)}
+          {statusLabelText}
         </Badge>
         <div className="mt-1 text-muted-foreground">
-          {record.lastReadbackAt ? record.lastReadbackAt.slice(0, 19).replace("T", " ") : t("mgmt.dataSources.noReadback")}
+          {cleanSourceToken(record.lastReadbackAt)
+            ? cleanSourceToken(record.lastReadbackAt)!.slice(0, 19).replace("T", " ")
+            : t("mgmt.dataSources.noReadback")}
         </div>
       </td>
       <td className="px-3 py-3 min-w-[180px] space-y-0.5">
         <div>
-          {t("mgmt.dataSources.credential")}: <span className="font-mono text-foreground">{fmtToken(record.credentialState)}</span>
+          {t("mgmt.dataSources.credential")}: <span className="font-mono text-foreground">{credentialLabelText}</span>
         </div>
         <div>{record.liveIngestionEnabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")}</div>
         <div>{record.readOnly ? t("mgmt.dataSources.readOnly") : t("mgmt.dataSources.writeCapable")}</div>
@@ -776,7 +1003,7 @@ function PersonaDataSourceRow({ record }: { record: SystemDataSourceRecord }) {
               to={`/management/personas/${encodeURIComponent(personaId)}`}
               className="font-mono text-primary hover:underline"
             >
-              {record.consumerPersonaNames[index] ?? personaId}
+              {cleanSourceToken(record.consumerPersonaNames[index]) ?? personaId}
             </Link>
           ))}
         </div>
@@ -816,10 +1043,12 @@ function PersonaDataSourceRow({ record }: { record: SystemDataSourceRecord }) {
 function MetricCard({
   label,
   value,
+  subtext,
   tone,
 }: {
   label: string;
   value: string;
+  subtext?: string;
   tone?: "ok" | "warn" | "bad";
 }) {
   const color =
@@ -835,6 +1064,11 @@ function MetricCard({
     <Card className="p-3">
       <div className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</div>
       <div className={`mt-1 font-mono text-base font-semibold ${color} truncate`}>{value}</div>
+      {subtext && (
+        <div className="mt-0.5 text-[11px] text-muted-foreground truncate" title={subtext}>
+          {subtext}
+        </div>
+      )}
     </Card>
   );
 }

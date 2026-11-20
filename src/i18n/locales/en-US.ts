@@ -3940,6 +3940,26 @@ export default {
       liveDataUnavailableBody: "This page does not render demo, seed, or non-production data source rows.",
       degradedLegacyBannerTitle: "Legacy Compatibility Projection Mode",
       degradedLegacyBannerDesc: "Data source rows are projected from legacy fleet state without full V2 lifecycle attributes.",
+      notReported: "未回報",
+      surfaceStatus: {
+        unavailable: "Unavailable",
+        degraded: "Degraded",
+      },
+      surfaceStateFmt: "Surface status: {{state}}",
+      surfaceReasonFmt: "Reason: {{reason}}",
+      surfaceSourceFmt: "Source: {{source}}",
+      legacyProjectionBadge: "Legacy projection (legacy_projection)",
+      legacyProjectionSource: "legacy_projection",
+      reasons: {
+        empty_v2_store_legacy_projection:
+          "V2 source management store is empty (0 instances); serving connector registry via degraded legacy projection (legacy_projection).",
+        source_ingest_registry_unavailable:
+          "Source-ingest registry is unavailable or unconfigured.",
+        source_ingest_registry_empty:
+          "Source-ingest registry is readable but currently empty.",
+        management_data_sources_unavailable:
+          "Management data sources are currently unavailable.",
+      },
       allSources: "all",
       focusLoadingFmt: "Loading data source rows for persona {{persona}} · source: {{source}}…",
       focusedFmt: "Focused persona: {{persona}} · source: {{source}} · {{count}} matching data source row(s)",

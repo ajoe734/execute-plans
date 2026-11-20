@@ -242,7 +242,7 @@ describe("DataSourceManagementPage", () => {
     expect(screen.queryByText("Pantheon bounded external feed")).not.toBeInTheDocument();
   });
 
-  it("keeps summary-only focused personas scoped and renders nan instead of global data sources", () => {
+  it("keeps summary-only focused personas scoped and renders 未回報 instead of nan or global data sources", () => {
     mocks.useV5Live
       .mockReturnValueOnce({
         data: { items: [systemRecord()] },
@@ -277,7 +277,8 @@ describe("DataSourceManagementPage", () => {
     renderPage();
 
     expect(screen.getByText("1/2")).toBeInTheDocument();
-    expect(screen.getAllByText("nan").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("未回報").length).toBeGreaterThan(0);
+    expect(screen.queryByText("nan")).not.toBeInTheDocument();
     expect(screen.getAllByText("datasource smoke ok").length).toBeGreaterThan(0);
     expect(screen.getByText("Provider identities are not declared yet.")).toBeInTheDocument();
     expect(screen.queryByText("Pantheon bounded external feed")).not.toBeInTheDocument();

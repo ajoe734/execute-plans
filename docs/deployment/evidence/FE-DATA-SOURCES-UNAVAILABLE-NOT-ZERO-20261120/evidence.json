@@ -1,0 +1,84 @@
+{
+  "task_id": "FE-DATA-SOURCES-UNAVAILABLE-NOT-ZERO-20261120",
+  "title": "Data sources page says the registry is unavailable instead of showing zero sources",
+  "problem_register_ref": {
+    "root_cause_class": "RC6",
+    "work_package": "WP6.3",
+    "register_path": "docs/operations/problem-register.md"
+  },
+  "captured_at": "2026-11-20T10:00:00Z",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "acceptance_1_hosted_reproduction_citation": {
+    "source": "coordinator hosted reads 2026-11-20 02:50Z (read-only)",
+    "observed_at_utc": "2026-11-20T02:50:00Z",
+    "route": "GET /bff/management/data-sources",
+    "bff_callsite": "services/control-plane/bff/console_gap/datasources.py:367-473",
+    "bff_timeout_budget_seconds": 2.0,
+    "timeout_env_var": "PANTHEON_BFF_SERVICE_TIMEOUT_SECONDS",
+    "observed_bff_response": {
+      "reads_attempted": 4,
+      "reads_unavailable": 4,
+      "data_status": "unavailable",
+      "meta_surfaces_data_sources_reason": "read_timeout"
+    },
+    "observed_ui_defect": {
+      "surface": "/management/data-sources",
+      "header_metrics_rendered": {
+        "資料源": "0",
+        "可讀": "0/0",
+        "異常": "0"
+      },
+      "nan_fallbacks_in_code": [
+        "src/management/pages/oversight/dataSources/DataSourceControlCenter.tsx:116-120 (personaSourceRecord fell back to 'nan' for missing providerKey, provider, and sourceStatus)",
+        "src/management/pages/oversight/dataSources/DataSourceControlCenter.tsx:148-151 (fallbackPersonaSourceRecord fell back to 'nan' for providerKey, provider, and sourceStatus)",
+        "src/management/pages/oversight/dataSources/DataSourceControlCenter.tsx:430,435 (focusedFmt and focusMissingFmt fell back to 'nan')"
+      ]
+    }
+  },
+  "acceptance_2_unavailable_and_degraded_surface_handling": {
+    "resolver": "resolveDataSourceSurfaceState in src/lib/bff-v1/managementDataSources.ts",
+    "reason_translator": "translateDataSourceSurfaceReason & translateDataSourceSurfaceStatus in src/management/pages/oversight/dataSources/dataSourceModels.ts using reasonCodeLabel & statusLabel from src/lib/enumLabels.ts (FE-MGMT-LABELS-AND-RAW-VALUES-20261120)",
+    "header_behavior": "When the BFF reports the data-source surface unavailable or degraded, the header renders the translated state badge (data-sources-header-state: 不可用（無法讀取） / Unavailable or 降級 / Degraded) and the translated reason (data-sources-header-reason: e.g. 原因：上游讀取逾時 / Reason: Upstream read timed out). The header MetricCards never display 0 or 0/0 when the surface is unavailable or degraded; 0 and 0/0 are shown only when the BFF returned a successful empty list (isAuthoritativeEmpty).",
+    "table_behavior": "DataSourceInstancesTable renders instances-table-surface-status and instances-table-empty-row showing the surface state and translated reason alongside the data-sources-unavailable and degraded-legacy-banner cards."
+  },
+  "acceptance_3_degraded_legacy_projection_label": {
+    "source_token": "legacy_projection",
+    "labelled_locations": [
+      "Header badge (data-testid='data-sources-header-source'): 舊版相容投影 (legacy_projection) / Legacy projection (legacy_projection)",
+      "Degraded legacy banner (data-testid='degraded-legacy-banner'): 舊版相容投影模式 + 降級 + legacy_projection + translated reason",
+      "Table surface status bar (data-testid='instances-table-surface-status'): 降級 + 舊版相容投影 (legacy_projection) + translated reason",
+      "Table row Support / Deployment badge: legacy_projection on both LegacyDataSourceRow and V2DataSourceRow when source=legacy_projection"
+    ]
+  },
+  "acceptance_4_nan_free_models_and_missing_fields": {
+    "missing_field_label": "未回報",
+    "sanitization": "cleanSourceToken (via sanitizeRawText from src/lib/enumLabels.ts) strips undefined, null, empty strings, and case-insensitive 'nan', 'undefined', and 'null' across DataSourceControlCenter.tsx, DataSourceInstancesTable.tsx, dataSourceModels.ts, and managementDataSources.ts.",
+    "verified_fallbacks": "personaSourceRecord, fallbackPersonaSourceRecord, personaDataSourceRecords, v2ToLegacyRecord, V2DataSourceRow, LegacyDataSourceRow, and PersonaDataSourceRow fall back to 未回報 for missing or nan provider, providerKey, and status."
+  },
+  "acceptance_5_tests": {
+    "commands": [
+      "npx vitest run src/management/pages/oversight/dataSources/DataSourceControlCenter.test.tsx src/management/pages/oversight/DataSourceManagement.test.tsx src/lib/bff-v1/managementDataSources.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "npm run typecheck:app && npm run typecheck:agora"
+    ],
+    "results": {
+      "DataSourceControlCenter.test.tsx": "4 passed (unavailable with read_timeout in zh-TW and en-US, degraded legacy_projection with translated reason and no 0 counts, successful empty list with 0 and 0/0 counts, and nan-free models/UI reading 未回報)",
+      "DataSourceManagement.test.tsx": "28 passed",
+      "managementDataSources.test.ts": "31 passed",
+      "i18nParity.test.ts": "15 passed",
+      "typecheck": "0 errors"
+    }
+  },
+  "residual_findings": [
+    {
+      "file": "src/management/pages/oversight/personaFleetDataSources.ts",
+      "lines": "110, 121, 158, 163",
+      "description": "personaFleetDataSources.ts (outside this task's scoped artifacts) still uses 'nan' fallback strings in connectorHealthSources and normalizeSource; DataSourceControlCenter.tsx and dataSourceModels.ts now sanitize those incoming 'nan' strings to 未回報, but personaFleetDataSources.ts itself can be cleaned up in a follow-up."
+    },
+    {
+      "file": "src/management/pages/oversight/dataSources/DataSourceInstancesTable.tsx",
+      "lines": "293-301",
+      "description": "Per docs/operations/problem-register.md RC6 WP6.3 ('freshness wording: no task yet'), observed health 'fresh' next to multi-hour Taiwan session age text remains tracked in the problem register for a dedicated freshness wording task."
+    }
+  ]
+}

@@ -400,4 +400,29 @@ describe("Pack PM-i18n parity", () => {
     expect(zh.status.resolved).toBe("已解決");
     expect(en.status.resolved).toBe("Resolved");
   });
+
+  it("includes data source surface status, reason, legacy_projection, and notReported keys in both locales", () => {
+    const dataSourceSurfaceKeys = [
+      "mgmt.dataSources.notReported",
+      "mgmt.dataSources.surfaceStateFmt",
+      "mgmt.dataSources.surfaceReasonFmt",
+      "mgmt.dataSources.surfaceSourceFmt",
+      "mgmt.dataSources.legacyProjectionBadge",
+      "mgmt.dataSources.legacyProjectionSource",
+      "mgmt.dataSources.reasons.empty_v2_store_legacy_projection",
+      "mgmt.dataSources.reasons.source_ingest_registry_unavailable",
+      "mgmt.dataSources.reasons.source_ingest_registry_empty",
+      "mgmt.dataSources.reasons.management_data_sources_unavailable",
+      "enumLabels.reasons.read_timeout",
+      "status.unavailable",
+      "status.degraded",
+    ];
+    for (const k of dataSourceSurfaceKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+    expect(zh.mgmt.dataSources.notReported).toBe("未回報");
+    expect(zh.enumLabels.reasons.read_timeout).toBe("上游讀取逾時");
+    expect(en.enumLabels.reasons.read_timeout).toBe("Upstream read timed out");
+  });
 });

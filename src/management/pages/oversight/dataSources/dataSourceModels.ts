@@ -1,20 +1,39 @@
 // Data source models, typeguards, badges, tone mappings and formatters (SD-SRCM-04).
 
-import type {
-  ConnectorDefinition,
-  DataSourceInstance,
-  ManagementDataSourceV2DTO,
-  SourceAllowedActions,
-  SourceCanaryResult,
-  SourceCommandReceipt,
-  SourceDesiredState,
-  SourceObservedState,
+import {
+  extractDataSourceEnvelopeItems,
+  normalizeDataSourceReasonCode,
+  resolveDataSourceSurfaceState,
+  type ConnectorDefinition,
+  type DataSourceInstance,
+  type DataSourceSurfaceResolution,
+  type DataSourceSurfaceStatus,
+  type ManagementDataSourceV2DTO,
+  type SourceAllowedActions,
+  type SourceCanaryResult,
+  type SourceCommandReceipt,
+  type SourceDesiredState,
+  type SourceObservedState,
 } from "@/lib/bff-v1/managementDataSources";
+import {
+  reasonCodeLabel,
+  sanitizeRawText,
+  statusLabel,
+  type TranslateFn,
+} from "@/lib/enumLabels";
 import type { SystemDataSourceRecord } from "@/lib/v5/management/systemDataSources";
+
+export {
+  extractDataSourceEnvelopeItems,
+  normalizeDataSourceReasonCode,
+  resolveDataSourceSurfaceState,
+};
 
 export type {
   ConnectorDefinition,
   DataSourceInstance,
+  DataSourceSurfaceResolution,
+  DataSourceSurfaceStatus,
   ManagementDataSourceV2DTO,
   SourceAllowedActions,
   SourceCanaryResult,
@@ -22,6 +41,8 @@ export type {
   SourceDesiredState,
   SourceObservedState,
 };
+
+export const MISSING_DATA_SOURCE_FIELD_LABEL = "未回報";
 
 export type ControlCenterTab = "instances" | "catalog" | "runs" | "receipts";
 
@@ -34,14 +55,58 @@ export const toneClass: Record<HealthTone, string> = {
   muted: "bg-muted text-muted-foreground border-border",
 };
 
-export function fmtToken(value?: string | null): string {
-  if (!value) return "—";
-  return value.replace(/_/g, " ");
+export function cleanSourceToken(value?: string | null): string | undefined {
+  return sanitizeRawText(value);
+}
+
+export function fmtToken(value?: string | null, fallback = "—"): string {
+  const cleaned = cleanSourceToken(value);
+  if (!cleaned) return fallback;
+  return cleaned.replace(/_/g, " ");
+}
+
+const DATA_SOURCE_REASON_KEYS = new Set([
+  "empty_v2_store_legacy_projection",
+  "source_ingest_registry_unavailable",
+  "source_ingest_registry_empty",
+  "management_data_sources_unavailable",
+]);
+
+export function translateDataSourceSurfaceReason(
+  rawReason?: string | null,
+  t?: TranslateFn,
+): string | undefined {
+  const normalized = normalizeDataSourceReasonCode(rawReason);
+  if (!normalized) return undefined;
+  if (DATA_SOURCE_REASON_KEYS.has(normalized) && t) {
+    return t(`mgmt.dataSources.reasons.${normalized}`, {
+      defaultValue: reasonCodeLabel(normalized, t),
+    });
+  }
+  return reasonCodeLabel(normalized, t);
+}
+
+export function translateDataSourceSurfaceStatus(
+  status?: string | null,
+  t?: TranslateFn,
+): string {
+  const cleaned = cleanSourceToken(status);
+  if (!cleaned) return MISSING_DATA_SOURCE_FIELD_LABEL;
+  const lower = cleaned.toLowerCase();
+  if ((lower === "unavailable" || lower === "degraded") && t) {
+    return t(`mgmt.dataSources.surfaceStatus.${lower}`, {
+      defaultValue: statusLabel(cleaned, t),
+    });
+  }
+  return statusLabel(cleaned, t);
 }
 
 export function joinOrDash(values?: string[]): string {
-  if (!values || values.length === 0) return "—";
-  return values.join(" / ");
+  const cleaned = (values ?? [])
+    .map((v) => cleanSourceToken(v))
+    .filter((v): v is string => Boolean(v));
+  if (cleaned.length === 0) return "—";
+  return cleaned.join(" / ");
 }
 
 export function formatBytes(bytes?: number): string {
@@ -152,22 +217,48 @@ export function isV2(item: unknown): item is ManagementDataSourceV2DTO {
   );
 }
 
-export function v2ToLegacyRecord(v2: ManagementDataSourceV2DTO): SystemDataSourceRecord {
-  const status = v2.observed?.effective_lifecycle || v2.instance?.lifecycle_state || "unknown";
-  const health = v2.observed?.health_state || "unknown";
-  const tone: HealthTone = health === "error" || health === "bad" ? "bad" : health === "stale" || health === "warn" || status === "degraded" ? "warn" : status === "enabled" && health === "healthy" ? "ok" : "muted";
+export function v2ToLegacyRecord(
+  v2: ManagementDataSourceV2DTO,
+  fallbackLabel = MISSING_DATA_SOURCE_FIELD_LABEL,
+): SystemDataSourceRecord {
+  const status =
+    cleanSourceToken(v2.observed?.effective_lifecycle) ||
+    cleanSourceToken(v2.instance?.lifecycle_state) ||
+    fallbackLabel;
+  const health = cleanSourceToken(v2.observed?.health_state) || "unknown";
+  const tone: HealthTone =
+    health === "error" || health === "bad"
+      ? "bad"
+      : health === "stale" || health === "warn" || status === "degraded"
+        ? "warn"
+        : status === "enabled" && health === "healthy"
+          ? "ok"
+          : "muted";
 
   let credState: SystemDataSourceRecord["credentialState"] = "unknown";
-  const rawCred = v2.observed?.credential_state?.toLowerCase();
+  const rawCred = cleanSourceToken(v2.observed?.credential_state)?.toLowerCase();
   if (rawCred === "configured") credState = "configured";
   else if (rawCred === "missing" || rawCred === "unavailable") credState = "missing";
   else if (rawCred === "not_required") credState = "not_required";
 
+  const providerKey =
+    cleanSourceToken(v2.connector_id) ||
+    cleanSourceToken(v2.source_instance_id) ||
+    fallbackLabel;
+  const provider =
+    cleanSourceToken(v2.provider) ||
+    cleanSourceToken(v2.definition?.provider) ||
+    cleanSourceToken(v2.source_instance_id) ||
+    fallbackLabel;
+  const sourceClass = cleanSourceToken(v2.source_class);
+
   return {
-    providerKey: v2.connector_id || v2.source_instance_id,
-    provider: v2.provider || v2.definition?.provider || v2.source_instance_id,
-    markets: v2.instance?.markets ?? [],
-    sourceClasses: v2.source_class ? [v2.source_class] : [],
+    providerKey,
+    provider,
+    markets: (v2.instance?.markets ?? [])
+      .map((m) => cleanSourceToken(m))
+      .filter((m): m is string => Boolean(m)),
+    sourceClasses: sourceClass ? [sourceClass] : [],
     status,
     tone,
     credentialState: credState,
@@ -176,11 +267,21 @@ export function v2ToLegacyRecord(v2: ManagementDataSourceV2DTO): SystemDataSourc
     orderSideEffectsAllowed: false,
     capitalSideEffectsAllowed: false,
     liveIngestionEnabled: status === "enabled" && v2.desired?.schedule?.enabled === true,
-    consumerPersonaIds: v2.observed?.dependent_refs ?? [],
-    consumerPersonaNames: v2.observed?.dependent_refs ?? [],
-    evidenceRefs: v2.observed?.last_run?.evidence_bundle_id ? [v2.observed.last_run.evidence_bundle_id] : [],
+    consumerPersonaIds: (v2.observed?.dependent_refs ?? [])
+      .map((r) => cleanSourceToken(r))
+      .filter((r): r is string => Boolean(r)),
+    consumerPersonaNames: (v2.observed?.dependent_refs ?? [])
+      .map((r) => cleanSourceToken(r))
+      .filter((r): r is string => Boolean(r)),
+    evidenceRefs: cleanSourceToken(v2.observed?.last_run?.evidence_bundle_id)
+      ? [cleanSourceToken(v2.observed?.last_run?.evidence_bundle_id)!]
+      : [],
     unavailableRefs: [],
-    lastReadbackAt: v2.observed?.freshness?.last_success_at || v2.observed?.observed_at,
-    reasons: v2.observed?.reasons ?? [],
+    lastReadbackAt:
+      cleanSourceToken(v2.observed?.freshness?.last_success_at) ||
+      cleanSourceToken(v2.observed?.observed_at),
+    reasons: (v2.observed?.reasons ?? [])
+      .map((r) => cleanSourceToken(r))
+      .filter((r): r is string => Boolean(r)),
   };
 }
