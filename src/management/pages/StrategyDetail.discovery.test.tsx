@@ -62,11 +62,13 @@ describe("StrategyDetail discovery block (FE-DISCOVERY-VIEWS-20261110)", () => {
     expect(screen.getByTestId("strategy-discovery-attribution")).toHaveTextContent("gov attribution");
   });
 
-  it("renders dashes when the discovery block is absent", async () => {
+  it("renders no discovery cards when the discovery block is absent", async () => {
     vi.spyOn(bffV1.strategies, "get").mockResolvedValue(strategy());
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("strategy-discovery")).toBeInTheDocument());
-    expect(screen.getByTestId("strategy-discovery-hypothesis-claim")).toHaveTextContent(/^—$/);
-    expect(screen.getByTestId("strategy-discovery-metrics-in-sharpe_ratio")).toHaveTextContent(/^—$/);
+    await waitFor(() => expect(screen.getAllByText("S1").length).toBeGreaterThan(0));
+    expect(screen.queryByTestId("strategy-discovery")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-discovery-hypothesis")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-discovery-metrics")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-discovery-lineage")).not.toBeInTheDocument();
   });
 });

@@ -995,3 +995,91 @@ describe("ConsultRulesPage (AC3 & AC7)", () => {
     );
   });
 });
+
+// FE-RISK-STRATEGY-RESEARCH-UI-20261120 WP6.3 — dead_letter Round 0 meeting (BFF contract shape).
+describe("MeetingsCenterPage failed meetings (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () => {
+  const deadLetterList = (includeFailed: boolean) => ({
+    status: "ok",
+    owner: "consultation",
+    reason: null,
+    empty: false,
+    fallback_used: false,
+    data: {
+      id: "management-meetings",
+      status: "ok",
+      source: "consultation",
+      empty: false,
+      items: [
+        {
+          id: "mtg-real-1",
+          meeting_id: "mtg-real-1",
+          meeting_type: "MT-1",
+          topic: "池子演進檢討",
+          topic_summary: "池子演進檢討",
+          status: "open",
+          execution_state: "convened",
+          chair_persona_id: "persona-alpha",
+          chair_persona_display_name: "青禾",
+          participants: [],
+          round: 2,
+          created_at: "2026-11-20T10:00:00Z",
+          href: "/management/meetings/mtg-real-1",
+        },
+        ...(includeFailed
+          ? [
+              {
+                id: "mtg-dead-1",
+                meeting_id: "mtg-dead-1",
+                meeting_type: "MT-2",
+                topic: "優化會議",
+                topic_summary: "優化會議",
+                status: "convened",
+                execution_state: "dead_letter",
+                last_error: "provider_unavailable",
+                chair_persona_id: "persona-beta",
+                chair_persona_display_name: "墨竹",
+                participants: [],
+                round: 0,
+                created_at: "2026-11-20T09:00:00Z",
+                href: "/management/meetings/mtg-dead-1",
+              },
+            ]
+          : []),
+      ],
+      summary: { dead_letter_count: 3 },
+    },
+  });
+
+  function mountRoutes() {
+    on("GET", "/bff/management/meetings", (req: { query?: Record<string, string> }) =>
+      json(deadLetterList(req.query?.include_failed === "true")),
+    );
+    on("GET", "/bff/management/meetings/proposals", { status: "ok", owner: "consultation", data: { items: [] } });
+    on("GET", "/bff/management/meetings/catalogue", { status: "ok", owner: "consultation", data: {} });
+  }
+
+  it("titles cards by type + chair + topic, localizes the authority badge and hides failed meetings by default", async () => {
+    await i18n.changeLanguage("zh-TW");
+    mountRoutes();
+    renderCenter("/management/meetings?tab=upcoming");
+    expect(await screen.findByTestId("meeting-row-mtg-real-1")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-title-mtg-real-1")).toHaveTextContent("池子演進會議 · 青禾");
+    expect(screen.getByTestId("meeting-topic-mtg-real-1")).toHaveTextContent("池子演進檢討");
+    expect(screen.getByTestId("meetings-authority-badge")).not.toHaveTextContent("execution_authority");
+    expect(screen.queryByTestId("meeting-row-mtg-dead-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("meetings-failed-text")).toHaveTextContent("3");
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("include_failed toggle shows 執行失敗（未開成） with the localized last_error instead of Round 0", async () => {
+    await i18n.changeLanguage("zh-TW");
+    mountRoutes();
+    renderCenter("/management/meetings?tab=upcoming&include_failed=true");
+    const row = await screen.findByTestId("meeting-row-mtg-dead-1");
+    expect(screen.getByTestId("meeting-execution-failed-mtg-dead-1")).toHaveTextContent("執行失敗（未開成）");
+    expect(screen.getByTestId("meeting-last-error-mtg-dead-1")).toBeInTheDocument();
+    expect(row.textContent ?? "").not.toMatch(/Round:\s*0/);
+    expect(calls.some((c) => c.path === "/bff/management/meetings" && c.query?.include_failed === "true")).toBe(true);
+    await i18n.changeLanguage("en-US");
+  });
+});

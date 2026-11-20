@@ -246,7 +246,7 @@ export const MeetingDetailPage = () => {
                 </Badge>
               );
             })() : null}
-            <Badge variant="outline">paper · execution_authority: none</Badge>
+            <Badge variant="outline">{t("meetingsCenter.authorityBadge")}</Badge>
           </div>
           <div className="text-xs font-mono text-muted-foreground">
             created: {m.created_at ?? "—"}

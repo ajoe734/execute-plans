@@ -105,9 +105,13 @@ export async function createStrategy(
   return data;
 }
 
-export async function listNonDraftStrategies(options?: {
+export interface NonDraftStrategiesOptions {
   hideRetiredPersonas?: boolean;
-}): Promise<Strategy[]> {
+  /** Include strategies of test/probe personas and synthetic/stub rows (default: hidden). */
+  includeTestPersonas?: boolean;
+}
+
+export async function listNonDraftStrategies(options?: NonDraftStrategiesOptions): Promise<Strategy[]> {
   return strictLivePaginatedList<Strategy>(
     "strategies.listNonDraft",
     paths.strategies(),
@@ -118,9 +122,54 @@ export async function listNonDraftStrategies(options?: {
         ...(typeof options?.hideRetiredPersonas === "boolean"
           ? { hide_retired_personas: options.hideRetiredPersonas ? "true" : "false" }
           : {}),
+        ...(typeof options?.includeTestPersonas === "boolean"
+          ? { include_test_personas: options.includeTestPersonas ? "true" : "false" }
+          : {}),
       },
     },
   );
+}
+
+function metaCount(meta: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = meta[key];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+  }
+  return undefined;
+}
+
+/** Hidden-row counts the BFF reports in `meta` for the default (non-draft) strategy slice. */
+export interface NonDraftStrategiesHiddenCounts {
+  retiredPersona?: number;
+  testOrSynthetic?: number;
+}
+
+export async function getNonDraftStrategiesHiddenCounts(
+  options?: NonDraftStrategiesOptions,
+): Promise<NonDraftStrategiesHiddenCounts> {
+  const body = await bffFetch<unknown>({
+    method: "GET",
+    path: paths.strategies(),
+    query: {
+      exclude_state: "draft",
+      page_size: 1,
+      hide_retired_personas: options?.hideRetiredPersonas === false ? "false" : "true",
+      include_test_personas: options?.includeTestPersonas ? "true" : "false",
+    },
+  });
+  const record = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  const rawMeta = record.meta;
+  const meta = rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta) ? (rawMeta as Record<string, unknown>) : {};
+  return {
+    retiredPersona: metaCount(meta, "hidden_retired_persona_count"),
+    testOrSynthetic: metaCount(
+      meta,
+      "hidden_test_persona_strategy_count",
+      "hidden_test_strategy_count",
+      "hidden_synthetic_or_stub_count",
+      "hidden_synthetic_count",
+    ),
+  };
 }
 
 export async function listStrategiesForPersona(personaId: string): Promise<Strategy[]> {
@@ -140,6 +189,7 @@ export async function getStrategy(id: string): Promise<Strategy | undefined> {
 
 export const strategies = {
   listNonDraft: listNonDraftStrategies,
+  nonDraftHiddenCounts: getNonDraftStrategiesHiddenCounts,
   listForPersona: listStrategiesForPersona,
   get: getStrategy,
   create: createStrategy,

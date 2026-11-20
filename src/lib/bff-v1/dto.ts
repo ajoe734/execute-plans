@@ -409,6 +409,11 @@ export interface Strategy extends BaseObject {
   operationalStatus?: StrategyOperationalStatus;
   symbols?: string[];
   rules?: StrategyRule[] | null;
+  /** BFF-STRATEGY-SYNTHETIC-STUBS-20261120: stub/synthetic rows carry no real rule set. */
+  is_synthetic_or_stub?: boolean | null;
+  stub_reason?: string | null;
+  /** persona_id → display name, resolved by the BFF (never derived on the client). */
+  persona_display_names?: Record<string, string> | null;
   pnl?: number | null;
   pnl30d: number | null;
   sharpe: number | null;
@@ -875,6 +880,13 @@ export interface ResearchExperiment extends BaseObject {
   action_receipts?: Array<Record<string, unknown>>;
 }
 
+export interface ResearchTaskDisplaySummary {
+  symbol?: string | null;
+  dataset_ref?: string | null;
+  subject_ref?: string | null;
+  [key: string]: unknown;
+}
+
 export interface ResearchTask extends ResearchExperiment {
   taskId: string;
   task_id?: string;
@@ -894,6 +906,10 @@ export interface ResearchTask extends ResearchExperiment {
   run_count?: number;
   latestRun: ResearchTaskLatestRun | null;
   latest_run?: ResearchTaskLatestRun | null;
+  /** BFF-STRATEGY-SYNTHETIC-STUBS-20261120: stub/manual runs are not real executions. */
+  is_non_real?: boolean | null;
+  name_is_fallback_id?: boolean | null;
+  display_summary?: ResearchTaskDisplaySummary | string | null;
   constraints?: Record<string, unknown>;
   idempotencyKey?: string | null;
   idempotency_key?: string | null;

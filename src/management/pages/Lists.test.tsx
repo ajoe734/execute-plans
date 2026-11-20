@@ -9,6 +9,7 @@ import {
   PersonasList,
   RankingFormulasList,
   StrategiesList,
+  extractHiddenNonRealCount,
   extractHiddenRetiredPersonaCount,
   extractHiddenTestPersonaStrategyCount,
   extractIncludeTestPersonas,
@@ -555,5 +556,13 @@ describe("FE-MGMT-DISPLAY-NAMES-AND-SUMMARIES-20261120: StrategiesList test-pers
     expect(screen.getByText("artifact-2330")).toBeInTheDocument();
     expect(screen.getByTestId("artifact-strategy-name-missing")).toBeInTheDocument();
     expect(screen.getByTestId("artifact-persona-name-missing")).toBeInTheDocument();
+  });
+});
+
+describe("extractHiddenNonRealCount", () => {
+  it("reads meta.hidden_non_real_count and ignores invalid values", () => {
+    expect(extractHiddenNonRealCount({ hidden_non_real_count: 5 })).toBe(5);
+    expect(extractHiddenNonRealCount({ hidden_non_real_count: "5" })).toBeUndefined();
+    expect(extractHiddenNonRealCount(null)).toBeUndefined();
   });
 });

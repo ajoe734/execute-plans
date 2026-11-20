@@ -210,6 +210,10 @@ export interface MeetingSummaryItem {
   subject_ref?: Record<string, unknown> | string | null;
   participants: MeetingParticipant[];
   participant_count?: number;
+  /** BFF-STRATEGY-SYNTHETIC-STUBS-20261120: plain-language topic and execution outcome. */
+  topic_summary?: string | null;
+  execution_state?: string | null;
+  last_error?: string | null;
   has_agora_participants?: boolean;
   has_private_servant?: boolean;
   round?: number;
@@ -228,6 +232,7 @@ export interface MeetingsListData {
     open_count?: number;
     closed_count?: number;
     review_count?: number;
+    dead_letter_count?: number;
   };
 }
 
@@ -470,6 +475,8 @@ export interface ListMeetingsFilters {
   personaId?: string;
   cursor?: string;
   limit?: number;
+  /** Include dead_letter / execution_failed meetings (hidden by default). */
+  includeFailed?: boolean;
 }
 
 export function getMeetings(filters: ListMeetingsFilters = {}): Promise<MeetingsRead<MeetingsListData>> {
@@ -478,6 +485,7 @@ export function getMeetings(filters: ListMeetingsFilters = {}): Promise<Meetings
   if (filters.type?.trim()) query.type = filters.type.trim();
   if (filters.personaId?.trim()) query.persona_id = filters.personaId.trim();
   if (filters.cursor?.trim()) query.cursor = filters.cursor.trim();
+  if (filters.includeFailed) query.include_failed = "true";
   if (typeof filters.limit === "number" && Number.isFinite(filters.limit) && filters.limit > 0) {
     query.limit = filters.limit;
   }

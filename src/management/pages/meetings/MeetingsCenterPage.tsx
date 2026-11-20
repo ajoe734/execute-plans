@@ -42,6 +42,12 @@ const MEETING_TYPES = [
   { id: "MT-6", label: "MT-6 Quarterly Review (季度檢討會議)" },
 ] as const;
 
+const FAILED_EXECUTION_STATES = new Set(["dead_letter", "execution_failed"]);
+
+export function isFailedMeeting(meeting: Pick<MeetingSummaryItem, "execution_state">): boolean {
+  return FAILED_EXECUTION_STATES.has(String(meeting.execution_state ?? "").trim().toLowerCase());
+}
+
 const CLOSED_STATUSES = new Set(["closed", "completed"]);
 const TERMINAL_NON_OPEN = new Set(["closed", "completed", "refused", "cancelled", "canceled"]);
 
@@ -151,20 +157,45 @@ function MeetingRowCard({
     String(meeting.outcome ?? "").toUpperCase() === "REVIEW" ||
     String(meeting.status ?? "").toUpperCase() === "REVIEW";
   const outcomeDisplay = meeting.outcome ? reasonCodeDisplay(meeting.outcome, t) : null;
+  const failed = isFailedMeeting(meeting);
+  const typeLabel = t(`meetingsCenter.typeName.${meeting.meeting_type}`, { defaultValue: meeting.meeting_type });
+  const chair = resolveBffSubjectDisplay(
+    {
+      id: meeting.chair_persona_id,
+      displayName: meeting.chair_persona_display_name,
+      nameMissing: meeting.chair_persona_name_missing,
+    },
+    t,
+  );
+  const topicRaw = (meeting.topic_summary ?? meeting.topic ?? "").trim();
+  const topicText = topicRaw
+    ? t(`meetingsCenter.topicSummary.${topicRaw}`, { defaultValue: topicRaw })
+    : "";
+  const titleParts = [typeLabel, chair.primaryText !== "—" ? chair.primaryText : ""].filter(Boolean);
+  const lastErrorText = meeting.last_error ? reasonCodeDisplay(meeting.last_error, t).text : "";
 
   return (
-    <Card className="p-4 space-y-2" data-testid={testId}>
+    <Card className="p-4 space-y-2" data-testid={testId} data-execution-failed={failed ? "true" : undefined}>
+      <div className="text-sm font-semibold text-foreground" data-testid={`meeting-title-${meeting.meeting_id}`}>
+        {titleParts.join(" · ")}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to={href}
-            className="font-mono text-sm font-semibold text-primary underline"
+            className="font-mono text-xs text-muted-foreground underline"
             data-testid={`meeting-link-${meeting.meeting_id}`}
           >
             {meeting.meeting_id}
           </Link>
           <Badge variant="outline">{meeting.meeting_type}</Badge>
-          <Badge variant="outline">{statusLabel(meeting.status, t)}</Badge>
+          {failed ? (
+            <Badge variant="destructive" data-testid={`meeting-execution-failed-${meeting.meeting_id}`}>
+              {t("meetingsCenter.executionFailed")}
+            </Badge>
+          ) : (
+            <Badge variant="outline">{statusLabel(meeting.status, t)}</Badge>
+          )}
           {outcomeDisplay ? (
             <Badge variant={isReview ? "destructive" : "secondary"}>
               <span>{outcomeDisplay.text}</span>
@@ -187,7 +218,16 @@ function MeetingRowCard({
           {meeting.closed_at ?? meeting.created_at ?? "—"}
         </span>
       </div>
-      {meeting.topic ? <p className="text-sm text-foreground">{meeting.topic}</p> : null}
+      {topicText ? (
+        <p className="text-sm text-foreground" data-testid={`meeting-topic-${meeting.meeting_id}`}>
+          {topicText}
+        </p>
+      ) : null}
+      {failed && lastErrorText ? (
+        <p className="text-sm text-destructive" data-testid={`meeting-last-error-${meeting.meeting_id}`}>
+          {t("meetingsCenter.failureReason", { reason: lastErrorText })}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           Chair:{" "}
@@ -209,9 +249,11 @@ function MeetingRowCard({
             />
           </span>
         ) : null}
-        <span>
-          Round: <code className="text-foreground">{meeting.round ?? 1}</code>
-        </span>
+        {failed ? null : (
+          <span>
+            Round: <code className="text-foreground">{meeting.round ?? 1}</code>
+          </span>
+        )}
         <span>
           Participants:{" "}
           <code className="text-foreground">
@@ -328,6 +370,7 @@ export const MeetingsCenterPage = () => {
   const activeTab = normalizeMeetingsTab(params.get("tab"));
   const typeFilter = (params.get("type") ?? "").trim();
   const personaFilter = (params.get("persona_id") ?? params.get("persona") ?? "").trim();
+  const includeFailed = params.get("include_failed") === "true";
 
   const access = useAgoraWriteAccess();
   const writeAllowed =
@@ -356,6 +399,7 @@ export const MeetingsCenterPage = () => {
     const filters = {
       ...(typeFilter ? { type: typeFilter } : {}),
       ...(personaFilter ? { personaId: personaFilter } : {}),
+      includeFailed,
     };
     void Promise.all([
       getMeetings(filters),
@@ -370,7 +414,7 @@ export const MeetingsCenterPage = () => {
     return () => {
       live = false;
     };
-  }, [typeFilter, personaFilter, refreshTick]);
+  }, [typeFilter, personaFilter, includeFailed, refreshTick]);
 
   const setActiveTab = useCallback(
     (nextTab: string) => {
@@ -417,19 +461,35 @@ export const MeetingsCenterPage = () => {
     }
   };
 
-  const upcomingItems = useMemo(() => {
+  const visibleMeetings = useMemo(() => {
     if (meetingsRead?.state !== "ok") return [];
-    return meetingsRead.data.items.filter(
-      (m) => !TERMINAL_NON_OPEN.has(String(m.status ?? "").trim().toLowerCase()),
-    );
+    return includeFailed ? meetingsRead.data.items : meetingsRead.data.items.filter((m) => !isFailedMeeting(m));
+  }, [meetingsRead, includeFailed]);
+
+  const deadLetterCount = useMemo(() => {
+    if (meetingsRead?.state !== "ok") return undefined;
+    const fromSummary = meetingsRead.data.summary?.dead_letter_count;
+    if (typeof fromSummary === "number" && Number.isFinite(fromSummary)) return fromSummary;
+    const local = meetingsRead.data.items.filter(isFailedMeeting).length;
+    return local > 0 ? local : undefined;
   }, [meetingsRead]);
 
-  const historyItems = useMemo(() => {
-    if (meetingsRead?.state !== "ok") return [];
-    return meetingsRead.data.items.filter((m) =>
-      CLOSED_STATUSES.has(String(m.status ?? "").trim().toLowerCase()),
-    );
-  }, [meetingsRead]);
+  const toggleIncludeFailed = useCallback(() => {
+    const next = new URLSearchParams(params);
+    if (includeFailed) next.delete("include_failed");
+    else next.set("include_failed", "true");
+    setParams(next, { replace: true });
+  }, [params, setParams, includeFailed]);
+
+  const upcomingItems = useMemo(
+    () => visibleMeetings.filter((m) => !TERMINAL_NON_OPEN.has(String(m.status ?? "").trim().toLowerCase()) || isFailedMeeting(m)),
+    [visibleMeetings],
+  );
+
+  const historyItems = useMemo(
+    () => visibleMeetings.filter((m) => CLOSED_STATUSES.has(String(m.status ?? "").trim().toLowerCase()) && !isFailedMeeting(m)),
+    [visibleMeetings],
+  );
 
   return (
     <section
@@ -442,7 +502,7 @@ export const MeetingsCenterPage = () => {
           <h1 className="text-2xl font-semibold text-foreground">
             {t("meetingsCenter.title", { defaultValue: "Meetings Center" })}
           </h1>
-          <Badge variant="outline">paper · execution_authority: none</Badge>
+          <Badge variant="outline" data-testid="meetings-authority-badge">{t("meetingsCenter.authorityBadge")}</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
           {t("meetingsCenter.subtitle", {
@@ -587,6 +647,31 @@ export const MeetingsCenterPage = () => {
           </div>
         ) : null}
       </Card>
+
+      {meetingsRead?.state === "ok" && (deadLetterCount !== undefined || includeFailed) ? (
+        <Card
+          className="flex flex-wrap items-center justify-between gap-2 border-border/70 bg-muted/20 p-3 text-sm"
+          data-testid="meetings-failed-banner"
+        >
+          <span data-testid="meetings-failed-text">
+            {includeFailed
+              ? t("meetingsCenter.showingFailed")
+              : t("meetingsCenter.hiddenFailedWithCount", { count: deadLetterCount ?? 0 })}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant={includeFailed ? "default" : "outline"}
+            aria-pressed={includeFailed}
+            data-testid="meetings-toggle-failed"
+            onClick={toggleIncludeFailed}
+          >
+            {includeFailed
+              ? t("meetingsCenter.hideFailed")
+              : t("meetingsCenter.showFailedWithCount", { count: deadLetterCount ?? 0 })}
+          </Button>
+        </Card>
+      ) : null}
 
       {/* Four canonical tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

@@ -10,6 +10,7 @@ import {
   LIST_CLASS_BY_KEY,
   normalizeBaseObjectFields,
   normalizeLiveListResponse,
+  listResearchTasksEnvelope,
   EVOLUTION_QUALIFICATION_CRITERIA,
   type EvolutionQualificationReport,
   type StrategyListQueryOptions,
@@ -1276,12 +1277,53 @@ function isNonRealRun(adapter?: string, dispatchMode?: string): boolean {
   return a === "stub" || a === "manual" || d === "stub" || d === "manual";
 }
 
+const UNRECORDED_RUN_VALUES = new Set(["", "unknown", "none", "null", "nan"]);
+
+function recordedRunValue(v: string | null | undefined): string {
+  const text = String(v ?? "").trim();
+  return UNRECORDED_RUN_VALUES.has(text.toLowerCase()) ? "" : text;
+}
+
+export function extractHiddenNonRealCount(meta: unknown): number | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const count = (meta as { hidden_non_real_count?: unknown }).hidden_non_real_count;
+  return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
+}
+
+function researchDisplaySummary(r: ResearchTask): string {
+  const raw = r.display_summary;
+  if (typeof raw === "string") return raw.trim();
+  if (!raw) return "";
+  return [raw.symbol, raw.dataset_ref, raw.subject_ref]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export const ResearchList = () => {
   const t = useT();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const includeNonReal = searchParams.get("include_non_real") === "true";
+  const loader = useCallback(
+    () => listResearchTasksEnvelope({ includeNonReal }),
+    [includeNonReal],
+  );
+  const toggleIncludeNonReal = () => {
+    const next = new URLSearchParams(searchParams);
+    if (includeNonReal) next.delete("include_non_real");
+    else next.set("include_non_real", "true");
+    setSearchParams(next);
+  };
+  const taskTypeLabel = (raw: string | null | undefined): string => {
+    const type = String(raw ?? "").trim();
+    if (!type) return "";
+    return t(`research.taskTypes.${type}`, { defaultValue: type.replace(/_/g, " ") });
+  };
   return (
     <ObjectListPage<ResearchTask>
       title={t("nav.research")}
-      loader={asEntityLoader<ResearchTask>(lists.research)}
+      loader={loader}
+      reloadKey={`research:${includeNonReal ? "include_non_real" : "default"}`}
       basePath="/management/experiments"
       liveKinds={["Research"]}
       createBehavior={{ kind: "disabled", reasonI18nKey: "research.createDisabledReason" }}
@@ -1289,11 +1331,55 @@ export const ResearchList = () => {
         title: t("research.emptyState.title"),
         description: t("research.emptyState.description"),
       }}
+      topControls={(ctx) => {
+        const hiddenCount = extractHiddenNonRealCount(ctx.meta);
+        const hasCount = typeof hiddenCount === "number";
+        if (ctx.isInitialLoading || (!hasCount && !includeNonReal)) return null;
+        return (
+          <Card
+            data-testid="research-non-real-banner"
+            className="mb-3 flex flex-wrap items-center justify-between gap-2 border-border/70 bg-muted/20 p-3 text-sm"
+          >
+            <span data-testid="research-non-real-text">
+              {includeNonReal
+                ? t("research.showingNonReal")
+                : t("research.hiddenNonRealWithCount", { count: hiddenCount })}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant={includeNonReal ? "default" : "outline"}
+              aria-pressed={includeNonReal}
+              data-testid="research-toggle-non-real-button"
+              onClick={toggleIncludeNonReal}
+            >
+              {includeNonReal
+                ? t("research.hideNonReal")
+                : t("research.showNonRealWithCount", { count: hiddenCount })}
+            </Button>
+          </Card>
+        );
+      }}
       columns={[
         {
           key: "name",
           header: t("common.name"),
-          cell: (r) => <div className="font-medium">{r.name}</div>,
+          cell: (r) => {
+            if (r.name_is_fallback_id === true) {
+              const primary = [taskTypeLabel(r.taskType ?? r.task_type), researchDisplaySummary(r)]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <div data-testid="research-row-title" data-fallback-title="true">
+                  <div className="font-medium">{primary || r.task_id || r.taskId || r.name}</div>
+                  <div className="text-mono text-xs text-muted-foreground" data-testid="research-row-task-id">
+                    {r.task_id ?? r.taskId ?? r.id}
+                  </div>
+                </div>
+              );
+            }
+            return <div className="font-medium">{r.name}</div>;
+          },
         },
         {
           key: "status",
@@ -1306,10 +1392,10 @@ export const ResearchList = () => {
           cell: (r) => {
             const latest = r.latestRun ?? r.latest_run;
             const runId = latest?.runId ?? latest?.run_id ?? "";
-            const runStatus = latest?.status ?? "";
-            const adapter = latest?.adapter ?? "";
-            const dispatchMode = latest?.dispatchMode ?? latest?.dispatch_mode ?? "";
-            if (!runId && !runStatus && !adapter && !dispatchMode) {
+            const runStatus = recordedRunValue(latest?.status);
+            const adapter = recordedRunValue(latest?.adapter);
+            const dispatchMode = recordedRunValue(latest?.dispatchMode ?? latest?.dispatch_mode);
+            if (!runId && !runStatus && !adapter && !dispatchMode && !latest) {
               return <span className="text-xs text-muted-foreground">{t("research.noRunsYet")}</span>;
             }
             const nonReal = isNonRealRun(adapter, dispatchMode);
@@ -1317,9 +1403,13 @@ export const ResearchList = () => {
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 {runId && <span className="text-mono">{runId}</span>}
                 {runStatus && <span className="text-muted-foreground">{statusLabel(runStatus, t)}</span>}
-                {(adapter || dispatchMode) && (
+                {adapter || dispatchMode ? (
                   <Badge variant="outline" className="font-mono text-[11px]">
                     {[adapter, dispatchMode].filter(Boolean).join(" / ")}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[11px] text-muted-foreground" data-testid="research-runner-unrecorded">
+                    {t("research.runnerUnrecorded")}
                   </Badge>
                 )}
                 {nonReal && (
@@ -1328,8 +1418,8 @@ export const ResearchList = () => {
                     className="border-status-warning/40 bg-status-warning/10 text-status-warning text-[11px]"
                   >
                     {t("research.nonRealRunBadge", {
-                      adapter: adapter || "—",
-                      dispatchMode: dispatchMode || "—",
+                      adapter: adapter || t("research.runnerUnrecorded"),
+                      dispatchMode: dispatchMode || t("research.runnerUnrecorded"),
                     })}
                   </Badge>
                 )}

@@ -69,6 +69,8 @@ export const RiskCenter = () => {
   const t = useT();
   const navigate = useNavigate();
   const [strategiesSlice, setStrategiesSlice] = useState<DomainSlice<Strategy>>(initialSlice);
+  const [includeHiddenStrategies, setIncludeHiddenStrategies] = useState(false);
+  const [hiddenStrategyCounts, setHiddenStrategyCounts] = useState<{ retired?: number; testOrSynthetic?: number }>({});
   const [personasSlice, setPersonasSlice] = useState<DomainSlice<Persona>>(initialSlice);
   const [poolsSlice, setPoolsSlice] = useState<DomainSlice<CapitalPool>>(initialSlice);
   const [runtimesSlice, setRuntimesSlice] = useState<DomainSlice<Runtime>>(initialSlice);
@@ -95,7 +97,6 @@ export const RiskCenter = () => {
         });
     };
 
-    loadSlice(() => bffV1.strategies.listNonDraft(), setStrategiesSlice);
     loadSlice(() => bffV1.personas.list(), setPersonasSlice);
     loadSlice(() => bffV1.capitalPools.list(), setPoolsSlice);
     loadSlice(() => bffV1.runtimes.list(), setRuntimesSlice);
@@ -112,6 +113,46 @@ export const RiskCenter = () => {
       cancelled = true;
     };
   }, []);
+
+  // Strategies slice: retired-persona and test/synthetic/stub rows are hidden by default
+  // (BFF-STRATEGY-SYNTHETIC-STUBS-20261120) so real trading strategies are not buried.
+  useEffect(() => {
+    let cancelled = false;
+    setStrategiesSlice(initialSlice());
+    bffV1.strategies
+      .listNonDraft({ hideRetiredPersonas: !includeHiddenStrategies, includeTestPersonas: includeHiddenStrategies })
+      .then((items) => {
+        if (!cancelled) setStrategiesSlice({ status: "ready", items });
+      })
+      .catch(() => {
+        if (!cancelled) setStrategiesSlice({ status: "error", items: [] });
+      });
+    if (!includeHiddenStrategies) {
+      bffV1.strategies
+        .nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false })
+        .then((c) => {
+          if (!cancelled) setHiddenStrategyCounts({ retired: c.retiredPersona, testOrSynthetic: c.testOrSynthetic });
+        })
+        .catch(() => {
+          if (!cancelled) setHiddenStrategyCounts({});
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [includeHiddenStrategies]);
+
+  const { visibleStrategies, hiddenStrategyCount } = useMemo(() => {
+    if (includeHiddenStrategies) return { visibleStrategies: strategiesSlice.items, hiddenStrategyCount: 0 };
+    const visible: Strategy[] = [];
+    let localHidden = 0;
+    for (const item of strategiesSlice.items) {
+      if (item.is_synthetic_or_stub === true) localHidden += 1;
+      else visible.push(item);
+    }
+    const metaHidden = (hiddenStrategyCounts.retired ?? 0) + (hiddenStrategyCounts.testOrSynthetic ?? 0);
+    return { visibleStrategies: visible, hiddenStrategyCount: Math.max(metaHidden, localHidden) };
+  }, [strategiesSlice.items, includeHiddenStrategies, hiddenStrategyCounts]);
 
   const { activePoolsSlice, archivedPoolsExcludedCount } = useMemo(() => {
     const activeItems: CapitalPool[] = [];
@@ -136,7 +177,7 @@ export const RiskCenter = () => {
 
   const data = useMemo(
     () => ({
-      strategies: strategiesSlice.items,
+      strategies: visibleStrategies,
       personas: personasSlice.items,
       pools: activePoolsSlice.items,
       runtimes: runtimesSlice.items,
@@ -147,7 +188,7 @@ export const RiskCenter = () => {
       incidents: incidentsSlice.items,
     }),
     [
-      strategiesSlice.items,
+      visibleStrategies,
       personasSlice.items,
       activePoolsSlice.items,
       runtimesSlice.items,
@@ -295,7 +336,7 @@ export const RiskCenter = () => {
             </div>
           </div>
           <BreachMatrix
-            strategiesSlice={strategiesSlice}
+            strategiesSlice={{ status: strategiesSlice.status, items: visibleStrategies }}
             poolsSlice={activePoolsSlice}
             runtimesSlice={runtimesSlice}
             toolsSlice={toolsSlice}
@@ -338,6 +379,30 @@ export const RiskCenter = () => {
             <div className="text-xs text-muted-foreground" data-testid="risk-strategies-drafts-excluded">
               {t("riskCenter.draftsExcluded")}
             </div>
+            {strategiesSlice.status === "ready" && (includeHiddenStrategies || hiddenStrategyCount > 0) && (
+              <div
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-sm"
+                data-testid="risk-strategies-hidden-banner"
+              >
+                <span data-testid="risk-strategies-hidden-text">
+                  {includeHiddenStrategies
+                    ? t("riskCenter.showingHiddenStrategies")
+                    : t("riskCenter.hiddenStrategiesWithCount", { count: hiddenStrategyCount })}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={includeHiddenStrategies ? "default" : "outline"}
+                  aria-pressed={includeHiddenStrategies}
+                  data-testid="risk-strategies-toggle-hidden"
+                  onClick={() => setIncludeHiddenStrategies((v) => !v)}
+                >
+                  {includeHiddenStrategies
+                    ? t("riskCenter.hideHiddenStrategies")
+                    : t("riskCenter.showHiddenStrategiesWithCount", { count: hiddenStrategyCount })}
+                </Button>
+              </div>
+            )}
             <DataTable
               rows={[...data.strategies].sort((a, b) => RISK_WEIGHT[b.risk] - RISK_WEIGHT[a.risk])}
               loading={strategiesSlice.status === "loading"}

@@ -1179,3 +1179,80 @@ describe("RiskCenter", () => {
     });
   });
 });
+
+// FE-RISK-STRATEGY-RESEARCH-UI-20261120 WP6.1 — hide synthetic / retired / test strategies by default.
+describe("RiskCenter strategies slice hides stub rows by default", () => {
+  const realStrategy = {
+    id: "strategy-persona-298e138c136c9840b0e4",
+    name: "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+    owner: "operator",
+    updatedAt: "2026-11-20T00:00:00Z",
+    state: "approved",
+    risk: "low",
+    alpha: "momentum.v1",
+    capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
+    personaIds: ["persona-be19a1fac471247f2b2a"],
+    is_synthetic_or_stub: false,
+    pnl30d: 0.04,
+    sharpe: 1.1,
+    drawdown: 0.03,
+  } as unknown as Strategy;
+  const officialStub = {
+    ...realStrategy,
+    id: "strat-tw-official",
+    name: "strat-tw-official",
+    personaIds: [],
+    is_synthetic_or_stub: true,
+    stub_reason: "no_rules",
+  } as unknown as Strategy;
+
+  beforeEach(async () => {
+    await i18n.changeLanguage("zh-TW");
+    vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.capitalPools, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.incidents, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.alerts, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    liveStatus._reset();
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("shows real strategies first, the BFF hidden count, and a toggle that requests hidden rows", async () => {
+    const listSpy = vi
+      .spyOn(bffV1.strategies, "listNonDraft")
+      .mockImplementation(async (opts) => (opts?.includeTestPersonas ? [realStrategy, officialStub] : [realStrategy]));
+    vi.spyOn(bffV1.strategies, "nonDraftHiddenCounts").mockResolvedValue({ retiredPersona: 4, testOrSynthetic: 8 });
+
+    renderRiskCenter();
+    const strategiesTab = await screen.findByRole("tab", { name: /策略/ });
+    fireEvent.mouseDown(strategiesTab);
+    fireEvent.click(strategiesTab);
+
+    expect(await screen.findByText(realStrategy.name)).toBeInTheDocument();
+    expect(screen.queryByText("strat-tw-official")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("risk-strategies-hidden-text")).toHaveTextContent("12"));
+    expect(listSpy).toHaveBeenCalledWith({ hideRetiredPersonas: true, includeTestPersonas: false });
+
+    fireEvent.click(screen.getByTestId("risk-strategies-toggle-hidden"));
+    expect(await screen.findByText("strat-tw-official")).toBeInTheDocument();
+    expect(listSpy).toHaveBeenLastCalledWith({ hideRetiredPersonas: false, includeTestPersonas: true });
+  });
+
+  it("filters is_synthetic_or_stub rows client-side even when the owner returns them", async () => {
+    vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([realStrategy, officialStub]);
+    vi.spyOn(bffV1.strategies, "nonDraftHiddenCounts").mockResolvedValue({});
+    renderRiskCenter();
+    const strategiesTab = await screen.findByRole("tab", { name: /策略/ });
+    fireEvent.mouseDown(strategiesTab);
+    fireEvent.click(strategiesTab);
+    expect(await screen.findByText(realStrategy.name)).toBeInTheDocument();
+    expect(screen.queryByText("strat-tw-official")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("risk-strategies-hidden-text")).toHaveTextContent("1"));
+  });
+});

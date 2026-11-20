@@ -440,6 +440,30 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
     ]);
   });
 
+  it("listNonDraft forwards hide_retired_personas/include_test_personas and nonDraftHiddenCounts reads meta (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", async () => {
+    enableStrictLiveMode();
+    const fetchUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchUrls.push(url);
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "strategy-real-1", name: "Real", state: "approved", risk: "low", alpha: "a", capitalPoolId: "p", personaIds: [] }],
+          meta: { hidden_retired_persona_count: 4, hidden_test_persona_strategy_count: 8 },
+          page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 1, next_page_token: null },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    await bffV1.strategies.listNonDraft({ hideRetiredPersonas: true, includeTestPersonas: false });
+    expect(fetchUrls[0]).toContain("hide_retired_personas=true");
+    expect(fetchUrls[0]).toContain("include_test_personas=false");
+
+    const counts = await bffV1.strategies.nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false });
+    expect(counts).toEqual({ retiredPersona: 4, testOrSynthetic: 8 });
+  });
+
   it("returns BFF strategy DTOs without persona_ids/persona_id/personaId/capital_pool_id alias synthesis and without replacing null with empty strings", async () => {
     enableStrictLiveMode();
 

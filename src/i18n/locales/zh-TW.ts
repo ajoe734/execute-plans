@@ -233,6 +233,21 @@ export default {
     },
   },
   meetingsCenter: {
+    authorityBadge: "模擬盤 · 僅供討論，不下單",
+    executionFailed: "執行失敗（未開成）",
+    failureReason: "原因：{{reason}}",
+    hiddenFailedWithCount: "預設已隱藏 {{count}} 場執行失敗（未開成）的會議。",
+    showFailedWithCount: "顯示執行失敗會議（{{count}}）",
+    showingFailed: "目前包含執行失敗（未開成）的會議。",
+    hideFailed: "隱藏執行失敗會議",
+    typeName: {
+      "MT-1": "池子演進會議",
+      "MT-2": "優化會議",
+      "MT-3": "新策略發想會議",
+      "MT-4": "績效歸因檢討",
+      "MT-5": "盤勢研判會議",
+      "MT-6": "季度檢討會議",
+    },
     title: "會議中心",
     subtitle: "討論型 Persona 會議、卷宗會前解讀交流、受治理提案追蹤與 M9 規則額度。",
     tabs: {
@@ -1225,6 +1240,10 @@ export default {
     col: { signal: "項目", source: "來源", kind: "類型" },
   },
   riskCenter: {
+    hiddenStrategiesWithCount: "預設已隱藏 {{count}} 筆已退役 Persona、測試或合成／無規則的策略。",
+    showHiddenStrategiesWithCount: "顯示已隱藏的測試與退役策略（{{count}}）",
+    showingHiddenStrategies: "目前包含已隱藏的測試、合成與退役策略。",
+    hideHiddenStrategies: "隱藏測試與退役策略",
     subtitle: "整合資金、策略、Persona、Runtime 與能力的風險視圖。",
     draftsExcluded: "不含草稿策略",
     archivedPoolsExcluded: "不含已封存資金池",
@@ -3294,6 +3313,17 @@ export default {
     changeTypeLabels: { baseline: "基準版本" },
   },
   research: {
+    taskTypes: {
+      factor_eval: "因子評估",
+      hypothesis_test: "假說驗證",
+      manual_check: "人工檢查",
+      backtest: "回測",
+    },
+    hiddenNonRealWithCount: "預設已隱藏 {{count}} 筆非真實（stub／manual）執行紀錄。",
+    showNonRealWithCount: "顯示非真實執行紀錄（{{count}}）",
+    showingNonReal: "目前包含非真實（stub／manual）執行紀錄。",
+    hideNonReal: "隱藏非真實執行紀錄",
+    runnerUnrecorded: "未記錄執行器",
     rerun: "重新執行",
     createDisabledReason:
       "研究項目由研究工作流自動建立；手動建立因尚無執行者處理而維持關閉。",
@@ -3309,6 +3339,8 @@ export default {
       description: "目前尚未執行任何研究工作。研究工作流啟動後，研究任務會顯示於此。",
     },
     detail: {
+      unbound: "未綁定",
+      notReported: "未回報",
       objective: "研究目標",
       runsTitle: "任務執行紀錄",
       noRuns: "此研究任務尚無執行紀錄。",
@@ -3365,6 +3397,21 @@ export default {
     topics: "主題",
   },
   strategyDetail: {
+    stubBanner: {
+      title: "這是測試／合成策略，沒有真實交易規則",
+      body: "原因：{{reason}}。歷史測試與原始資料僅為占位，不代表真實績效。",
+    },
+    stubReason: {
+      unspecified: "後端標記為合成或占位資料",
+      no_rules: "尚未設定任何交易規則",
+      synthetic: "合成測試資料",
+      test_probe: "測試探針",
+    },
+    rulesSummary: {
+      title: "交易規則摘要",
+      empty: "此策略尚未回報交易規則。",
+      viewSpec: "查看完整規格 →",
+    },
     spec: "規格與參數",
     specTitle: "策略規格",
     specBodyNoAlpha: "修改規格或參數會建立草稿版本,並經治理審查後才能部署。",
