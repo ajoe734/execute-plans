@@ -1,0 +1,188 @@
+管理控制台
+執行環境
+執行環境
+
+Executor、MCP 伺服器、排程與資料攝取的即時運維視圖。
+
+名稱	種類	環境	狀態	CPU	MEMORY	P95 LATENCY	UPTIME	區域	
+
+pcb-persona-paper-d594bd6487f68147b213
+persona-0f94f05389a7e092b469
+交易旅程
+	PAPER	PAPER	degraded	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-e4c604cb
+rb-bf677164beb84b01b9453d30ee93f9ae
+persona-21cdbed183c80cf371df
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-9ef4589c
+rb-8b36da8734534f298923e6fbb5f3eea7
+persona-9bc44570c2eeef68f259
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-1bc4efea
+rb-e3eafebeda57401b8ecdac6481e09fe7
+persona-4900b20b038a885dec38
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-7ce705cf
+rb-40419c598d5c436f9a735b3b7c5ccdf3
+persona-79cf73f571e32d848bcc
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-d0ce88c3
+rb-9572f7b0cf9745c29ddafdc03cde136e
+persona-9e2a17ce62380f17b3d4
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-fae0166d
+rb-d96ba18666394213b0a837c0cf0fdfc6
+persona-e3375f2f59c89158b0af
+交易旅程
+	PAPER	PAPER	失敗	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-0354501c
+rb-d9edf8e0c1204f8d821588bfbefb9fe1
+persona-a1d7cbb8ccff5e6bb8f9
+交易旅程
+	PAPER	PAPER	失敗	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-2ed1139b
+rb-7aadcafe2f9a4ecfbc84019ada996de9
+persona-42a98f84de33e2f56b0b
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-8b61e138
+rb-b1f9532ba83043a3a8ef39ea95711f31
+persona-b52db9473b6e0396f4d9
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-522d253a
+rb-8794cd13cdd649febc55c9957f0b3ba4
+persona-0a1283ddf9a0fdb7ad33
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-3306d99f
+rb-d3a8e143ed464a40a7d26511c962c622
+persona-95a79aa840d361eefce5
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-3763e031
+rb-69bfc2859ff14ff88a5006c78dcc4999
+persona-72f7acb5d0c3c27a99a1
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-bb87c4dd
+rb-f4d33a981dce4598bcfdfbe6ed3ac35e
+persona-070a7b24589fb129f052
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-bed17d74
+rb-30092281a9294185928793fd8d31761e
+persona-ae7b97a96e92acd86682
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-ab8072c8
+rb-3ad0b19e0c964f89b822d6207c47f053
+persona-f258b4a5c3af546933fc
+交易旅程
+	PAPER	PAPER	已退役	
+nan
+	
+nan
+	nan	nan	nan	
+
+
+rt-9ba4e0f8
+rb-17888a7c529b43378d76a6006740116d
+persona-6e0e6e51e442cd21d1e2
+交易旅程
+	P

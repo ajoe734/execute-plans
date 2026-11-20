@@ -1,0 +1,13 @@
+{
+  "taskId": "FE-GATE-READABILITY-PROBE-20261120",
+  "advisoryOnly": true,
+  "detectors": ["internal_id", "enum_code", "nan", "translation_key", "key_value", "repeated_long_line"],
+  "wiring": {
+    "crawl": "crawlRoute adds per-route `readability`; manifest.readability {summary,pages}; markdown + GITHUB_STEP_SUMMARY section; not a gateCheck",
+    "aggregate": "release-gate-summary.json mgmtReadability + one markdown line; no effect on overall/releaseReadiness",
+    "standalone": "node scripts/accept-management-hosted-production.mjs --readability-only true (baseline routes, read-only, writes management-readability-*.json, never fails)"
+  },
+  "fixtures": "scripts/__tests__/fixtures/management-readability (cut from 2026-11-20 hosted texts: human-inbox, persona-intent, runtimes, incidents, tools)",
+  "tests": "node --test scripts/__tests__/management-readability.test.mjs => 10 pass / 0 fail",
+  "notRun": "No live crawl executed in this worktree (needs hosted viewer token); coordinator runs standalone mode against hosted after RC6 deploys."
+}
