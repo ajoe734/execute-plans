@@ -43,6 +43,9 @@ import {
   joinOrDash,
   lifecycleTone,
   reconciliationTone,
+  resolveLegacyProviderKey,
+  resolveLegacyProviderKeyLabel,
+  resolveLegacyProviderLabel,
   toneClass,
   translateDataSourceSurfaceStatus,
 } from "./dataSourceModels";
@@ -52,8 +55,16 @@ import {
   type DataSourceActionKey,
 } from "./dataSourceActions";
 
+export type LegacyDataSourceRowRecord = Omit<
+  SystemDataSourceRecord,
+  "reasons" | "credentialState"
+> & {
+  reasons?: string[];
+  credentialState?: string;
+};
+
 export interface DataSourceInstancesTableProps {
-  records: Array<ManagementDataSourceV2DTO | SystemDataSourceRecord>;
+  records: Array<ManagementDataSourceV2DTO | LegacyDataSourceRowRecord>;
   onSelectSource: (sourceId: string, item: ManagementDataSourceV2DTO | null) => void;
   onExecuteAction: (actionKey: DataSourceActionKey, source: ManagementDataSourceV2DTO) => void;
   surfaceStatus?: string;
@@ -171,7 +182,7 @@ export function DataSourceInstancesTable({
                   );
                 }
                 const legacyItem = item as SystemDataSourceRecord;
-                const legacyKey = cleanSourceToken(legacyItem.providerKey) || `legacy-${index}`;
+                const legacyKey = resolveLegacyProviderKey(legacyItem) || `legacy-${index}`;
                 return (
                   <LegacyDataSourceRow
                     key={legacyKey}
@@ -481,12 +492,12 @@ function LegacyDataSourceRow({
   record,
   onSelect,
 }: {
-  record: SystemDataSourceRecord;
+  record: LegacyDataSourceRowRecord;
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const providerLabel = cleanSourceToken(record.provider) || MISSING_DATA_SOURCE_FIELD_LABEL;
-  const providerKeyLabel = cleanSourceToken(record.providerKey) || MISSING_DATA_SOURCE_FIELD_LABEL;
+  const providerLabel = resolveLegacyProviderLabel(record);
+  const providerKeyLabel = resolveLegacyProviderKeyLabel(record);
   const statusLabelText = fmtToken(record.status, MISSING_DATA_SOURCE_FIELD_LABEL);
   const credentialLabelText = fmtToken(record.credentialState, MISSING_DATA_SOURCE_FIELD_LABEL);
 

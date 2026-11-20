@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,7 @@ import {
   personaDataSourceRecords,
   personaSourceRecord,
 } from "./DataSourceControlCenter";
+import { DataSourceInstancesTable } from "./DataSourceInstancesTable";
 import {
   MISSING_DATA_SOURCE_FIELD_LABEL,
   fmtToken,
@@ -345,6 +346,48 @@ describe("DataSourceControlCenter — unavailable, degraded legacy, and nan-free
     expect(within(table).queryByText(/^unknown$/i)).not.toBeInTheDocument();
     expect(within(table).queryByText(/^nan$/i)).not.toBeInTheDocument();
     expect(within(table).queryByText(/^data-source-1$/i)).not.toBeInTheDocument();
+  });
+
+  it("renders 未回報 for a legacy record with a real connector ID when provider is omitted, and preserves authoritative source-1 / connector-1 view routing IDs", () => {
+    const legacyWithConnectorOnly = adaptDataSource(
+      { connector_id: "tw-registry", status: "enabled" },
+      0,
+    );
+    const v2WithNumericId = adaptDataSourceV2OrLegacy(
+      {
+        source_instance_id: "source-1",
+        connector_id: "connector-1",
+        provider: "TWSE",
+        definition: {},
+        instance: {},
+      },
+      0,
+    );
+    const select = vi.fn();
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <DataSourceInstancesTable
+            records={[legacyWithConnectorOnly, v2WithNumericId]}
+            onSelectSource={select}
+            onExecuteAction={vi.fn()}
+          />
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    const rows = screen.getAllByRole("row");
+    const legacyProviderCell = within(rows[1]).getAllByRole("cell")[0];
+    expect(legacyProviderCell.querySelector(".font-semibold")).toHaveTextContent(
+      "未回報",
+    );
+    expect(legacyProviderCell.querySelector(".font-mono")).toHaveTextContent(
+      "tw-registry",
+    );
+
+    fireEvent.click(within(rows[2]).getByRole("button", { name: "檢視" }));
+    expect(select).toHaveBeenCalledWith("source-1", v2WithNumericId);
   });
 
   it("shows 0 and 0/0 counts only when the BFF returns a successful empty list", () => {

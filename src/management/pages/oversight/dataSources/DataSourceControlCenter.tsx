@@ -45,6 +45,8 @@ import {
   isV2,
   joinOrDash,
   resolveDataSourceSurfaceState,
+  resolveLegacyProviderKeyLabel,
+  resolveLegacyProviderLabel,
   toneClass,
   translateDataSourceSurfaceReason,
   translateDataSourceSurfaceStatus,
@@ -299,8 +301,8 @@ export function DataSourceControlCenter() {
       const rec = item as SystemDataSourceRecord;
       return {
         ...rec,
-        providerKey: cleanSourceToken(rec.providerKey) || MISSING_DATA_SOURCE_FIELD_LABEL,
-        provider: cleanSourceToken(rec.provider) || MISSING_DATA_SOURCE_FIELD_LABEL,
+        providerKey: resolveLegacyProviderKeyLabel(rec),
+        provider: resolveLegacyProviderLabel(rec),
         status: cleanSourceToken(rec.status) || MISSING_DATA_SOURCE_FIELD_LABEL,
       };
     });

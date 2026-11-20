@@ -6,7 +6,7 @@
     "work_package": "WP6.3",
     "register_path": "docs/operations/problem-register.md"
   },
-  "captured_at": "2026-11-20T23:26:00Z",
+  "captured_at": "2026-11-20T23:50:00Z",
   "owner": "Antigravity",
   "reviewer": "Codex2",
   "acceptance_1_hosted_reproduction_citation": {
@@ -53,8 +53,8 @@
   },
   "acceptance_4_nan_free_models_and_missing_fields": {
     "missing_field_label": "未回報",
-    "sanitization": "cleanSourceToken (via sanitizeRawText from src/lib/enumLabels.ts plus adapter missing sentinels 'unknown', 'unknown-source', 'unknown_source', and synthetic 'data-source-N'/'source-N'/'connector-N' fallbacks) strips undefined, null, empty strings, nan, and adapter missing sentinels across DataSourceControlCenter.tsx, DataSourceInstancesTable.tsx, dataSourceModels.ts, and managementDataSources.ts.",
-    "verified_fallbacks": "personaSourceRecord, fallbackPersonaSourceRecord, personaDataSourceRecords, v2ToLegacyRecord, V2DataSourceRow, LegacyDataSourceRow, and PersonaDataSourceRow fall back to 未回報 for missing, nan, or adapter-synthesized unknown provider, providerKey, and lifecycle/health/reconciliation/credential/definition status."
+    "sanitization": "cleanSourceToken strips undefined, null, empty strings, nan, and adapter missing sentinels ('unknown', 'unknown-source', 'unknown_source') without discarding real source-N/connector-N identifiers; resolveLegacyProviderKey and resolveLegacyProviderLabel detect synthetic data-source-N placeholders and missing legacy providers synthesized from connector_id/providerKey.",
+    "verified_fallbacks": "personaSourceRecord, fallbackPersonaSourceRecord, personaDataSourceRecords, v2ToLegacyRecord, V2DataSourceRow, LegacyDataSourceRow, and PersonaDataSourceRow fall back to 未回報 for missing, nan, or adapter-synthesized provider and lifecycle/health/reconciliation/credential/definition status while preserving authoritative V2 source_instance_id/connector_id routing targets."
   },
   "acceptance_5_tests": {
     "commands": [
@@ -62,7 +62,7 @@
       "npm run typecheck:app && npm run typecheck:agora"
     ],
     "results": {
-      "DataSourceControlCenter.test.tsx": "6 passed (unavailable with read_timeout in zh-TW and en-US, degraded legacy_projection with translated reason and no 0 counts, non-legacy degraded service_client with generic degraded copy and no legacy claim or 0 counts, real adaptDataSourceV2OrLegacy/adaptDataSource omitted provider & lifecycle fields reading 未回報 instead of unknown, successful empty list with 0 and 0/0 counts, and nan-free models/UI reading 未回報)",
+      "DataSourceControlCenter.test.tsx": "7 passed (unavailable with read_timeout in zh-TW and en-US, degraded legacy_projection with translated reason and no 0 counts, non-legacy degraded service_client with generic degraded copy and no legacy claim or 0 counts, real adaptDataSourceV2OrLegacy/adaptDataSource omitted provider & lifecycle fields reading 未回報 instead of unknown, legacy connector-only missing provider reading 未回報 plus authoritative source-1/connector-1 view routing IDs, successful empty list with 0 and 0/0 counts, and nan-free models/UI reading 未回報)",
       "DataSourceManagement.test.tsx": "28 passed",
       "managementDataSources.test.ts": "31 passed",
       "i18nParity.test.ts": "17 passed",

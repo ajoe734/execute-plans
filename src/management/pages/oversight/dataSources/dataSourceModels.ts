@@ -60,14 +60,62 @@ const ADAPTER_MISSING_SENTINELS = new Set([
   "unknown-source",
   "unknown_source",
 ]);
-const ADAPTER_SYNTHETIC_ID_RE = /^(?:data-source|source|connector)-\d+$/i;
+const ADAPTER_SYNTHETIC_LEGACY_KEY_RE = /^data-source-\d+$/i;
 
 export function cleanSourceToken(value?: string | null): string | undefined {
   const cleaned = sanitizeRawText(value);
   if (!cleaned) return undefined;
   if (ADAPTER_MISSING_SENTINELS.has(cleaned.toLowerCase())) return undefined;
-  if (ADAPTER_SYNTHETIC_ID_RE.test(cleaned)) return undefined;
   return cleaned;
+}
+
+export interface LegacyProviderRecordLike {
+  provider?: string | null;
+  providerKey?: string | null;
+  provider_key?: unknown;
+  connector_id?: unknown;
+  id?: unknown;
+  name?: unknown;
+  display_name?: unknown;
+}
+
+export function resolveLegacyProviderKey(
+  record: LegacyProviderRecordLike,
+): string | undefined {
+  const rawKey =
+    cleanSourceToken(record.providerKey) ??
+    cleanSourceToken(typeof record.provider_key === "string" ? record.provider_key : undefined) ??
+    cleanSourceToken(typeof record.connector_id === "string" ? record.connector_id : undefined) ??
+    cleanSourceToken(typeof record.id === "string" ? record.id : undefined);
+  if (!rawKey || ADAPTER_SYNTHETIC_LEGACY_KEY_RE.test(rawKey)) {
+    return undefined;
+  }
+  return rawKey;
+}
+
+export function resolveLegacyProviderKeyLabel(
+  record: LegacyProviderRecordLike,
+  fallback = MISSING_DATA_SOURCE_FIELD_LABEL,
+): string {
+  return resolveLegacyProviderKey(record) ?? fallback;
+}
+
+export function resolveLegacyProviderLabel(
+  record: LegacyProviderRecordLike,
+  fallback = MISSING_DATA_SOURCE_FIELD_LABEL,
+): string {
+  const cleanedProvider =
+    cleanSourceToken(record.provider) ??
+    cleanSourceToken(typeof record.name === "string" ? record.name : undefined) ??
+    cleanSourceToken(typeof record.display_name === "string" ? record.display_name : undefined);
+  if (!cleanedProvider || ADAPTER_SYNTHETIC_LEGACY_KEY_RE.test(cleanedProvider)) {
+    return fallback;
+  }
+  const cleanedKey = resolveLegacyProviderKey(record);
+  if (cleanedKey && cleanedProvider === cleanedKey) {
+    return fallback;
+  }
+  return cleanedProvider;
 }
 
 export function fmtToken(
