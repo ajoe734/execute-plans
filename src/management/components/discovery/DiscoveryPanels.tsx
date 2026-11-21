@@ -239,15 +239,24 @@ export function TemplateEvaluationsPanel({ templates, testId = "discovery-templa
   );
 }
 
-/** Hypothesis + metrics + lineage + attribution for any record carrying discovery fields. */
+/**
+ * Hypothesis + metrics + lineage + attribution for any record carrying discovery fields.
+ * Sections the owner did not supply are omitted entirely (FE-RISK-STRATEGY-RESEARCH-UI-20261120):
+ * a record with no discovery data renders nothing instead of a wall of dashes.
+ */
 export function DiscoverySections({ record, testId = "discovery" }: { record: unknown; testId?: string }) {
   const view = normalizeDiscovery(record);
+  const hasCard = view.hypothesisCard !== null;
+  const hasMetrics = view.metrics !== null;
+  const hasLineage = view.lineage !== null;
+  const hasAttribution = view.attribution !== null;
+  if (!hasCard && !hasMetrics && !hasLineage && !hasAttribution) return null;
   return (
     <div className="space-y-3" data-testid={testId}>
-      <HypothesisCardPanel view={view} testId={`${testId}-hypothesis`} />
-      <SampleMetricsPanel view={view} testId={`${testId}-metrics`} />
-      <LineagePanel view={view} testId={`${testId}-lineage`} />
-      <AttributionNote view={view} testId={`${testId}-attribution`} />
+      {hasCard ? <HypothesisCardPanel view={view} testId={`${testId}-hypothesis`} /> : null}
+      {hasMetrics ? <SampleMetricsPanel view={view} testId={`${testId}-metrics`} /> : null}
+      {hasLineage ? <LineagePanel view={view} testId={`${testId}-lineage`} /> : null}
+      {hasAttribution ? <AttributionNote view={view} testId={`${testId}-attribution`} /> : null}
     </div>
   );
 }

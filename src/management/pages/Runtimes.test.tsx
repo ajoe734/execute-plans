@@ -74,11 +74,11 @@ describe("RuntimesPage", () => {
     }
   });
 
-  it("focuses live runtime binding rows and renders missing telemetry as nan", () => {
+  it("focuses live runtime binding rows, omits unsupported telemetry columns, and renders missing values as Not reported / 未回報 without nan", async () => {
     const rows: RuntimeListItem[] = [{
       id: "rt-rescue-0260528-5937dea1",
       name: "rt-rescue-0260528-5937dea1",
-      kind: "paper" as RuntimeListItem["kind"],
+      kind: "" as RuntimeListItem["kind"],
       env: "paper",
       status: "active",
       cpu: Number.NaN,
@@ -102,7 +102,16 @@ describe("RuntimesPage", () => {
     expect(screen.getByText("rt-rescue-0260528-5937dea1")).toBeInTheDocument();
     expect(screen.getByText("rb-433f2a614995432b9e7a463c882dbefb")).toBeInTheDocument();
     expect(screen.getByText("persona-20260528-5937dea1")).toBeInTheDocument();
-    expect(screen.getAllByText("nan").length).toBeGreaterThanOrEqual(4);
+
+    const columnHeaders = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    expect(columnHeaders).not.toContain("CPU");
+    expect(columnHeaders).not.toContain("Memory");
+    expect(columnHeaders).not.toContain("p95 latency");
+    expect(columnHeaders).not.toContain("Uptime");
+    expect(columnHeaders).not.toContain("Region");
+
+    expect(screen.getByText("Not reported")).toBeInTheDocument();
+    expect(screen.queryByText(/nan/i)).not.toBeInTheDocument();
     expect(screen.queryByText("0ms")).not.toBeInTheDocument();
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
     const journeysLink = screen.getByRole("link", { name: "persona-20260528-5937dea1 trade journeys" });
@@ -110,6 +119,10 @@ describe("RuntimesPage", () => {
       "href",
       "/management/trade-journeys?persona_id=persona-20260528-5937dea1&return_to=%2Fmanagement%2Fruntimes%3Fpersona%3Dpersona-20260528-5937dea1%26runtime%3Drt-rescue-0260528-5937dea1%26binding%3Drb-433f2a614995432b9e7a463c882dbefb&return_label=Runtimes",
     );
+
+    await i18n.changeLanguage("zh-TW");
+    expect(screen.getByText("未回報")).toBeInTheDocument();
+    expect(screen.queryByText(/nan/i)).not.toBeInTheDocument();
   });
 
   it("does not fall back to unrelated runtime rows when focus misses", () => {
@@ -383,5 +396,82 @@ describe("RuntimesPage", () => {
     const actionBtn = screen.getByRole("button", { name: "Runtime actions" });
     expect(actionBtn).toBeDisabled();
     expect(mocks.runActionSafe).not.toHaveBeenCalled();
+  });
+
+  it("renders BFF persona and strategy display names as primary text, moves raw IDs to secondary monospace text, and shows name_missing badge without resolving names client-side (AC1/AC4)", async () => {
+    const rows: RuntimeListItem[] = [
+      {
+        id: "rt-named-01",
+        name: "rt-named-01",
+        kind: "paper" as RuntimeListItem["kind"],
+        env: "paper",
+        status: "active",
+        cpu: Number.NaN,
+        memory: Number.NaN,
+        latencyP95Ms: Number.NaN,
+        uptimePct: Number.NaN,
+        region: "",
+        updatedAt: "2026-11-20T08:00:00Z",
+        runtimeId: "rt-named-01",
+        runtimeBindingId: "rb-named-01",
+        personaId: "persona-be19a1fac471247f2b2a",
+        personaDisplayName: "青禾｜2330 台股 Paper 學習 R2",
+        personaNameMissing: false,
+        strategyId: "strategy-persona-2330",
+        strategyDisplayName: "青禾 2330 動能策略",
+        strategyNameMissing: false,
+      },
+      {
+        id: "rt-missing-02",
+        name: "rt-missing-02",
+        kind: "paper" as RuntimeListItem["kind"],
+        env: "paper",
+        status: "active",
+        cpu: Number.NaN,
+        memory: Number.NaN,
+        latencyP95Ms: Number.NaN,
+        uptimePct: Number.NaN,
+        region: "",
+        updatedAt: "2026-11-20T08:05:00Z",
+        runtimeId: "rt-missing-02",
+        runtimeBindingId: "rb-missing-02",
+        personaId: "persona-orphan-99",
+        personaDisplayName: null,
+        personaNameMissing: true,
+        strategyId: "strategy-orphan-99",
+        strategyDisplayName: null,
+        strategyNameMissing: true,
+      },
+    ];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: vi.fn(),
+      loading: false,
+    });
+
+    await i18n.changeLanguage("en-US");
+    renderRuntimes("/management/runtimes");
+
+    expect(screen.getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+    expect(screen.getByText("青禾 2330 動能策略")).toBeInTheDocument();
+    expect(screen.getByText("persona-be19a1fac471247f2b2a")).toBeInTheDocument();
+    expect(screen.getByText("strategy-persona-2330")).toBeInTheDocument();
+    expect(screen.getByText("rt-named-01")).toBeInTheDocument();
+    expect(screen.getByText("rb-named-01")).toBeInTheDocument();
+
+    expect(screen.getByTestId("runtime-persona-name-missing")).toHaveTextContent(
+      "Name missing",
+    );
+    expect(screen.getByTestId("runtime-strategy-name-missing")).toHaveTextContent(
+      "Name missing",
+    );
+
+    await i18n.changeLanguage("zh-TW");
+    expect(screen.getByTestId("runtime-persona-name-missing")).toHaveTextContent(
+      "名稱未登記",
+    );
+    expect(screen.getByTestId("runtime-strategy-name-missing")).toHaveTextContent(
+      "名稱未登記",
+    );
   });
 });

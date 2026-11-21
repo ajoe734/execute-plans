@@ -759,6 +759,193 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
     renderDetail("/management/meetings/mtg-offline");
     const unavailable = await screen.findByTestId("meeting-detail-unavailable");
     expect(unavailable.textContent).toContain("consultation_owner_unavailable");
+    expect(unavailable.textContent).toMatch(/Consultation owner service is unavailable|會診主控服務暫時無法使用/);
+  });
+
+  it("renders localized labels and plain-language reasons with secondary code for refused / insufficient_participants meetings", async () => {
+    on("GET", "/bff/management/meetings/mtg-492d824b116f9ace", {
+      status: 200,
+      data: {
+        meeting_id: "mtg-492d824b116f9ace",
+        meeting_type: "MT-3",
+        topic: "Strategy ideation",
+        status: "refused",
+        outcome: "insufficient_participants",
+        participants: [],
+        rounds: [],
+        proposals: [],
+        writebacks: [],
+      },
+    });
+
+    renderDetail("/management/meetings/mtg-492d824b116f9ace");
+    const header = await screen.findByTestId("meeting-detail-header");
+    expect(header.textContent).toMatch(/Refused|已拒絕召開/);
+    expect(header.textContent).toMatch(/Insufficient eligible participants to convene meeting|合格參與人數不足，無法召開會議/);
+    expect(header.textContent).toContain("insufficient_participants");
+  });
+
+  it("renders BFF persona and strategy display names, secondary raw IDs, and name_missing flags on MeetingsCenterPage and MeetingDetailPage without resolving names client-side (AC1/AC4)", async () => {
+    await i18n.changeLanguage("en-US");
+    routes = [];
+    on("GET", "/bff/management/meetings", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        items: [
+          {
+            meeting_id: "mtg-display-01",
+            meeting_type: "MT-1",
+            topic: "Weekly review with display names",
+            status: "open",
+            outcome: "IN_PROGRESS",
+            chair_persona_id: "persona-alpha",
+            chair_persona_display_name: "Alpha Macro Strategist",
+            chair_persona_name_missing: false,
+            strategy_id: "strategy-alpha-2330",
+            strategy_display_name: "Alpha 2330 Core",
+            strategy_name_missing: false,
+            participants: [
+              {
+                persona_id: "persona-alpha",
+                persona_display_name: "Alpha Macro Strategist",
+                persona_name_missing: false,
+                role: "chair",
+              },
+              {
+                persona_id: "persona-orphan-01",
+                persona_display_name: null,
+                persona_name_missing: true,
+                role: "risk",
+              },
+            ],
+            participant_count: 2,
+          },
+        ],
+        summary: { total_items: 1, open_count: 1, closed_count: 0, review_count: 0 },
+      },
+    });
+    on("GET", "/bff/management/meetings/proposals", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        items: [
+          {
+            proposal_id: "prop-display-01",
+            meeting_id: "mtg-display-01",
+            kind: "research_demand",
+            sponsor_persona_id: "persona-alpha",
+            sponsor_persona_display_name: "Alpha Macro Strategist",
+            sponsor_persona_name_missing: false,
+            strategy_id: "strategy-orphan-prop",
+            strategy_display_name: null,
+            strategy_name_missing: true,
+            downstream: { target: "research_demand", id: "rd-101", status: "pending" },
+          },
+        ],
+      },
+    });
+    on("GET", "/bff/management/meetings/catalogue", recordedCatalogueResponse);
+    on("GET", "/bff/management/meetings/mtg-display-01", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        meeting_id: "mtg-display-01",
+        meeting_type: "MT-1",
+        topic: "Weekly review with display names",
+        status: "open",
+        chair_persona_id: "persona-alpha",
+        chair_persona_display_name: "Alpha Macro Strategist",
+        chair_persona_name_missing: false,
+        strategy_id: "strategy-alpha-2330",
+        strategy_display_name: "Alpha 2330 Core",
+        strategy_name_missing: false,
+        participants: [
+          {
+            persona_id: "persona-alpha",
+            persona_display_name: "Alpha Macro Strategist",
+            persona_name_missing: false,
+            role: "chair",
+          },
+          {
+            persona_id: "persona-orphan-01",
+            persona_display_name: null,
+            persona_name_missing: true,
+            role: "risk",
+          },
+        ],
+        pre_read: {
+          interpretations: [
+            {
+              persona_id: "persona-alpha",
+              persona_display_name: "Alpha Macro Strategist",
+              persona_name_missing: false,
+              relevance_scope: "committee",
+              text: "Shared committee interpretation",
+            },
+          ],
+        },
+        rounds: [],
+        proposals: [
+          {
+            proposal_id: "prop-display-01",
+            meeting_id: "mtg-display-01",
+            kind: "research_demand",
+            sponsor_persona_id: "persona-orphan-01",
+            sponsor_persona_display_name: null,
+            sponsor_persona_name_missing: true,
+            downstream: { target: "research_demand", id: "rd-101", status: "pending" },
+          },
+        ],
+        writebacks: [
+          {
+            persona_id: "persona-alpha",
+            persona_display_name: "Alpha Macro Strategist",
+            persona_name_missing: false,
+            entry_id: "wb-display-01",
+          },
+        ],
+      },
+    });
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/management/meetings"]}>
+        <Routes>
+          <Route path="/management/meetings" element={<MeetingsCenterPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByTestId("meeting-chair-mtg-display-01-primary"),
+    ).toHaveTextContent("Alpha Macro Strategist");
+    expect(screen.getByTestId("meeting-chair-mtg-display-01-id")).toHaveTextContent(
+      "(persona-alpha)",
+    );
+    expect(
+      screen.getByTestId("meeting-strategy-mtg-display-01-primary"),
+    ).toHaveTextContent("Alpha 2330 Core");
+    expect(
+      screen.getByTestId(
+        "meeting-row-mtg-display-01-participant-persona-orphan-01-name-missing",
+      ),
+    ).toHaveTextContent("Name missing");
+    unmount();
+
+    renderDetail("/management/meetings/mtg-display-01");
+    expect(
+      await screen.findByTestId("meeting-detail-chair-primary"),
+    ).toHaveTextContent("Alpha Macro Strategist");
+    expect(screen.getByTestId("meeting-detail-chair-id")).toHaveTextContent("(persona-alpha)");
+    expect(
+      screen.getByTestId("participant-persona-orphan-01-name-missing"),
+    ).toHaveTextContent("Name missing");
+    expect(
+      screen.getByTestId("detail-proposal-sponsor-prop-display-01-name-missing"),
+    ).toHaveTextContent("Name missing");
+    expect(
+      screen.getByTestId("writeback-persona-persona-alpha-wb-display-01-primary"),
+    ).toHaveTextContent("Alpha Macro Strategist");
   });
 });
 
@@ -806,5 +993,110 @@ describe("ConsultRulesPage (AC3 & AC7)", () => {
       "href",
       "/management/meetings?tab=rules",
     );
+  });
+});
+
+// FE-RISK-STRATEGY-RESEARCH-UI-20261120 WP6.3 — dead_letter Round 0 meeting (BFF contract shape).
+describe("MeetingsCenterPage failed meetings (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () => {
+  const deadLetterList = (includeFailed: boolean) => ({
+    status: "ok",
+    owner: "consultation",
+    reason: null,
+    empty: false,
+    fallback_used: false,
+    data: {
+      id: "management-meetings",
+      status: "ok",
+      source: "consultation",
+      empty: false,
+      items: [
+        {
+          id: "mtg-real-1",
+          meeting_id: "mtg-real-1",
+          meeting_type: "MT-1",
+          topic: "池子演進檢討",
+          topic_summary: {
+            kind: "pool_evolution_review",
+            subject_persona_id: "persona-alpha",
+            period: "2026-Q3",
+            lesson_count: 4,
+          },
+          status: "open",
+          execution_state: { status: "convened", attempt_count: 1, max_attempts: 3, last_error: null, updated_at: "2026-11-20T10:00:00Z" },
+          chair_persona_id: "persona-alpha",
+          chair_persona_display_name: "青禾",
+          persona_display_name: "青禾",
+          participants: [],
+          round: 2,
+          created_at: "2026-11-20T10:00:00Z",
+          href: "/management/meetings/mtg-real-1",
+        },
+        ...(includeFailed
+          ? [
+              {
+                id: "mtg-dead-1",
+                meeting_id: "mtg-dead-1",
+                meeting_type: "MT-2",
+                topic: "優化會議",
+                topic_summary: {
+                  kind: "optimisation_review",
+                  subject_persona_id: "persona-beta",
+                  period: "2026-Q3",
+                  lesson_count: 2,
+                },
+                status: "convened",
+                effective_status: "execution_failed",
+                execution_state: {
+                  status: "dead_letter",
+                  attempt_count: 3,
+                  max_attempts: 3,
+                  last_error: "provider_unavailable",
+                  updated_at: "2026-11-20T09:05:00Z",
+                },
+                chair_persona_id: "persona-beta",
+                chair_persona_display_name: "墨竹",
+                participants: [],
+                round: 0,
+                created_at: "2026-11-20T09:00:00Z",
+                href: "/management/meetings/mtg-dead-1",
+              },
+            ]
+          : []),
+      ],
+      summary: { dead_letter_count: 3 },
+    },
+  });
+
+  function mountRoutes() {
+    on("GET", "/bff/management/meetings", (req: { query?: Record<string, string> }) =>
+      json(deadLetterList(req.query?.include_failed === "true")),
+    );
+    on("GET", "/bff/management/meetings/proposals", { status: "ok", owner: "consultation", data: { items: [] } });
+    on("GET", "/bff/management/meetings/catalogue", { status: "ok", owner: "consultation", data: {} });
+  }
+
+  it("titles cards by type + chair + topic, localizes the authority badge and hides failed meetings by default", async () => {
+    await i18n.changeLanguage("zh-TW");
+    mountRoutes();
+    renderCenter("/management/meetings?tab=upcoming");
+    expect(await screen.findByTestId("meeting-row-mtg-real-1")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-title-mtg-real-1")).toHaveTextContent("池子演進會議 · 青禾");
+    expect(screen.getByTestId("meeting-topic-mtg-real-1")).toHaveTextContent("池子演進檢討：青禾（2026-Q3，4 則教訓）");
+    expect(screen.getByTestId("meetings-authority-badge")).not.toHaveTextContent("execution_authority");
+    expect(screen.queryByTestId("meeting-row-mtg-dead-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("meetings-failed-text")).toHaveTextContent("3");
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("include_failed toggle shows 執行失敗（未開成） with the localized last_error instead of Round 0", async () => {
+    await i18n.changeLanguage("zh-TW");
+    mountRoutes();
+    renderCenter("/management/meetings?tab=upcoming&include_failed=true");
+    const row = await screen.findByTestId("meeting-row-mtg-dead-1");
+    expect(screen.getByTestId("meeting-execution-failed-mtg-dead-1")).toHaveTextContent("執行失敗（未開成）");
+    expect(screen.getByTestId("meeting-last-error-mtg-dead-1")).toBeInTheDocument();
+    expect(row.textContent ?? "").not.toMatch(/Round:\s*0/);
+    expect(calls.some((c) => c.path === "/bff/management/meetings" && c.query?.include_failed === "true")).toBe(true);
+    await i18n.changeLanguage("en-US");
   });
 });

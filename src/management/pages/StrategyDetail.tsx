@@ -40,6 +40,7 @@ import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
 import type { Watcher, DecisionJournalEntry } from "@/lib/bff-v1";
 import { Eye, BookOpen, User } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
+import { RuleDescription } from "@/management/components/detail/RuleDescription";
 import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
 
 export const StrategyDetail = () => {
@@ -154,6 +155,19 @@ export const StrategyDetail = () => {
           .map((pid) => String(pid).trim())
           .filter(Boolean)
           .map((personaId) => ({ personaId, state: "" }));
+  const personaDisplayNames = s.persona_display_names ?? {};
+  const tradingRules = (Array.isArray(s.rules) ? s.rules : []).filter((rule) => rule && (rule.role ?? "trading") === "trading");
+  const isStub = s.is_synthetic_or_stub === true;
+  const stubReasonRaw = typeof s.stub_reason === "string" ? s.stub_reason.trim() : "";
+  const stubReasonText = stubReasonRaw
+    ? t(`strategyDetail.stubReason.${stubReasonRaw}`, { defaultValue: stubReasonRaw.replace(/_/g, " ") })
+    : t("strategyDetail.stubReason.unspecified");
+  const openSpecTab = () => {
+    const trigger = document.querySelector<HTMLElement>('[role="tab"][id$="-trigger-spec"]');
+    if (!trigger) return;
+    trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, ctrlKey: false }));
+    trigger.focus();
+  };
   const joinList = (v: string[] | string | undefined | null): string =>
     (Array.isArray(v) ? v : typeof v === "string" ? [v] : []).map((x) => String(x).trim()).filter(Boolean).join(", ");
   const specScope = s.spec?.market_scope;
@@ -172,7 +186,11 @@ export const StrategyDetail = () => {
   const alphaRaw = s.alpha?.trim() || "";
   const alphaDisplay = alphaRaw || noData;
   const poolDisplay = s.capitalPoolId?.trim() || noData;
-  const personasDisplay = (s.personaIds ?? []).filter(Boolean).join(", ") || noData;
+  const personasDisplay =
+    (s.personaIds ?? [])
+      .filter(Boolean)
+      .map((pid) => (s.persona_display_names?.[pid] ? `${s.persona_display_names[pid]} (${pid})` : pid))
+      .join(", ") || noData;
   const subtitle = alphaRaw ? `${alphaRaw} · ${s.id}` : s.id;
   const hasPnl = typeof s.pnl === "number" && Number.isFinite(s.pnl);
   const hasPnl30d = typeof s.pnl30d === "number" && Number.isFinite(s.pnl30d);
@@ -219,6 +237,45 @@ export const StrategyDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (
               <>
+                {isStub && (
+                  <div
+                    role="note"
+                    data-testid="strategy-stub-banner"
+                    className="mb-4 rounded-md border border-status-warning/40 bg-status-warning/10 p-3 text-sm"
+                  >
+                    <div className="font-medium text-status-warning">{t("strategyDetail.stubBanner.title")}</div>
+                    <div className="mt-1 text-muted-foreground" data-testid="strategy-stub-reason">
+                      {t("strategyDetail.stubBanner.body", { reason: stubReasonText })}
+                    </div>
+                  </div>
+                )}
+                {!isStub && (
+                  <Section title={t("strategyDetail.rulesSummary.title")}>
+                    <div data-testid="strategy-rules-summary" className="space-y-2">
+                      {tradingRules.length === 0 ? (
+                        <p className="text-sm text-muted-foreground" data-testid="strategy-rules-summary-empty">
+                          {t("strategyDetail.rulesSummary.empty")}
+                        </p>
+                      ) : (
+                        tradingRules.map((rule, idx) => (
+                          <RuleDescription
+                            key={`${rule.registryId}-${idx}`}
+                            rule={rule}
+                            testId={`strategy-rules-summary-rule-${idx}`}
+                          />
+                        ))
+                      )}
+                      <button
+                        type="button"
+                        onClick={openSpecTab}
+                        data-testid="strategy-rules-summary-spec-link"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {t("strategyDetail.rulesSummary.viewSpec")}
+                      </button>
+                    </div>
+                  </Section>
+                )}
                 <DiscoverySections record={s} testId="strategy-discovery" />
                 <Section>
                   <div className="mb-4 space-y-3">
@@ -278,9 +335,21 @@ export const StrategyDetail = () => {
                                 data-persona-state={entry.state || undefined}
                                 className="inline-flex items-center gap-1.5 rounded border border-border/70 bg-background px-2.5 py-1 text-xs hover:bg-muted/50"
                               >
-                                <span className="text-mono text-primary underline-offset-2 hover:underline">
-                                  {entry.personaId}
-                                </span>
+                                {personaDisplayNames[entry.personaId] ? (
+                                  <span className="flex flex-col leading-tight">
+                                    <span
+                                      className="text-primary underline-offset-2 hover:underline"
+                                      data-testid={`strategy-bound-persona-name-${entry.personaId}`}
+                                    >
+                                      {personaDisplayNames[entry.personaId]}
+                                    </span>
+                                    <span className="text-mono text-[10px] text-muted-foreground">{entry.personaId}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-mono text-primary underline-offset-2 hover:underline">
+                                    {entry.personaId}
+                                  </span>
+                                )}
                                 {entry.state && (
                                   entry.state === "unknown" ? (
                                     <Badge

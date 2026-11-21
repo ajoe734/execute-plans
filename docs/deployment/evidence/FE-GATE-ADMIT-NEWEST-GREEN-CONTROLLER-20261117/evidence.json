@@ -1,0 +1,15 @@
+{
+  "task": "FE-GATE-ADMIT-NEWEST-GREEN-CONTROLLER-20261117",
+  "rule": "Controller admitted when head_sha === backend (tip) OR (run is nonprod-deploy workflow_dispatch on dev in ajoe734/pantheon, run name matches ^Dev release <backend> + <40hex>$, and compareCommits(base=backend, head=controller.head_sha) is ahead|identical).",
+  "deployed_backend_proof": "run name rendered by the trusted nonprod-deploy.yml run-name expression from inputs.ref (the ref the workflow checks out and deploys), combined with path/repo/event/branch checks and Pantheon dev ancestry; no dispatcher-only input is trusted alone.",
+  "reproduction": {
+    "pantheon_run": 44083921576, "controller_head_sha": "a16b4b1fc6d1f170e6cd6882bbed666892b53597",
+    "backend": "57dcdd9d8ebb281581db6d22f754fe5aef418731", "frontend_gate_run": 44088947061,
+    "pre_fix": "2 new tests failed (gate, deploy non-tip case) against the old workflows"
+  },
+  "validation": [
+    {"cmd": "npx vitest run src/test/paired-release-workflow.test.ts", "result": "40 passed (40), incl. 14 new tests: tip, non-tip, non-ancestor, wrong run name, forged path/repo/event/branch, inactive controller; for both workflows"},
+    {"cmd": "npx vitest run src/test/deploy-safe-defaults.test.ts", "result": "25 passed (25); contract assertion updated to the tip-or-ancestor rule (fixes Component merge gate / Deploy safety contract CI failure)"}
+  ],
+  "pantheon_change_needed": "none"
+}

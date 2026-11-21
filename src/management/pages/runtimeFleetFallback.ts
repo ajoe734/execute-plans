@@ -114,10 +114,11 @@ function fleetRowToRuntime(row: ManagementPersonaFleetRow): FleetRuntimeRow | nu
   if (!runtimeId && !bindingId) return null;
   const deploymentStage = fleetDeploymentStage(row);
   const id = runtimeId ?? bindingId ?? row.personaId;
-  const kind = deploymentStage ?? "nan";
+  const kind = deploymentStage ?? "";
+  const personaName = usableText(row.personaName);
   return {
     id,
-    name: runtimeId ?? bindingId ?? "nan",
+    name: runtimeId ?? bindingId ?? "",
     kind: kind as RuntimeListItem["kind"],
     runtimeKind: kind,
     runtime_kind: kind,
@@ -138,7 +139,13 @@ function fleetRowToRuntime(row: ManagementPersonaFleetRow): FleetRuntimeRow | nu
     personaId: row.personaId,
     persona_id: row.personaId,
     fleetDerived: true,
-    personaName: usableText(row.personaName),
+    personaName,
+    ...(personaName
+      ? {
+          personaDisplayName: personaName,
+          persona_display_name: personaName,
+        }
+      : {}),
   };
 }
 
@@ -147,27 +154,7 @@ export async function runtimesWithFleetFallback(): Promise<ListEnvelope<FleetRun
     lists.runtimes() as Promise<ListEnvelope<FleetRuntimeRow>>,
     mgmt.personaFleet.get().catch(() => [] as ManagementPersonaFleetRow[]),
   ]);
-  const enrichedItems = runtimeEnv.items.map((item) => {
-    const matchingFleet = fleetRows.find(
-      (f) =>
-        (item.runtimeId && fleetRuntimeId(f) === item.runtimeId) ||
-        (item.runtime_id && fleetRuntimeId(f) === item.runtime_id) ||
-        (item.bindingId && fleetBindingId(f) === item.bindingId) ||
-        (item.binding_id && fleetBindingId(f) === item.binding_id) ||
-        (item.runtimeBindingId && fleetBindingId(f) === item.runtimeBindingId) ||
-        (item.runtime_binding_id && fleetBindingId(f) === item.runtime_binding_id)
-    );
-    if (matchingFleet && matchingFleet.personaId && matchingFleet.personaId !== item.personaId) {
-      return {
-        ...item,
-        personaId: matchingFleet.personaId,
-        persona_id: matchingFleet.personaId,
-        personaName: usableText(matchingFleet.personaName) || item.personaName,
-      };
-    }
-    return item;
-  });
-  const existingKeys = existingRuntimeKeys(enrichedItems);
+  const existingKeys = existingRuntimeKeys(runtimeEnv.items);
   const fallbackRows: FleetRuntimeRow[] = [];
   for (const fleetRow of fleetRows) {
     const row = fleetRowToRuntime(fleetRow);
@@ -181,7 +168,7 @@ export async function runtimesWithFleetFallback(): Promise<ListEnvelope<FleetRun
   }
   return {
     ...runtimeEnv,
-    items: [...fallbackRows, ...enrichedItems],
+    items: [...fallbackRows, ...runtimeEnv.items],
     pageSize: runtimeEnv.pageSize + fallbackRows.length,
     estimatedTotal: typeof runtimeEnv.estimatedTotal === "number" ? runtimeEnv.estimatedTotal + fallbackRows.length : runtimeEnv.estimatedTotal,
   };

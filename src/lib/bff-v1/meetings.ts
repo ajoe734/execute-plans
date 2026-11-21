@@ -37,6 +37,8 @@ const PRIVATE_FIELD_KEYS = new Set([
 
 const WRITEBACK_ALLOWED_KEYS = new Set([
   "persona_id",
+  "persona_display_name",
+  "persona_name_missing",
   "entry_id",
   "status",
   "written_at",
@@ -161,6 +163,8 @@ async function readMeetingsSurface<T>(
 
 export interface MeetingParticipant {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   role?: string;
   origin?: "institutional" | "agora_advisor" | "private_servant" | string;
   servant?: boolean;
@@ -188,10 +192,30 @@ export interface MeetingSummaryItem {
   status: string;
   outcome?: string | null;
   chair_persona_id?: string | null;
+  chair_persona_display_name?: string | null;
+  chair_persona_name_missing?: boolean;
+  persona_id?: string | null;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
+  sponsor_persona_id?: string | null;
+  sponsor_persona_display_name?: string | null;
+  sponsor_persona_name_missing?: boolean;
+  subject_persona_id?: string | null;
+  subject_persona_display_name?: string | null;
+  subject_persona_name_missing?: boolean;
+  strategy_id?: string | null;
+  strategy_display_name?: string | null;
+  strategy_name_missing?: boolean;
   convened_by?: MeetingConvenedBy | null;
   subject_ref?: Record<string, unknown> | string | null;
   participants: MeetingParticipant[];
   participant_count?: number;
+  /** BFF-STRATEGY-SYNTHETIC-STUBS-20261120: plain-language topic and execution outcome. */
+  topic_summary?: MeetingTopicSummary | string | null;
+  execution_state?: MeetingExecutionState | string | null;
+  /** 'execution_failed' when dead-lettered at round 0. */
+  effective_status?: string | null;
+  last_error?: string | null;
   has_agora_participants?: boolean;
   has_private_servant?: boolean;
   round?: number;
@@ -199,6 +223,22 @@ export interface MeetingSummaryItem {
   closed_at?: string | null;
   href?: string;
   [key: string]: unknown;
+}
+
+export interface MeetingTopicSummary {
+  kind?: "pool_evolution_review" | "optimisation_review" | string | null;
+  subject_persona_id?: string | null;
+  subject_persona_display_name?: string | null;
+  period?: string | null;
+  lesson_count?: number | null;
+}
+
+export interface MeetingExecutionState {
+  status?: string | null;
+  attempt_count?: number | null;
+  max_attempts?: number | null;
+  last_error?: string | null;
+  updated_at?: string | null;
 }
 
 export interface MeetingsListData {
@@ -210,6 +250,7 @@ export interface MeetingsListData {
     open_count?: number;
     closed_count?: number;
     review_count?: number;
+    dead_letter_count?: number;
   };
 }
 
@@ -227,6 +268,14 @@ export interface MeetingProposalItem {
   meeting_href?: string | null;
   kind?: string;
   sponsor_persona_id?: string | null;
+  sponsor_persona_display_name?: string | null;
+  sponsor_persona_name_missing?: boolean;
+  persona_id?: string | null;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
+  strategy_id?: string | null;
+  strategy_display_name?: string | null;
+  strategy_name_missing?: boolean;
   summary?: string;
   title?: string;
   downstream: MeetingProposalDownstream;
@@ -257,6 +306,8 @@ export interface MeetingTypeRule {
 
 export interface MeetingScheduleEntry {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   meeting_type: string;
   last_run_at?: string | null;
   next_due_at?: string | null;
@@ -267,6 +318,8 @@ export interface MeetingScheduleEntry {
 
 export interface MeetingRefusalEntry {
   persona_id?: string | null;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   meeting_type: string;
   reason: string;
   at?: string;
@@ -301,6 +354,8 @@ export interface MeetingCaseFileItem {
 
 export interface MeetingPreReadInterpretation {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   relevance_scope?: string;
   text?: string;
   summary?: string;
@@ -311,6 +366,8 @@ export interface MeetingPreReadInterpretation {
 export interface MeetingRoundPosition {
   label: string;
   persona_id?: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   revealed_persona_id?: string;
   role?: string;
   style?: string;
@@ -350,6 +407,8 @@ export interface MeetingSynthesis {
 
 export interface MeetingWritebackEntry {
   persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
   entry_id: string;
   status?: string;
   written_at?: string;
@@ -434,6 +493,8 @@ export interface ListMeetingsFilters {
   personaId?: string;
   cursor?: string;
   limit?: number;
+  /** Include dead_letter / execution_failed meetings (hidden by default). */
+  includeFailed?: boolean;
 }
 
 export function getMeetings(filters: ListMeetingsFilters = {}): Promise<MeetingsRead<MeetingsListData>> {
@@ -442,6 +503,7 @@ export function getMeetings(filters: ListMeetingsFilters = {}): Promise<Meetings
   if (filters.type?.trim()) query.type = filters.type.trim();
   if (filters.personaId?.trim()) query.persona_id = filters.personaId.trim();
   if (filters.cursor?.trim()) query.cursor = filters.cursor.trim();
+  if (filters.includeFailed) query.include_failed = "true";
   if (typeof filters.limit === "number" && Number.isFinite(filters.limit) && filters.limit > 0) {
     query.limit = filters.limit;
   }

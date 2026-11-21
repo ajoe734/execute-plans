@@ -169,22 +169,32 @@ describe("release Gate 4 unauthenticated Persona Fleet contract", () => {
 });
 
 describe("release Gate 8 hosted management acceptance posture", () => {
-  it("downgrades hosted management readback failures when the hosted gate is advisory", () => {
+  it("downgrades hosted management readback and step failures when the hosted gate is advisory", () => {
     const checks = gate8For("false");
 
     expect(checks[0]).toMatchObject({
       status: "advisory_fail",
       note: "count:1; advisory on pull_request",
     });
+    expect(
+      checks
+        .filter((check) => check.status !== "pass")
+        .every((check) => check.status === "advisory_fail"),
+    ).toBe(true);
   });
 
-  it("keeps hosted management readback failures hard when the hosted gate is enabled", () => {
+  it("keeps hosted management readback and step failures hard when the hosted gate is enabled", () => {
     const checks = gate8For("true");
 
     expect(checks[0]).toMatchObject({
       status: "fail",
       note: "count:1",
     });
+    expect(
+      checks
+        .filter((check) => check.status !== "pass")
+        .every((check) => ["fail", "missing"].includes(check.status)),
+    ).toBe(true);
   });
 });
 

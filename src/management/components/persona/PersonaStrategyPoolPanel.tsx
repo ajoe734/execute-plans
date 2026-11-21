@@ -3,13 +3,16 @@
 // non-"ok" surface is shown as unavailable with the owner's reason; nothing is
 // derived, defaulted or synthesised here.
 
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { RuleDescription } from "@/management/components/detail/RuleDescription";
 import { useT } from "@/platform/hooks";
 import type {
   PersonaManagementEnvelope,
   PoolMemberBookRow,
   PoolMemberRecord,
   PoolHealthMeasure,
+  PoolMemberRuleRow,
 } from "@/lib/bff-v1/personas";
 
 interface Props {
@@ -96,6 +99,50 @@ export function PersonaStrategyPoolPanel({ management, managementUnavailable }: 
   // marks the section, while individually "ok" rows remain real owner values.
   for (const row of pool.memberVirtualBooks ?? []) bookByRef.set(row.artifact_ref, row);
 
+  const ruleByRef = new Map<string, PoolMemberRuleRow>();
+  for (const row of pool.memberRules ?? []) ruleByRef.set(row.artifact_ref, row);
+  const rulesSurface = management.meta?.surfaces?.member_rules;
+  const currentVersion = pool.current?.pool_version;
+  const observedNote = (surface: string) => {
+    const observed = management.meta?.surfaces?.[surface]?.observed_pool_version;
+    if (typeof observed !== "number" || observed === currentVersion) return null;
+    return (
+      <div data-testid={`observed-pool-version-${surface}`} className="text-xs text-muted-foreground mb-2">
+        {t("strategyDetail.poolRules.observedPoolVersion", { observed, current: currentVersion ?? "—" })}
+      </div>
+    );
+  };
+
+  const renderRule = (artifactRef: string) => {
+    const row = ruleByRef.get(artifactRef);
+    if (!row || row.status !== "ok") {
+      const reason = row?.reason ?? (row ? null : rulesSurface?.reason ?? null);
+      return (
+        <div data-testid={`pool-member-rule-unavailable-${artifactRef}`} className="text-sm text-muted-foreground">
+          {t("persona.pool.unavailable", { defaultValue: "無法讀取" })}
+          {reason ? <span className="ml-2 font-mono text-xs">({reason})</span> : null}
+        </div>
+      );
+    }
+    return (
+      <div>
+        <RuleDescription
+          testId={`pool-member-rule-${artifactRef}`}
+          rule={{ role: "pool_member", strategyLogic: row.strategy_logic, parameters: row.parameters }}
+        />
+        {row.strategy_id ? (
+          <Link
+            data-testid={`pool-member-link-${artifactRef}`}
+            className="text-xs underline"
+            to={`/management/strategies/${encodeURIComponent(row.strategy_id)}`}
+          >
+            {t("strategyDetail.poolRules.viewStrategy")}
+          </Link>
+        ) : null}
+      </div>
+    );
+  };
+
   const renderMember = (m: PoolMemberRecord) => {
     const row = bookByRef.get(m.artifact_ref);
     const ok = row?.status === "ok" && row.book;
@@ -105,6 +152,7 @@ export function PersonaStrategyPoolPanel({ management, managementUnavailable }: 
       <tr key={`${m.artifact_ref}:${m.checksum}`} data-testid={`pool-member-${m.artifact_ref}`}
           className="border-t border-border">
         <td className="p-2 font-mono text-xs">{m.artifact_ref}</td>
+        <td className="p-2 max-w-md">{renderRule(m.artifact_ref)}</td>
         <td className="p-2"><Badge variant="outline">{m.stage}</Badge></td>
         <td className="p-2 font-mono">{fmt(m.risk_weight, 2)}</td>
         <td className="p-2 font-mono text-xs">{m.baseline_ref ?? "—"}</td>
@@ -156,6 +204,7 @@ export function PersonaStrategyPoolPanel({ management, managementUnavailable }: 
           <Unavailable testId="pool-current-unavailable" reason={reasonOf(management, "strategy_pool")} />
         ) : (
           <>
+            {observedNote("member_virtual_books")}
             {!booksOk ? (
               <Unavailable testId="pool-books-unavailable" reason={reasonOf(management, "member_virtual_books")} />
             ) : null}
@@ -163,6 +212,7 @@ export function PersonaStrategyPoolPanel({ management, managementUnavailable }: 
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="p-2">{t("persona.pool.col.member", { defaultValue: "成員" })}</th>
+                  <th className="p-2">{t("strategyDetail.poolRules.colRule")}</th>
                   <th className="p-2">{t("persona.pool.col.stage", { defaultValue: "階段" })}</th>
                   <th className="p-2">{t("persona.pool.col.weight", { defaultValue: "權重" })}</th>
                   <th className="p-2">{t("persona.pool.col.baseline", { defaultValue: "基準" })}</th>
@@ -180,6 +230,7 @@ export function PersonaStrategyPoolPanel({ management, managementUnavailable }: 
 
       <section>
         <h4 className="text-sm font-medium mb-2">{t("persona.pool.health", { defaultValue: "池子健康" })}</h4>
+        {observedNote("pool_health")}
         {!healthOk ? (
           <Unavailable testId="pool-health-unavailable" reason={reasonOf(management, "pool_health")} />
         ) : (

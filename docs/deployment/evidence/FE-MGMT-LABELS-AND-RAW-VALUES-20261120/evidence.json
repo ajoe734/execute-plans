@@ -1,0 +1,104 @@
+{
+  "task_id": "FE-MGMT-LABELS-AND-RAW-VALUES-20261120",
+  "title": "Management pages show translated states and reasons and never print nan or translation keys",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "delivery_state": "in_progress",
+  "reproduction": {
+    "source": "coordinator hosted reads 2026-11-20 (read-only; BFF fb8ed951d; sweep of 67 pages in /home/chloe_ong_dev_cctech_support_com/claude-evidence/mgmt-readability-sweep-20261120/full/)",
+    "bff_commit": "fb8ed951d",
+    "sweep_date": "2026-11-20",
+    "findings_reproduced": [
+      {
+        "surface": "/management/incidents (incidents.txt)",
+        "observed": "Resolved incidents rendered a green 成功 badge because Operations.tsx:594 and :621 mapped r.status === 'resolved' to 'success'."
+      },
+      {
+        "surface": "/management/jobs, /management/deployments, /management/experiments, /management/meetings (jobs.txt, deployments.txt, experiments.txt, meetings.txt, meetings_mtg-492d824b116f9ace.txt)",
+        "observed": "Status and outcome values completed, executed, canceled, refused, convened, and insufficient_participants rendered untranslated."
+      },
+      {
+        "surface": "/management/runtimes (runtimes.txt)",
+        "observed": "Runtimes.tsx defined const NAN = 'nan' and rendered five unsupported telemetry columns (CPU, Memory, p95 latency, Uptime, Region) printing nan five times per row."
+      },
+      {
+        "surface": "/management/tools, /management/mcp, /management/skills (tools.txt, mcp.txt, skills.txt)",
+        "observed": "CapabilitiesLists.tsx:17 referenced capabilities.actions.disabledReason which was missing from both zh-TW.ts and en-US.ts, causing ObjectListPage.tsx:329 to print the raw key capabilities.actions.disabledReason."
+      },
+      {
+        "surface": "/management/persona-fleet (persona-fleet.txt)",
+        "observed": "PersonaFleetPage in oversight/_core.tsx:1287-1296 rendered status, stage, and failureReason inline without spaces or translation, producing failedobserving(tool_record_unavailable:no_proposal_submitted)."
+      },
+      {
+        "surface": "/management/llm-provider-auth & /management/cockpit (llm-provider-auth.txt, cockpit.txt)",
+        "observed": "OpenClawLlmAuthPanel.tsx rendered raw reason codes answer_probe_not_run, codex_mount_missing_credentials, claude_mount_missing_credentials, claude_auth_probe_non_zero_exit, and provider_snapshot without plain-language explanation."
+      },
+      {
+        "surface": "/management/lineage (lineage.txt)",
+        "observed": "LineageGraph.tsx rendered raw edge types source_strategy_spec, source_run, capital_pool and raw node state approved."
+      },
+      {
+        "surface": "/management/human-inbox (human-inbox.txt)",
+        "observed": "HumanInboxPage in oversight/_core.tsx:1577 rendered multi-hundred-character DriftReport summaries unclamped without a 3-line clamp or expand control."
+      }
+    ]
+  },
+  "changes_summary": {
+    "shared_helper": "src/lib/enumLabels.ts centralizes BFF enum localization and tone resolution across status, outcome, action, risk, reason code, and lineage edge type, and folds in PostmortemLibrary, governanceDecisionState, and Lists status/workflow mappings.",
+    "locales": "src/i18n/locales/zh-TW.ts and src/i18n/locales/en-US.ts symmetrically define all status.*, risk.*, capabilities.*, common.notReported, mgmt.inbox.expandSummary/collapseSummary, and enumLabels.{outcomes,actions,reasons,lineageEdges}.* keys.",
+    "incidents": "Operations.tsx passes r.status and active.status directly to StatusBadge so resolved incidents render 已解決 / Resolved and never 成功.",
+    "runtimes": "Runtimes.tsx removes the NAN constant and the five unsupported telemetry columns (cpu, memory, p95 latency, uptime, region), and renders 未回報 / Not reported for missing values.",
+    "reasons": "PersonaFleetPage (_core.tsx), OpenClawLlmAuthPanel.tsx, MeetingsCenterPage.tsx, and MeetingDetailPage.tsx render plain-language reason text with the raw code as secondary text.",
+    "capabilities": "CapabilitiesLists.tsx and ObjectListPage.tsx render the localized capabilities.actions.disabledReason and guard against printing raw translation keys.",
+    "human_inbox": "HumanInboxPage (_core.tsx) clamps card summary text to 3 lines (line-clamp-3) by default with an expand/collapse toggle control.",
+    "lineage": "LineageGraph.tsx localizes edge labels and node states via enumLabels while keeping column-gap layout synchronized with displayed label width."
+  },
+  "verification": {
+    "typecheck": "npm run typecheck:app && npm run typecheck:agora (0 errors)",
+    "full_suite_totals": "npm run test: 281 test files passed (281), 3256 tests passed (3256)",
+    "four_test_failure_decisions": [
+      {
+        "test": "src/management/pages/PersonaDetail.test.ts — renders canonical lifecycleStatus research_only instead of contradictory legacy draft state while preserving paper readiness",
+        "decision": "display_text_only (updated expectation in test)",
+        "rationale": "StatusBadge now localizes research_only to 僅供研究 (zh-TW) / Research Only (en-US) via enumLabels instead of printing the raw untranslated enum research_only. Canonical lifecycleStatus still wins over legacy draft (草稿) and paper readiness (0/5, 未升級) is preserved."
+      },
+      {
+        "test": "src/test/governance-owner-readonly-detail.test.tsx — displays canonical state as unknown and renders decision buttons non-actionable for unknown owner states",
+        "decision": "display_text_only (updated expectation in test)",
+        "rationale": "In en-US, StatusBadge now renders localized Unknown (capitalized, matching Pending/Approved) for state='unknown' while the Canonical State mono field renders unknown and the decision panel renders 'Already unknown.' with approve/reject buttons non-actionable. Updated getAllByText to /^unknown$/i (>= 2)."
+      },
+      {
+        "test": "src/management/pages/CapitalPoolDetail.test.tsx — renders unavailable badges and placeholders when status and currency are missing or unknown",
+        "decision": "behaviour_regression_fixed_in_code (fixed StatusBadge.tsx; test unchanged)",
+        "rationale": "StatusBadge.tsx had replaced the empty/missing state fallback with '—' instead of the unavailable label. Restored label ?? statusLabel('unavailable', t) ('無資料' in zh-TW, 'Unavailable' in en-US) when !cleanState so missing/unknown status and risk each render an Unavailable badge (2 total) and CapitalPoolDetail.test.tsx passes unchanged."
+      },
+      {
+        "test": "src/management/pages/phase2/LineageExplorer.test.tsx — filters Strategy, Persona, Artifact, CapitalPool, Experiment, and Dataset nodes and removes incident edges while keeping unknown types visible and labelled",
+        "decision": "display_text_only (updated expectation in test)",
+        "rationale": "LineageGraph.tsx localizes node state ('draft' -> '草稿' in zh-TW / 'Draft' in en-US) while keeping unknown node type feature_set visible and labelled (data-node-type='feature_set', text 'feature_set · 草稿'). Updated expectation to /feature_set · (草稿|Draft)/i."
+      }
+    ],
+    "unit_tests": [
+      "npm run test (281 test files passed, 3256 tests passed)",
+      "vitest run src/lib/__tests__/enumLabels.test.ts src/platform/components/StatusBadge.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/platform/components/LineageGraph.test.tsx src/management/pages/Runtimes.test.tsx src/management/components/openclaw/OpenClawLlmAuthPanel.test.tsx src/management/pages/meetings/meetings.test.tsx (7 test files, 61 tests passed)",
+      "vitest run src/management/pages/PersonaDetail.test.ts src/test/governance-owner-readonly-detail.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/phase2/LineageExplorer.test.tsx (4 test files, 45 tests passed)"
+    ]
+  },
+  "residual_findings": [
+    {
+      "file": "src/management/pages/ResearchDetail.tsx",
+      "lines": "403-447",
+      "description": "ResearchDetail.tsx outside this task's scoped artifacts uses ?? 'nan' fallback for missing Management Research Context fields (Persona, Persona ID, Project, Frameworks, Dataset, Registry admission, Blocked by, Deployment stage), which rendered 'nan' on /management/experiments/rtask-20260913-001 in experiments_rtask-20260913-001.txt."
+    },
+    {
+      "file": "src/management/pages/oversight/personaFleetDataSources.ts, src/management/pages/oversight/dataSources/DataSourceControlCenter.tsx, src/management/pages/v5/ResearchLoop.tsx, src/management/pages/oversight/QuarterlyRanking.tsx",
+      "lines": "personaFleetDataSources.ts:110,121,158,163; DataSourceControlCenter.tsx:116-120,148-151,430,435; ResearchLoop.tsx:184-188; QuarterlyRanking.tsx:33",
+      "description": "Files outside this task's scoped artifacts retain 'nan' string fallbacks for missing provider/persona/formula tokens."
+    },
+    {
+      "file": "governance_consult.txt (2026-11-20 coordinator sweep)",
+      "lines": "1-3",
+      "description": "The 2026-11-20 coordinator sweep of /management/governance/consult captured Minified React error #31 (object with keys {chair, participants, min_trading_personas, requires_risk, requires_red_team, ...})."
+    }
+  ]
+}

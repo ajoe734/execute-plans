@@ -466,3 +466,39 @@ describe("SkillSandboxStudio Cancellation and Timer Fence", () => {
     expect(screen.queryByText("評估執行結果")).not.toBeInTheDocument();
   });
 });
+
+// FE-RISK-STRATEGY-RESEARCH-UI-20261120 WP6.4 — no "nan" anywhere on the detail page.
+describe("ResearchDetail empty values (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () => {
+  beforeEach(() => {
+    mocks.researchGet.mockReset();
+    mocks.auditList.mockReset();
+    mocks.personaFleetGet.mockReset();
+  });
+
+  it("renders 未綁定 / 未回報 instead of nan for an unbound stub task", async () => {
+    vi.useRealTimers();
+    await i18n.changeLanguage("zh-TW");
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+    mocks.researchGet.mockResolvedValue({
+      id: "exp-mgmt-qlib-006",
+      name: "exp-mgmt-qlib-006",
+      owner: "",
+      updatedAt: "2026-11-20T00:00:00Z",
+      state: "review",
+      status: "review",
+      risk: "low",
+      hypothesis: "",
+      metric: "",
+      metricValue: 0,
+      parent_experiment_id: "nan",
+      registry_admission_status: "NaN",
+    });
+    const { container } = renderDetail();
+    await screen.findByText("Management research context");
+    expect(container.textContent ?? "").toContain("未綁定");
+    expect(container.textContent ?? "").toContain("未回報");
+    expect(container.textContent ?? "").not.toMatch(/\bnan\b/i);
+    await i18n.changeLanguage("en-US");
+  });
+});

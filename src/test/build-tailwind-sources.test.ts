@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, symlinkSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -32,27 +32,34 @@ const PROBE_C = probe("bg-li", "me-300");
 
 const execFileAsync = promisify(execFile);
 
-async function build(outDir: string, contractContent: string | null) {
-  const contractDir = path.join(root, "pantheon-contract");
-  if (existsSync(contractDir)) throw new Error("pantheon-contract/ already exists; refusing to clobber");
-  try {
-    if (contractContent !== null) {
-      mkdirSync(contractDir);
-      writeFileSync(path.join(contractDir, "contract.ts"), contractContent);
-    }
-    await execFileAsync(process.execPath, [path.join(root, "node_modules/vite/bin/vite.js"), "build", "--outDir", outDir, "--emptyOutDir"], {
-      cwd: root,
-      env: {
-        ...process.env,
-        VITE_BFF_BASE_URL: "https://api.dev.mvl-cap.tw",
-        VITE_GCP_IDENTITY_API_KEY: "AIza01234567890123456789012345678901234",
-        VITE_GCP_IDENTITY_PROJECT_ID: "pantheon-dev-20260902",
-        VITE_GCP_IDENTITY_AUTH_DOMAIN: "pantheon-dev-20260902.firebaseapp.com",
-      },
-    });
-  } finally {
-    rmSync(contractDir, { recursive: true, force: true });
+const ROOT_ENTRIES = ["index.html", "src", "public", "package.json", "vite.config.ts", "tailwind.config.ts", "components.json", ".lovable", "scripts/lib"];
+
+// Builds from an isolated temp copy of the FE build inputs so the real FE root
+// (including a gate-provided pantheon-contract/ checkout) is never touched.
+async function build(tmp: string, name: string, contractContent: string) {
+  // Same root path for every build: absolute paths feed chunk hashes.
+  const isoRoot = path.join(tmp, "root");
+  const outDir = path.join(tmp, `out-${name}`);
+  rmSync(isoRoot, { recursive: true, force: true });
+  mkdirSync(isoRoot);
+  for (const entry of [...ROOT_ENTRIES, ...readdirSync(root).filter((f) => /^tsconfig.*\.json$/.test(f))]) {
+    const from = path.join(root, entry);
+    if (existsSync(from)) { mkdirSync(path.dirname(path.join(isoRoot, entry)), { recursive: true }); cpSync(from, path.join(isoRoot, entry), { recursive: true }); }
   }
+  symlinkSync(path.join(root, "node_modules"), path.join(isoRoot, "node_modules"), "dir");
+  mkdirSync(path.join(isoRoot, "pantheon-contract"));
+  writeFileSync(path.join(isoRoot, "pantheon-contract", "contract.ts"), contractContent);
+  await execFileAsync(process.execPath, [path.join(isoRoot, "node_modules/vite/bin/vite.js"), "build", "--outDir", outDir, "--emptyOutDir"], {
+    cwd: isoRoot,
+    env: {
+      ...process.env,
+      VITE_BFF_BASE_URL: "https://api.dev.mvl-cap.tw",
+      VITE_GCP_IDENTITY_API_KEY: "AIza01234567890123456789012345678901234",
+      VITE_GCP_IDENTITY_PROJECT_ID: "pantheon-dev-20260902",
+      VITE_GCP_IDENTITY_AUTH_DOMAIN: "pantheon-dev-20260902.firebaseapp.com",
+    },
+  });
+  return outDir;
 }
 
 describe("Tailwind source detection is limited to FE sources", () => {
@@ -72,10 +79,8 @@ describe("Tailwind source detection is limited to FE sources", () => {
   it("same FE source with different pantheon-contract/ contents builds byte-identical dist", async () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "tw-sources-"));
     try {
-      const a = path.join(tmp, "a");
-      const b = path.join(tmp, "b");
-      await build(a, `export const x = "snap-x snap-mandatory ${PROBE_A} ${PROBE_B}";`);
-      await build(b, `export const y = "snap-y ${PROBE_C} snap-center";`);
+      const a = await build(tmp, "a", `export const x = "snap-x snap-mandatory ${PROBE_A} ${PROBE_B}";`);
+      const b = await build(tmp, "b", `export const y = "snap-y ${PROBE_C} snap-center";`);
       expect(listFiles(a)).toEqual(listFiles(b));
       expect(digest(a)).toBe(digest(b));
       const cssFile = listFiles(a).find((f) => /^assets\/index-.*\.css$/.test(f))!;

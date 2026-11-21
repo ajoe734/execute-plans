@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { isTranslationKeyLike } from "@/lib/enumLabels";
 import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff-v1";
 import { realWritesEnabled, useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
@@ -298,7 +299,19 @@ export function ObjectListPage<T extends BaseObject>({
       key: "name",
       header: t("common.name"),
       className: nameCell ? "min-w-[320px]" : undefined,
-      cell: (r) => nameCell ? nameCell(r) : <div className="font-medium">{r.name}</div>,
+      cell: (r) =>
+        nameCell ? (
+          nameCell(r)
+        ) : (
+          <div>
+            <div className="font-medium">{r.name}</div>
+            {r.id && r.name && r.id !== r.name && (
+              <div className="font-mono text-xs text-muted-foreground" data-testid="object-secondary-id">
+                {r.id}
+              </div>
+            )}
+          </div>
+        ),
     },
     { key: "state", header: t("common.state"), cell: (r) => <StatusBadge state={r.state} /> },
     { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
@@ -326,7 +339,9 @@ export function ObjectListPage<T extends BaseObject>({
       );
     }
     if (createBehavior.kind === "disabled") {
-      const reason = t(createBehavior.reasonI18nKey, { defaultValue: createBehavior.reasonI18nKey });
+      const fallbackReason = t("common.createNotConfigured", { defaultValue: "Create flow not configured" });
+      const rawReason = t(createBehavior.reasonI18nKey, { defaultValue: fallbackReason });
+      const reason = isTranslationKeyLike(rawReason) ? fallbackReason : rawReason;
       return (
         <TooltipProvider>
           <Tooltip>

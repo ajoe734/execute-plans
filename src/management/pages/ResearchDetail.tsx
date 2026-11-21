@@ -92,9 +92,20 @@ function researchContextFor(experiment: ResearchExperimentLive, rows: Management
   };
 }
 
+/** Empty-ish values (null, blank, "nan", "None") are treated as absent so the page never prints them. */
+function present(v: unknown): string | undefined {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : undefined;
+  const text = String(v).trim();
+  if (!text || /^(nan|none|null|undefined)$/i.test(text)) return undefined;
+  return text;
+}
+
 export const ResearchDetail = () => {
   const { id } = useParams();
   const t = useT();
+  const unbound = t("research.detail.unbound");
+  const notReported = t("research.detail.notReported");
   const navigate = useNavigate();
   const { data: x, setData: setX, loading, isError, error } = useLiveDetail<ResearchExperimentLive>(
     id,
@@ -400,21 +411,21 @@ export const ResearchDetail = () => {
                       {(x.parent_experiment_id || x.parentExperimentId) && (
                         <Field
                           label="Parent attempt"
-                          value={x.parent_experiment_id ?? x.parentExperimentId ?? "nan"}
+                          value={present(x.parent_experiment_id ?? x.parentExperimentId) ?? notReported}
                           mono
                         />
                       )}
                       {(x.root_experiment_id || x.rootExperimentId) && (
                         <Field
                           label="Root attempt"
-                          value={x.root_experiment_id ?? x.rootExperimentId ?? "nan"}
+                          value={present(x.root_experiment_id ?? x.rootExperimentId) ?? notReported}
                           mono
                         />
                       )}
                       {(x.cancellation_fence || x.cancellationFence) && (
                         <Field
                           label="Cancellation fence"
-                          value={x.cancellation_fence ?? x.cancellationFence ?? "nan"}
+                          value={present(x.cancellation_fence ?? x.cancellationFence) ?? notReported}
                           mono
                         />
                       )}
@@ -428,7 +439,7 @@ export const ResearchDetail = () => {
                       {(x.invalidated_reason || x.invalidatedReason) && (
                         <Field
                           label="Invalidated reason"
-                          value={x.invalidated_reason ?? x.invalidatedReason ?? "nan"}
+                          value={present(x.invalidated_reason ?? x.invalidatedReason) ?? notReported}
                           mono
                         />
                       )}
@@ -437,14 +448,14 @@ export const ResearchDetail = () => {
                 )}
                 <Section title="Management research context">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <Field label="Persona" value={researchContext.persona?.personaName ?? researchContext.persona?.personaId ?? "nan"} mono />
-                    <Field label="Persona ID" value={researchContext.persona?.personaId ?? "nan"} mono />
-                    <Field label="Project" value={researchContext.project?.projectId ?? "nan"} mono />
-                    <Field label="Frameworks" value={frameworks.length ? frameworks.join(" / ") : "nan"} mono />
-                    <Field label="Dataset" value={researchContext.datasetRef ?? x.datasetRef ?? x.dataset_ref ?? "nan"} mono />
-                    <Field label="Registry admission" value={researchContext.registryAdmissionStatus ?? x.registryAdmissionStatus ?? x.registry_admission_status ?? "nan"} mono />
-                    <Field label="Blocked by" value={researchContext.blockedByTaskIds.length ? researchContext.blockedByTaskIds.join(" / ") : "nan"} mono />
-                    <Field label="Deployment stage" value={x.deploymentStage ?? x.deployment_stage ?? "nan"} mono />
+                    <Field label="Persona" value={present(researchContext.persona?.personaName ?? researchContext.persona?.personaId) ?? unbound} mono />
+                    <Field label="Persona ID" value={present(researchContext.persona?.personaId) ?? unbound} mono />
+                    <Field label="Project" value={present(researchContext.project?.projectId) ?? unbound} mono />
+                    <Field label="Frameworks" value={frameworks.length ? frameworks.join(" / ") : unbound} mono />
+                    <Field label="Dataset" value={present(researchContext.datasetRef ?? x.datasetRef ?? x.dataset_ref) ?? unbound} mono />
+                    <Field label="Registry admission" value={present(researchContext.registryAdmissionStatus ?? x.registryAdmissionStatus ?? x.registry_admission_status) ?? notReported} mono />
+                    <Field label="Blocked by" value={researchContext.blockedByTaskIds.length ? researchContext.blockedByTaskIds.join(" / ") : unbound} mono />
+                    <Field label="Deployment stage" value={present(x.deploymentStage ?? x.deployment_stage) ?? notReported} mono />
                   </div>
                 </Section>
               </>

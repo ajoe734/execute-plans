@@ -15,6 +15,17 @@ export interface JourneyMeta {
 export type JourneyFlags = Record<string, boolean>;
 export interface JourneyStage { status?: string; updated_at?: string; owner?: string; block_reason?: string; [key: string]: unknown }
 
+export type JourneyOutcomeKind = "normal" | "no_trade" | "rejected" | "reconciliation_deferred" | "variance" | "open";
+export interface JourneyOutcome {
+  kind: JourneyOutcomeKind;
+  reason_code?: string | null;
+  /** Rejection: `{required, available, limit, holding_quantity, requested_quantity}`; reconciliation: a list of per-check records. */
+  reason_detail?: Record<string, unknown> | Array<Record<string, unknown>> | null;
+  rejected_stage?: string | null;
+}
+/** A link for the operator, never an action: governed actions stay on the actions route. */
+export interface JourneyNextStep { action_needed: string; href: string }
+
 export interface JourneyRow {
   journey_id: string;
   environment: JourneyEnvironment;
@@ -22,10 +33,15 @@ export interface JourneyRow {
   current_stage: string;
   severity: string;
   persona_id?: string | null;
+  persona_name?: string | null;
+  persona_is_probe?: boolean;
   strategy_id?: string | null;
   symbol?: string | null;
   side?: string | null;
   quantity?: number | null;
+  filled_quantity?: number | null;
+  outcome?: JourneyOutcome | null;
+  next_step?: JourneyNextStep | null;
   decision_id?: string | null;
   broker_order_id?: string | null;
   created_at?: string | null;
@@ -56,6 +72,8 @@ export interface JourneyTimelineEvent {
   occurred_at?: string;
   recorded_at?: string;
   source?: string;
+  reason_code?: string | null;
+  reason_detail?: JourneyOutcome["reason_detail"];
   [key: string]: unknown;
 }
 
