@@ -17,6 +17,7 @@ import {
 } from "./index";
 import {
   buildFollowUpConveneInput,
+  formatMeetingRosterRule,
   mgmtMeetingReviewPath,
   reviewMeeting,
 } from "./meetings";
@@ -128,7 +129,47 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
                     meeting_type: "MT-1",
                     enabled: true,
                     cadence: "weekly",
-                    roster_rule: "owner_plus_peer_plus_risk",
+                    roster_rule: {
+                      chair: "owning_persona",
+                      participants: [
+                        "owning_persona",
+                        "peer_different_style",
+                        "persona-risk-officer",
+                      ],
+                      min_trading_personas: 1,
+                      requires_risk: true,
+                      requires_red_team: false,
+                      allow_agora_advisor: true,
+                      allow_owning_user_servant: true,
+                      allow_subject_trader_servant: false,
+                      description:
+                        "owner + 1 peer trading persona of a different style (rotating) + risk persona",
+                    },
+                    budget: { max_participants: 5, max_rounds: 2, weekly_limit: 3 },
+                  },
+                  {
+                    meeting_type: "MT-4",
+                    enabled: true,
+                    cadence: "weekly_and_event",
+                    roster_rule: {
+                      chair: "closest_institutional_persona",
+                      participants: [
+                        "subject_persona_or_trader_servant",
+                        "counter_party_persona",
+                        "peers_same_strategy_family",
+                        "persona-risk-officer",
+                        "persona-red-team",
+                      ],
+                      min_trading_personas: 1,
+                      requires_risk: true,
+                      requires_red_team: true,
+                      red_team_assigned_case: "luck_or_small_sample_or_confounder",
+                      allow_agora_advisor: true,
+                      allow_owning_user_servant: true,
+                      allow_subject_trader_servant: true,
+                      description:
+                        "subject (persona or trader's own servant) + party that decided the other way + peers of same strategy family + risk persona + red-team persona",
+                    },
                     budget: { max_participants: 5, max_rounds: 2, weekly_limit: 3 },
                   },
                 ],
@@ -244,6 +285,38 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
     expect(catRes.state).toBe("ok");
     if (catRes.state === "ok") {
       expect(catRes.data.types[0].meeting_type).toBe("MT-1");
+      expect(catRes.data.types[0].roster_rule).toEqual({
+        chair: "owning_persona",
+        participants: ["owning_persona", "peer_different_style", "persona-risk-officer"],
+        min_trading_personas: 1,
+        requires_risk: true,
+        requires_red_team: false,
+        allow_agora_advisor: true,
+        allow_owning_user_servant: true,
+        allow_subject_trader_servant: false,
+        description:
+          "owner + 1 peer trading persona of a different style (rotating) + risk persona",
+      });
+      expect(catRes.data.types[1].meeting_type).toBe("MT-4");
+      expect(catRes.data.types[1].roster_rule).toEqual({
+        chair: "closest_institutional_persona",
+        participants: [
+          "subject_persona_or_trader_servant",
+          "counter_party_persona",
+          "peers_same_strategy_family",
+          "persona-risk-officer",
+          "persona-red-team",
+        ],
+        min_trading_personas: 1,
+        requires_risk: true,
+        requires_red_team: true,
+        red_team_assigned_case: "luck_or_small_sample_or_confounder",
+        allow_agora_advisor: true,
+        allow_owning_user_servant: true,
+        allow_subject_trader_servant: true,
+        description:
+          "subject (persona or trader's own servant) + party that decided the other way + peers of same strategy family + risk persona + red-team persona",
+      });
       expect(catRes.data.refusals[0].reason).toBe("insufficient_participants");
     }
 
@@ -836,5 +909,48 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
 
     secondRender.unmount();
     cleanup();
+  });
+
+  it("formats structured catalogue roster_rule objects with canonical MT-1/MT-4 values and honest absent-description fallback (FE-MEETING-ROSTER-CATALOGUE-20261121)", () => {
+    const mt1Rule = {
+      chair: "owning_persona",
+      participants: ["owning_persona", "peer_different_style", "persona-risk-officer"],
+      min_trading_personas: 1,
+      requires_risk: true,
+      requires_red_team: false,
+      allow_agora_advisor: true,
+      allow_owning_user_servant: true,
+      allow_subject_trader_servant: false,
+      description: "owner + 1 peer trading persona of a different style (rotating) + risk persona",
+    };
+    expect(formatMeetingRosterRule(mt1Rule)).toBe(
+      "owner + 1 peer trading persona of a different style (rotating) + risk persona",
+    );
+
+    const mt4WithoutDescription = {
+      chair: "closest_institutional_persona",
+      participants: [
+        "subject_persona_or_trader_servant",
+        "counter_party_persona",
+        "peers_same_strategy_family",
+        "persona-risk-officer",
+        "persona-red-team",
+      ],
+      min_trading_personas: 1,
+      requires_risk: true,
+      requires_red_team: true,
+      red_team_assigned_case: "luck_or_small_sample_or_confounder",
+      allow_agora_advisor: true,
+      allow_owning_user_servant: true,
+      allow_subject_trader_servant: true,
+      description: "   ",
+    };
+    expect(formatMeetingRosterRule(mt4WithoutDescription)).toBe(
+      "chair: closest_institutional_persona · participants: subject_persona_or_trader_servant + counter_party_persona + peers_same_strategy_family + persona-risk-officer + persona-red-team · min_trading_personas=1 · requires_risk · requires_red_team (luck_or_small_sample_or_confounder)",
+    );
+
+    expect(formatMeetingRosterRule({})).toBe("—");
+    expect(formatMeetingRosterRule(null)).toBe("—");
+    expect(formatMeetingRosterRule(undefined)).toBe("—");
   });
 });

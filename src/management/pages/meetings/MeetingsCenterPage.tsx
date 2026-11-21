@@ -19,6 +19,7 @@ import { reasonCodeDisplay, resolveBffSubjectDisplay, statusLabel } from "@/lib/
 import { CANONICAL_CENTERS } from "@/management/navigation/managementRouteManifest";
 import {
   conveneMeeting,
+  formatMeetingRosterRule,
   getMeetingCatalogue,
   getMeetingProposals,
   getMeetings,
@@ -860,7 +861,7 @@ export const MeetingsCenterPage = () => {
                         </div>
                         <div>
                           Cadence: <code>{mt.cadence ?? "—"}</code> · Roster:{" "}
-                          <code>{mt.roster_rule ?? "—"}</code>
+                          <code>{formatMeetingRosterRule(mt.roster_rule)}</code>
                         </div>
                         {mt.budget ? (
                           <div className="text-muted-foreground font-mono">
