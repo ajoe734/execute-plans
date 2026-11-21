@@ -1,34 +1,27 @@
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { sanitizeRawText, statusBadgeClass, statusLabel } from "@/lib/enumLabels";
 import { useT } from "@/platform/hooks";
 
-const map: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground border-border",
-  review: "bg-status-warning/15 text-status-warning border-status-warning/30",
-  approved: "bg-accent/15 text-accent border-accent/30",
-  deployed: "bg-status-success/15 text-status-success border-status-success/30",
-  paused: "bg-status-paused/15 text-status-paused border-status-paused/30",
-  retired: "bg-muted text-muted-foreground border-border",
-  pending: "bg-status-pending/15 text-status-pending border-status-pending/30",
-  running: "bg-status-running/15 text-status-running border-status-running/30",
-  success: "bg-status-success/15 text-status-success border-status-success/30",
-  warning: "bg-status-warning/15 text-status-warning border-status-warning/30",
-  failed: "bg-status-failed/15 text-status-failed border-status-failed/30",
-};
-
-export const StatusBadge = ({ state }: { state?: string }) => {
+export const StatusBadge = ({ state, label, className }: { state?: string; label?: string; className?: string }) => {
   const t = useT();
-  if (!state) {
+  const cleanState = sanitizeRawText(state);
+  if (!cleanState) {
     return (
-      <Badge variant="outline" className="font-medium whitespace-nowrap bg-muted text-muted-foreground border-dashed">
-        {t("status.unavailable", { defaultValue: "Unavailable" })}
+      <Badge
+        variant="outline"
+        className={`whitespace-nowrap font-medium border-dashed bg-muted/40 text-muted-foreground ${className || ""}`}
+      >
+        {label ?? statusLabel("unavailable", t)}
       </Badge>
     );
   }
-  const key = `status.${state}`;
+  const text = label ?? statusLabel(cleanState, t);
   return (
-    <Badge variant="outline" className={cn("font-medium whitespace-nowrap", map[state] ?? "bg-muted text-muted-foreground")}>
-      {t(key, { defaultValue: state })}
+    <Badge
+      variant="outline"
+      className={`whitespace-nowrap font-medium ${statusBadgeClass(cleanState)} ${className || ""}`}
+    >
+      {text}
     </Badge>
   );
 };

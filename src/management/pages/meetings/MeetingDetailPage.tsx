@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { reasonCodeDisplay, resolveBffSubjectDisplay, statusLabel } from "@/lib/enumLabels";
 import {
   getMeetingDetail,
   stripPrivateMemory,
@@ -25,6 +26,52 @@ import {
   type MeetingPreReadInterpretation,
   type MeetingsRead,
 } from "@/lib/bff-v1/meetings";
+
+function BffSubjectInline({
+  id,
+  displayName,
+  nameMissing,
+  testIdPrefix,
+}: {
+  id?: string | null;
+  displayName?: string | null;
+  nameMissing?: boolean | null;
+  testIdPrefix?: string;
+}) {
+  const { t } = useTranslation();
+  const resolved = resolveBffSubjectDisplay({ id, displayName, nameMissing }, t);
+  if (resolved.primaryText === "—") {
+    return <code className="text-foreground">—</code>;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <span
+        className={resolved.hasDisplayName ? "font-sans font-semibold text-foreground" : "font-mono font-semibold text-foreground"}
+        data-testid={testIdPrefix ? `${testIdPrefix}-primary` : undefined}
+      >
+        {resolved.primaryText}
+      </span>
+      {resolved.secondaryId ? (
+        <code
+          className="font-mono text-[11px] text-muted-foreground"
+          data-testid={testIdPrefix ? `${testIdPrefix}-id` : undefined}
+        >
+          ({resolved.secondaryId})
+        </code>
+      ) : null}
+      {resolved.nameMissing ? (
+        <Badge
+          variant="outline"
+          className="text-[10px] py-0 px-1"
+          data-name-missing="true"
+          data-testid={testIdPrefix ? `${testIdPrefix}-name-missing` : undefined}
+        >
+          {resolved.nameMissingBadgeLabel}
+        </Badge>
+      ) : null}
+    </span>
+  );
+}
 
 function extractPreReadList(
   preRead: MeetingDetail["pre_read"],
@@ -79,6 +126,7 @@ export const MeetingDetailPage = () => {
   }
 
   if (read.state === "not_found") {
+    const notFoundReason = reasonCodeDisplay(read.reason, t);
     return (
       <section className="p-6 space-y-4" data-testid="meeting-detail-not-found">
         <Card className="p-6 space-y-3">
@@ -89,7 +137,13 @@ export const MeetingDetailPage = () => {
             })}
           </h1>
           <p className="text-sm text-muted-foreground font-mono">
-            reason: {read.reason}
+            reason: <span className="font-sans text-foreground">{notFoundReason.text}</span>
+            {notFoundReason.code && notFoundReason.code !== notFoundReason.text ? (
+              <>
+                {" "}
+                <code>{notFoundReason.code}</code>
+              </>
+            ) : null}
           </p>
           <div>
             <Button asChild size="sm" variant="outline">
@@ -106,6 +160,7 @@ export const MeetingDetailPage = () => {
   }
 
   if (read.state === "unavailable") {
+    const unavailableReason = reasonCodeDisplay(read.reason, t);
     return (
       <section className="p-6 space-y-4" data-testid="meeting-detail-unavailable" role="status">
         <Card className="border-dashed p-6 space-y-2">
@@ -115,7 +170,13 @@ export const MeetingDetailPage = () => {
             })}
           </h1>
           <p className="text-sm font-mono text-muted-foreground">
-            reason: <code>{read.reason}</code>
+            reason: <span className="font-sans text-foreground">{unavailableReason.text}</span>
+            {unavailableReason.code && unavailableReason.code !== unavailableReason.text ? (
+              <>
+                {" "}
+                <code>{unavailableReason.code}</code>
+              </>
+            ) : null}
             {read.owner ? (
               <>
                 {" · "}owner: <code>{read.owner}</code>
@@ -170,11 +231,22 @@ export const MeetingDetailPage = () => {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold font-mono text-foreground">{m.meeting_id}</h1>
             <Badge variant="outline">{m.meeting_type}</Badge>
-            <Badge variant="outline">{m.status}</Badge>
-            {m.outcome ? (
-              <Badge variant={isReview ? "destructive" : "secondary"}>{m.outcome}</Badge>
-            ) : null}
-            <Badge variant="outline">paper · execution_authority: none</Badge>
+            <Badge variant="outline">{statusLabel(m.status, t)}</Badge>
+            {m.outcome ? (() => {
+              const outcomeDisplay = reasonCodeDisplay(m.outcome, t);
+              return (
+                <Badge variant={isReview ? "destructive" : "secondary"}>
+                  <span>{outcomeDisplay.text}</span>
+                  {outcomeDisplay.code && outcomeDisplay.code !== outcomeDisplay.text ? (
+                    <>
+                      {" "}
+                      <code className="ml-1 font-mono text-[10px] opacity-80">{outcomeDisplay.code}</code>
+                    </>
+                  ) : null}
+                </Badge>
+              );
+            })() : null}
+            <Badge variant="outline">{t("meetingsCenter.authorityBadge")}</Badge>
           </div>
           <div className="text-xs font-mono text-muted-foreground">
             created: {m.created_at ?? "—"}
@@ -185,8 +257,24 @@ export const MeetingDetailPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-muted-foreground">
           <div>
             Chair / Sponsor:{" "}
-            <code className="text-foreground">{m.chair_persona_id ?? "—"}</code>
+            <BffSubjectInline
+              id={m.chair_persona_id}
+              displayName={m.chair_persona_display_name}
+              nameMissing={m.chair_persona_name_missing}
+              testIdPrefix="meeting-detail-chair"
+            />
           </div>
+          {m.strategy_id || m.strategy_display_name ? (
+            <div>
+              Strategy:{" "}
+              <BffSubjectInline
+                id={m.strategy_id}
+                displayName={m.strategy_display_name}
+                nameMissing={m.strategy_name_missing}
+                testIdPrefix="meeting-detail-strategy"
+              />
+            </div>
+          ) : null}
           <div>
             Convened By:{" "}
             <code className="text-foreground">
@@ -212,8 +300,13 @@ export const MeetingDetailPage = () => {
                 data-testid={`meeting-participant-${p.persona_id}`}
                 className="rounded border border-border bg-muted/20 px-2.5 py-1.5 text-xs space-y-0.5"
               >
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-semibold">{p.persona_id}</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <BffSubjectInline
+                    id={p.persona_id}
+                    displayName={p.persona_display_name}
+                    nameMissing={p.persona_name_missing}
+                    testIdPrefix={`participant-${p.persona_id}`}
+                  />
                   {p.role ? <Badge variant="outline">{p.role}</Badge> : null}
                   {p.origin ? <Badge variant="secondary">{p.origin}</Badge> : null}
                   {p.servant || p.origin === "private_servant" ? (
@@ -368,8 +461,13 @@ export const MeetingDetailPage = () => {
                 data-testid={`pre-read-item-${interp.persona_id}`}
                 className="rounded border border-border p-3 text-xs space-y-1"
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-semibold">{interp.persona_id}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <BffSubjectInline
+                    id={interp.persona_id}
+                    displayName={interp.persona_display_name}
+                    nameMissing={interp.persona_name_missing}
+                    testIdPrefix={`pre-read-persona-${interp.persona_id}`}
+                  />
                   {interp.relevance_scope ? (
                     <Badge variant="outline">scope:{interp.relevance_scope}</Badge>
                   ) : null}
@@ -533,7 +631,23 @@ export const MeetingDetailPage = () => {
         </h2>
         <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
           <span>
-            Outcome: <strong>{m.synthesis?.outcome ?? m.outcome ?? "—"}</strong>
+            Outcome:{" "}
+            {(() => {
+              const rawOutcome = m.synthesis?.outcome ?? m.outcome;
+              if (!rawOutcome) return <strong>—</strong>;
+              const outcomeDisplay = reasonCodeDisplay(rawOutcome, t);
+              return (
+                <>
+                  <strong className="font-sans">{outcomeDisplay.text}</strong>
+                  {outcomeDisplay.code && outcomeDisplay.code !== outcomeDisplay.text ? (
+                    <>
+                      {" "}
+                      <code className="font-mono text-muted-foreground">({outcomeDisplay.code})</code>
+                    </>
+                  ) : null}
+                </>
+              );
+            })()}
           </span>
           {m.synthesis?.tally ? (
             <span data-testid="meeting-synthesis-tally">
@@ -573,12 +687,40 @@ export const MeetingDetailPage = () => {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono font-semibold">{p.proposal_id}</span>
                   {p.kind ? <Badge variant="outline">{p.kind}</Badge> : null}
-                  <span>
-                    Sponsor: <code className="text-foreground">{p.sponsor_persona_id ?? "—"}</code>
+                  <span className="inline-flex items-center gap-1">
+                    Sponsor:{" "}
+                    <BffSubjectInline
+                      id={p.sponsor_persona_id}
+                      displayName={p.sponsor_persona_display_name ?? p.persona_display_name}
+                      nameMissing={p.sponsor_persona_name_missing ?? p.persona_name_missing}
+                      testIdPrefix={`detail-proposal-sponsor-${p.proposal_id}`}
+                    />
                   </span>
-                  {p.downstream?.status ? (
-                    <Badge variant="secondary">{p.downstream.status}</Badge>
+                  {p.strategy_id || p.strategy_display_name ? (
+                    <span className="inline-flex items-center gap-1">
+                      Strategy:{" "}
+                      <BffSubjectInline
+                        id={p.strategy_id}
+                        displayName={p.strategy_display_name}
+                        nameMissing={p.strategy_name_missing}
+                        testIdPrefix={`detail-proposal-strategy-${p.proposal_id}`}
+                      />
+                    </span>
                   ) : null}
+                  {p.downstream?.status ? (() => {
+                    const dsLabel = statusLabel(p.downstream.status, t);
+                    return (
+                      <Badge variant="secondary">
+                        <span>{dsLabel}</span>
+                        {dsLabel !== p.downstream.status ? (
+                          <>
+                            {" "}
+                            <code className="ml-1 font-mono text-[10px] opacity-80">{p.downstream.status}</code>
+                          </>
+                        ) : null}
+                      </Badge>
+                    );
+                  })() : null}
                 </div>
                 {p.downstream?.href ? (
                   <Link
@@ -618,7 +760,13 @@ export const MeetingDetailPage = () => {
                 key={`${wb.persona_id}-${wb.entry_id}`}
                 data-testid={`writeback-${wb.persona_id}-${wb.entry_id}`}
               >
-                {wb.persona_id} → <code>{wb.entry_id}</code>
+                <BffSubjectInline
+                  id={wb.persona_id}
+                  displayName={wb.persona_display_name}
+                  nameMissing={wb.persona_name_missing}
+                  testIdPrefix={`writeback-persona-${wb.persona_id}-${wb.entry_id}`}
+                />{" "}
+                → <code>{wb.entry_id}</code>
                 {wb.status ? ` (${wb.status})` : ""}
                 {wb.written_at ? ` · ${wb.written_at}` : ""}
               </li>

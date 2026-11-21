@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDashed, ExternalLink, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDashed, Copy, ExternalLink, Search } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { signedTenantId } from "@/lib/auth/bffBrowserSession";
 import { getAuthProvider } from "@/lib/bff-v1/headers";
+import { actionText, readStateText, sourceText, stageStatusView, failedChecks, journeyTitle, nextStepHref, outcomeView, reasonText, UPSTREAM_STAGES, type OutcomeTone } from "./journeyReadable";
 import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, subscribeTradeJourneys, type JourneyDetailEnvelope, type JourneyListEnvelope, type JourneyLiveState, type JourneyMeta, type JourneyRow, type JourneyTimelineEnvelope } from "@/lib/bff-v1/tradeJourneys";
 
 function useTradeJourneyTenant(params: URLSearchParams): string {
@@ -22,12 +23,12 @@ const STAGES = ["signal_generation", "trade_decision", "risk_evaluation", "order
 const VIEWS = [{ labelKey: "tradeJourneys.filters.viewAttention", value: "attention" }, { labelKey: "tradeJourneys.filters.viewRiskReject", value: "risk_reject" }, { labelKey: "tradeJourneys.filters.viewBrokerReject", value: "broker_reject" }, { labelKey: "tradeJourneys.filters.viewPartialFill", value: "partial_fill" }, { labelKey: "tradeJourneys.filters.viewReconMismatch", value: "recon_mismatch" }];
 const baseInput = "rounded-md border border-border bg-background px-3 py-2 text-sm";
 
-function ReadState({ meta }: { meta?: JourneyMeta }) {
+function ReadState({ meta, lackingRows }: { meta?: JourneyMeta; lackingRows?: number }) {
   const t = useT();
   if (!meta) return null;
   const stale = Boolean(meta.snapshot_at) && Date.now() - Date.parse(meta.snapshot_at) > 5 * 60_000;
   if (meta.read_state === "formal" && !stale) return <span className="text-xs text-muted-foreground">{t("tradeJourneys.freshRevision", { revision: meta.freshness.materializer_revision })}</span>;
-  return <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"><strong>{meta.read_state === "formal" ? t("tradeJourneys.staleData") : t("tradeJourneys.readStateData", { state: meta.read_state })}</strong><span className="ml-2">{t("tradeJourneys.incompleteEvidence")} {meta.warnings?.join(" · ")}</span></div>;
+  return <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"><strong>{meta.read_state === "formal" ? t("tradeJourneys.staleData") : lackingRows ? t("tradeJourneys.rowsLackStages", { count: lackingRows }) : t("tradeJourneys.readStateData", { state: readStateText(meta.read_state, t) })}</strong><span className="ml-2">{t("tradeJourneys.incompleteEvidence")} {meta.warnings?.join(" · ")}</span></div>;
 }
 
 function Status({ row }: { row: JourneyRow }) {
@@ -45,6 +46,31 @@ function Status({ row }: { row: JourneyRow }) {
         : "bg-muted text-muted-foreground";
   const label = row.status ? t(`tradeJourneys.statuses.${row.status}`, { defaultValue: row.status }) : "";
   return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${tone}`}>{bad || warn ? <AlertTriangle size={13} /> : ok ? <CheckCircle2 size={13} /> : <CircleDashed size={13} />}{label}</span>;
+}
+
+const TONE_CLASS: Record<OutcomeTone, string> = {
+  gray: "bg-muted text-muted-foreground",
+  red: "bg-red-500/10 text-red-700 dark:text-red-300",
+  amber: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  neutral: "bg-muted text-muted-foreground",
+};
+
+/** Status badge plus one plain sentence saying why; rows without an outcome keep the plain badge. */
+function StatusCell({ row }: { row: JourneyRow }) {
+  const t = useT();
+  const view = outcomeView(row, t);
+  if (!view) return <Status row={row} />;
+  return <div className="space-y-1">
+    {view.badge ? <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${TONE_CLASS[view.tone]}`}>{view.badge}</span> : <Status row={row} />}
+    {view.sentence && <p className={`text-xs ${view.tone === "gray" ? "text-muted-foreground" : ""}`}>{view.sentence}</p>}
+  </div>;
+}
+
+function JourneyId({ id }: { id: string }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const copy = () => { try { void navigator.clipboard?.writeText(id); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
+  return <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"><code className="break-all">{id}</code><button type="button" aria-label={t("tradeJourneys.copyId")} title={copied ? t("tradeJourneys.copied") : t("tradeJourneys.copyId")} onClick={copy} className="rounded p-0.5 hover:bg-muted"><Copy size={11} /></button></span>;
 }
 
 export function TradeJourneysPage() {
@@ -71,7 +97,7 @@ export function TradeJourneysPage() {
   const set = (key: string, value: string) => { const next = new URLSearchParams(params); if (value) next.set(key, value); else next.delete(key); next.delete("page_token"); next.delete("cursor_history"); setParams(next); };
   const goNext = () => { const token = payload?.page_info.next_page_token; if (!token) return; const next = new URLSearchParams(params); next.set("page_token", token); next.set("cursor_history", JSON.stringify([...cursorHistory, params.get("page_token") || ""])); setParams(next); };
   const goPrevious = () => { if (!cursorHistory.length) return; const history = cursorHistory.slice(0, -1); const token = cursorHistory[cursorHistory.length - 1]; const next = new URLSearchParams(params); if (token) next.set("page_token", token); else next.delete("page_token"); if (history.length) next.set("cursor_history", JSON.stringify(history)); else next.delete("cursor_history"); setParams(next); };
-  const query = useMemo(() => ({ tenant_id: tenant, environment, q: params.get("q") || undefined, status: params.get("status") || undefined, attention: params.get("view") || undefined, persona_id: personaFocus, strategy_id: strategyFocus, decision_id: decisionFocus, order_id: orderFocus, broker_order_id: brokerOrderFocus, page_token: params.get("page_token") || undefined, page_size: 25, sort: "updated_at_desc" }), [params, tenant, environment, personaFocus, strategyFocus, decisionFocus, orderFocus, brokerOrderFocus]);
+  const query = useMemo(() => ({ tenant_id: tenant, environment, q: params.get("q") || undefined, status: params.get("status") || undefined, attention: params.get("view") || undefined, include_probe: params.get("include_probe") === "true" ? "true" : undefined, persona_id: personaFocus, strategy_id: strategyFocus, decision_id: decisionFocus, order_id: orderFocus, broker_order_id: brokerOrderFocus, page_token: params.get("page_token") || undefined, page_size: 25, sort: "updated_at_desc" }), [params, tenant, environment, personaFocus, strategyFocus, decisionFocus, orderFocus, brokerOrderFocus]);
   // Live invalidation must not abort a same-scope read that is still pending:
   // that restarted its clock on every invalidation and starved slow reads.
   // Invalidations coalesce into one refetch after the in-flight read settles;
@@ -105,16 +131,40 @@ export function TradeJourneysPage() {
       <span>{t("tradeJourneys.focused.summary", { parts: focusParts, count: payload?.page_info.total ?? 0 })}</span>
       <Link className="text-primary hover:underline" to={`/management/trade-journeys?${detailContext}`}>{t("tradeJourneys.focused.showAll")}</Link>
     </div>}
-    <ReadState meta={payload?.meta} />
+    <ReadState meta={payload?.meta} lackingRows={payload?.data.items.filter(r => r.read_state && r.read_state !== "formal").length} />
     <div className="grid gap-3 rounded-lg border bg-card p-4 lg:grid-cols-[1fr_auto_auto]">
       <label className="relative"><span className="sr-only">{t("tradeJourneys.filters.searchLabel")}</span><Search className="absolute left-3 top-3" size={16}/><input className={`${baseInput} w-full pl-9`} value={params.get("q") || ""} onChange={e => set("q", e.target.value)} placeholder={t("tradeJourneys.filters.searchPlaceholder")} /></label>
       <select aria-label={t("tradeJourneys.filters.environment")} className={baseInput} value={environment} onChange={e => set("environment", e.target.value)}><option value="paper">{t("tradeJourneys.filters.envPaper")}</option><option value="canary">{t("tradeJourneys.filters.envCanary")}</option><option value="live">{t("tradeJourneys.filters.envLive")}</option></select>
       <select aria-label={t("tradeJourneys.filters.viewLabel")} className={baseInput} value={params.get("view") || ""} onChange={e => set("view", e.target.value)}><option value="">{t("tradeJourneys.filters.viewAll")}</option>{VIEWS.map(v => <option key={v.value} value={v.value}>{t(v.labelKey)}</option>)}</select>
+      <label className="flex items-center gap-2 text-sm lg:col-span-3"><input type="checkbox" checked={params.get("include_probe") === "true"} onChange={e => set("include_probe", e.target.checked ? "true" : "")} />{t("tradeJourneys.filters.includeProbe")}</label>
       <div className="flex gap-2 lg:col-span-3"><input aria-label={t("tradeJourneys.filters.resolveLabel")} className={`${baseInput} min-w-0 flex-1`} value={params.get("resolve") || ""} onChange={e => set("resolve", e.target.value)} onKeyDown={e => e.key === "Enter" && resolve()} placeholder={t("tradeJourneys.filters.resolvePlaceholder")}/><button className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground" onClick={resolve} disabled={resolving}>{resolving ? t("tradeJourneys.filters.resolving") : t("tradeJourneys.filters.resolve")}</button></div>
     </div>
     {error && <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">{error}</div>}
-    <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[780px] text-left text-sm"><thead className="bg-muted/50"><tr>{["journey", "instrument", "stage", "status", "updated"].map(x => <th className="p-3 font-medium" key={x}>{t(`tradeJourneys.table.${x}`)}</th>)}</tr></thead><tbody>{payload?.data.items.map(row => <tr key={row.journey_id} className="border-t"><td className="p-3"><Link className="font-medium text-primary hover:underline" to={`${encodeURIComponent(row.journey_id)}?${detailContext}`}>{row.journey_id}</Link><div className="text-xs text-muted-foreground">{row.persona_id || t("tradeJourneys.table.unknownPersona")}</div></td><td className="p-3">{row.symbol || t("tradeJourneys.table.unknown")}<div className="text-xs text-muted-foreground">{row.side || "—"} {row.quantity ?? "—"}</div></td><td className="p-3">{stageName(row.current_stage) || t("tradeJourneys.table.unknown")}</td><td className="p-3"><Status row={row}/>{row.read_state && row.read_state !== "formal" && <div className="mt-1 text-xs text-amber-600">{row.read_state}</div>}</td><td className="p-3">{row.updated_at ? new Date(row.updated_at).toLocaleString() : t("tradeJourneys.table.unknown")}</td></tr>)}{payload && payload.data.items.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">{t("tradeJourneys.table.empty")}</td></tr>}</tbody></table></div>
+    <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[780px] text-left text-sm"><thead className="bg-muted/50"><tr>{["journey", "instrument", "stage", "status", "updated"].map(x => <th className="p-3 font-medium" key={x}>{t(`tradeJourneys.table.${x}`)}</th>)}</tr></thead><tbody>{payload?.data.items.map(row => <tr key={row.journey_id} className="border-t"><td className="p-3"><Link className="font-medium text-primary hover:underline" to={`${encodeURIComponent(row.journey_id)}?${detailContext}`}>{journeyTitle(row, t)}</Link><div><JourneyId id={row.journey_id} /></div></td><td className="p-3">{row.symbol || t("tradeJourneys.table.unknown")}<div className="text-xs text-muted-foreground">{row.side || "—"} {row.quantity ?? "—"}</div></td><td className="p-3">{stageName(row.current_stage) || t("tradeJourneys.table.unknown")}</td><td className="p-3"><StatusCell row={row}/>{row.read_state && row.read_state !== "formal" && <div className="mt-1 text-xs text-amber-600">{readStateText(row.read_state, t)}</div>}</td><td className="p-3">{row.updated_at ? new Date(row.updated_at).toLocaleString() : t("tradeJourneys.table.unknown")}</td></tr>)}{payload && payload.data.items.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">{t("tradeJourneys.table.empty")}</td></tr>}</tbody></table></div>
     <footer aria-label={t("tradeJourneys.pagination.label")} className="flex items-center justify-between gap-3 text-sm"><span>{t("tradeJourneys.pagination.count", { count: payload?.page_info.total ?? 0 })}</span><div className="flex gap-2"><button className="rounded border px-3 py-1 disabled:opacity-50" disabled={!cursorHistory.length} onClick={goPrevious}>{t("tradeJourneys.pagination.previous")}</button><button className="rounded border px-3 py-1 disabled:opacity-50" disabled={!payload?.page_info.next_page_token} onClick={goNext}>{t("tradeJourneys.pagination.next")}</button></div></footer>
+  </section>;
+}
+
+/** Answers three questions before any raw data: what happened, who handles it, what the operator does. */
+function SummaryPanel({ row }: { row: JourneyRow }) {
+  const t = useT();
+  const view = outcomeView(row, t);
+  const kind = row.outcome?.kind ?? "normal";
+  const step = row.next_step;
+  const what = view?.sentence || (kind === "open" ? t("tradeJourneys.summary.openWhat") : kind === "normal" ? t("tradeJourneys.summary.normalWhat") : t("tradeJourneys.summary.unknownWhat"));
+  const title = view?.badge ? `${view.badge}：` : "";
+  const who = kind === "reconciliation_deferred" ? t("tradeJourneys.summary.whoSystem")
+    : step ? (step.href.includes("/incidents/") ? t("tradeJourneys.summary.whoIncident") : t("tradeJourneys.summary.whoNobody"))
+    : t("tradeJourneys.summary.whoNone");
+  const adverse = kind === "rejected" || kind === "variance";
+  const todo = step ? <>{actionText(step.action_needed, t)} <Link className="inline-flex items-center gap-1 text-primary hover:underline" to={nextStepHref(step.href)}>{t("tradeJourneys.summary.todoOpen")} <ExternalLink size={13}/></Link></>
+    : kind === "reconciliation_deferred" ? t("tradeJourneys.summary.todoWait") : t("tradeJourneys.summary.todoNone");
+  return <section aria-label={t("tradeJourneys.summary.label")} className={`rounded-lg border p-4 ${adverse ? "border-red-500/40 bg-red-500/5" : view ? "border-amber-500/40 bg-amber-500/5" : "bg-card"}`}>
+    <dl className="grid gap-3 md:grid-cols-3">
+      <div><dt className="text-xs font-medium text-muted-foreground">{t("tradeJourneys.summary.what")}</dt><dd className="text-sm">{title}{what}</dd></div>
+      <div><dt className="text-xs font-medium text-muted-foreground">{t("tradeJourneys.summary.who")}</dt><dd className="text-sm">{who}</dd></div>
+      <div><dt className="text-xs font-medium text-muted-foreground">{t("tradeJourneys.summary.todo")}</dt><dd className="text-sm">{todo}</dd></div>
+    </dl>
   </section>;
 }
 
@@ -128,10 +178,16 @@ export function TradeJourneyDetailPage() {
   useEffect(() => { const c = new AbortController(); const q = { tenant_id: tenant, environment }; Promise.all([getTradeJourney(journeyId, q, c.signal), getTradeJourneyTimeline(journeyId, { ...q, page_size: 100 }, c.signal), getTradeJourneyEvidence(journeyId, q, c.signal)]).then(([d,tl,e]) => { setDetail(d); setTimeline(tl); setEvidence(e.data); }).catch(e => setError(e.message)); return () => c.abort(); }, [journeyId, tenant, environment]);
   const row = detail?.data;
   const stageName = (stage: string) => t(`tradeJourneys.stages.${stage}`, { defaultValue: stage.replaceAll("_", " ") });
+  const stageReasons = useMemo(() => { const map: Record<string, string> = {}; for (const e of timeline?.data.items ?? []) { if (e.stage && e.reason_code) map[e.stage] = e.stage === "reconciliation" && failedChecks(e.reason_detail, t).length ? t("tradeJourneys.outcome.varianceChecks", { checks: failedChecks(e.reason_detail, t).join("、") }) : reasonText(e.reason_code, e.reason_detail, t); } return map; }, [timeline, t]);
+  const upstreamUnlinked = Array.isArray(row?.diagnostics) && row.diagnostics.some(d => d?.code === "upstream_lineage_unlinked");
+  const missingStages = (row?.completeness?.missing_stages || []).filter(x => !UPSTREAM_STAGES.includes(x));
+  const lineageGap = upstreamUnlinked || Boolean(row?.completeness?.missing_stages?.some(x => UPSTREAM_STAGES.includes(x)));
+  const activeFlags = Object.entries(row?.flags || {}).filter(([, active]) => active).map(([name]) => t(`tradeJourneys.flagNames.${name}`, { defaultValue: name }));
   return <section className="mx-auto w-full max-w-[1400px] space-y-5 p-4 md:p-6"><div className="flex flex-wrap items-center gap-4"><Link className="inline-flex items-center gap-1 text-sm text-primary" to={`/management/trade-journeys?${listContext}`}><ArrowLeft size={15}/>{t("tradeJourneys.detail.allJourneys")}</Link>{returnTo && <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" to={returnTo}><ArrowLeft size={15}/>{t("tradeJourneys.backTo", { label: returnLabel || t("tradeJourneys.origin") })}</Link>}</div>
-    {error && <div role="alert" className="rounded border border-red-500/40 bg-red-500/10 p-3">{error}</div>}{row && <><header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-xs uppercase text-muted-foreground">{t("tradeJourneys.detail.envRevision", { environment: row.environment, revision: row.revision ?? t("tradeJourneys.detail.unknownRevision") })}</p><h1 className="break-all text-2xl font-semibold">{row.journey_id}</h1><p>{row.symbol || t("tradeJourneys.detail.unknownInstrument")} · {row.side || t("tradeJourneys.detail.unknownSide")} {row.quantity ?? t("tradeJourneys.detail.unknownQuantity")}</p></div><Status row={row}/></header><ReadState meta={detail.meta}/>
-    <div aria-label={t("tradeJourneys.detail.stagesLabel")} className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">{STAGES.map(stage => { const status = row.stages?.[stage]?.status; const complete = /complete|filled|reconciled|accepted|acknowledged/i.test(status || ""); const adverse = /reject|mismatch|fail|block|cancel/i.test(status || ""); return <div key={stage} aria-label={`${stageName(stage)}: ${status || t("tradeJourneys.detail.unknownStatus")}`} className={`rounded border p-2 text-xs ${adverse ? "border-red-500/50 bg-red-500/10" : complete ? "border-primary/40 bg-primary/5" : "opacity-65"}`}>{complete ? <CheckCircle2 size={15}/> : adverse ? <AlertTriangle size={15}/> : <CircleDashed size={15}/>}<span className="mt-1 block break-words">{stageName(stage)}</span><span className="block font-medium">{status || t("tradeJourneys.detail.unknownStatus")}</span></div>; })}</div>
-    {(Object.values(row.flags || {}).some(Boolean) || row.completeness?.missing_stages?.length) && <aside className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"><h2 className="font-semibold">{t("tradeJourneys.detail.attentionRequired")}</h2><p className="text-sm">{[...Object.entries(row.flags || {}).filter(([, active]) => active).map(([name]) => name), ...(row.completeness?.missing_stages || []).map(x => t("tradeJourneys.detail.missingStage", { stage: stageName(x) }))].join(" · ")}</p></aside>}
-    <div className="grid gap-5 lg:grid-cols-[2fr_1fr]"><div className="rounded-lg border p-4"><h2 className="mb-3 text-lg font-semibold">{t("tradeJourneys.detail.timeline")}</h2><ol className="space-y-3">{timeline?.data.items.map(event => <li key={event.event_id} className="border-l-2 border-primary/30 pl-4"><strong>{(event.stage ? stageName(event.stage) : t("tradeJourneys.detail.unknownStage"))} · {event.stage_status || t("tradeJourneys.detail.unknownStageStatus")}</strong><div className="text-sm text-muted-foreground">{t("tradeJourneys.detail.occurred", { time: event.occurred_at ? new Date(event.occurred_at).toLocaleString() : t("tradeJourneys.detail.unknownTime") })}{event.recorded_at && <> · {t("tradeJourneys.detail.recorded", { time: new Date(event.recorded_at).toLocaleString() })}</>}</div><div className="text-xs text-muted-foreground">{event.source || t("tradeJourneys.detail.unknownSource")} · {event.event_id}</div></li>)}</ol></div><aside className="rounded-lg border p-4"><h2 className="mb-3 text-lg font-semibold">{t("tradeJourneys.detail.evidence")}</h2>{evidence ? <pre aria-label={t("tradeJourneys.detail.evidence")} tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(evidence, null, 2)}</pre> : <p className="text-sm text-muted-foreground">{t("tradeJourneys.detail.evidenceUnavailable")}</p>}<Link className="mt-3 inline-flex items-center gap-1 text-sm text-primary" to={`/management/evidence?journey_id=${encodeURIComponent(journeyId)}`}>{t("tradeJourneys.detail.openEvidenceExplorer")} <ExternalLink size={14}/></Link></aside></div></>}
+    {error && <div role="alert" className="rounded border border-red-500/40 bg-red-500/10 p-3">{error}</div>}{row && <><header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-xs uppercase text-muted-foreground">{t("tradeJourneys.detail.envRevision", { environment: row.environment, revision: row.revision ?? t("tradeJourneys.detail.unknownRevision") })}</p><h1 className="break-all text-2xl font-semibold">{row.persona_name ? journeyTitle(row, t) : row.journey_id}</h1>{row.persona_name && <JourneyId id={row.journey_id} />}<p>{row.symbol || t("tradeJourneys.detail.unknownInstrument")} · {row.side || t("tradeJourneys.detail.unknownSide")} {row.quantity ?? t("tradeJourneys.detail.unknownQuantity")}</p></div><StatusCell row={row}/></header><SummaryPanel row={row}/><ReadState meta={detail.meta}/>
+    <div aria-label={t("tradeJourneys.detail.stagesLabel")} className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">{STAGES.map(stage => { const status = row.stages?.[stage]?.status; const view = stageStatusView(status, t); const label = status ? view.label : t("tradeJourneys.detail.unknownStatus"); return <div key={stage} aria-label={`${stageName(stage)}: ${label}`} className={`rounded border p-2 text-xs ${view.tone === "danger" ? "border-red-500/50 bg-red-500/10" : view.tone === "success" ? "border-emerald-500/40 bg-emerald-500/5" : "opacity-65"}`}>{view.tone === "success" ? <CheckCircle2 size={15} className="text-emerald-600"/> : view.tone === "danger" ? <AlertTriangle size={15} className="text-red-600"/> : <CircleDashed size={15}/>}<span className="mt-1 block break-words">{stageName(stage)}</span><span className={`block font-medium ${view.tone === "danger" ? "text-red-700 dark:text-red-300" : view.tone === "success" ? "text-emerald-700 dark:text-emerald-300" : ""}`}>{label}</span>{stageReasons[stage] && <span className="mt-1 block text-[11px] text-muted-foreground">{stageReasons[stage]}</span>}</div>; })}</div>
+    {(activeFlags.length > 0 || missingStages.length > 0) && <aside className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"><h2 className="font-semibold">{t("tradeJourneys.detail.attentionRequired")}</h2><p className="text-sm">{[...activeFlags, ...missingStages.map(x => t("tradeJourneys.detail.missingStage", { stage: stageName(x) }))].join(" · ")}</p></aside>}
+    {lineageGap && <p className="text-xs text-muted-foreground">{t("tradeJourneys.detail.lineageUnlinked")}</p>}
+    <div className="grid gap-5 lg:grid-cols-[2fr_1fr]"><div className="rounded-lg border p-4"><h2 className="mb-3 text-lg font-semibold">{t("tradeJourneys.detail.timeline")}</h2><ol className="space-y-3">{timeline?.data.items.map(event => <li key={event.event_id} className="border-l-2 border-primary/30 pl-4"><strong>{(event.stage ? stageName(event.stage) : t("tradeJourneys.detail.unknownStage"))} · {event.stage_status ? stageStatusView(event.stage_status, t).label : t("tradeJourneys.detail.unknownStageStatus")}</strong>{event.reason_code && <div className="text-sm">{event.stage === "reconciliation" && failedChecks(event.reason_detail, t).length ? t("tradeJourneys.outcome.varianceChecks", { checks: failedChecks(event.reason_detail, t).join("、") }) : reasonText(event.reason_code, event.reason_detail, t)}</div>}<div className="text-sm text-muted-foreground">{t("tradeJourneys.detail.occurred", { time: event.occurred_at ? new Date(event.occurred_at).toLocaleString() : t("tradeJourneys.detail.unknownTime") })}{event.recorded_at && <> · {t("tradeJourneys.detail.recorded", { time: new Date(event.recorded_at).toLocaleString() })}</>}</div><div className="text-xs text-muted-foreground">{[sourceText(event.source, t), event.event_id].filter(Boolean).join(" · ")}</div></li>)}</ol></div><aside className="rounded-lg border p-4"><h2 className="mb-3 text-lg font-semibold">{t("tradeJourneys.detail.evidence")}</h2>{evidence ? <details><summary className="cursor-pointer text-sm">{t("tradeJourneys.detail.rawData")}</summary><pre aria-label={t("tradeJourneys.detail.evidence")} tabIndex={0} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(evidence, null, 2)}</pre></details> : <p className="text-sm text-muted-foreground">{t("tradeJourneys.detail.evidenceUnavailable")}</p>}<Link className="mt-3 inline-flex items-center gap-1 text-sm text-primary" to={`/management/evidence?journey_id=${encodeURIComponent(journeyId)}`}>{t("tradeJourneys.detail.openEvidenceExplorer")} <ExternalLink size={14}/></Link></aside></div></>}
   </section>;
 }

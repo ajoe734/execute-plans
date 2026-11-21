@@ -1,0 +1,10 @@
+管理控制台
+工具
+工具
+建立
+capabilities.actions.disabledReason
+目前無法載入工具
+
+無法從伺服器取得資料（tool list is currently unavailable.），請重試。
+
+重試

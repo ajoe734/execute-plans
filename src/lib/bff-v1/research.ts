@@ -154,7 +154,21 @@ export function normalizeResearchTask(raw: unknown): ResearchTask | undefined {
     latestRun,
     latest_run: latestRun,
     runs,
+    is_non_real: typeof record.is_non_real === "boolean" ? record.is_non_real : null,
+    name_is_fallback_id: typeof record.name_is_fallback_id === "boolean" ? record.name_is_fallback_id : null,
+    display_summary: normalizeDisplaySummary(record.display_summary),
   };
+}
+
+function normalizeDisplaySummary(raw: unknown): ResearchTask["display_summary"] {
+  if (typeof raw === "string") return raw.trim() || null;
+  const rec = asRecord(raw);
+  if (!rec) return null;
+  const pick = (key: string) => {
+    const v = rec[key];
+    return typeof v === "string" && v.trim() ? v.trim() : null;
+  };
+  return { symbol: pick("symbol"), dataset_ref: pick("dataset_ref"), subject_ref: pick("subject_ref") };
 }
 
 export async function listResearchTasks(): Promise<ResearchTask[]> {

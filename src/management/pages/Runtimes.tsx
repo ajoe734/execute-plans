@@ -4,19 +4,17 @@ import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { realWritesEnabled, runActionSafe, useLiveListV1 } from "@/lib/bff-v1";
+import { notReportedLabel, resolveBffSubjectDisplay, sanitizeRawText } from "@/lib/enumLabels";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, RotateCcw, PowerOff, Move, Maximize2, ShieldAlert, ScrollText, Ban, Skull } from "lucide-react";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { NON_PRODUCTION_COMMAND_REASON } from "@/management/components/NonProductionActionButton";
 import { runtimesWithFleetFallback, type FleetRuntimeRow } from "./runtimeFleetFallback";
-
-const NAN = "nan";
 
 type RuntimeAction = "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs" | "disable_new" | "emergency_kill";
 
@@ -27,31 +25,11 @@ type RuntimeRow = FleetRuntimeRow & {
 
 const cleanText = (...values: unknown[]): string | undefined => {
   for (const value of values) {
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed && trimmed !== "null" && trimmed !== "undefined") return trimmed;
-    }
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    const clean = sanitizeRawText(value);
+    if (clean) return clean;
   }
   return undefined;
 };
-
-const textOrNan = (...values: unknown[]): string => cleanText(...values) ?? NAN;
-
-const hasFinite = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
-
-const progressValue = (value: unknown): number =>
-  hasFinite(value) ? Math.max(0, Math.min(100, value * 100)) : 0;
-
-const formatRatio = (value: unknown): string =>
-  hasFinite(value) ? `${(value * 100).toFixed(0)}%` : NAN;
-
-const formatUptime = (value: unknown): string =>
-  hasFinite(value) ? `${value.toFixed(2)}%` : NAN;
-
-const formatLatency = (value: unknown): string =>
-  hasFinite(value) ? `${value}ms` : NAN;
 
 const envTone = (e?: string) => {
   if (e === "live") return "bg-env-live-bg text-status-success border-status-success/30";
@@ -68,6 +46,9 @@ const bindingIdOf = (r: RuntimeRow): string | undefined =>
 
 const personaIdOf = (r: RuntimeRow): string | undefined =>
   cleanText(r.personaId, r.persona_id);
+
+const strategyIdOf = (r: RuntimeRow): string | undefined =>
+  cleanText(r.strategyId, r.strategy_id);
 
 const actionTargetId = (r: RuntimeRow): string | undefined =>
   runtimeIdOf(r) ?? cleanText(r.id);
@@ -115,6 +96,8 @@ function filterRuntimeRowsForFocus(
 
 export const RuntimesPage = () => {
   const t = useT();
+  const notReported = notReportedLabel(t);
+  const textOrNotReported = (...values: unknown[]): string => cleanText(...values) ?? notReported;
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
@@ -142,7 +125,7 @@ export const RuntimesPage = () => {
       action: mappedAction,
       memo: memoOverride ?? (action === "disable_new" ? "disable_new_deployments" : "from runtimes table"),
     }, {
-      successTitle: t(`runtime.actions.${action}.toast`, { name: textOrNan(r.name, runtimeIdOf(r)) }),
+      successTitle: t(`runtime.actions.${action}.toast`, { name: textOrNotReported(r.name, runtimeIdOf(r)) }),
     });
     if (!receipt.ok) return;
     refresh();
@@ -158,15 +141,15 @@ export const RuntimesPage = () => {
               <span className="text-foreground">
                 {focusFiltered.matched
                   ? t("runtime.focusedFmt", {
-                    persona: personaFocus || NAN,
-                    runtime: runtimeFocus || NAN,
-                    binding: bindingFocus || NAN,
+                    persona: personaFocus || notReported,
+                    runtime: runtimeFocus || notReported,
+                    binding: bindingFocus || notReported,
                     count: visibleRows.length,
                   })
                   : t("runtime.focusMissingFmt", {
-                    persona: personaFocus || NAN,
-                    runtime: runtimeFocus || NAN,
-                    binding: bindingFocus || NAN,
+                    persona: personaFocus || notReported,
+                    runtime: runtimeFocus || notReported,
+                    binding: bindingFocus || notReported,
                   })}
               </span>
               <Button asChild size="sm" variant="outline">
@@ -186,13 +169,108 @@ export const RuntimesPage = () => {
                 const runtimeId = runtimeIdOf(r);
                 const bindingId = bindingIdOf(r);
                 const personaId = personaIdOf(r);
-                const primary = textOrNan(r.name, runtimeId, bindingId);
+                const strategyId = strategyIdOf(r);
+                const personaDisplay = resolveBffSubjectDisplay(
+                  {
+                    id: personaId,
+                    displayName: cleanText(r.personaDisplayName, r.persona_display_name, r.personaName),
+                    nameMissing: r.personaNameMissing ?? r.persona_name_missing,
+                  },
+                  t,
+                );
+                const strategyDisplay = resolveBffSubjectDisplay(
+                  {
+                    id: strategyId,
+                    displayName: cleanText(r.strategyDisplayName, r.strategy_display_name),
+                    nameMissing: r.strategyNameMissing ?? r.strategy_name_missing,
+                  },
+                  t,
+                );
+                const hasPersonaSubject = Boolean(
+                  personaId || cleanText(r.personaDisplayName, r.persona_display_name, r.personaName),
+                );
+                const hasStrategySubject = Boolean(
+                  strategyId || cleanText(r.strategyDisplayName, r.strategy_display_name),
+                );
+                const runtimeLabel = textOrNotReported(r.name, runtimeId, bindingId);
+                const hasDistinctDisplayHeadline =
+                  (hasPersonaSubject && personaDisplay.primaryText !== personaId) ||
+                  (hasStrategySubject && strategyDisplay.primaryText !== strategyId);
                 return (
-                  <div className="min-w-[220px]">
-                    <div className="font-medium text-mono text-xs">{primary}</div>
-                    {runtimeId && runtimeId !== primary && <div className="font-mono text-[11px] text-muted-foreground">{runtimeId}</div>}
-                    {bindingId && bindingId !== runtimeId && <div className="font-mono text-[11px] text-muted-foreground">{bindingId}</div>}
-                    {personaId && <div className="font-mono text-[11px] text-muted-foreground">{personaId}</div>}
+                  <div className="min-w-[220px] space-y-0.5">
+                    {hasPersonaSubject && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={
+                            personaDisplay.primaryText !== personaId
+                              ? "font-medium text-xs text-foreground"
+                              : "font-mono text-[11px] text-muted-foreground"
+                          }
+                          data-testid="runtime-persona-display"
+                        >
+                          {personaDisplay.primaryText}
+                        </span>
+                        {personaDisplay.nameMissing && (
+                          <Badge
+                            variant="outline"
+                            data-testid="runtime-persona-name-missing"
+                            data-name-missing="true"
+                            className="border-status-warning/40 text-[10px] text-status-warning"
+                          >
+                            {personaDisplay.nameMissingLabel}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {hasStrategySubject && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={
+                            strategyDisplay.primaryText !== strategyId
+                              ? "font-medium text-xs text-foreground"
+                              : "font-mono text-[11px] text-muted-foreground"
+                          }
+                          data-testid="runtime-strategy-display"
+                        >
+                          {strategyDisplay.primaryText}
+                        </span>
+                        {strategyDisplay.nameMissing && (
+                          <Badge
+                            variant="outline"
+                            data-testid="runtime-strategy-name-missing"
+                            data-name-missing="true"
+                            className="border-status-warning/40 text-[10px] text-status-warning"
+                          >
+                            {strategyDisplay.nameMissingLabel}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    <div
+                      className={
+                        hasDistinctDisplayHeadline
+                          ? "font-mono text-[11px] text-muted-foreground"
+                          : "font-medium text-mono text-xs"
+                      }
+                    >
+                      {runtimeLabel}
+                    </div>
+                    {runtimeId && runtimeId !== runtimeLabel && (
+                      <div className="font-mono text-[11px] text-muted-foreground">{runtimeId}</div>
+                    )}
+                    {bindingId && bindingId !== runtimeId && bindingId !== runtimeLabel && (
+                      <div className="font-mono text-[11px] text-muted-foreground">{bindingId}</div>
+                    )}
+                    {personaDisplay.secondaryId && (
+                      <div className="font-mono text-[11px] text-muted-foreground" data-testid="runtime-persona-id">
+                        {personaDisplay.secondaryId}
+                      </div>
+                    )}
+                    {strategyDisplay.secondaryId && (
+                      <div className="font-mono text-[11px] text-muted-foreground" data-testid="runtime-strategy-id">
+                        {strategyDisplay.secondaryId}
+                      </div>
+                    )}
                     {personaId && (
                       <Link
                         aria-label={`${personaId} trade journeys`}
@@ -206,17 +284,12 @@ export const RuntimesPage = () => {
                 );
               },
             },
-            { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-xs uppercase tracking-wider text-muted-foreground">{textOrNan(r.kind, r.runtimeKind, r.runtime_kind)}</span> },
+            { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-xs uppercase tracking-wider text-muted-foreground">{textOrNotReported(r.kind, r.runtimeKind, r.runtime_kind)}</span> },
             { key: "env", header: t("table.env"), cell: (r) => {
               const env = cleanText(r.env, r.deploymentStage, r.deployment_stage);
-              return <Badge variant="outline" className={`uppercase text-[10px] ${envTone(env)}`}>{env ?? NAN}</Badge>;
+              return <Badge variant="outline" className={`uppercase text-[10px] ${envTone(env)}`}>{env ?? notReported}</Badge>;
             } },
             { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={cleanText(r.status)} /> },
-            { key: "cpu", header: "CPU", cell: (r) => <div className="flex items-center gap-2 w-28"><Progress value={progressValue(r.cpu)} className="h-1.5" /><span className="text-mono text-xs w-10 text-right">{formatRatio(r.cpu)}</span></div> },
-            { key: "mem", header: "Memory", cell: (r) => <div className="flex items-center gap-2 w-28"><Progress value={progressValue(r.memory)} className="h-1.5" /><span className="text-mono text-xs w-10 text-right">{formatRatio(r.memory)}</span></div> },
-            { key: "lat", header: "p95 latency", cell: (r) => <span className={`text-mono text-xs ${hasFinite(r.latencyP95Ms) && r.latencyP95Ms > 1000 ? "text-status-warning" : ""}`}>{formatLatency(r.latencyP95Ms)}</span> },
-            { key: "up", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{formatUptime(r.uptimePct)}</span> },
-            { key: "region", header: t("table.region"), cell: (r) => <span className="text-mono text-xs">{textOrNan(r.region)}</span> },
             { key: "act", header: "", cell: (r) => {
               const writesAllowed = realWritesEnabled();
               const canAct = writesAllowed && Boolean(actionTargetId(r)) && !r.fleetDerived;
@@ -258,7 +331,7 @@ export const RuntimesPage = () => {
           open={!!killTarget && realWritesEnabled()}
           onOpenChange={(o) => !o && setKillTarget(null)}
           operation="runtime.emergency_kill"
-          target={{ type: "Runtime", id: actionTargetId(killTarget) ?? textOrNan(killTarget.id), name: textOrNan(killTarget.name, runtimeIdOf(killTarget)) }}
+          target={{ type: "Runtime", id: actionTargetId(killTarget) ?? textOrNotReported(killTarget.id), name: textOrNotReported(killTarget.name, runtimeIdOf(killTarget)) }}
           risk="critical"
           destructive
           riskImpact={t("runtime.actions.emergency_kill.impact")}

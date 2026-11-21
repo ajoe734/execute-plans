@@ -24,6 +24,14 @@ import { canonicalCenterUrl } from "@/management/navigation/managementRouteManif
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import {
+  formatLocalizedIncidentSummary,
+  isRawEvidenceSummaryText,
+  reasonCodeDisplay,
+  resolveBffSubjectDisplay,
+  resolveEnumLabel,
+  statusLabel,
+} from "@/lib/enumLabels";
+import {
   HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxList,
 } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
@@ -1284,22 +1292,59 @@ export const PersonaFleetPage = () => {
                     })()}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2" data-testid={`fleet-cycle-health-${r.personaId}`}>
-                    {r.personaCycleHealth && r.personaCycleHealth.status !== "unavailable" ? (
-                      <span title={r.personaCycleHealth.failureReason ?? undefined}>
-                        <Badge variant="outline">{r.personaCycleHealth.status}</Badge>
-                        {r.personaCycleHealth.stage ? (
-                          <span className="ml-1 font-mono text-xs text-muted-foreground">{r.personaCycleHealth.stage}</span>
-                        ) : null}
-                        {r.personaCycleHealth.failureReason ? (
-                          <span className="ml-1 font-mono text-xs text-destructive">({r.personaCycleHealth.failureReason})</span>
-                        ) : null}
-                      </span>
-                    ) : (
+                    {r.personaCycleHealth && r.personaCycleHealth.status !== "unavailable" ? (() => {
+                      const cycleStatus = resolveEnumLabel("status", r.personaCycleHealth.status, t);
+                      const cycleStage = r.personaCycleHealth.stage
+                        ? statusLabel(r.personaCycleHealth.stage, t)
+                        : "";
+                      const failureReason = r.personaCycleHealth.failureReason
+                        ? reasonCodeDisplay(r.personaCycleHealth.failureReason, t)
+                        : null;
+                      return (
+                        <span title={r.personaCycleHealth.failureReason ?? undefined}>
+                          <Badge variant="outline" className={cycleStatus.badgeClass}>
+                            {cycleStatus.label}
+                          </Badge>
+                          {cycleStage ? (
+                            <>
+                              {" "}
+                              <span className="ml-1 text-xs text-muted-foreground">{cycleStage}</span>
+                            </>
+                          ) : null}
+                          {failureReason ? (
+                            <>
+                              {" "}
+                              <span className="ml-1 text-xs text-destructive">{failureReason.text}</span>
+                              {failureReason.code && (
+                                <>
+                                  {" "}
+                                  <code className="ml-1 font-mono text-[11px] text-muted-foreground">
+                                    ({failureReason.code})
+                                  </code>
+                                </>
+                              )}
+                            </>
+                          ) : null}
+                        </span>
+                      );
+                    })() : (
                       <span className="text-xs text-muted-foreground">
                         {t("mgmt.fleet.cycleUnavailable", { defaultValue: "無法讀取" })}
-                        {r.personaCycleHealth?.failureReason ? (
-                          <span className="ml-1 font-mono">({r.personaCycleHealth.failureReason})</span>
-                        ) : null}
+                        {r.personaCycleHealth?.failureReason ? (() => {
+                          const failureReason = reasonCodeDisplay(r.personaCycleHealth.failureReason, t);
+                          return (
+                            <>
+                              {" "}
+                              <span className="ml-1">{failureReason.text}</span>
+                              {failureReason.code && (
+                                <>
+                                  {" "}
+                                  <code className="ml-1 font-mono text-[11px]">({failureReason.code})</code>
+                                </>
+                              )}
+                            </>
+                          );
+                        })() : null}
                       </span>
                     )}
                   </td>
@@ -1365,6 +1410,123 @@ export const PersonaFleetPage = () => {
   );
 };
 
+export function extractAttributionHiddenTestCounts(input: {
+  hiddenTestPersonaCount?: number;
+  hiddenTestStrategyCount?: number;
+  includeTestPersonas?: boolean;
+  summary?: unknown;
+  meta?: unknown;
+} | null | undefined): {
+  hiddenPersonaCount: number;
+  hiddenStrategyCount: number;
+  includeTestPersonas: boolean;
+} {
+  if (!input || typeof input !== "object") {
+    return { hiddenPersonaCount: 0, hiddenStrategyCount: 0, includeTestPersonas: false };
+  }
+  const summary =
+    input.summary && typeof input.summary === "object"
+      ? (input.summary as Record<string, unknown>)
+      : {};
+  const meta =
+    input.meta && typeof input.meta === "object"
+      ? (input.meta as Record<string, unknown>)
+      : {};
+  const rawStrategyCount =
+    input.hiddenTestStrategyCount ??
+    summary.hidden_test_strategy_count ??
+    summary.hiddenTestStrategyCount ??
+    meta.hidden_test_strategy_count ??
+    meta.hiddenTestStrategyCount ??
+    input.hiddenTestPersonaCount ??
+    summary.hidden_test_persona_count ??
+    summary.hiddenTestPersonaCount ??
+    meta.hidden_test_persona_count ??
+    meta.hiddenTestPersonaCount ??
+    0;
+  const rawPersonaCount =
+    input.hiddenTestPersonaCount ??
+    summary.hidden_test_persona_count ??
+    summary.hiddenTestPersonaCount ??
+    meta.hidden_test_persona_count ??
+    meta.hiddenTestPersonaCount ??
+    rawStrategyCount;
+  const hiddenStrategyCount = Number.isFinite(Number(rawStrategyCount))
+    ? Math.max(0, Number(rawStrategyCount))
+    : 0;
+  const hiddenPersonaCount = Number.isFinite(Number(rawPersonaCount))
+    ? Math.max(0, Number(rawPersonaCount))
+    : 0;
+  const includeTestPersonas = Boolean(
+    input.includeTestPersonas ??
+    summary.include_test_personas ??
+    summary.includeTestPersonas ??
+    meta.include_test_personas ??
+    meta.includeTestPersonas,
+  );
+  return { hiddenPersonaCount, hiddenStrategyCount, includeTestPersonas };
+}
+
+export function PerformanceAttributionTestPersonaBanner({
+  attribution,
+  includeTestPersonas: includeOverride,
+  onToggleIncludeTestPersonas,
+}: {
+  attribution?: {
+    hiddenTestPersonaCount?: number;
+    hiddenTestStrategyCount?: number;
+    includeTestPersonas?: boolean;
+    summary?: unknown;
+    meta?: unknown;
+  } | null;
+  includeTestPersonas?: boolean;
+  onToggleIncludeTestPersonas?: (next: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const counts = extractAttributionHiddenTestCounts(attribution);
+  const showing = includeOverride ?? counts.includeTestPersonas;
+  const hiddenStrategies = counts.hiddenStrategyCount || counts.hiddenPersonaCount;
+  if (!showing && hiddenStrategies <= 0) return null;
+
+  return (
+    <Card
+      className="p-3 text-xs flex flex-wrap items-center justify-between gap-2 border-border bg-muted/20"
+      data-testid="attribution-test-personas-banner"
+    >
+      <span className="text-muted-foreground" data-testid="attribution-test-personas-count">
+        {showing
+          ? t("mgmt.attribution.showingTestPersonasNotice")
+          : counts.hiddenPersonaCount > 0 && counts.hiddenStrategyCount > 0
+            ? t("mgmt.attribution.hiddenTestPersonaStrategiesFmt", {
+                count: counts.hiddenStrategyCount,
+                strategyCount: counts.hiddenStrategyCount,
+                personaCount: counts.hiddenPersonaCount,
+              })
+            : t("mgmt.attribution.hiddenTestPersonaStrategiesOnlyFmt", {
+                count: hiddenStrategies,
+                strategyCount: hiddenStrategies,
+              })}
+      </span>
+      {onToggleIncludeTestPersonas ? (
+        <Button
+          type="button"
+          size="sm"
+          variant={showing ? "default" : "outline"}
+          data-testid="attribution-toggle-test-personas-button"
+          aria-pressed={showing}
+          onClick={() => onToggleIncludeTestPersonas(!showing)}
+        >
+          {showing
+            ? t("mgmt.attribution.hideTestPersonas")
+            : hiddenStrategies > 0
+              ? t("mgmt.attribution.showTestPersonasFmt", { count: hiddenStrategies })
+              : t("mgmt.attribution.showTestPersonas")}
+        </Button>
+      ) : null}
+    </Card>
+  );
+}
+
 // =====================================================================
 // Human Inbox — governance work queue
 // =====================================================================
@@ -1373,6 +1535,9 @@ export const HumanInboxPage = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const [expandedSummaries, setExpandedSummaries] = useState<Record<string, boolean>>({});
+  const toggleSummary = (id: string) =>
+    setExpandedSummaries((prev) => ({ ...prev, [id]: !prev[id] }));
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
@@ -1426,8 +1591,14 @@ export const HumanInboxPage = () => {
     return sorted.filter((it) => [
       it.id,
       it.title,
+      it.titleDisplay,
+      it.rawTitle,
       it.summary,
       it.personaId,
+      it.personaDisplayName,
+      it.strategyId,
+      it.strategyDisplayName,
+      it.bindingId,
       it.sourceId,
       it.reviewId,
       it.detailHref,
@@ -1558,12 +1729,62 @@ export const HumanInboxPage = () => {
         const evidenceHref = evidenceRefs.length > 0 && it.detailHref
           ? `${it.detailHref}#evidence`
           : it.links?.evidenceHref;
+        const primaryTitle = it.titleDisplay || it.title;
+        const secondaryId =
+          it.rawTitle && it.rawTitle !== primaryTitle
+            ? it.rawTitle
+            : it.sourceId && it.sourceId !== primaryTitle
+              ? it.sourceId
+              : undefined;
+        const personaDisplay = resolveBffSubjectDisplay(
+          {
+            id: it.personaId,
+            displayName: it.personaDisplayName,
+            nameMissing: it.personaNameMissing,
+          },
+          t,
+        );
+        const strategyDisplay = resolveBffSubjectDisplay(
+          {
+            id: it.strategyId,
+            displayName: it.strategyDisplayName,
+            nameMissing: it.strategyNameMissing,
+          },
+          t,
+        );
+        const hasIncidentSummaryInputs = Boolean(
+          it.summaryKey ||
+          it.kind === "incident" ||
+          it.occurrenceCount !== undefined ||
+          (it.observed !== undefined && it.threshold !== undefined),
+        );
+        const localizedIncidentSummary = hasIncidentSummaryInputs
+          ? formatLocalizedIncidentSummary(it, t)
+          : "";
+        const safeFallbackSummary =
+          it.summary &&
+          it.summary !== it.evidenceSummary &&
+          !isRawEvidenceSummaryText(it.summary)
+            ? it.summary
+            : "";
+        const cardSummary = localizedIncidentSummary || safeFallbackSummary;
+
         return (
-        <Card key={it.id} className="p-4">
+        <Card key={it.id} className="p-4" data-testid={`inbox-card-${it.id}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">{it.kind}</Badge>
-              <span className="text-sm font-medium text-foreground">{it.title}</span>
+              <span className="text-sm font-medium text-foreground" data-testid={`inbox-title-${it.id}`}>
+                {primaryTitle}
+              </span>
+              {secondaryId ? (
+                <code
+                  className="text-xs font-mono text-muted-foreground"
+                  data-testid={`inbox-secondary-id-${it.id}`}
+                >
+                  {secondaryId}
+                </code>
+              ) : null}
               {!it.canProceed && (
                 <Badge variant="outline" className="bg-status-failed/15 text-status-failed border-status-failed/30">
                   {t("mgmt.inbox.cannotProceedBadge")}
@@ -1574,7 +1795,82 @@ export const HumanInboxPage = () => {
               <Badge variant="outline">{t("mgmt.inbox.requiredRoleFmt", { role: it.requiredRole })}</Badge>
             )}
           </div>
-          {it.summary && <p className="mt-2 text-sm text-muted-foreground">{it.summary}</p>}
+          {(personaDisplay.primaryText !== "—" || strategyDisplay.primaryText !== "—" || it.bindingId) && (
+            <div
+              className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground"
+              data-testid={`inbox-subjects-${it.id}`}
+            >
+              {personaDisplay.primaryText !== "—" && (
+                <span className="inline-flex flex-wrap items-center gap-1" data-testid={`inbox-persona-${it.id}`}>
+                  <span className="font-medium text-foreground">{personaDisplay.primaryText}</span>
+                  {personaDisplay.secondaryId && (
+                    <code className="font-mono text-[11px] text-muted-foreground">
+                      ({personaDisplay.secondaryId})
+                    </code>
+                  )}
+                  {personaDisplay.nameMissing && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] py-0 px-1"
+                      data-name-missing="true"
+                      data-testid={`inbox-persona-name-missing-${it.id}`}
+                    >
+                      {personaDisplay.nameMissingBadgeLabel}
+                    </Badge>
+                  )}
+                </span>
+              )}
+              {strategyDisplay.primaryText !== "—" && (
+                <span className="inline-flex flex-wrap items-center gap-1" data-testid={`inbox-strategy-${it.id}`}>
+                  <span className="font-medium text-foreground">{strategyDisplay.primaryText}</span>
+                  {strategyDisplay.secondaryId && (
+                    <code className="font-mono text-[11px] text-muted-foreground">
+                      ({strategyDisplay.secondaryId})
+                    </code>
+                  )}
+                  {strategyDisplay.nameMissing && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] py-0 px-1"
+                      data-name-missing="true"
+                      data-testid={`inbox-strategy-name-missing-${it.id}`}
+                    >
+                      {strategyDisplay.nameMissingBadgeLabel}
+                    </Badge>
+                  )}
+                </span>
+              )}
+              {it.bindingId && (
+                <code className="font-mono text-[11px] text-muted-foreground">
+                  {it.bindingId}
+                </code>
+              )}
+            </div>
+          )}
+          {cardSummary && (() => {
+            const isExpanded = Boolean(expandedSummaries[it.id]);
+            return (
+              <div className="mt-2">
+                <p
+                  data-testid={`inbox-summary-${it.id}`}
+                  className={`text-sm text-muted-foreground break-words ${isExpanded ? "" : "line-clamp-3"}`}
+                >
+                  {cardSummary}
+                </p>
+                <button
+                  type="button"
+                  data-testid={`inbox-summary-toggle-${it.id}`}
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleSummary(it.id)}
+                  className="mt-1 text-xs font-medium text-primary hover:underline"
+                >
+                  {isExpanded
+                    ? t("mgmt.inbox.collapseSummary", { defaultValue: "Show less" })
+                    : t("mgmt.inbox.expandSummary", { defaultValue: "Show more" })}
+                </button>
+              </div>
+            );
+          })()}
           {/* The consequence triplet only exists on the legacy shape; live
               governance items carry a summary instead. */}
           {(it.consequenceIfApproved || it.consequenceIfRejected || it.consequenceIfIgnored) && (

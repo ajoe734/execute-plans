@@ -372,4 +372,32 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
       writebacks: [{ persona_id: "p1", entry_id: "wb-1" }],
     });
   });
+
+  it("stripPrivateMemory preserves persona_display_name and persona_name_missing on writebacks while stripping private content", () => {
+    const cleaned = stripPrivateMemory({
+      writebacks: [
+        {
+          persona_id: "persona-alpha",
+          persona_display_name: "Alpha Macro Strategist",
+          persona_name_missing: false,
+          entry_id: "wb-101",
+          status: "committed",
+          written_at: "2026-11-20T09:00:00Z",
+          content: "SECRET_PRIVATE_MEMORY_TEXT",
+        },
+      ],
+    });
+    expect(cleaned).toEqual({
+      writebacks: [
+        {
+          persona_id: "persona-alpha",
+          persona_display_name: "Alpha Macro Strategist",
+          persona_name_missing: false,
+          entry_id: "wb-101",
+          status: "committed",
+          written_at: "2026-11-20T09:00:00Z",
+        },
+      ],
+    });
+  });
 });

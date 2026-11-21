@@ -60,8 +60,13 @@ export interface HumanInboxItem {
   id: string;
   kind: HumanInboxKind;
   title: string;
+  titleDisplay?: string;
+  rawTitle?: string;
   /** Live BFF items carry a one-line summary instead of the mock consequence triplet. */
   summary?: string;
+  evidenceSummary?: string;
+  summaryKey?: string;
+  summaryParams?: Record<string, unknown>;
   requiredRole: string;
   consequenceIfApproved: string;
   consequenceIfRejected: string;
@@ -72,6 +77,19 @@ export interface HumanInboxItem {
   status?: string;
   sourceId?: string;
   personaId?: string;
+  personaDisplayName?: string;
+  personaNameMissing?: boolean;
+  strategyId?: string;
+  strategyDisplayName?: string;
+  strategyNameMissing?: boolean;
+  bindingId?: string;
+  occurrenceCount?: number;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  metric?: string;
+  observed?: unknown;
+  threshold?: unknown;
+  comparator?: string;
   reviewId?: string;
   reviewType?: string;
   decisionHref?: string;
