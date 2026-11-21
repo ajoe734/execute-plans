@@ -12,8 +12,8 @@
 //   - Usage
 // Renders an honest not-found on 404 and explicit unavailable with reason on consultation owner outage.
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useContext, useEffect, useRef, useState, type FormEvent } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
@@ -114,11 +114,7 @@ export const MeetingDetailPage = () => {
   const { id = "" } = useParams<{ id: string }>();
   const { t } = useTranslation();
   const access = useAgoraWriteAccess();
-  try {
-    registerMeetingQueryClient(useQueryClient());
-  } catch {
-    // No external QueryClientProvider mounted; shared fallback client is used.
-  }
+  registerMeetingQueryClient(useContext(QueryClientContext));
   const [read, setRead] = useState<MeetingsRead<MeetingDetail> | null>(null);
   const [showReveal, setShowReveal] = useState(true);
   const [reviewNote, setReviewNote] = useState("");

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -7,6 +8,11 @@ import i18n from "@/i18n";
 import { setMockResolver } from "@/lib/bff-v1/client";
 import { makeBffError } from "@/lib/bff-v1/errors";
 import { adaptHumanInboxDetail } from "@/lib/bff-v1/management";
+import {
+  getSharedQueryClient,
+  queryKeys,
+  resetSharedQueryClientForTests,
+} from "@/lib/bff-v1/queryKeys";
 import { MeetingDetailPage } from "../meetings/MeetingDetailPage";
 import { HumanGateDetailPage } from "./HumanGateDetail";
 import type { HumanInboxDetail } from "@/lib/v5/management/humanInbox";
@@ -875,5 +881,183 @@ describe("HumanGateDetailPage", () => {
     renderDetail("meeting_review:mtg-review-02");
     expect(await screen.findByTestId("inbox-meeting-review-read-only")).toBeInTheDocument();
     expect(screen.queryByTestId("inbox-meeting-review-submit")).not.toBeInTheDocument();
+  });
+
+  it("invalidates both the mounted QueryClientProvider cache and the standalone fallback QueryClient cache across HumanGateDetailPage meeting review disposition and remount (FE-MEETING-REVIEW-HOOK-ORDER-20261121)", async () => {
+    await i18n.changeLanguage("en-US");
+    const refresh = vi.fn();
+    let reviewed = false;
+    const inboxDetail = adaptHumanInboxDetail({
+      data: {
+        item: {
+          id: "meeting_review:mtg-review-03",
+          item_id: "mtg-review-03",
+          inbox_id: "meeting_review:mtg-review-03",
+          kind: "meeting_review",
+          source_type: "meeting",
+          source_id: "mtg-review-03",
+          meeting_id: "mtg-review-03",
+          meeting_type: "MT-1",
+          persona_id: "persona-alpha",
+          title: "Meeting synthesis requires operator review (MT-1)",
+          summary: "Meeting mtg-review-03 (MT-1) ended with REVIEW synthesis.",
+          status: "pending",
+          action_state: "pending",
+          outcome: "REVIEW",
+          reason: "synthesis_review_required",
+          unreadable_reason: "model_output_missing",
+          blocking_reasons: ["synthesis_review_required"],
+          evidence_refs: [],
+          required_role: "operator",
+          can_decide: true,
+          can_proceed: false,
+          href: "/management/meetings/mtg-review-03",
+          links: {
+            manageHref: "/management/meetings/mtg-review-03",
+          },
+        },
+      },
+    })!;
+
+    setMockResolver((method, path) => {
+      if (method === "GET" && path === "/bff/management/meetings/mtg-review-03") {
+        return () => ({
+          kind: "json",
+          status: 200,
+          body: {
+            status: "ok",
+            owner: "consultation",
+            data: {
+              meeting_id: "mtg-review-03",
+              meeting_type: "MT-1",
+              status: "closed",
+              outcome: "REVIEW",
+              unreadable_reason: "model_output_missing",
+              case_file_items: [],
+              rounds: [],
+              proposals: [],
+              synthesis: {
+                outcome: "REVIEW",
+                proposals: [],
+                unreadable_reason: "model_output_missing",
+                summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+              },
+              operator_review: reviewed
+                ? {
+                    status: "reviewed",
+                    disposition: "closed_no_proposal",
+                    note: "Disposition recorded under provider and standalone cache checks.",
+                    reviewed_by: "op-gate-3",
+                    reviewed_at: "2026-11-21T16:30:00Z",
+                    cause: "model_output_missing",
+                  }
+                : null,
+            },
+          },
+        });
+      }
+      if (method === "POST" && path === "/bff/management/meetings/mtg-review-03/review") {
+        return (req) => {
+          const body = req.body as { note: string };
+          reviewed = true;
+          return {
+            kind: "json",
+            status: 200,
+            body: {
+              status: "ok",
+              owner: "consultation",
+              data: {
+                meeting_id: "mtg-review-03",
+                meeting_type: "MT-1",
+                status: "closed",
+                outcome: "REVIEW",
+                unreadable_reason: "model_output_missing",
+                operator_review: {
+                  status: "reviewed",
+                  disposition: "closed_no_proposal",
+                  note: body.note,
+                  reviewed_by: "op-gate-3",
+                  reviewed_at: "2026-11-21T16:30:00Z",
+                  cause: "model_output_missing",
+                },
+                case_file_items: [],
+                rounds: [],
+                proposals: [],
+                synthesis: {
+                  outcome: "REVIEW",
+                  proposals: [],
+                  summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+                },
+              },
+            },
+          };
+        };
+      }
+      return undefined;
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      data: inboxDetail,
+      loading: false,
+      refresh,
+    });
+
+    // 1. Mounted inside QueryClientProvider: invalidates provider-owned QueryClient and standalone fallback
+    resetSharedQueryClientForTests();
+    const providerClient = new QueryClient({
+      defaultOptions: { queries: { staleTime: 60_000 } },
+    });
+    const fallbackClient = getSharedQueryClient();
+    const inboxKey = queryKeys.oversight.humanInbox();
+    providerClient.setQueryData(inboxKey, [{ id: "meeting_review:mtg-review-03" }]);
+    fallbackClient.setQueryData(inboxKey, [{ id: "meeting_review:mtg-review-03" }]);
+    const providerInvalidateSpy = vi.spyOn(providerClient, "invalidateQueries");
+    const fallbackInvalidateSpy = vi.spyOn(fallbackClient, "invalidateQueries");
+
+    const { unmount } = render(
+      <QueryClientProvider client={providerClient}>
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter
+            initialEntries={[
+              `/management/human-inbox/${encodeURIComponent("meeting_review:mtg-review-03")}`,
+            ]}
+          >
+            <Routes>
+              <Route path="/management/human-inbox/:id" element={<HumanGateDetailPage />} />
+            </Routes>
+          </MemoryRouter>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId("inbox-meeting-review-form")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("inbox-meeting-review-note-input"), {
+      target: { value: "Disposition recorded under provider and standalone cache checks." },
+    });
+    fireEvent.click(screen.getByTestId("inbox-meeting-review-submit"));
+
+    expect(await screen.findByTestId("inbox-meeting-review-recorded")).toBeInTheDocument();
+    expect(providerInvalidateSpy).toHaveBeenCalled();
+    expect(fallbackInvalidateSpy).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    unmount();
+
+    // 2. Remount standalone without QueryClientProvider: preserves recorded disposition and revalidates standalone fallback cache
+    reviewed = false;
+    providerInvalidateSpy.mockClear();
+    fallbackInvalidateSpy.mockClear();
+    fallbackClient.setQueryData(inboxKey, [{ id: "meeting_review:mtg-review-03" }]);
+
+    const standalone = renderDetail("meeting_review:mtg-review-03");
+    expect(await screen.findByTestId("inbox-meeting-review-form")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("inbox-meeting-review-note-input"), {
+      target: { value: "Disposition recorded under standalone fallback only." },
+    });
+    fireEvent.click(screen.getByTestId("inbox-meeting-review-submit"));
+
+    expect(await screen.findByTestId("inbox-meeting-review-recorded")).toBeInTheDocument();
+    expect(fallbackInvalidateSpy).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    standalone.unmount();
   });
 });
