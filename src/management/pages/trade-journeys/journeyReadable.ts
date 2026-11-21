@@ -1,27 +1,84 @@
-import { statusLabel, statusTone, type EnumTone } from "@/lib/enumLabels";
-import type { JourneyOutcome, JourneyRow } from "@/lib/bff-v1/tradeJourneys";
+import { isNanLike, statusLabel, statusTone, type EnumTone } from "@/lib/enumLabels";
+import type {
+  JourneyDetail,
+  JourneyDiscrepancy,
+  JourneyOutcome,
+  JourneyReconciliationClassification,
+  JourneyRow,
+  JourneyStage,
+  JourneyTimelineEvent,
+} from "@/lib/bff-v1/tradeJourneys";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
 
 /** Stages 1-6 are minted before a journey exists; their absence is lineage, not an operator problem. */
-export const UPSTREAM_STAGES = ["research_rationale", "strategy_candidate", "candidate_evaluation", "promotion_decision", "capital_binding", "deployment_runtime"];
+export const UPSTREAM_STAGES = [
+  "research_rationale",
+  "strategy_candidate",
+  "candidate_evaluation",
+  "promotion_decision",
+  "capital_binding",
+  "deployment_runtime",
+];
 
 /** Reason codes with zh-TW/en-US copy under `tradeJourneys.reasons`. */
 export const KNOWN_REASON_CODES = [
-  "insufficient_cash", "insufficient_buying_power", "insufficient_initial_margin", "insufficient_position", "kill_switch",
-  "hold_signal", "partially_filled",
-  "runtime_unhealthy_at_reconciliation", "reconciliation_identity_unverified", "reconciliation_check_failed",
-  "broker_record_missing", "broker_fill_mismatch", "position_variance", "cash_variance", "broker_unavailable_at_reconciliation",
+  "insufficient_cash",
+  "insufficient_buying_power",
+  "insufficient_initial_margin",
+  "insufficient_position",
+  "sell_without_holdings",
+  "kill_switch",
+  "hold_signal",
+  "partially_filled",
+  "runtime_unhealthy_at_reconciliation",
+  "reconciliation_deferred_runtime_unhealthy",
+  "reconciliation_identity_unverified",
+  "reconciliation_evidence_incomplete",
+  "reconciliation_check_failed",
+  "broker_record_missing",
+  "broker_fill_mismatch",
+  "position_variance",
+  "cash_variance",
+  "broker_unavailable_at_reconciliation",
+  "reconciliation_deferred_broker_unavailable",
   "reason_not_recorded",
 ] as const;
 
 /** Expression-policy choice codes: how the order was expressed, not why it was rejected. */
 export const EXPRESSION_CHOICE_CODES = ["long_cash", "long_lever", "short_via_future", "close_leg"] as const;
 
+const CASH_REJECT_CODES = new Set(["insufficient_cash", "insufficient_buying_power", "insufficient_initial_margin"]);
+const POSITION_REJECT_CODES = new Set(["insufficient_position", "sell_without_holdings"]);
+const DEFERRED_RUNTIME_CODES = new Set([
+  "runtime_unhealthy_at_reconciliation",
+  "reconciliation_deferred_runtime_unhealthy",
+]);
+const DEFERRED_BROKER_CODES = new Set([
+  "broker_unavailable_at_reconciliation",
+  "reconciliation_deferred_broker_unavailable",
+]);
+const RUNTIME_HEALTH_CHECKS = new Set([
+  "runtime_state",
+  "runtime_health_summary",
+  "queue_lag_ms",
+  "event_delivery_lag_ms",
+  "actual_metrics_presence",
+]);
+const SPECIFIC_VARIANCE_CODES = new Set([
+  "cash_variance",
+  "position_variance",
+  "broker_fill_mismatch",
+  "broker_record_missing",
+]);
+const COMPARISON_TOLERANCE = 1e-6;
+
 export function formatAmount(value: unknown): string {
   const n = typeof value === "number" ? value : Number(value);
-  if (value === null || value === undefined || value === "" || !Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { maximumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2 });
+  if (value === null || value === undefined || value === "" || typeof value === "boolean" || !Number.isFinite(n)) {
+    return "—";
+  }
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
 /** "澄川｜2317 台股 Paper 學習 R2" → "澄川"; the long suffix repeats the symbol the row already shows. */
@@ -44,63 +101,548 @@ export function journeyTitle(row: JourneyRow, t: T): string {
   const side = String(row.side || "").toLowerCase();
   if (side === "buy" || side === "sell") parts.push(t(`tradeJourneys.sides.${side}`));
   if (row.symbol) parts.push(shortSymbol(row.symbol));
-  if (side && row.quantity != null && row.quantity > 0) parts.push(t("tradeJourneys.quantityShares", { quantity: formatAmount(row.quantity) }));
+  if (side && row.quantity != null && row.quantity > 0) {
+    parts.push(t("tradeJourneys.quantityShares", { quantity: formatAmount(row.quantity) }));
+  }
   return parts.join(" ");
 }
 
-type Detail = Record<string, unknown>;
-const asRecord = (value: unknown): Detail | undefined => value && typeof value === "object" && !Array.isArray(value) ? value as Detail : undefined;
+/** Formats instrument sub-line with side, requested quantity, and available price / filled quantity figures. */
+export function instrumentFiguresText(row: JourneyRow, t: T): string {
+  const rawSide = String(row.side || "").trim();
+  const sideLower = rawSide.toLowerCase();
+  const sideText =
+    sideLower === "buy" || sideLower === "sell"
+      ? t(`tradeJourneys.sides.${sideLower}`)
+      : rawSide || "—";
+  const qtyText = row.quantity != null && !isNanLike(row.quantity) ? formatAmount(row.quantity) : "—";
+  const parts = [`${sideText} ${qtyText}`];
+  if (row.price != null && !isNanLike(row.price) && Number(row.price) > 0) {
+    parts.push(t("tradeJourneys.priceAt", { price: formatAmount(row.price) }));
+  }
+  if (row.filled_quantity != null && !isNanLike(row.filled_quantity) && Number(row.filled_quantity) > 0) {
+    parts.push(t("tradeJourneys.filledShares", { quantity: formatAmount(row.filled_quantity) }));
+  }
+  return parts.join(" · ");
+}
 
-export function reasonText(code: string | null | undefined, detail: JourneyOutcome["reason_detail"], t: T): string {
-  if (!code) return "";
-  // Expression-policy choice codes (long_cash, long_lever, short_via_future, close_leg) are never a rejection reason.
-  if ((EXPRESSION_CHOICE_CODES as readonly string[]).includes(code)) return t("tradeJourneys.reasons.reason_not_recorded");
-  if (!(KNOWN_REASON_CODES as readonly string[]).includes(code)) return t("tradeJourneys.reasons.unknown", { code });
+type Detail = Record<string, unknown>;
+const asRecord = (value: unknown): Detail | undefined =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Detail) : undefined;
+
+function hasValue(value: unknown): boolean {
+  return value !== null && value !== undefined && value !== "" && typeof value !== "boolean" && !isNanLike(value);
+}
+
+/** Formats an array of missing evidence field tokens into an explicit insufficient-evidence phrase. */
+export function missingEvidenceText(missing: unknown, t: T): string {
+  if (!Array.isArray(missing) || missing.length === 0) return "";
+  const sep = t("tradeJourneys.listSep");
+  const labels: string[] = [];
+  for (const raw of missing) {
+    const token = String(raw ?? "").trim();
+    if (!token) continue;
+    let label: string;
+    if (token.includes(":")) {
+      const [rawCheck, rawField] = token.split(":", 2);
+      const checkLabel = t(`tradeJourneys.checks.${rawCheck}`, { defaultValue: rawCheck });
+      const fieldLabel = t(`tradeJourneys.evidenceFields.${rawField}`, { defaultValue: rawField });
+      label = t("tradeJourneys.evidenceFields.qualified", { check: checkLabel, field: fieldLabel });
+    } else {
+      label = t(`tradeJourneys.evidenceFields.${token}`, {
+        defaultValue: t(`tradeJourneys.checks.${token}`, { defaultValue: token }),
+      });
+    }
+    if (label && !labels.includes(label)) labels.push(label);
+  }
+  if (labels.length === 0) return "";
+  return t("tradeJourneys.outcome.insufficientEvidence", { fields: labels.join(sep) });
+}
+
+export function reasonText(
+  code: string | null | undefined,
+  detail: JourneyOutcome["reason_detail"],
+  t: T,
+  missingEvidence?: string[] | null,
+): string {
+  const rawCode = String(code ?? "").trim();
+  const isExpressionCode = (EXPRESSION_CHOICE_CODES as readonly string[]).includes(rawCode);
+  const effectiveCode = isExpressionCode ? "reason_not_recorded" : rawCode;
+  if (!effectiveCode) {
+    return missingEvidence && missingEvidence.length > 0 ? missingEvidenceText(missingEvidence, t) : "";
+  }
+  const base = (KNOWN_REASON_CODES as readonly string[]).includes(effectiveCode)
+    ? t(`tradeJourneys.reasons.${effectiveCode}`)
+    : t("tradeJourneys.reasons.unknown", { code: effectiveCode });
+
   const record = asRecord(detail);
-  const params = record
-    ? { required: formatAmount(record.required), available: formatAmount(record.available), limit: formatAmount(record.limit), holding: formatAmount(record.holding_quantity), requested: formatAmount(record.requested_quantity) }
-    : undefined;
-  // Numbers are only worth a sentence when the producer sent them.
-  if (params && record?.required != null && record?.available != null && (code === "insufficient_cash" || code === "insufficient_buying_power" || code === "insufficient_initial_margin")) {
-    return t(`tradeJourneys.reasons.${code}Detail`, params);
+  const sep = t("tradeJourneys.listSep");
+  const figures: string[] = [];
+  if (record) {
+    if (hasValue(record.required)) {
+      figures.push(t("tradeJourneys.figures.required", { value: formatAmount(record.required) }));
+    }
+    if (hasValue(record.available)) {
+      figures.push(t("tradeJourneys.figures.available", { value: formatAmount(record.available) }));
+    }
+    if (hasValue(record.limit)) {
+      figures.push(t("tradeJourneys.figures.limit", { value: formatAmount(record.limit) }));
+    }
+    if (hasValue(record.holding_quantity)) {
+      figures.push(t("tradeJourneys.figures.holding", { value: formatAmount(record.holding_quantity) }));
+    }
+    if (hasValue(record.requested_quantity)) {
+      const key = POSITION_REJECT_CODES.has(effectiveCode)
+        ? "tradeJourneys.figures.requestedSell"
+        : "tradeJourneys.figures.requestedQty";
+      figures.push(t(key, { value: formatAmount(record.requested_quantity) }));
+    }
   }
-  if (params && code === "insufficient_position" && record?.holding_quantity != null && record?.requested_quantity != null) {
-    return t("tradeJourneys.reasons.insufficient_positionDetail", params);
+
+  const missing: string[] = Array.isArray(missingEvidence)
+    ? missingEvidence.map(x => String(x ?? "").trim()).filter(Boolean)
+    : [];
+  if (CASH_REJECT_CODES.has(effectiveCode) && record) {
+    if (!hasValue(record.required) && hasValue(record.available) && !missing.includes("required")) {
+      missing.push("required");
+    }
+    if (!hasValue(record.available) && hasValue(record.required) && !missing.includes("available")) {
+      missing.push("available");
+    }
+  } else if (POSITION_REJECT_CODES.has(effectiveCode) && record) {
+    if (!hasValue(record.holding_quantity) && hasValue(record.requested_quantity) && !missing.includes("holding_quantity")) {
+      missing.push("holding_quantity");
+    }
+    if (!hasValue(record.requested_quantity) && hasValue(record.holding_quantity) && !missing.includes("requested_quantity")) {
+      missing.push("requested_quantity");
+    }
   }
-  return t(`tradeJourneys.reasons.${code}`);
+
+  let sentence = figures.length > 0 ? `${base}：${figures.join(sep)}` : base;
+  const missingPhrase = missingEvidenceText(missing, t);
+  if (missingPhrase) {
+    sentence = `${sentence} · ${missingPhrase}`;
+  }
+  return sentence;
+}
+
+/** True when a rejection stopped at the pre-broker risk gate and the order was never submitted to a broker. */
+export function isPreBrokerRefusal(rowOrOutcome: JourneyRow | JourneyDetail | JourneyOutcome | null | undefined): boolean {
+  if (!rowOrOutcome || typeof rowOrOutcome !== "object") return false;
+  const outcome = "outcome" in rowOrOutcome ? rowOrOutcome.outcome : (rowOrOutcome as JourneyOutcome);
+  if (outcome) {
+    if (outcome.rejected_stage === "risk_evaluation") return true;
+    if (outcome.submitted_to_broker === false || outcome.order_status === "not_submitted") return true;
+  }
+  if ("stages" in rowOrOutcome && rowOrOutcome.stages) {
+    if (rowOrOutcome.stages.risk_evaluation?.status === "rejected") return true;
+    if (rowOrOutcome.stages.order_submission?.status === "not_submitted") return true;
+    if (rowOrOutcome.stages.order_submission?.submitted_to_broker === false) return true;
+  }
+  if ("stage_events" in rowOrOutcome && rowOrOutcome.stage_events) {
+    const subEv = rowOrOutcome.stage_events.order_submission;
+    if (
+      subEv &&
+      subEv.submitted_to_broker === false &&
+      (subEv.event_type === "order_rejection" || subEv.event_type === "order_rejection_simulated")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Effective current stage, preferring the BFF's `rejected_stage` on pre-broker refusals. */
+export function effectiveCurrentStage(row: JourneyRow): string {
+  if (row.outcome?.kind === "rejected" && isPreBrokerRefusal(row)) {
+    return "risk_evaluation";
+  }
+  return row.outcome?.rejected_stage || row.current_stage;
 }
 
 /** Names of the non-ok checks of a reconciliation `reason_detail`, in words. */
 export function failedChecks(detail: JourneyOutcome["reason_detail"], t: T): string[] {
   if (!Array.isArray(detail)) return [];
   return detail
-    .filter(item => item && String(item.status ?? "failed").toLowerCase() !== "ok" && String(item.status ?? "").toLowerCase() !== "passed")
+    .filter(
+      item =>
+        item &&
+        String(item.status ?? "failed").toLowerCase() !== "ok" &&
+        String(item.status ?? "").toLowerCase() !== "passed",
+    )
     .map(item => String(item.check ?? ""))
     .filter(Boolean)
     .map(check => t(`tradeJourneys.checks.${check}`, { defaultValue: check }));
 }
 
-export type OutcomeTone = "gray" | "red" | "amber" | "neutral";
-export interface OutcomeView { kind: JourneyOutcome["kind"]; tone: OutcomeTone; badge?: string; sentence: string }
+export interface ReconciliationEvidenceInput {
+  kind?: string | null;
+  classification?: JourneyReconciliationClassification | string | null;
+  accounting_variance?: boolean | null;
+  comparison_completed?: boolean | null;
+  reason_code?: string | null;
+  reason_detail?: JourneyOutcome["reason_detail"];
+  discrepancies?: JourneyDiscrepancy[] | null;
+  missing_evidence?: string[] | null;
+  unverified_reason_code?: string | null;
+}
 
-/** One plain sentence for the status cell; undefined when the row carries no outcome worth replacing the status badge for. */
+export interface ReconciliationAnalysisView {
+  kind: "reconciliation_deferred" | "variance";
+  isDeferred: boolean;
+  isUnverified: boolean;
+  isProvenVariance: boolean;
+  tone: OutcomeTone;
+  stageTone: EnumTone;
+  badge?: string;
+  stageStatusLabel: string;
+  sentence: string;
+}
+
+function isValidDiscrepancyRecord(item: Record<string, unknown>): boolean {
+  const check = String(item.check ?? "").trim();
+  if (!check || RUNTIME_HEALTH_CHECKS.has(check)) return false;
+  const status = String(item.status ?? "failed").toLowerCase();
+  if (status === "unverified" || status === "missing_evidence" || status === "passed" || status === "ok" || status === "unavailable") {
+    return false;
+  }
+  const exp = item.expected;
+  const act = item.actual;
+  if (exp === null || exp === undefined || exp === "" || act === null || act === undefined || act === "") {
+    return false;
+  }
+  if (typeof exp === "boolean" || typeof act === "boolean") return false;
+  const expNum = typeof exp === "number" ? exp : Number(exp);
+  const actNum = typeof act === "number" ? act : Number(act);
+  if (Number.isFinite(expNum) && Number.isFinite(actNum)) {
+    const computed = actNum - expNum;
+    if (Math.abs(computed) <= COMPARISON_TOLERANCE) return false;
+    for (const key of ["delta", "difference"] as const) {
+      if (item[key] !== null && item[key] !== undefined) {
+        const val = typeof item[key] === "number" ? (item[key] as number) : Number(item[key]);
+        if (!Number.isFinite(val) || Math.abs(val - computed) > COMPARISON_TOLERANCE) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  return String(exp) !== String(act);
+}
+
+function formatDiscrepancyItem(item: Record<string, unknown>, t: T): string {
+  const checkKey = String(item.check ?? "").trim();
+  const checkLabel = t(`tradeJourneys.checks.${checkKey}`, { defaultValue: checkKey });
+  const exp = item.expected;
+  const act = item.actual;
+  const expNum = typeof exp === "number" ? exp : Number(exp);
+  const actNum = typeof act === "number" ? act : Number(act);
+  const rawDelta =
+    item.delta !== null && item.delta !== undefined
+      ? item.delta
+      : item.difference !== null && item.difference !== undefined
+        ? item.difference
+        : Number.isFinite(expNum) && Number.isFinite(actNum)
+          ? actNum - expNum
+          : null;
+  if (rawDelta !== null && rawDelta !== undefined && Number.isFinite(Number(rawDelta))) {
+    return t("tradeJourneys.outcome.comparedValuesDelta", {
+      check: checkLabel,
+      expected: formatAmount(exp),
+      actual: formatAmount(act),
+      delta: formatAmount(rawDelta),
+    });
+  }
+  return t("tradeJourneys.outcome.comparedValues", {
+    check: checkLabel,
+    expected: String(exp),
+    actual: String(act),
+  });
+}
+
+export function reconciliationAnalysisView(
+  input: ReconciliationEvidenceInput,
+  t: T,
+): ReconciliationAnalysisView {
+  const sep = t("tradeJourneys.listSep");
+  const rawCode = String(input.reason_code ?? "").trim();
+  const classification = String(input.classification ?? "").trim();
+  const detailItems = Array.isArray(input.reason_detail)
+    ? input.reason_detail.filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
+    : [];
+
+  const nonOkDetailItems = detailItems.filter(item => {
+    const st = String(item.status ?? "failed").toLowerCase();
+    return st !== "ok" && st !== "passed";
+  });
+
+  const hasBrokerUnavailableCheck = nonOkDetailItems.some(
+    item => String(item.check ?? "") === "broker_record" && String(item.status ?? "").toLowerCase() === "unavailable",
+  );
+  const onlyRuntimeHealthChecks =
+    nonOkDetailItems.length > 0 &&
+    nonOkDetailItems.every(item => RUNTIME_HEALTH_CHECKS.has(String(item.check ?? "").trim()));
+
+  const isBrokerDeferred =
+    classification === "broker_unavailable" ||
+    DEFERRED_BROKER_CODES.has(rawCode) ||
+    hasBrokerUnavailableCheck;
+  const isRuntimeDeferred =
+    !isBrokerDeferred &&
+    (classification === "runtime_health" ||
+      DEFERRED_RUNTIME_CODES.has(rawCode) ||
+      onlyRuntimeHealthChecks ||
+      input.kind === "reconciliation_deferred");
+
+  if (isBrokerDeferred || isRuntimeDeferred) {
+    const effectiveCode = isBrokerDeferred
+      ? "broker_unavailable_at_reconciliation"
+      : "runtime_unhealthy_at_reconciliation";
+    const baseReason = t(`tradeJourneys.reasons.${effectiveCode}`);
+    const checkLabels: string[] = [];
+    for (const item of nonOkDetailItems) {
+      const checkKey = String(item.check ?? "").trim();
+      if (!checkKey) continue;
+      const checkLabel = t(`tradeJourneys.checks.${checkKey}`, { defaultValue: checkKey });
+      const httpMatch = /\b([45]\d\d)\b/.exec(String(item.error ?? item.detail ?? ""));
+      const formatted = httpMatch
+        ? t("tradeJourneys.outcome.checkWithHttp", { check: checkLabel, status: httpMatch[1] })
+        : checkLabel;
+      if (!checkLabels.includes(formatted)) checkLabels.push(formatted);
+    }
+    let sentence = baseReason;
+    if (checkLabels.length > 0) {
+      sentence = `${sentence}（${t("tradeJourneys.outcome.deferredChecks", { checks: checkLabels.join(sep) })}）`;
+    }
+    const missingPhrase = missingEvidenceText(input.missing_evidence, t);
+    if (missingPhrase) {
+      sentence = `${sentence} · ${missingPhrase}`;
+    }
+    return {
+      kind: "reconciliation_deferred",
+      isDeferred: true,
+      isUnverified: false,
+      isProvenVariance: false,
+      tone: "amber",
+      stageTone: "warning",
+      badge: t("tradeJourneys.outcome.deferred"),
+      stageStatusLabel: t("tradeJourneys.stageStatuses.reconciliationPending"),
+      sentence,
+    };
+  }
+
+  // Determine proven discrepancies vs unverified checks
+  const rawDiscrepancies =
+    Array.isArray(input.discrepancies) && input.discrepancies.length > 0
+      ? input.discrepancies.filter((x): x is JourneyDiscrepancy => Boolean(x) && typeof x === "object")
+      : classification === "" && input.accounting_variance !== false
+        ? detailItems
+        : [];
+  const validDiscrepancies = rawDiscrepancies.filter(isValidDiscrepancyRecord);
+
+  const isProvenVariance =
+    validDiscrepancies.length > 0 &&
+    classification !== "unverified_evidence" &&
+    input.accounting_variance !== false &&
+    input.comparison_completed !== false;
+
+  if (isProvenVariance) {
+    const formattedValues = validDiscrepancies.map(d => formatDiscrepancyItem(d, t)).join(sep);
+    let sentence: string;
+    if (SPECIFIC_VARIANCE_CODES.has(rawCode)) {
+      const reasonLabel = t(`tradeJourneys.reasons.${rawCode}`);
+      sentence = t("tradeJourneys.outcome.varianceWithReasonAndValues", {
+        reason: reasonLabel,
+        values: formattedValues,
+      });
+    } else {
+      sentence = t("tradeJourneys.outcome.varianceChecks", { checks: formattedValues });
+    }
+    const missingPhrase = missingEvidenceText(input.missing_evidence, t);
+    if (missingPhrase) {
+      sentence = `${sentence} · ${missingPhrase}`;
+    }
+    return {
+      kind: "variance",
+      isDeferred: false,
+      isUnverified: false,
+      isProvenVariance: true,
+      tone: "amber",
+      stageTone: "danger",
+      badge: undefined,
+      stageStatusLabel: statusLabel("failed", t),
+      sentence,
+    };
+  }
+
+  // Unverified / insufficient evidence on reconciliation
+  const effectiveCode =
+    SPECIFIC_VARIANCE_CODES.has(rawCode)
+      ? "reconciliation_evidence_incomplete"
+      : rawCode || "reason_not_recorded";
+  const unverifiedClaimCode =
+    input.unverified_reason_code ||
+    (SPECIFIC_VARIANCE_CODES.has(rawCode) ? rawCode : null);
+
+  const parts: string[] = [];
+  const baseReason = (KNOWN_REASON_CODES as readonly string[]).includes(effectiveCode)
+    ? t(`tradeJourneys.reasons.${effectiveCode}`)
+    : t("tradeJourneys.reasons.unknown", { code: effectiveCode });
+  if (baseReason) parts.push(baseReason);
+
+  if (unverifiedClaimCode) {
+    const claimLabel = (KNOWN_REASON_CODES as readonly string[]).includes(unverifiedClaimCode)
+      ? t(`tradeJourneys.reasons.${unverifiedClaimCode}`)
+      : unverifiedClaimCode;
+    parts.push(t("tradeJourneys.outcome.unverifiedClaim", { reason: claimLabel }));
+  }
+
+  const inferredMissing: string[] = Array.isArray(input.missing_evidence)
+    ? input.missing_evidence.map(x => String(x ?? "").trim()).filter(Boolean)
+    : [];
+
+  for (const item of nonOkDetailItems) {
+    const checkKey = String(item.check ?? "").trim();
+    if (!checkKey) continue;
+    const checkLabel = t(`tradeJourneys.checks.${checkKey}`, { defaultValue: checkKey });
+    const hasExp = hasValue(item.expected);
+    const hasAct = hasValue(item.actual);
+    if (hasExp || hasAct) {
+      const expText = hasExp ? formatAmount(item.expected) : t("tradeJourneys.outcome.missingSideValue");
+      const actText = hasAct ? formatAmount(item.actual) : t("tradeJourneys.outcome.missingSideValue");
+      const rawDelta = item.delta ?? item.difference;
+      if (hasExp && hasAct && hasValue(rawDelta)) {
+        parts.push(
+          t("tradeJourneys.outcome.conflictingCheckValues", {
+            check: checkLabel,
+            expected: expText,
+            actual: actText,
+            delta: formatAmount(rawDelta),
+          }),
+        );
+        if (!inferredMissing.some(m => m.startsWith(`${checkKey}:`))) {
+          inferredMissing.push(`${checkKey}:conflicting_delta`);
+        }
+      } else {
+        parts.push(
+          t("tradeJourneys.outcome.partialCheckValues", {
+            check: checkLabel,
+            expected: expText,
+            actual: actText,
+          }),
+        );
+        if (!hasExp && !inferredMissing.includes(`${checkKey}:expected`)) {
+          inferredMissing.push(`${checkKey}:expected`);
+        }
+        if (!hasAct && !inferredMissing.includes(`${checkKey}:actual`)) {
+          inferredMissing.push(`${checkKey}:actual`);
+        }
+      }
+    } else {
+      parts.push(checkLabel);
+    }
+  }
+
+  if (inferredMissing.length === 0) {
+    if (effectiveCode === "reason_not_recorded") {
+      inferredMissing.push("reconciliation_reason", "booking_comparison");
+    } else if (effectiveCode === "reconciliation_identity_unverified") {
+      inferredMissing.push("authoritative_actual_identity");
+    } else {
+      inferredMissing.push("booking_comparison");
+    }
+  }
+
+  const missingPhrase = missingEvidenceText(inferredMissing, t);
+  if (missingPhrase) parts.push(missingPhrase);
+
+  return {
+    kind: "variance",
+    isDeferred: false,
+    isUnverified: true,
+    isProvenVariance: false,
+    tone: "amber",
+    stageTone: "warning",
+    badge: t("tradeJourneys.outcome.deferred"),
+    stageStatusLabel: t("tradeJourneys.stageStatuses.reconciliationPending"),
+    sentence: parts.join(" · "),
+  };
+}
+
+export type OutcomeTone = "gray" | "red" | "amber" | "neutral";
+export interface OutcomeView {
+  kind: JourneyOutcome["kind"];
+  tone: OutcomeTone;
+  badge?: string;
+  sentence: string;
+  isDeferred?: boolean;
+  isUnverified?: boolean;
+  isProvenVariance?: boolean;
+  isPreBrokerRefusal?: boolean;
+}
+
+/** One plain sentence for the status cell and summary banner; undefined when the row carries no outcome worth replacing the status badge for. */
 export function outcomeView(row: JourneyRow, t: T): OutcomeView | undefined {
   const outcome = row.outcome;
   if (!outcome || outcome.kind === "normal") return undefined;
-  const reason = reasonText(outcome.reason_code, outcome.reason_detail, t);
   switch (outcome.kind) {
-    case "no_trade":
+    case "no_trade": {
+      const reason = reasonText(outcome.reason_code, outcome.reason_detail, t, outcome.missing_evidence);
       return { kind: outcome.kind, tone: "gray", badge: t("tradeJourneys.outcome.noTrade"), sentence: reason };
-    case "rejected":
-      return { kind: outcome.kind, tone: "red", sentence: t("tradeJourneys.outcome.rejected", { reason }) };
-    case "reconciliation_deferred":
-      return { kind: outcome.kind, tone: "amber", badge: t("tradeJourneys.outcome.deferred"), sentence: reason };
-    case "variance": {
-      const checks = failedChecks(outcome.reason_detail, t);
-      return { kind: outcome.kind, tone: "amber", sentence: checks.length ? t("tradeJourneys.outcome.varianceChecks", { checks: checks.join("、") }) : t("tradeJourneys.outcome.variance", { reason }) };
     }
-    case "open":
+    case "rejected": {
+      const preBroker = isPreBrokerRefusal(row);
+      const rawCode = String(outcome.reason_code ?? "").trim();
+      const isMissingReason =
+        !rawCode ||
+        rawCode === "reason_not_recorded" ||
+        (EXPRESSION_CHOICE_CODES as readonly string[]).includes(rawCode);
+      const missingList =
+        Array.isArray(outcome.missing_evidence) && outcome.missing_evidence.length > 0
+          ? outcome.missing_evidence
+          : isMissingReason
+            ? ["reject_reason"]
+            : undefined;
+      const reason = reasonText(outcome.reason_code, outcome.reason_detail, t, missingList);
+      let sentence: string;
+      if (preBroker) {
+        const stageLabel = t("tradeJourneys.stages.risk_evaluation");
+        sentence = t("tradeJourneys.outcome.preBrokerRejected", { stage: stageLabel, reason });
+      } else if (outcome.rejected_stage === "broker_acknowledgement") {
+        const stageLabel = t("tradeJourneys.stages.broker_acknowledgement");
+        sentence = t("tradeJourneys.outcome.brokerRejected", { stage: stageLabel, reason });
+      } else if (outcome.rejected_stage) {
+        const stageLabel = t(`tradeJourneys.stages.${outcome.rejected_stage}`, {
+          defaultValue: outcome.rejected_stage,
+        });
+        sentence = t("tradeJourneys.outcome.stageRejected", { stage: stageLabel, reason });
+      } else {
+        sentence = t("tradeJourneys.outcome.rejected", { reason });
+      }
+      return {
+        kind: outcome.kind,
+        tone: "red",
+        sentence,
+        isPreBrokerRefusal: preBroker,
+      };
+    }
+    case "reconciliation_deferred":
+    case "variance": {
+      const recon = reconciliationAnalysisView(outcome, t);
+      return {
+        kind: recon.kind,
+        tone: recon.tone,
+        badge: recon.badge,
+        sentence: recon.sentence,
+        isDeferred: recon.isDeferred,
+        isUnverified: recon.isUnverified,
+        isProvenVariance: recon.isProvenVariance,
+      };
+    }
+    case "open": {
+      const reason = reasonText(outcome.reason_code, outcome.reason_detail, t, outcome.missing_evidence);
       return reason ? { kind: outcome.kind, tone: "neutral", sentence: reason } : undefined;
+    }
     default:
       return undefined;
   }
@@ -112,21 +654,384 @@ export function nextStepHref(href: string): string {
   return `/management${href}`;
 }
 
-export const KNOWN_ACTION_CODES = ["review_open_incident", "review_cash_and_risk_limits", "review_reconciliation_variance"] as const;
+export const KNOWN_ACTION_CODES = [
+  "review_open_incident",
+  "review_cash_and_risk_limits",
+  "review_reconciliation_variance",
+] as const;
 
-/** The BFF sends next_step.action_needed as a code; show words, and name the code when it is unknown. */
-export function actionText(code: string, t: T): string {
-  if ((KNOWN_ACTION_CODES as readonly string[]).includes(code)) return t(`tradeJourneys.actions.${code}`);
-  return t("tradeJourneys.actions.unknown", { code });
+/** The BFF sends next_step.action_needed as a code; show words grounded in the identified cause, and name the code when it is unknown. */
+export function actionText(code: string, t: T, row?: JourneyRow): string {
+  if (!(KNOWN_ACTION_CODES as readonly string[]).includes(code)) {
+    return t("tradeJourneys.actions.unknown", { code });
+  }
+  const outcome = row?.outcome;
+  if (code === "review_open_incident" && outcome) {
+    const recon =
+      outcome.kind === "variance" || outcome.kind === "reconciliation_deferred"
+        ? reconciliationAnalysisView(outcome, t)
+        : undefined;
+    if (recon?.isUnverified) {
+      return t("tradeJourneys.actions.review_open_incident_missing_evidence");
+    }
+  }
+  if (code === "review_reconciliation_variance" && outcome) {
+    const recon = reconciliationAnalysisView(outcome, t);
+    if (recon.isUnverified) {
+      return t("tradeJourneys.actions.review_missing_reconciliation_evidence");
+    }
+  }
+  if (code === "review_cash_and_risk_limits" && outcome) {
+    const rawCode = String(outcome.reason_code ?? "").trim();
+    if (POSITION_REJECT_CODES.has(rawCode)) {
+      return t("tradeJourneys.actions.review_position_and_order_limits");
+    }
+    const isMissingReason =
+      !rawCode ||
+      rawCode === "reason_not_recorded" ||
+      (EXPRESSION_CHOICE_CODES as readonly string[]).includes(rawCode) ||
+      (Array.isArray(outcome.missing_evidence) && outcome.missing_evidence.includes("reject_reason"));
+    if (isMissingReason) {
+      return t("tradeJourneys.actions.review_missing_rejection_evidence");
+    }
+  }
+  return t(`tradeJourneys.actions.${code}`);
 }
 
 /** Stage and timeline statuses in words and tone, through the shared enum helper. */
-export function stageStatusView(status: string | null | undefined, t: T): { label: string; tone: EnumTone } {
+export function stageStatusView(
+  status: string | null | undefined,
+  t: T,
+  stage?: string | null,
+): { label: string; tone: EnumTone } {
+  const normStatus = String(status ?? "").trim().toLowerCase();
+  if (stage === "risk_evaluation" && normStatus === "rejected") {
+    return { label: t("tradeJourneys.stageStatuses.riskRejected"), tone: "danger" };
+  }
+  if (stage === "broker_acknowledgement" && normStatus === "rejected") {
+    return { label: t("tradeJourneys.stageStatuses.brokerRejected"), tone: "danger" };
+  }
+  if (normStatus === "not_submitted") {
+    return { label: t("tradeJourneys.stageStatuses.notSubmitted"), tone: "paused" };
+  }
   return { label: statusLabel(status, t), tone: statusTone(status) };
 }
 
+/** Normalizes detail stages and timeline items so pre-broker refusals and reconciliation causes render consistently across banner, stages, and timeline. */
+export function resolveDetailStagesAndTimeline(
+  row: JourneyDetail | undefined,
+  timelineItems: JourneyTimelineEvent[] | undefined,
+  t: T,
+): {
+  stages: Record<string, JourneyStage>;
+  stageViews: Record<string, { label: string; tone: EnumTone; reason?: string }>;
+  timeline: Array<
+    JourneyTimelineEvent & {
+      displayStage?: string;
+      displayStatusLabel: string;
+      displayReason?: string;
+    }
+  >;
+} {
+  const rawStages: Record<string, JourneyStage> = {};
+  for (const [k, v] of Object.entries(row?.stages ?? {})) {
+    if (v && typeof v === "object") rawStages[k] = { ...v };
+  }
+  const items = (timelineItems ?? []).map(item => ({ ...item }));
+  const preBroker = isPreBrokerRefusal(row);
+
+  if (preBroker && row) {
+    const subStage = rawStages.order_submission;
+    const subEvent = row.stage_events?.order_submission;
+    const riskEvent = row.stage_events?.risk_evaluation;
+    const outcome = row.outcome;
+    const rawReasonCode =
+      rawStages.risk_evaluation?.reason_code ??
+      riskEvent?.reason_code ??
+      outcome?.reason_code ??
+      subStage?.reason_code ??
+      subEvent?.reason_code ??
+      "reason_not_recorded";
+    const effReasonCode = (EXPRESSION_CHOICE_CODES as readonly string[]).includes(String(rawReasonCode))
+      ? "reason_not_recorded"
+      : rawReasonCode;
+    const effDetail =
+      rawStages.risk_evaluation?.reason_detail ??
+      riskEvent?.reason_detail ??
+      outcome?.reason_detail ??
+      subStage?.reason_detail ??
+      subEvent?.reason_detail ??
+      null;
+    const effMissing =
+      rawStages.risk_evaluation?.missing_evidence ??
+      riskEvent?.missing_evidence ??
+      outcome?.missing_evidence ??
+      (effReasonCode === "reason_not_recorded" ? ["reject_reason"] : undefined);
+
+    rawStages.risk_evaluation = {
+      ...rawStages.risk_evaluation,
+      status: "rejected",
+      reason_code: effReasonCode,
+      reason_detail: effDetail,
+      missing_evidence: effMissing,
+      submitted_to_broker: false,
+      order_status: "not_submitted",
+      updated_at: rawStages.risk_evaluation?.updated_at ?? subStage?.updated_at,
+    };
+    rawStages.order_submission = {
+      ...subStage,
+      status: "not_submitted",
+      order_status: "not_submitted",
+      submitted_to_broker: false,
+      reason_code: undefined,
+      reason_detail: undefined,
+    };
+
+    for (const ev of items) {
+      const isRejEv =
+        ev.event_type === "order_rejection" ||
+        ev.event_type === "order_rejection_simulated" ||
+        (ev.stage === "order_submission" && (ev.stage_status === "failed" || ev.stage_status === "rejected")) ||
+        (ev.stage === "risk_evaluation" && (ev.stage_status === "rejected" || ev.stage_status === "failed"));
+      if (isRejEv) {
+        ev.stage = "risk_evaluation";
+        ev.stage_status = "rejected";
+        ev.status = "rejected";
+        ev.submitted_to_broker = false;
+        ev.order_status = "not_submitted";
+        ev.reason_code =
+          ev.reason_code && !(EXPRESSION_CHOICE_CODES as readonly string[]).includes(ev.reason_code)
+            ? ev.reason_code
+            : effReasonCode;
+        ev.reason_detail = ev.reason_detail ?? effDetail;
+        ev.missing_evidence = ev.missing_evidence ?? effMissing;
+      }
+    }
+  }
+
+  // Merge stage reasons and status views
+  const stageViews: Record<string, { label: string; tone: EnumTone; reason?: string }> = {};
+  const allStageNames = new Set([
+    "signal_generation",
+    "trade_decision",
+    "risk_evaluation",
+    "order_submission",
+    "broker_acknowledgement",
+    "fill_management",
+    "ledger_booking",
+    "reconciliation",
+    ...Object.keys(rawStages),
+  ]);
+
+  for (const stage of allStageNames) {
+    const stInfo = rawStages[stage];
+    const stEv = row?.stage_events?.[stage];
+    const tlEv = [...items].reverse().find(e => e.stage === stage);
+    const status = stInfo?.status;
+
+    if (stage === "reconciliation") {
+      const mergedRecon: ReconciliationEvidenceInput = {
+        kind:
+          row?.outcome?.kind === "reconciliation_deferred" || row?.outcome?.kind === "variance"
+            ? row.outcome.kind
+            : undefined,
+        classification:
+          stInfo?.classification ??
+          stEv?.classification ??
+          tlEv?.classification ??
+          row?.outcome?.classification,
+        accounting_variance:
+          stInfo?.accounting_variance ??
+          stEv?.accounting_variance ??
+          tlEv?.accounting_variance ??
+          row?.outcome?.accounting_variance,
+        comparison_completed:
+          stInfo?.comparison_completed ??
+          stEv?.comparison_completed ??
+          tlEv?.comparison_completed ??
+          row?.outcome?.comparison_completed,
+        reason_code:
+          stInfo?.reason_code ??
+          stEv?.reason_code ??
+          tlEv?.reason_code ??
+          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
+            ? row.outcome.reason_code
+            : undefined),
+        reason_detail:
+          stInfo?.reason_detail ??
+          stEv?.reason_detail ??
+          tlEv?.reason_detail ??
+          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
+            ? row.outcome.reason_detail
+            : undefined),
+        discrepancies:
+          stInfo?.discrepancies ??
+          stEv?.discrepancies ??
+          tlEv?.discrepancies ??
+          row?.outcome?.discrepancies,
+        missing_evidence:
+          stInfo?.missing_evidence ??
+          stEv?.missing_evidence ??
+          tlEv?.missing_evidence ??
+          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
+            ? row.outcome.missing_evidence
+            : undefined),
+        unverified_reason_code:
+          stInfo?.unverified_reason_code ??
+          stEv?.unverified_reason_code ??
+          tlEv?.unverified_reason_code ??
+          row?.outcome?.unverified_reason_code,
+      };
+      const hasReconFailure =
+        status === "failed" ||
+        status === "completed_with_variance" ||
+        row?.outcome?.kind === "variance" ||
+        row?.outcome?.kind === "reconciliation_deferred" ||
+        tlEv?.stage_status === "failed" ||
+        tlEv?.event_type === "reconciliation_failed";
+
+      if (hasReconFailure && (status || tlEv || row?.outcome)) {
+        const reconView = reconciliationAnalysisView(mergedRecon, t);
+        stageViews[stage] = {
+          label: status ? reconView.stageStatusLabel : t("tradeJourneys.detail.unknownStatus"),
+          tone: status ? reconView.stageTone : "neutral",
+          reason: reconView.sentence,
+        };
+        continue;
+      }
+    }
+
+    const baseView = stageStatusView(status, t, stage);
+    let reason: string | undefined;
+    if (stage !== "order_submission" || status !== "not_submitted") {
+      const code = stInfo?.reason_code ?? tlEv?.reason_code ?? stEv?.reason_code;
+      const detail = stInfo?.reason_detail ?? tlEv?.reason_detail ?? stEv?.reason_detail;
+      const missing = stInfo?.missing_evidence ?? tlEv?.missing_evidence ?? stEv?.missing_evidence;
+      if (code || (Array.isArray(missing) && missing.length > 0)) {
+        reason = reasonText(code, detail, t, missing);
+      }
+    }
+    stageViews[stage] = {
+      label: status ? baseView.label : t("tradeJourneys.detail.unknownStatus"),
+      tone: baseView.tone,
+      reason,
+    };
+  }
+
+  const resolvedTimeline = items.map(ev => {
+    const stage = ev.stage;
+    if (
+      stage === "risk_evaluation" &&
+      (ev.stage_status === "rejected" || ev.submitted_to_broker === false || ev.order_status === "not_submitted")
+    ) {
+      const riskLabel = t("tradeJourneys.stageStatuses.riskRejected");
+      const notSubLabel =
+        ev.submitted_to_broker === false || ev.order_status === "not_submitted"
+          ? ` · ${t("tradeJourneys.stageStatuses.notSubmitted")}`
+          : "";
+      const rawCode = String(ev.reason_code ?? "").trim();
+      const isMissingReason =
+        !rawCode ||
+        rawCode === "reason_not_recorded" ||
+        (EXPRESSION_CHOICE_CODES as readonly string[]).includes(rawCode);
+      const effMissing =
+        Array.isArray(ev.missing_evidence) && ev.missing_evidence.length > 0
+          ? ev.missing_evidence
+          : isMissingReason
+            ? ["reject_reason"]
+            : undefined;
+      return {
+        ...ev,
+        displayStage: stage,
+        displayStatusLabel: `${riskLabel}${notSubLabel}`,
+        displayReason: reasonText(ev.reason_code || "reason_not_recorded", ev.reason_detail, t, effMissing),
+      };
+    }
+
+    if (
+      stage === "reconciliation" &&
+      (ev.stage_status === "failed" ||
+        ev.event_type === "reconciliation_failed" ||
+        ev.reason_code ||
+        ev.reason_detail ||
+        row?.outcome?.kind === "variance" ||
+        row?.outcome?.kind === "reconciliation_deferred")
+    ) {
+      const stInfo = rawStages.reconciliation;
+      const mergedRecon: ReconciliationEvidenceInput = {
+        kind:
+          row?.outcome?.kind === "reconciliation_deferred" || row?.outcome?.kind === "variance"
+            ? row.outcome.kind
+            : undefined,
+        classification: ev.classification ?? stInfo?.classification ?? row?.outcome?.classification,
+        accounting_variance:
+          ev.accounting_variance ?? stInfo?.accounting_variance ?? row?.outcome?.accounting_variance,
+        comparison_completed:
+          ev.comparison_completed ?? stInfo?.comparison_completed ?? row?.outcome?.comparison_completed,
+        reason_code:
+          ev.reason_code ??
+          stInfo?.reason_code ??
+          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
+            ? row.outcome.reason_code
+            : undefined),
+        reason_detail:
+          ev.reason_detail ??
+          stInfo?.reason_detail ??
+          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
+            ? row.outcome.reason_detail
+            : undefined),
+        discrepancies: ev.discrepancies ?? stInfo?.discrepancies ?? row?.outcome?.discrepancies,
+        missing_evidence:
+          ev.missing_evidence ??
+          stInfo?.missing_evidence ??
+          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
+            ? row.outcome.missing_evidence
+            : undefined),
+        unverified_reason_code:
+          ev.unverified_reason_code ?? stInfo?.unverified_reason_code ?? row?.outcome?.unverified_reason_code,
+      };
+      const isFailureOrReconOutcome =
+        ev.stage_status === "failed" ||
+        ev.event_type === "reconciliation_failed" ||
+        Boolean(ev.reason_code) ||
+        Boolean(ev.reason_detail);
+      if (isFailureOrReconOutcome) {
+        const reconView = reconciliationAnalysisView(mergedRecon, t);
+        return {
+          ...ev,
+          displayStage: stage,
+          displayStatusLabel: reconView.stageStatusLabel,
+          displayReason: reconView.sentence,
+        };
+      }
+    }
+
+    const baseStatus = ev.stage_status
+      ? stageStatusView(ev.stage_status, t, stage).label
+      : t("tradeJourneys.detail.unknownStageStatus");
+    const displayReason =
+      ev.reason_code || (Array.isArray(ev.missing_evidence) && ev.missing_evidence.length > 0)
+        ? reasonText(ev.reason_code, ev.reason_detail, t, ev.missing_evidence)
+        : undefined;
+    return {
+      ...ev,
+      displayStage: stage,
+      displayStatusLabel: baseStatus,
+      displayReason,
+    };
+  });
+
+  return { stages: rawStages, stageViews, timeline: resolvedTimeline };
+}
+
 /** Producers with a plain-name entry under `tradeJourneys.sources`. */
-export const KNOWN_SOURCES = ["execution.paper_runtime", "broker.paper_sidecar", "reconciliation-drift.scheduled", "canonical.lifecycle_projector", "canonical.telemetry"] as const;
+export const KNOWN_SOURCES = [
+  "execution.paper_runtime",
+  "broker.paper_sidecar",
+  "reconciliation-drift.scheduled",
+  "canonical.lifecycle_projector",
+  "canonical.telemetry",
+] as const;
 
 /** A producer's plain name; "" (render nothing) when the source is missing or not one we can name. */
 export function sourceText(source: string | null | undefined, t: T): string {
@@ -137,5 +1042,7 @@ export function sourceText(source: string | null | undefined, t: T): string {
 /** Row/page read_state in words; never the raw partial/degraded word. */
 export function readStateText(state: string | null | undefined, t: T): string {
   const key = String(state || "").toLowerCase();
-  return ["partial", "degraded", "unavailable"].includes(key) ? t(`tradeJourneys.readStates.${key}`) : t("tradeJourneys.readStates.other");
+  return ["partial", "degraded", "unavailable"].includes(key)
+    ? t(`tradeJourneys.readStates.${key}`)
+    : t("tradeJourneys.readStates.other");
 }
