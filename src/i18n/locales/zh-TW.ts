@@ -4095,8 +4095,30 @@ export default {
       emptyBody: "此環境目前尚未設定任何資料源。點擊「新增資料源」以註冊新的連接器實例。",
       liveDataUnavailableTitle: "目前沒有 live 資料源資料",
       liveDataUnavailableBody: "此頁不顯示 demo、seed 或非正式資料源列。",
+      degradedBannerTitle: "資料源表面降級",
+      degradedBannerDesc: "資料源表面目前處於降級狀態；在完成即時驗證前，未確認的計數不會顯示為 0。",
       degradedLegacyBannerTitle: "舊版相容投影模式",
       degradedLegacyBannerDesc: "部分資料源紀錄來自舊版 Fleet 狀態投影，未包含完整 V2 生命週期屬性。",
+      notReported: "未回報",
+      surfaceStatus: {
+        unavailable: "不可用（無法讀取）",
+        degraded: "降級",
+      },
+      surfaceStateFmt: "表面狀態：{{state}}",
+      surfaceReasonFmt: "原因：{{reason}}",
+      surfaceSourceFmt: "資料來源：{{source}}",
+      legacyProjectionBadge: "舊版相容投影 (legacy_projection)",
+      legacyProjectionSource: "legacy_projection",
+      reasons: {
+        empty_v2_store_legacy_projection:
+          "V2 資料源管理儲存區為空（0 個實例），目前改由舊版相容投影（legacy_projection）提供連接器註冊表資料。",
+        source_ingest_registry_unavailable:
+          "資料源擷取註冊表不可用或尚未設定。",
+        source_ingest_registry_empty:
+          "資料源擷取註冊表可讀但目前為空。",
+        management_data_sources_unavailable:
+          "資料來源管理服務目前不可用。",
+      },
       allSources: "全部",
       focusLoadingFmt: "正在載入 Persona {{persona}} 的資料源列 · 資料源：{{source}}…",
       focusedFmt: "已聚焦 Persona：{{persona}} · 資料源：{{source}} · {{count}} 筆匹配資料源",

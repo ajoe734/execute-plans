@@ -440,11 +440,235 @@ const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
 
 const asStr = (...values: unknown[]): string | undefined => {
   for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "string" && value.trim()) {
+      const trimmed = value.trim();
+      if (!["nan", "undefined", "null"].includes(trimmed.toLowerCase())) {
+        return trimmed;
+      }
+    }
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
   }
   return undefined;
 };
+
+export type DataSourceSurfaceStatus = "ok" | "degraded" | "unavailable" | "loading";
+
+export interface DataSourceSurfaceResolution {
+  status: DataSourceSurfaceStatus;
+  rawStatus: string;
+  source: string;
+  reasonCode?: string;
+  rawReason?: string;
+  message?: string;
+  isUnavailable: boolean;
+  isDegraded: boolean;
+  isLegacyProjection: boolean;
+  isAuthoritativeEmpty: boolean;
+}
+
+export function normalizeDataSourceReasonCode(rawReason?: string | null): string | undefined {
+  const cleaned = asStr(rawReason);
+  if (!cleaned) return undefined;
+  const lower = cleaned.toLowerCase();
+  if (
+    lower.includes("v2 source management store is empty") ||
+    lower === "empty_v2_store_legacy_projection" ||
+    lower === "legacy_projection"
+  ) {
+    return "empty_v2_store_legacy_projection";
+  }
+  if (
+    lower.includes("source-ingest registry is unavailable or unconfigured") ||
+    lower === "source_ingest_registry_unavailable"
+  ) {
+    return "source_ingest_registry_unavailable";
+  }
+  if (
+    lower.includes("source-ingest registry is readable but currently empty") ||
+    lower === "source_ingest_registry_empty"
+  ) {
+    return "source_ingest_registry_empty";
+  }
+  if (
+    lower.includes("management data sources are currently unavailable") ||
+    lower === "management_data_sources_unavailable"
+  ) {
+    return "management_data_sources_unavailable";
+  }
+  return cleaned;
+}
+
+export function extractDataSourceEnvelopeItems<T = unknown>(input: unknown): T[] {
+  const root = isObjectRecord(input) ? input : undefined;
+  if (Array.isArray(root?.items)) return root.items as T[];
+  const nestedData = isObjectRecord(root?.data) ? (root.data as Record<string, unknown>) : undefined;
+  if (Array.isArray(nestedData?.items)) return nestedData.items as T[];
+  return [];
+}
+
+export function resolveDataSourceSurfaceState(
+  input: unknown,
+  opts?: { loading?: boolean; itemCount?: number; hasLegacyItems?: boolean },
+): DataSourceSurfaceResolution {
+  const root = isObjectRecord(input) ? input : undefined;
+  const nestedData = isObjectRecord(root?.data) ? (root.data as Record<string, unknown>) : undefined;
+  const summary = isObjectRecord(nestedData?.summary)
+    ? (nestedData.summary as Record<string, unknown>)
+    : isObjectRecord(root?.summary)
+      ? (root.summary as Record<string, unknown>)
+      : undefined;
+  const meta = isObjectRecord(root?.meta)
+    ? (root.meta as Record<string, unknown>)
+    : isObjectRecord(nestedData?.meta)
+      ? (nestedData.meta as Record<string, unknown>)
+      : undefined;
+  const surfaces = isObjectRecord(meta?.surfaces)
+    ? (meta.surfaces as Record<string, unknown>)
+    : undefined;
+  const dsSurface = isObjectRecord(surfaces?.data_sources)
+    ? (surfaces.data_sources as Record<string, unknown>)
+    : undefined;
+  const degradation = isObjectRecord(meta?.degradation)
+    ? (meta.degradation as Record<string, unknown>)
+    : undefined;
+
+  const rawItems = Array.isArray(root?.items)
+    ? root.items
+    : Array.isArray(nestedData?.items)
+      ? nestedData.items
+      : undefined;
+  const itemCount = opts?.itemCount ?? (rawItems ? rawItems.length : 0);
+
+  const statusCandidates = [
+    dsSurface?.status,
+    meta?.status,
+    nestedData?.status,
+    root?.status,
+    summary?.status,
+  ]
+    .map((v) => asStr(v))
+    .filter((v): v is string => Boolean(v));
+
+  const sourceCandidates = [
+    dsSurface?.source,
+    meta?.source,
+    nestedData?.source,
+    root?.source,
+    summary?.source,
+  ]
+    .map((v) => asStr(v))
+    .filter((v): v is string => Boolean(v));
+
+  const rawReason = asStr(
+    dsSurface?.reason,
+    meta?.reason,
+    degradation?.reason,
+    nestedData?.reason,
+    root?.reason,
+    summary?.reason,
+  );
+  const message = asStr(
+    dsSurface?.message,
+    meta?.message,
+    degradation?.message,
+    nestedData?.message,
+    root?.message,
+  );
+
+  const lowerStatuses = statusCandidates.map((s) => s.toLowerCase());
+  const lowerSources = sourceCandidates.map((s) => s.toLowerCase());
+
+  const isLegacyProjection =
+    lowerSources.includes("legacy_projection") || Boolean(opts?.hasLegacyItems);
+
+  const hasUnavailableStatus =
+    lowerStatuses.some((s) => s === "unavailable" || s === "error" || s === "failed") ||
+    (lowerStatuses.length === 0 &&
+      lowerSources.some((s) => s === "unavailable" || s === "missing"));
+
+  const hasDegradedStatus =
+    lowerStatuses.some(
+      (s) => s === "degraded" || s === "partial" || s === "warning" || s === "stale",
+    ) || isLegacyProjection;
+
+  const effectiveSource = isLegacyProjection
+    ? "legacy_projection"
+    : sourceCandidates[0] ?? (root ? "service_client" : "unavailable");
+
+  if (opts?.loading) {
+    return {
+      status: "loading",
+      rawStatus: statusCandidates[0] ?? "loading",
+      source: effectiveSource,
+      reasonCode: normalizeDataSourceReasonCode(rawReason ?? message),
+      rawReason,
+      message,
+      isUnavailable: false,
+      isDegraded: false,
+      isLegacyProjection,
+      isAuthoritativeEmpty: false,
+    };
+  }
+
+  if (!root || hasUnavailableStatus) {
+    const fallbackUnavailableReason =
+      effectiveSource.toLowerCase() === "missing"
+        ? "not_configured"
+        : "datasource_unavailable";
+    const reasonCode =
+      normalizeDataSourceReasonCode(rawReason) ??
+      normalizeDataSourceReasonCode(message) ??
+      fallbackUnavailableReason;
+    return {
+      status: "unavailable",
+      rawStatus: statusCandidates[0] ?? "unavailable",
+      source: effectiveSource,
+      reasonCode,
+      rawReason,
+      message,
+      isUnavailable: true,
+      isDegraded: false,
+      isLegacyProjection: false,
+      isAuthoritativeEmpty: false,
+    };
+  }
+
+  if (hasDegradedStatus) {
+    const fallbackDegradedReason = isLegacyProjection
+      ? "empty_v2_store_legacy_projection"
+      : "degraded_source";
+    const reasonCode =
+      normalizeDataSourceReasonCode(rawReason) ??
+      normalizeDataSourceReasonCode(message) ??
+      fallbackDegradedReason;
+    return {
+      status: "degraded",
+      rawStatus: statusCandidates[0] ?? "degraded",
+      source: effectiveSource,
+      reasonCode,
+      rawReason,
+      message,
+      isUnavailable: false,
+      isDegraded: true,
+      isLegacyProjection,
+      isAuthoritativeEmpty: false,
+    };
+  }
+
+  const isAuthoritativeEmpty = itemCount === 0 && Array.isArray(rawItems);
+  return {
+    status: "ok",
+    rawStatus: statusCandidates[0] ?? "ok",
+    source: effectiveSource,
+    reasonCode: normalizeDataSourceReasonCode(rawReason),
+    rawReason,
+    message,
+    isUnavailable: false,
+    isDegraded: false,
+    isLegacyProjection: false,
+    isAuthoritativeEmpty,
+  };
+}
 
 const asBool = (value: unknown, fallback = false): boolean =>
   typeof value === "boolean" ? value : fallback;

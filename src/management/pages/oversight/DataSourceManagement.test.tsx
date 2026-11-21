@@ -242,7 +242,7 @@ describe("DataSourceManagementPage", () => {
     expect(screen.queryByText("Pantheon bounded external feed")).not.toBeInTheDocument();
   });
 
-  it("keeps summary-only focused personas scoped and renders nan instead of global data sources", () => {
+  it("keeps summary-only focused personas scoped and renders 未回報 instead of nan or global data sources", () => {
     mocks.useV5Live
       .mockReturnValueOnce({
         data: { items: [systemRecord()] },
@@ -277,7 +277,8 @@ describe("DataSourceManagementPage", () => {
     renderPage();
 
     expect(screen.getByText("1/2")).toBeInTheDocument();
-    expect(screen.getAllByText("nan").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("未回報").length).toBeGreaterThan(0);
+    expect(screen.queryByText("nan")).not.toBeInTheDocument();
     expect(screen.getAllByText("datasource smoke ok").length).toBeGreaterThan(0);
     expect(screen.getByText("Provider identities are not declared yet.")).toBeInTheDocument();
     expect(screen.queryByText("Pantheon bounded external feed")).not.toBeInTheDocument();
@@ -1488,9 +1489,10 @@ describe("DataSourceManagementPage", () => {
       );
 
       expect(screen.getByText("ds-partial-table-01")).toBeInTheDocument();
-      // Definition state and health must show unknown
-      const unknownBadges = screen.getAllByText("unknown");
-      expect(unknownBadges.length).toBeGreaterThanOrEqual(3);
+      // Definition state, lifecycle, and health missing sentinels must render 未回報 instead of unknown
+      const missingBadges = screen.getAllByText("未回報");
+      expect(missingBadges.length).toBeGreaterThanOrEqual(5);
+      expect(screen.queryByText("unknown")).not.toBeInTheDocument();
       // Must not render positive defaults
       expect(screen.queryByText("supported")).not.toBeInTheDocument();
       expect(screen.queryByText("converged")).not.toBeInTheDocument();
@@ -1595,8 +1597,8 @@ describe("DataSourceManagementPage", () => {
         expect(screen.getByRole("heading", { name: "ds-minimal-drawer" })).toBeInTheDocument();
       });
 
-      // Verify that partial drawer renders unknown and dash without positive truth fallbacks
-      expect(screen.getAllByText("unknown").length).toBeGreaterThanOrEqual(2);
+      // Verify that partial drawer renders 未回報 and dash without positive truth fallbacks
+      expect(screen.getAllByText("未回報").length).toBeGreaterThanOrEqual(2);
       expect(screen.queryByText("supported")).not.toBeInTheDocument();
       expect(screen.queryByText("converged")).not.toBeInTheDocument();
       expect(screen.queryByText("healthy")).not.toBeInTheDocument();
