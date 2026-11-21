@@ -22,6 +22,10 @@ export type MeetingsRead<T> =
 export const MEETINGS_REASON_UNKNOWN = "consultation_owner_unavailable";
 export const MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS = 2000;
 
+export function countMeetingReviewNoteChars(note: string): number {
+  return Array.from(note).length;
+}
+
 const PRIVATE_SCOPES = new Set([
   "persona_private",
   "private",
@@ -138,21 +142,21 @@ function stripPrivateMemoryInner<T>(obj: T, withheldIds: Set<string>): T {
           });
         continue;
       }
-      if ((k === "evidence_refs" || k === "citations") && Array.isArray(v) && withheldIds.size > 0) {
-        cleaned[k] = v.filter((entry) => {
-          if (typeof entry === "string") return !withheldIds.has(entry.trim());
-          if (isRecord(entry)) {
-            for (const rk of ["item_id", "id", "ref", "ref_id", "evidence_ref", "source_id", "record_id"]) {
-              const s = typeof entry[rk] === "string" ? entry[rk].trim() : "";
-              if (s && withheldIds.has(s)) return false;
-            }
-          }
-          return true;
-        });
-        continue;
-      }
-      const stripped = stripPrivateMemoryInner(v, withheldIds);
-      if (stripped !== undefined || v === null) {
+      const candidate =
+        (k === "evidence_refs" || k === "citations") && Array.isArray(v) && withheldIds.size > 0
+          ? v.filter((entry) => {
+              if (typeof entry === "string") return !withheldIds.has(entry.trim());
+              if (isRecord(entry)) {
+                for (const rk of ["item_id", "id", "ref", "ref_id", "evidence_ref", "source_id", "record_id"]) {
+                  const s = typeof entry[rk] === "string" ? entry[rk].trim() : "";
+                  if (s && withheldIds.has(s)) return false;
+                }
+              }
+              return true;
+            })
+          : v;
+      const stripped = stripPrivateMemoryInner(candidate, withheldIds);
+      if (stripped !== undefined || candidate === null) {
         cleaned[k] = stripped;
       }
     }
@@ -1055,10 +1059,7 @@ export async function reviewMeeting(
   if (!cleanNote) {
     return { state: "unavailable", reason: "review_note_required", owner: "consultation" };
   }
-  if (
-    Array.from(cleanNote).length > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS ||
-    cleanNote.length > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS
-  ) {
+  if (countMeetingReviewNoteChars(cleanNote) > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS) {
     return { state: "unavailable", reason: "review_note_too_long", owner: "consultation" };
   }
   if (shouldCheckLiveWriteGate()) {

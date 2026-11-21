@@ -29,6 +29,7 @@ import {
   buildFollowUpConveneInput,
   collectMeetingEvidenceRefs,
   conveneMeeting,
+  countMeetingReviewNoteChars,
   getMeetingDetail,
   normalizeOperatorReview,
   resolveMeetingReviewCause,
@@ -277,7 +278,7 @@ export const MeetingDetailPage = () => {
         (!hasExplicitOperatorRole && access.interactionAllowed === false)));
   const canWriteReview = (isUnmockedMockResolverSession || !access.loading) && !isReadOnlyViewer;
   const trimmedReviewNote = reviewNote.trim();
-  const reviewNoteCharCount = Array.from(trimmedReviewNote).length;
+  const reviewNoteCharCount = countMeetingReviewNoteChars(trimmedReviewNote);
   const followUpCenterHref = `/management/meetings?tab=upcoming&type=${encodeURIComponent(
     m.meeting_type || "MT-1",
   )}${m.chair_persona_id ? `&persona_id=${encodeURIComponent(m.chair_persona_id)}` : ""}&source_meeting_id=${encodeURIComponent(m.meeting_id)}`;
@@ -289,10 +290,7 @@ export const MeetingDetailPage = () => {
       setReviewError("review_note_required");
       return;
     }
-    if (
-      reviewNoteCharCount > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS ||
-      trimmedReviewNote.length > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS
-    ) {
+    if (reviewNoteCharCount > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS) {
       setReviewError("review_note_too_long");
       return;
     }

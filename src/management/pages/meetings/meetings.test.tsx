@@ -1362,12 +1362,28 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
     });
     expect(screen.getByTestId("meeting-review-form")).toBeInTheDocument();
 
-    // 3. First review submission fails; error reported truthfully and note preserved
-    const noteText =
-      "Both participants requested more research across two rounds; closing review with no proposal.";
+    // 2b. Supplementary-plane CJK/emoji Unicode code-point boundary: 2001 rejected before network, 2000 accepted
+    const supplementary2001 = "𠮷".repeat(1001) + "🧪".repeat(1000);
+    fireEvent.change(screen.getByTestId("meeting-review-note-input"), {
+      target: { value: supplementary2001 },
+    });
+    expect(screen.getByTestId("meeting-review-submit")).toBeDisabled();
+    fireEvent.submit(screen.getByTestId("meeting-review-form"));
+    expect(await screen.findByTestId("meeting-review-error")).toHaveTextContent(
+      "review_note_too_long",
+    );
+    expect(
+      calls.filter(
+        (c) => c.method === "POST" && c.path === "/bff/management/meetings/mtg-2c016da5651a0dc4/review",
+      ),
+    ).toHaveLength(0);
+
+    // 3. First review submission with 2000 supplementary-plane CJK/emoji characters (4000 UTF-16 units) reaches network and reports failure truthfully
+    const noteText = "𠮷".repeat(1000) + "🧪".repeat(1000);
     fireEvent.change(screen.getByTestId("meeting-review-note-input"), {
       target: { value: noteText },
     });
+    expect(screen.getByTestId("meeting-review-submit")).not.toBeDisabled();
     fireEvent.click(screen.getByTestId("meeting-review-submit"));
 
     const errBanner = await screen.findByTestId("meeting-review-error");

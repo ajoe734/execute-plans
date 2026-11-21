@@ -407,6 +407,78 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
     });
   });
 
+  it("stripPrivateMemory recursively sanitizes retained citation and evidence_ref objects even when withheldIds is non-empty", () => {
+    const cleaned = stripPrivateMemory({
+      case_file_items: [
+        { item_id: "cf-priv-1", relevance_scope: "persona_private", excerpt: "SECRET_CASE_FILE" },
+        { item_id: "cf-pub-1", relevance_scope: "committee", excerpt: "Public case file" },
+      ],
+      citations: [
+        "cf-priv-1",
+        "cf-pub-1",
+        {
+          id: "cit-pub-obj",
+          relevance_scope: "committee",
+          label: "Public citation object",
+          private_memory_text: "SECRET_CITATION_DIRECT_PRIVATE_FIELD",
+          metadata: {
+            public_note: "keep-note",
+            private_text: "SECRET_CITATION_NESTED_PRIVATE_FIELD",
+          },
+        },
+        {
+          id: "cit-unlisted-priv-obj",
+          relevance_scope: "persona_private",
+          label: "SECRET_PRIVATE_CITATION_ITEM",
+        },
+      ],
+      evidence_refs: [
+        "cf-priv-1",
+        {
+          ref_id: "ev-pub-obj",
+          label: "Public evidence object",
+          private_content: "SECRET_EVIDENCE_DIRECT_PRIVATE_FIELD",
+          metadata: {
+            public_tag: "keep-tag",
+            private_interpretation: "SECRET_EVIDENCE_NESTED_PRIVATE_FIELD",
+          },
+        },
+      ],
+    });
+
+    const serialized = JSON.stringify(cleaned);
+    expect(serialized).not.toContain("SECRET_CASE_FILE");
+    expect(serialized).not.toContain("SECRET_CITATION_DIRECT_PRIVATE_FIELD");
+    expect(serialized).not.toContain("SECRET_CITATION_NESTED_PRIVATE_FIELD");
+    expect(serialized).not.toContain("SECRET_PRIVATE_CITATION_ITEM");
+    expect(serialized).not.toContain("SECRET_EVIDENCE_DIRECT_PRIVATE_FIELD");
+    expect(serialized).not.toContain("SECRET_EVIDENCE_NESTED_PRIVATE_FIELD");
+
+    expect(cleaned).toEqual({
+      case_file_items: [{ item_id: "cf-pub-1", relevance_scope: "committee", excerpt: "Public case file" }],
+      citations: [
+        "cf-pub-1",
+        {
+          id: "cit-pub-obj",
+          relevance_scope: "committee",
+          label: "Public citation object",
+          metadata: {
+            public_note: "keep-note",
+          },
+        },
+      ],
+      evidence_refs: [
+        {
+          ref_id: "ev-pub-obj",
+          label: "Public evidence object",
+          metadata: {
+            public_tag: "keep-tag",
+          },
+        },
+      ],
+    });
+  });
+
   it("normalizes legacy REVIEW detail (null unreadable_reason -> unknown) and specific causes while stripping private item IDs from evidence_refs", async () => {
     setMockResolver((method, path) => {
       if (method === "GET" && path === "/bff/management/meetings/mtg-2c016da5651a0dc4") {
@@ -528,6 +600,15 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
       owner: "consultation",
     });
 
+    const overLimitSupplementaryNote = await reviewMeeting("mtg-2c016da5651a0dc4", {
+      note: "𠮷".repeat(1001) + "🧪".repeat(1000),
+    });
+    expect(overLimitSupplementaryNote).toEqual({
+      state: "unavailable",
+      reason: "review_note_too_long",
+      owner: "consultation",
+    });
+
     // 2. Write gate closed when real writes are disabled
     vi.stubEnv("VITE_BFF_REAL_WRITES", "false");
     const gated = await reviewMeeting("mtg-2c016da5651a0dc4", {
@@ -561,12 +642,14 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
       reason: "meeting_already_reviewed",
     });
 
-    // 4. Successful 2000-character CJK note review with Idempotency-Key & inbox V5 event
+    // 4. Successful 2000-character supplementary-plane CJK/emoji note (4000 UTF-16 code units, 2000 Unicode code points) review with Idempotency-Key & inbox V5 event
     let capturedHeaders: Record<string, string> = {};
     let capturedBody: unknown = null;
     const v5Events: unknown[] = [];
     const off = onV5Event((ev) => v5Events.push(ev));
-    const maxCjkNote = "審".repeat(2000);
+    const maxCjkNote = "𠮷".repeat(1000) + "🧪".repeat(1000);
+    expect(Array.from(maxCjkNote).length).toBe(2000);
+    expect(maxCjkNote.length).toBe(4000);
 
     setMockResolver((method, path) => {
       if (method === "POST" && path === "/bff/management/meetings/mtg-2c016da5651a0dc4/review") {

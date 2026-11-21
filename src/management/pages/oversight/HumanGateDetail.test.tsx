@@ -826,10 +826,22 @@ describe("HumanGateDetailPage", () => {
       "closed_no_proposal",
     );
 
-    const noteText = "Confirmed zero proposals after model output timeout; closing review.";
+    // Supplementary-plane CJK/emoji Unicode code-point boundary: 2001 rejected before network, 2000 accepted
+    const supplementary2001 = "𠮷".repeat(1001) + "🧪".repeat(1000);
+    fireEvent.change(screen.getByTestId("inbox-meeting-review-note-input"), {
+      target: { value: supplementary2001 },
+    });
+    expect(screen.getByTestId("inbox-meeting-review-submit")).toBeDisabled();
+    fireEvent.submit(screen.getByTestId("inbox-meeting-review-form"));
+    expect(await screen.findByTestId("inbox-meeting-review-error")).toHaveTextContent(
+      "review_note_too_long",
+    );
+
+    const noteText = "𠮷".repeat(1000) + "🧪".repeat(1000);
     fireEvent.change(screen.getByTestId("inbox-meeting-review-note-input"), {
       target: { value: noteText },
     });
+    expect(screen.getByTestId("inbox-meeting-review-submit")).not.toBeDisabled();
     fireEvent.click(screen.getByTestId("inbox-meeting-review-submit"));
 
     const err = await screen.findByTestId("inbox-meeting-review-error");

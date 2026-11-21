@@ -12,6 +12,7 @@ import { mgmt } from "@/lib/bff-v1";
 import {
   MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS,
   collectMeetingEvidenceRefs,
+  countMeetingReviewNoteChars,
   getMeetingDetail,
   normalizeOperatorReview,
   resolveMeetingReviewCause,
@@ -195,7 +196,7 @@ export const HumanGateDetailPage = () => {
       meetingDetail?.anonymised_labels_revealed !== false,
   );
   const trimmedMeetingReviewNote = meetingReviewNote.trim();
-  const meetingReviewNoteCharCount = Array.from(trimmedMeetingReviewNote).length;
+  const meetingReviewNoteCharCount = countMeetingReviewNoteChars(trimmedMeetingReviewNote);
   const meetingType = (meetingDetail?.meeting_type || meetingTypeFromInboxItem(item) || "MT-1").trim();
   const meetingConveneFollowUpHref = meetingId
     ? `/management/meetings?tab=upcoming&type=${encodeURIComponent(meetingType)}${
@@ -211,10 +212,7 @@ export const HumanGateDetailPage = () => {
       setMeetingReviewError("review_note_required");
       return;
     }
-    if (
-      meetingReviewNoteCharCount > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS ||
-      trimmedMeetingReviewNote.length > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS
-    ) {
+    if (meetingReviewNoteCharCount > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS) {
       setMeetingReviewError("review_note_too_long");
       return;
     }
