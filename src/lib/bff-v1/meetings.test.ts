@@ -18,7 +18,6 @@ import {
 import {
   buildFollowUpConveneInput,
   formatMeetingRosterRule,
-  interpretMeetingRosterRule,
   mgmtMeetingReviewPath,
   reviewMeeting,
 } from "./meetings";
@@ -912,7 +911,7 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
     cleanup();
   });
 
-  it("interprets structured catalogue roster_rule objects with canonical MT-1/MT-4 values and honest absent-description fallback (FE-MEETING-ROSTER-CATALOGUE-20261121)", () => {
+  it("formats structured catalogue roster_rule objects with canonical MT-1/MT-4 values and honest absent-description fallback (FE-MEETING-ROSTER-CATALOGUE-20261121)", () => {
     const mt1Rule = {
       chair: "owning_persona",
       participants: ["owning_persona", "peer_different_style", "persona-risk-officer"],
@@ -924,15 +923,9 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
       allow_subject_trader_servant: false,
       description: "owner + 1 peer trading persona of a different style (rotating) + risk persona",
     };
-    const mt1Display = interpretMeetingRosterRule(mt1Rule);
-    expect(mt1Display.hasDescription).toBe(true);
-    expect(mt1Display.summary).toBe(
+    expect(formatMeetingRosterRule(mt1Rule)).toBe(
       "owner + 1 peer trading persona of a different style (rotating) + risk persona",
     );
-    expect(mt1Display.details).toBe(
-      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk · allow_agora_advisor · allow_owning_user_servant",
-    );
-    expect(formatMeetingRosterRule(mt1Rule)).toBe(mt1Display.summary);
 
     const mt4WithoutDescription = {
       chair: "closest_institutional_persona",
@@ -952,15 +945,12 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
       allow_subject_trader_servant: true,
       description: "   ",
     };
-    const absentDescDisplay = interpretMeetingRosterRule(mt4WithoutDescription);
-    expect(absentDescDisplay.hasDescription).toBe(false);
-    expect(absentDescDisplay.description).toBeNull();
-    expect(absentDescDisplay.summary).toBe(
-      "chair: closest_institutional_persona · participants: subject_persona_or_trader_servant + counter_party_persona + peers_same_strategy_family + persona-risk-officer + persona-red-team · min_trading_personas=1 · requires_risk · requires_red_team (luck_or_small_sample_or_confounder) · allow_agora_advisor · allow_owning_user_servant · allow_subject_trader_servant",
+    expect(formatMeetingRosterRule(mt4WithoutDescription)).toBe(
+      "chair: closest_institutional_persona · participants: subject_persona_or_trader_servant + counter_party_persona + peers_same_strategy_family + persona-risk-officer + persona-red-team · min_trading_personas=1 · requires_risk · requires_red_team (luck_or_small_sample_or_confounder)",
     );
 
-    expect(interpretMeetingRosterRule({}).summary).toBe("—");
-    expect(interpretMeetingRosterRule(null).summary).toBe("—");
-    expect(interpretMeetingRosterRule(undefined).summary).toBe("—");
+    expect(formatMeetingRosterRule({})).toBe("—");
+    expect(formatMeetingRosterRule(null)).toBe("—");
+    expect(formatMeetingRosterRule(undefined)).toBe("—");
   });
 });

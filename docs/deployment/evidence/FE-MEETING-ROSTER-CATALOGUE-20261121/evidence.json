@@ -55,21 +55,21 @@
       }
     }
   },
-  "owned_layer": "Frontend meeting catalogue roster_rule typing, normalization, shared display interpretation, and rendering across src/lib/bff-v1/meetings.ts, src/management/pages/governance/ConsultRulesPage.tsx, and src/management/pages/meetings/MeetingsCenterPage.tsx",
+  "owned_layer": "Frontend meeting catalogue roster_rule typing, shared display formatting, and rendering across src/lib/bff-v1/meetings.ts, src/management/pages/governance/ConsultRulesPage.tsx, and src/management/pages/meetings/MeetingsCenterPage.tsx",
   "not_changing": [
     "Backend consultation owner contract, BFF route (/bff/management/meetings/catalogue), and data owner (consultation)",
     "Schedule, refusals, M9 budget caps, and read-only governance behavior on ConsultRulesPage and MeetingsCenterPage"
   ],
   "changes": {
-    "src/lib/bff-v1/meetings.ts": "Added MeetingRosterRule, MeetingRosterRuleValue, and MeetingRosterRuleDisplay types; added normalizeMeetingRosterRule, interpretMeetingRosterRule, and formatMeetingRosterRule helpers; updated getMeetingCatalogue to normalize each catalogue type's structured roster_rule while sharing display interpretation across consumers.",
-    "src/management/pages/governance/ConsultRulesPage.tsx": "Updated the Deliberative Meetings catalogue section to render structured roster_rule via interpretMeetingRosterRule(mt.roster_rule), displaying the existing description alongside governed chair/participants/requirement details and falling back honestly to governed participant/requirement fields (or '—') when description is absent.",
-    "src/management/pages/meetings/MeetingsCenterPage.tsx": "Updated the Rules & Budget catalogue tab to render structured roster_rule via interpretMeetingRosterRule(mt.roster_rule) with the same shared display interpretation, preserving schedule, refusals, and M9 budget display.",
+    "src/lib/bff-v1/meetings.ts": "Typed MeetingRosterRule on MeetingTypeRule.roster_rule for the consultation owner's structured roster_rule object and exported formatMeetingRosterRule to render the existing description or governed participant/requirement fields (or '—' when absent).",
+    "src/management/pages/governance/ConsultRulesPage.tsx": "Updated the Deliberative Meetings catalogue section to render structured roster_rule via formatMeetingRosterRule(mt.roster_rule), preserving schedule, refusals, budget, and read-only governance behavior.",
+    "src/management/pages/meetings/MeetingsCenterPage.tsx": "Updated the Rules & Budget catalogue tab to render structured roster_rule via formatMeetingRosterRule(mt.roster_rule), preserving schedule, refusals, and M9 budget display.",
     "src/management/pages/meetings/meetings.test.tsx": "Replaced MT-1 and MT-4 string roster_rule fixtures in recordedCatalogueResponse with the exact canonical structured objects from services/consultation/meeting_catalogue.json, verified both ConsultRulesPage and MeetingsCenterPage Rules & Budget render readable text without React child errors, and added regression coverage for absent description fallback, navigation to /management/meetings?tab=rules, and unavailable states.",
-    "src/lib/bff-v1/meetings.test.ts": "Replaced the catalogue test fixture with canonical MT-1 and MT-4 structured roster_rule objects and added unit tests for interpretMeetingRosterRule and formatMeetingRosterRule with present and absent descriptions."
+    "src/lib/bff-v1/meetings.test.ts": "Replaced the catalogue test fixture with canonical MT-1 and MT-4 structured roster_rule objects and added unit tests for formatMeetingRosterRule with present and absent descriptions."
   },
   "acceptance_mapping": {
-    "1": "Both ConsultRulesPage (/management/governance/consult) and MeetingsCenterPage Rules & Budget (/management/meetings?tab=rules) render the structured roster_rule from GET /bff/management/meetings/catalogue as readable text (showing description and governed chair/participants/requirements, with honest fallback to governed fields or '—' when description is absent) while preserving schedule, refusals, budget, and read-only governance controls.",
-    "2": "Typed MeetingRosterRule in src/lib/bff-v1/meetings.ts and shared interpretMeetingRosterRule / formatMeetingRosterRule across both consumers without changing backend contract, route, or data owner.",
+    "1": "Both ConsultRulesPage (/management/governance/consult) and MeetingsCenterPage Rules & Budget (/management/meetings?tab=rules) render the structured roster_rule from GET /bff/management/meetings/catalogue as readable text (showing description or governed chair/participants/requirements, with honest handling of an absent description) while preserving schedule, refusals, budget, and read-only governance controls.",
+    "2": "Typed MeetingRosterRule on MeetingTypeRule.roster_rule in src/lib/bff-v1/meetings.ts and shared formatMeetingRosterRule across both consumers without changing backend contract, route, or data owner.",
     "3": "Replaced string fixtures with canonical MT-1 and MT-4 roster_rule objects in src/management/pages/meetings/meetings.test.tsx and src/lib/bff-v1/meetings.test.ts; ran focused Vitest suites, full ESLint check, and TypeScript app/agora typechecks.",
     "4": "Recorded official browse failures 44918407417 and 44926468729 and local two-route reproduction logs above; documented post-merge hosted browse verification steps for the hosted acceptance coordinator while keeping source and hosted evidence distinct.",
     "5": "Delivered on task/FE-MEETING-ROSTER-CATALOGUE-20261121 from execute-plans dev for independent review by Codex and integration via required CI."

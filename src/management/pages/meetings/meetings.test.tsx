@@ -569,14 +569,8 @@ describe("MeetingsCenterPage (AC1, AC5, AC6, AC7)", () => {
     expect(screen.getByTestId("catalogue-type-MT-1")).toHaveTextContent(
       "owner + 1 peer trading persona of a different style (rotating) + risk persona",
     );
-    expect(screen.getByTestId("catalogue-roster-details-MT-1")).toHaveTextContent(
-      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
-    );
     expect(screen.getByTestId("catalogue-type-MT-4")).toHaveTextContent(
       "subject (persona or trader's own servant) + party that decided the other way + peers of same strategy family + risk persona + red-team persona",
-    );
-    expect(screen.getByTestId("catalogue-roster-details-MT-4")).toHaveTextContent(
-      "chair: closest_institutional_persona · participants: subject_persona_or_trader_servant + counter_party_persona + peers_same_strategy_family + persona-risk-officer + persona-red-team · min_trading_personas=1 · requires_risk · requires_red_team (luck_or_small_sample_or_confounder)",
     );
     expect(screen.getByTestId("catalogue-schedule-persona-alpha-MT-1")).toHaveTextContent(
       "2026-11-16T10:00:00Z",
@@ -1031,14 +1025,8 @@ describe("ConsultRulesPage (AC3 & AC7)", () => {
     expect(screen.getByTestId("consult-deliberative-type-MT-1")).toHaveTextContent(
       "owner + 1 peer trading persona of a different style (rotating) + risk persona",
     );
-    expect(screen.getByTestId("consult-deliberative-roster-details-MT-1")).toHaveTextContent(
-      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
-    );
     expect(screen.getByTestId("consult-deliberative-type-MT-4")).toHaveTextContent(
       "subject (persona or trader's own servant) + party that decided the other way + peers of same strategy family + risk persona + red-team persona",
-    );
-    expect(screen.getByTestId("consult-deliberative-roster-details-MT-4")).toHaveTextContent(
-      "chair: closest_institutional_persona · participants: subject_persona_or_trader_servant + counter_party_persona + peers_same_strategy_family + persona-risk-officer + persona-red-team · min_trading_personas=1 · requires_risk · requires_red_team (luck_or_small_sample_or_confounder)",
     );
     expect(screen.getByTestId("consult-link-meetings-rules")).toHaveAttribute(
       "href",
@@ -1074,7 +1062,7 @@ describe("ConsultRulesPage (AC3 & AC7)", () => {
               requires_risk: true,
               requires_red_team: false,
             },
-            budget: { max_participants: 5, max_rounds: 2, max_meetings_per_persona_per_week: 3 },
+            budget: { max_participants: 5, max_rounds: 2, weekly_limit: 3 },
           },
           {
             meeting_type: "MT-4",
@@ -1098,20 +1086,19 @@ describe("ConsultRulesPage (AC3 & AC7)", () => {
       </MemoryRouter>,
     );
 
-    const consultMt1 = await screen.findByTestId("consult-deliberative-roster-MT-1");
+    const consultMt1 = await screen.findByTestId("consult-deliberative-type-MT-1");
     expect(consultMt1).toHaveTextContent(
-      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
+      "Roster Rule: chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
     );
-    expect(screen.queryByTestId("consult-deliberative-roster-details-MT-1")).not.toBeInTheDocument();
-    expect(screen.getByTestId("consult-deliberative-roster-MT-4")).toHaveTextContent("Roster Rule: —");
+    expect(screen.getByTestId("consult-deliberative-type-MT-4")).toHaveTextContent("Roster Rule: —");
 
     // Navigate from ConsultRulesPage to MeetingsCenterPage Rules & Budget tab
     fireEvent.click(screen.getByTestId("consult-link-meetings-rules"));
     expect(await screen.findByTestId("meetings-catalogue-view")).toBeInTheDocument();
-    expect(screen.getByTestId("catalogue-roster-MT-1")).toHaveTextContent(
-      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
+    expect(screen.getByTestId("catalogue-type-MT-1")).toHaveTextContent(
+      "Roster: chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
     );
-    expect(screen.getByTestId("catalogue-roster-MT-4")).toHaveTextContent("Roster: —");
+    expect(screen.getByTestId("catalogue-type-MT-4")).toHaveTextContent("Roster: —");
     unmount();
 
     // Unavailable catalogue state on both routes

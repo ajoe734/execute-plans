@@ -13,8 +13,8 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowRight, MessagesSquare, Plus, Trash2 } from "lucide-react";
 import { bffV1, managementConsoleReads } from "@/lib/bff-v1";
 import {
+  formatMeetingRosterRule,
   getMeetingCatalogue,
-  interpretMeetingRosterRule,
   type MeetingCatalogueData,
   type MeetingsRead,
 } from "@/lib/bff-v1/meetings";
@@ -298,50 +298,39 @@ export const ConsultRulesPage = () => {
                 className="grid grid-cols-1 md:grid-cols-2 gap-3"
                 data-testid="consult-deliberative-types"
               >
-                {catalogueRead.data.types.map((mt) => {
-                  const roster = interpretMeetingRosterRule(mt.roster_rule);
-                  return (
-                    <Card
-                      key={mt.meeting_type}
-                      className="p-4 space-y-2"
-                      data-testid={`consult-deliberative-type-${mt.meeting_type}`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <Switch checked={mt.enabled} disabled />
-                          <span className="font-mono text-sm font-semibold">{mt.meeting_type}</span>
-                        </div>
-                        <Badge variant={mt.enabled ? "default" : "outline"}>
-                          {mt.enabled ? "enabled" : "disabled"}
-                        </Badge>
+                {catalogueRead.data.types.map((mt) => (
+                  <Card
+                    key={mt.meeting_type}
+                    className="p-4 space-y-2"
+                    data-testid={`consult-deliberative-type-${mt.meeting_type}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={mt.enabled} disabled />
+                        <span className="font-mono text-sm font-semibold">{mt.meeting_type}</span>
                       </div>
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        <div>
-                          Cadence: <code className="text-foreground">{mt.cadence ?? "—"}</code>
-                        </div>
-                        <div data-testid={`consult-deliberative-roster-${mt.meeting_type}`}>
-                          Roster Rule: <code className="text-foreground">{roster.summary}</code>
-                          {roster.description && roster.details ? (
-                            <div
-                              className="mt-0.5 font-mono text-[11px] text-muted-foreground"
-                              data-testid={`consult-deliberative-roster-details-${mt.meeting_type}`}
-                            >
-                              {roster.details}
-                            </div>
-                          ) : null}
-                        </div>
-                        {mt.budget ? (
-                          <div className="font-mono">
-                            M9 Budget (coordinator proposal): max_participants=
-                            {mt.budget.max_participants ?? 5} · max_rounds={mt.budget.max_rounds ?? 2} ·
-                            weekly_limit=
-                            {mt.budget.weekly_limit ?? mt.budget.max_meetings_per_persona_per_week ?? 3}
-                          </div>
-                        ) : null}
+                      <Badge variant={mt.enabled ? "default" : "outline"}>
+                        {mt.enabled ? "enabled" : "disabled"}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <div>
+                        Cadence: <code className="text-foreground">{mt.cadence ?? "—"}</code>
                       </div>
-                    </Card>
-                  );
-                })}
+                      <div>
+                        Roster Rule:{" "}
+                        <code className="text-foreground">{formatMeetingRosterRule(mt.roster_rule)}</code>
+                      </div>
+                      {mt.budget ? (
+                        <div className="font-mono">
+                          M9 Budget (coordinator proposal): max_participants=
+                          {mt.budget.max_participants ?? 5} · max_rounds={mt.budget.max_rounds ?? 2} ·
+                          weekly_limit={mt.budget.weekly_limit ?? 3}
+                        </div>
+                      ) : null}
+                    </div>
+                  </Card>
+                ))}
               </div>
             )}
           </section>
