@@ -79,9 +79,14 @@
       "chromium_headless_shell": "159.0.8154.6 (playwright chromium-headless-shell v1255)",
       "ffmpeg": "v1013"
     },
-    "vitest_jsdom_compatibility": {
-      "file": "src/test/setup.ts",
-      "reason": "Playwright 1.65.1 crPage.ts webUIHost(url) and checkUrlAllowed(url) call static URL.canParse(...). Vitest's jsdom@20.0.3 (whatwg-url@11.0.0) overwrites Node 22 globalThis.URL with a window.URL constructor that lacks static URL.canParse. Shimming URL.canParse in src/test/setup.ts restores standard WHATWG URL.canParse in Vitest without upgrading unrelated jsdom/whatwg-url dependencies."
+    "vitest_node_environment_compatibility": {
+      "files": [
+        "src/test/setup.ts",
+        "src/test/accept-management-route-attribution.test.ts",
+        "src/test/hosted-browser-release-policy.test.ts",
+        "src/test/persona-strategy-hosted-readonly.test.ts"
+      ],
+      "reason": "Playwright 1.65.1 crPage.ts webUIHost(url) and checkUrlAllowed(url) call static URL.canParse(...). Because the three host-side Playwright driver suites run a Node HTTP/CLI/Playwright driver while Chromium owns its real page DOM, they declare Vitest's file-level '// @vitest-environment node' directive and src/test/setup.ts places its existing DOM-only shims under the existing 'typeof window !== \"undefined\"' guard. This uses native Node 22 URL.canParse without adding any global polyfill or modifying jsdom@20.0.3."
     }
   },
   "ubuntu_26_04_verification": {
@@ -135,8 +140,10 @@
     "cli_path": "scripts/accept-persona-strategy-hosted-readonly.mjs",
     "cli_sha256": "c8354cbebe09cd56b46132ea3d5f83146bd718e08a38b7fc28530d5d5ae4e329",
     "test_path": "src/test/persona-strategy-hosted-readonly.test.ts",
-    "test_sha256": "fd0df18e83a411cb7bccd7ef36b8466d31d623afdcb26d52d182e43262e3f3ef",
-    "unchanged": true,
+    "test_sha256": "309d65b156c61006d6b8c5903d839f77acf034dfee917fbc689a4368091b12e8",
+    "cli_unchanged": true,
+    "test_assertions_unchanged": true,
+    "test_environment_directive": "// @vitest-environment node",
     "protected_caller_note": "Existing Pantheon protected caller (scripts/run_dev_paired_readonly_qa.py in .github/workflows/nonprod-deploy.yml) and its credential-free setup step, stdin-only four-role credential transport, thresholds, and supplementary reporting remain untouched. Actual hosted public-origin report awaits the next accepted FE/BFF pair containing this frontend commit."
   },
   "component_and_browser_checks": {
@@ -178,12 +185,12 @@
     "full_vitest_suite": {
       "command": "npm run test",
       "exit_code": 0,
-      "summary": "288/288 test files passed, 3329/3329 tests passed"
+      "summary": "288/288 test files passed, 3331/3331 tests passed"
     },
     "production_build_and_credential_scan": {
       "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build && npm run scan:bundle-credentials",
       "exit_code": 0,
-      "bundle_digest_sha256": "fcf815b56e2f6fa88574381b48c73d6ffc3c0714b623f04cb63781489f7a6b86"
+      "bundle_digest_sha256": "879e0a0f33b744cde40de2356d2bac620d8d2070780215be87b4aa08326feb19"
     },
     "playwright_e2e_and_a11y": {
       "command": "PANTHEON_RELEASE_GATE_CONTEXT=pull_request npx --no-install playwright test e2e/17-a11y-v5.spec.ts e2e/01-startup-session.spec.ts --project=chromium --grep-invert 'asserts MeResponse tenant/env/user/capabilities shape' --retries=0 --trace=off --reporter=list",
