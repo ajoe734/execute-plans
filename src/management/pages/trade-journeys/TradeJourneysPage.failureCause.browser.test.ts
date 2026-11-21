@@ -5,6 +5,7 @@ import path from "node:path";
 import { chromium, type Browser } from "@playwright/test";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  completedRow,
   fixtureMeta,
   makeTj57418ba7Timeline,
   rejectedBeforeRepairRow,
@@ -265,6 +266,59 @@ describe("FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121 real Chromium browser verifica
             .end(JSON.stringify({ data: { ...current7972, stages }, meta: fixtureMeta }));
           return;
         }
+        if (id === completedRow.journey_id) {
+          const passedChecks = [
+            { check: "broker_fill_qty", status: "passed", expected: 1, actual: 1, difference: 0 },
+            { check: "cash_change", status: "passed", expected: 2206, actual: 2206, difference: 0 },
+          ];
+          if (sub === "timeline") {
+            const tl = [
+              {
+                event_id: "fill-ok-1",
+                stage: "fill_management",
+                event_type: "paper_fill_simulated",
+                stage_status: "succeeded",
+                status: "succeeded",
+                occurred_at: "2026-11-19T23:49:00.000000Z",
+                source: "execution.paper_runtime",
+              },
+              {
+                event_id: "recon-pass-1",
+                source_event_id: "recon-pass-1",
+                stage: "reconciliation",
+                event_type: "reconciliation_completed",
+                stage_status: "succeeded",
+                status: "succeeded",
+                occurred_at: "2026-11-19T23:50:03.000000Z",
+                source: "reconciliation-drift.scheduled",
+                reason_detail: passedChecks,
+              },
+            ];
+            res
+              .writeHead(200, { ...cors, "content-type": "application/json" })
+              .end(JSON.stringify({ data: { items: tl }, page_info: { total: tl.length, page_size: 100 }, meta: fixtureMeta }));
+            return;
+          }
+          res.writeHead(200, { ...cors, "content-type": "application/json" }).end(
+            JSON.stringify({
+              data: {
+                ...completedRow,
+                stages: {
+                  signal_generation: { status: "succeeded" },
+                  trade_decision: { status: "succeeded" },
+                  risk_evaluation: { status: "succeeded" },
+                  order_submission: { status: "succeeded" },
+                  broker_acknowledgement: { status: "succeeded" },
+                  fill_management: { status: "succeeded" },
+                  ledger_booking: { status: "succeeded" },
+                  reconciliation: { status: "succeeded", reason_detail: passedChecks },
+                },
+              },
+              meta: fixtureMeta,
+            }),
+          );
+          return;
+        }
         if (id === recordedVarianceDetail.data.journey_id) {
           if (sub === "timeline") {
             res
@@ -434,6 +488,22 @@ describe("FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121 real Chromium browser verifica
       expect(omissionText).toContain("證據不足（缺少：現金變動（實際值））");
       expect(omissionText).toContain("補齊缺少的對帳證據並確認帳務紀錄");
       expect(omissionText).not.toMatch(RAW_LEAK_RE);
+
+      // 6. Open completed journey with passed reconciliation checks in browser
+      await page.goto(
+        `${feBase}/management/trade-journeys/${completedRow.journey_id}?tenant_id=tenant-dev&environment=paper`,
+        { waitUntil: "networkidle" },
+      );
+      await page.waitForSelector("text=對帳 · 成功");
+      const completedText = await readableDomText();
+      expect(completedText).toContain("已正常完成，沒有異常。");
+      expect(completedText).toContain(
+        "券商成交數量（預期 1、實際 1、差額 0）、現金變動（預期 2,206、實際 2,206、差額 0）",
+      );
+      expect(completedText).not.toContain("對帳待確認");
+      expect(completedText).not.toContain("此筆記錄沒有保存原因");
+      expect(completedText).not.toContain("證據不足");
+      expect(completedText).not.toMatch(RAW_LEAK_RE);
     } finally {
       await context.close();
     }

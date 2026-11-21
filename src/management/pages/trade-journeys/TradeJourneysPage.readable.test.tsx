@@ -867,4 +867,215 @@ describe("readable trade journey detail (zh-TW)", () => {
       screen.getAllByText("持股不足 · 證據不足（缺少：持有股數、委託股數）").length,
     ).toBeGreaterThanOrEqual(2);
   });
+
+  it("preserves successful reconciliation_completed status and renders passed check evidence without inventing a missing cause, including mixed historical success/failure refresh", async () => {
+    const passedChecksDetail = [
+      { check: "broker_fill_qty", status: "passed", expected: 1, actual: 1, difference: 0 },
+      { check: "cash_change", status: "passed", expected: 2206, actual: 2206, difference: 0 },
+    ];
+    const completedReconTimeline: api.JourneyTimelineEvent[] = [
+      {
+        event_id: "fill-ok-1",
+        stage: "fill_management",
+        event_type: "paper_fill_simulated",
+        stage_status: "succeeded",
+        status: "succeeded",
+        occurred_at: "2026-11-19T23:49:00.000000Z",
+        source: "execution.paper_runtime",
+      },
+      {
+        event_id: "recon-pass-1",
+        source_event_id: "recon-pass-1",
+        stage: "reconciliation",
+        event_type: "reconciliation_completed",
+        stage_status: "succeeded",
+        status: "succeeded",
+        occurred_at: "2026-11-19T23:50:03.000000Z",
+        source: "reconciliation-drift.scheduled",
+        reason_detail: passedChecksDetail,
+      },
+    ];
+
+    // 1. Completed row with reconciliation stage succeeded and successful timeline event carrying passed checks
+    renderDetail(completedRow, completedReconTimeline, {
+      stages: {
+        signal_generation: { status: "succeeded" },
+        trade_decision: { status: "succeeded" },
+        risk_evaluation: { status: "succeeded" },
+        order_submission: { status: "succeeded" },
+        broker_acknowledgement: { status: "succeeded" },
+        fill_management: { status: "succeeded" },
+        ledger_booking: { status: "succeeded" },
+        reconciliation: { status: "succeeded" },
+      },
+    });
+    let panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(within(panel).getByText("已正常完成，沒有異常。")).toBeInTheDocument();
+    const reconStageCard = within(screen.getByLabelText("旅程階段")).getByLabelText("對帳: 成功");
+    expect(reconStageCard).toHaveTextContent(
+      "券商成交數量（預期 1、實際 1、差額 0）、現金變動（預期 2,206、實際 2,206、差額 0）",
+    );
+    expect(screen.getByText("對帳 · 成功")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "券商成交數量（預期 1、實際 1、差額 0）、現金變動（預期 2,206、實際 2,206、差額 0）",
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(document.body.textContent).not.toContain("對帳待確認");
+    expect(document.body.textContent).not.toContain("此筆記錄沒有保存原因");
+    expect(document.body.textContent).not.toContain("證據不足");
+    cleanup();
+
+    // 2. Mixed historical success + current failure (and refresh into completed-with-passed-checks)
+    const historicalSuccessEvent: api.JourneyTimelineEvent = {
+      event_id: "recon-hist-pass",
+      source_event_id: "recon-hist-pass",
+      stage: "reconciliation",
+      event_type: "reconciliation_completed",
+      stage_status: "succeeded",
+      status: "succeeded",
+      occurred_at: "2026-11-16T06:55:00.000000Z",
+      source: "reconciliation-drift.scheduled",
+      reason_detail: passedChecksDetail,
+    };
+    const historicalFailureEvent: api.JourneyTimelineEvent = {
+      ...makeTj57418ba7Timeline(tj57418ba7GenuineMismatchRow)[1],
+      event_id: "recon-hist-variance",
+      source_event_id: "recon-hist-variance",
+      occurred_at: "2026-11-16T06:58:29.000000Z",
+    };
+    const resolvedSuccessEvent: api.JourneyTimelineEvent = {
+      event_id: "recon-resolved-pass",
+      source_event_id: "recon-resolved-pass",
+      stage: "reconciliation",
+      event_type: "reconciliation_completed",
+      stage_status: "succeeded",
+      status: "succeeded",
+      occurred_at: "2026-11-16T07:05:00.000000Z",
+      source: "reconciliation-drift.scheduled",
+      reason_detail: [
+        { check: "broker_record", status: "not_configured" },
+        { check: "position_change", status: "passed", expected: -1, actual: -1, difference: 0 },
+        { check: "cash_change", status: "passed", expected: 217.5331375, actual: 217.5331375, difference: 0 },
+      ],
+    };
+    const resolvedCompletedRow: api.JourneyRow = {
+      ...tj57418ba7GenuineMismatchRow,
+      status: "completed",
+      severity: "info",
+      flags: {
+        waiting_human: false,
+        blocked: false,
+        rejected: false,
+        mismatch: false,
+        orphan: false,
+        stalled: false,
+      },
+      outcome: { kind: "normal", reason_code: null, reason_detail: null },
+      next_step: null,
+    };
+
+    vi.mocked(api.getTradeJourney)
+      .mockResolvedValueOnce({
+        data: {
+          ...tj57418ba7GenuineMismatchRow,
+          stages: { reconciliation: { status: "failed", ...tj57418ba7GenuineMismatchRow.outcome } },
+        },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          ...resolvedCompletedRow,
+          stages: {
+            reconciliation: {
+              status: "succeeded",
+              source_event_id: "recon-resolved-pass",
+              reason_detail: resolvedSuccessEvent.reason_detail,
+            },
+          },
+        },
+        meta: fixtureMeta,
+      });
+    vi.mocked(api.getTradeJourneyTimeline)
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            makeTj57418ba7Timeline(tj57418ba7GenuineMismatchRow)[0],
+            historicalSuccessEvent,
+            historicalFailureEvent,
+          ],
+        },
+        page_info: { total: 3, page_size: 100 },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            makeTj57418ba7Timeline(tj57418ba7GenuineMismatchRow)[0],
+            historicalSuccessEvent,
+            historicalFailureEvent,
+            resolvedSuccessEvent,
+          ],
+        },
+        page_info: { total: 4, page_size: 100 },
+        meta: fixtureMeta,
+      });
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fixtureMeta });
+
+    render(
+      <MemoryRouter initialEntries={[`/management/trade-journeys/${tj57418ba7GenuineMismatchRow.journey_id}`]}>
+        <Routes>
+          <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Before refresh: row is in variance state, but historicalSuccessEvent in timeline still renders 對帳 · 成功 with passed checks
+    panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      within(panel).getByText(
+        "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("對帳: 失敗")).toBeInTheDocument();
+    expect(screen.getByText("對帳 · 成功")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "券商成交數量（預期 1、實際 1、差額 0）、現金變動（預期 2,206、實際 2,206、差額 0）",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("對帳 · 失敗")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("對帳待確認");
+
+    // Click refresh: journey transitions to completed with resolvedSuccessEvent while retaining historicalSuccessEvent and historicalFailureEvent
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "這筆旅程的情況" })).getByText("已正常完成，沒有異常。"),
+      ).toBeInTheDocument(),
+    );
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("對帳: 成功")).toHaveTextContent(
+      "券商訂單紀錄、部位變動（預期 -1、實際 -1、差額 0）、現金變動（預期 217.5331、實際 217.5331、差額 0）",
+    );
+    expect(screen.getAllByText("對帳 · 成功")).toHaveLength(2);
+    expect(
+      screen.getByText(
+        "券商成交數量（預期 1、實際 1、差額 0）、現金變動（預期 2,206、實際 2,206、差額 0）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "券商訂單紀錄、部位變動（預期 -1、實際 -1、差額 0）、現金變動（預期 217.5331、實際 217.5331、差額 0）",
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+    // Historical failure event in timeline still keeps its own variance cause
+    expect(screen.getByText("對帳 · 失敗")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("對帳待確認");
+    expect(document.body.textContent).not.toContain("此筆記錄沒有保存原因");
+  });
 });
