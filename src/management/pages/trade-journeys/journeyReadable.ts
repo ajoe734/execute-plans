@@ -202,18 +202,18 @@ export function reasonText(
   const missing: string[] = Array.isArray(missingEvidence)
     ? missingEvidence.map(x => String(x ?? "").trim()).filter(Boolean)
     : [];
-  if (CASH_REJECT_CODES.has(effectiveCode) && record) {
-    if (!hasValue(record.required) && hasValue(record.available) && !missing.includes("required")) {
+  if (CASH_REJECT_CODES.has(effectiveCode)) {
+    if (!hasValue(record?.required) && !missing.includes("required")) {
       missing.push("required");
     }
-    if (!hasValue(record.available) && hasValue(record.required) && !missing.includes("available")) {
+    if (!hasValue(record?.available) && !missing.includes("available")) {
       missing.push("available");
     }
-  } else if (POSITION_REJECT_CODES.has(effectiveCode) && record) {
-    if (!hasValue(record.holding_quantity) && hasValue(record.requested_quantity) && !missing.includes("holding_quantity")) {
+  } else if (POSITION_REJECT_CODES.has(effectiveCode)) {
+    if (!hasValue(record?.holding_quantity) && !missing.includes("holding_quantity")) {
       missing.push("holding_quantity");
     }
-    if (!hasValue(record.requested_quantity) && hasValue(record.holding_quantity) && !missing.includes("requested_quantity")) {
+    if (!hasValue(record?.requested_quantity) && !missing.includes("requested_quantity")) {
       missing.push("requested_quantity");
     }
   }
@@ -392,7 +392,10 @@ export function reconciliationAnalysisView(
     (classification === "runtime_health" ||
       DEFERRED_RUNTIME_CODES.has(rawCode) ||
       onlyRuntimeHealthChecks ||
-      input.kind === "reconciliation_deferred");
+      (input.kind === "reconciliation_deferred" &&
+        classification !== "accounting_variance" &&
+        classification !== "unverified_evidence" &&
+        !SPECIFIC_VARIANCE_CODES.has(rawCode)));
 
   if (isBrokerDeferred || isRuntimeDeferred) {
     const effectiveCode = isBrokerDeferred
@@ -717,6 +720,111 @@ export function stageStatusView(
   return { label: statusLabel(status, t), tone: statusTone(status) };
 }
 
+type EventIdentityCarrier = {
+  source_event_id?: string | null;
+  event_id?: string | null;
+  canonical_event_id?: string | null;
+  reconciliation_id?: string | null;
+};
+
+type ReconEvidenceCarrier = EventIdentityCarrier & {
+  kind?: string | null;
+  classification?: JourneyReconciliationClassification | string | null;
+  accounting_variance?: boolean | null;
+  comparison_completed?: boolean | null;
+  reason_code?: string | null;
+  reason_detail?: JourneyOutcome["reason_detail"];
+  discrepancies?: JourneyDiscrepancy[] | null;
+  missing_evidence?: string[] | null;
+  unverified_reason_code?: string | null;
+};
+
+function extractEventIds(record: EventIdentityCarrier | null | undefined): string[] {
+  if (!record || typeof record !== "object") return [];
+  const ids: string[] = [];
+  for (const raw of [record.source_event_id, record.event_id, record.canonical_event_id, record.reconciliation_id]) {
+    const val = String(raw ?? "").trim();
+    if (!val) continue;
+    if (!ids.includes(val)) ids.push(val);
+    const prefix = val.split(":")[0]?.trim();
+    if (prefix && !ids.includes(prefix)) ids.push(prefix);
+  }
+  return ids;
+}
+
+function hasMatchingEventIdentity(
+  ev: EventIdentityCarrier | null | undefined,
+  candidate: EventIdentityCarrier | null | undefined,
+): boolean {
+  const evIds = extractEventIds(ev);
+  const candIds = extractEventIds(candidate);
+  if (evIds.length === 0 || candIds.length === 0) return false;
+  return evIds.some(id => candIds.includes(id));
+}
+
+function hasReconEvidenceFields(record: ReconEvidenceCarrier | null | undefined): boolean {
+  if (!record || typeof record !== "object") return false;
+  return (
+    Boolean(String(record.classification ?? "").trim()) ||
+    Boolean(String(record.reason_code ?? "").trim()) ||
+    record.reason_detail !== undefined ||
+    record.discrepancies !== undefined ||
+    (Array.isArray(record.missing_evidence) && record.missing_evidence.length > 0) ||
+    Boolean(String(record.unverified_reason_code ?? "").trim()) ||
+    typeof record.accounting_variance === "boolean" ||
+    typeof record.comparison_completed === "boolean"
+  );
+}
+
+function areReconCausesCompatible(
+  primary: ReconEvidenceCarrier | null | undefined,
+  secondary: ReconEvidenceCarrier | null | undefined,
+): boolean {
+  if (!primary || !secondary) return true;
+  const pClass = String(primary.classification ?? "").trim();
+  const sClass = String(secondary.classification ?? "").trim();
+  if (pClass && sClass && pClass !== sClass) return false;
+  const pCode = String(primary.reason_code ?? "").trim();
+  const sCode = String(secondary.reason_code ?? "").trim();
+  if (pCode && sCode && pCode !== sCode) return false;
+  if (
+    typeof primary.accounting_variance === "boolean" &&
+    typeof secondary.accounting_variance === "boolean" &&
+    primary.accounting_variance !== secondary.accounting_variance
+  ) {
+    return false;
+  }
+  if (
+    typeof primary.comparison_completed === "boolean" &&
+    typeof secondary.comparison_completed === "boolean" &&
+    primary.comparison_completed !== secondary.comparison_completed
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function canHydrateReconTimelineEventFrom(
+  ev: JourneyTimelineEvent,
+  candidate: ReconEvidenceCarrier | null | undefined,
+): boolean {
+  if (!candidate || typeof candidate !== "object") return false;
+  if (!hasMatchingEventIdentity(ev, candidate)) return false;
+  if (!areReconCausesCompatible(ev, candidate)) return false;
+  if (hasReconEvidenceFields(ev)) {
+    const evClass = String(ev.classification ?? "").trim();
+    if (
+      evClass ||
+      ev.reason_detail !== undefined ||
+      ev.discrepancies !== undefined ||
+      ev.missing_evidence !== undefined
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Normalizes detail stages and timeline items so pre-broker refusals and reconciliation causes render consistently across banner, stages, and timeline. */
 export function resolveDetailStagesAndTimeline(
   row: JourneyDetail | undefined,
@@ -756,17 +864,33 @@ export function resolveDetailStagesAndTimeline(
       ? "reason_not_recorded"
       : rawReasonCode;
     const effDetail =
-      rawStages.risk_evaluation?.reason_detail ??
-      riskEvent?.reason_detail ??
-      outcome?.reason_detail ??
-      subStage?.reason_detail ??
-      subEvent?.reason_detail ??
-      null;
+      rawStages.risk_evaluation?.reason_detail !== undefined
+        ? rawStages.risk_evaluation.reason_detail
+        : riskEvent?.reason_detail !== undefined
+          ? riskEvent.reason_detail
+          : outcome?.reason_detail !== undefined
+            ? outcome.reason_detail
+            : subStage?.reason_detail !== undefined
+              ? subStage.reason_detail
+              : subEvent?.reason_detail ?? null;
     const effMissing =
-      rawStages.risk_evaluation?.missing_evidence ??
-      riskEvent?.missing_evidence ??
-      outcome?.missing_evidence ??
-      (effReasonCode === "reason_not_recorded" ? ["reject_reason"] : undefined);
+      rawStages.risk_evaluation?.missing_evidence !== undefined
+        ? rawStages.risk_evaluation.missing_evidence
+        : riskEvent?.missing_evidence !== undefined
+          ? riskEvent.missing_evidence
+          : outcome?.missing_evidence !== undefined
+            ? outcome.missing_evidence
+            : effReasonCode === "reason_not_recorded"
+              ? ["reject_reason"]
+              : undefined;
+    const effSourceEventId =
+      rawStages.risk_evaluation?.source_event_id ??
+      riskEvent?.source_event_id ??
+      riskEvent?.event_id ??
+      outcome?.source_event_id ??
+      subStage?.source_event_id ??
+      subEvent?.source_event_id ??
+      subEvent?.event_id;
 
     rawStages.risk_evaluation = {
       ...rawStages.risk_evaluation,
@@ -774,6 +898,7 @@ export function resolveDetailStagesAndTimeline(
       reason_code: effReasonCode,
       reason_detail: effDetail,
       missing_evidence: effMissing,
+      source_event_id: effSourceEventId,
       submitted_to_broker: false,
       order_status: "not_submitted",
       updated_at: rawStages.risk_evaluation?.updated_at ?? subStage?.updated_at,
@@ -787,6 +912,9 @@ export function resolveDetailStagesAndTimeline(
       reason_detail: undefined,
     };
 
+    const rowRejCarrier: EventIdentityCarrier = { source_event_id: effSourceEventId };
+    const hasRowRejIdentity = extractEventIds(rowRejCarrier).length > 0;
+
     for (const ev of items) {
       const isRejEv =
         ev.event_type === "order_rejection" ||
@@ -794,17 +922,34 @@ export function resolveDetailStagesAndTimeline(
         (ev.stage === "order_submission" && (ev.stage_status === "failed" || ev.stage_status === "rejected")) ||
         (ev.stage === "risk_evaluation" && (ev.stage_status === "rejected" || ev.stage_status === "failed"));
       if (isRejEv) {
+        const rawEvCode = String(ev.reason_code ?? "").trim();
+        const hasValidLocalRejCode =
+          Boolean(rawEvCode) && !(EXPRESSION_CHOICE_CODES as readonly string[]).includes(rawEvCode);
+        const matchesRowRej = hasMatchingEventIdentity(ev, rowRejCarrier);
+        const canHydrateFromRow =
+          matchesRowRej || (!hasRowRejIdentity && extractEventIds(ev).length === 0);
+
         ev.stage = "risk_evaluation";
         ev.stage_status = "rejected";
         ev.status = "rejected";
         ev.submitted_to_broker = false;
         ev.order_status = "not_submitted";
-        ev.reason_code =
-          ev.reason_code && !(EXPRESSION_CHOICE_CODES as readonly string[]).includes(ev.reason_code)
-            ? ev.reason_code
-            : effReasonCode;
-        ev.reason_detail = ev.reason_detail ?? effDetail;
-        ev.missing_evidence = ev.missing_evidence ?? effMissing;
+        if (hasValidLocalRejCode) {
+          ev.reason_code = rawEvCode;
+          if (ev.reason_detail === undefined && rawEvCode === effReasonCode && canHydrateFromRow) {
+            ev.reason_detail = effDetail;
+          }
+          if (ev.missing_evidence === undefined && rawEvCode === effReasonCode && canHydrateFromRow) {
+            ev.missing_evidence = effMissing;
+          }
+        } else if (canHydrateFromRow) {
+          ev.reason_code = effReasonCode;
+          if (ev.reason_detail === undefined) ev.reason_detail = effDetail;
+          if (ev.missing_evidence === undefined) ev.missing_evidence = effMissing;
+        } else {
+          ev.reason_code = "reason_not_recorded";
+          if (ev.missing_evidence === undefined) ev.missing_evidence = ["reject_reason"];
+        }
       }
     }
   }
@@ -823,6 +968,11 @@ export function resolveDetailStagesAndTimeline(
     ...Object.keys(rawStages),
   ]);
 
+  const reconOutcome: ReconEvidenceCarrier | undefined =
+    row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
+      ? row.outcome
+      : undefined;
+
   for (const stage of allStageNames) {
     const stInfo = rawStages[stage];
     const stEv = row?.stage_events?.[stage];
@@ -830,67 +980,58 @@ export function resolveDetailStagesAndTimeline(
     const status = stInfo?.status;
 
     if (stage === "reconciliation") {
+      const stagePrimary: ReconEvidenceCarrier | undefined = hasReconEvidenceFields(stInfo)
+        ? stInfo
+        : hasReconEvidenceFields(stEv)
+          ? stEv
+          : hasReconEvidenceFields(reconOutcome)
+            ? reconOutcome
+            : tlEv;
+      const stageFallback: ReconEvidenceCarrier | undefined =
+        stagePrimary === stInfo && areReconCausesCompatible(stInfo, reconOutcome)
+          ? reconOutcome
+          : undefined;
+      const effStageKind =
+        reconOutcome?.kind === "reconciliation_deferred" || reconOutcome?.kind === "variance"
+          ? areReconCausesCompatible(stagePrimary, reconOutcome)
+            ? reconOutcome.kind
+            : undefined
+          : undefined;
       const mergedRecon: ReconciliationEvidenceInput = {
-        kind:
-          row?.outcome?.kind === "reconciliation_deferred" || row?.outcome?.kind === "variance"
-            ? row.outcome.kind
-            : undefined,
-        classification:
-          stInfo?.classification ??
-          stEv?.classification ??
-          tlEv?.classification ??
-          row?.outcome?.classification,
-        accounting_variance:
-          stInfo?.accounting_variance ??
-          stEv?.accounting_variance ??
-          tlEv?.accounting_variance ??
-          row?.outcome?.accounting_variance,
-        comparison_completed:
-          stInfo?.comparison_completed ??
-          stEv?.comparison_completed ??
-          tlEv?.comparison_completed ??
-          row?.outcome?.comparison_completed,
-        reason_code:
-          stInfo?.reason_code ??
-          stEv?.reason_code ??
-          tlEv?.reason_code ??
-          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
-            ? row.outcome.reason_code
-            : undefined),
+        kind: effStageKind,
+        classification: stagePrimary?.classification ?? stageFallback?.classification,
+        accounting_variance: stagePrimary?.accounting_variance ?? stageFallback?.accounting_variance,
+        comparison_completed: stagePrimary?.comparison_completed ?? stageFallback?.comparison_completed,
+        reason_code: stagePrimary?.reason_code ?? stageFallback?.reason_code,
         reason_detail:
-          stInfo?.reason_detail ??
-          stEv?.reason_detail ??
-          tlEv?.reason_detail ??
-          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
-            ? row.outcome.reason_detail
-            : undefined),
+          stagePrimary?.reason_detail !== undefined
+            ? stagePrimary.reason_detail
+            : stageFallback?.reason_detail,
         discrepancies:
-          stInfo?.discrepancies ??
-          stEv?.discrepancies ??
-          tlEv?.discrepancies ??
-          row?.outcome?.discrepancies,
+          stagePrimary?.discrepancies !== undefined
+            ? stagePrimary.discrepancies
+            : stageFallback?.discrepancies,
         missing_evidence:
-          stInfo?.missing_evidence ??
-          stEv?.missing_evidence ??
-          tlEv?.missing_evidence ??
-          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
-            ? row.outcome.missing_evidence
-            : undefined),
+          stagePrimary?.missing_evidence !== undefined
+            ? stagePrimary.missing_evidence
+            : hasReconEvidenceFields(stagePrimary)
+              ? undefined
+              : stageFallback?.missing_evidence,
         unverified_reason_code:
-          stInfo?.unverified_reason_code ??
-          stEv?.unverified_reason_code ??
-          tlEv?.unverified_reason_code ??
-          row?.outcome?.unverified_reason_code,
+          stagePrimary?.unverified_reason_code !== undefined
+            ? stagePrimary.unverified_reason_code
+            : hasReconEvidenceFields(stagePrimary)
+              ? undefined
+              : stageFallback?.unverified_reason_code,
       };
       const hasReconFailure =
         status === "failed" ||
         status === "completed_with_variance" ||
-        row?.outcome?.kind === "variance" ||
-        row?.outcome?.kind === "reconciliation_deferred" ||
+        Boolean(reconOutcome) ||
         tlEv?.stage_status === "failed" ||
         tlEv?.event_type === "reconciliation_failed";
 
-      if (hasReconFailure && (status || tlEv || row?.outcome)) {
+      if (hasReconFailure && (status || tlEv || reconOutcome)) {
         const reconView = reconciliationAnalysisView(mergedRecon, t);
         stageViews[stage] = {
           label: status ? reconView.stageStatusLabel : t("tradeJourneys.detail.unknownStatus"),
@@ -904,9 +1045,28 @@ export function resolveDetailStagesAndTimeline(
     const baseView = stageStatusView(status, t, stage);
     let reason: string | undefined;
     if (stage !== "order_submission" || status !== "not_submitted") {
-      const code = stInfo?.reason_code ?? tlEv?.reason_code ?? stEv?.reason_code;
-      const detail = stInfo?.reason_detail ?? tlEv?.reason_detail ?? stEv?.reason_detail;
-      const missing = stInfo?.missing_evidence ?? tlEv?.missing_evidence ?? stEv?.missing_evidence;
+      const canUseTlEv =
+        tlEv &&
+        (!hasReconEvidenceFields(stInfo) && stInfo?.reason_code === undefined) &&
+        (hasMatchingEventIdentity(tlEv, stInfo ?? stEv ?? row?.outcome) ||
+          (extractEventIds(stInfo).length === 0 && extractEventIds(stEv).length === 0));
+      const code = stInfo?.reason_code ?? stEv?.reason_code ?? (canUseTlEv ? tlEv?.reason_code : undefined);
+      const detail =
+        stInfo?.reason_detail !== undefined
+          ? stInfo.reason_detail
+          : stEv?.reason_detail !== undefined
+            ? stEv.reason_detail
+            : canUseTlEv
+              ? tlEv?.reason_detail
+              : undefined;
+      const missing =
+        stInfo?.missing_evidence !== undefined
+          ? stInfo.missing_evidence
+          : stEv?.missing_evidence !== undefined
+            ? stEv.missing_evidence
+            : canUseTlEv
+              ? tlEv?.missing_evidence
+              : undefined;
       if (code || (Array.isArray(missing) && missing.length > 0)) {
         reason = reasonText(code, detail, t, missing);
       }
@@ -948,62 +1108,61 @@ export function resolveDetailStagesAndTimeline(
       };
     }
 
-    if (
+    const isReconEventFailureOrEvidence =
       stage === "reconciliation" &&
       (ev.stage_status === "failed" ||
+        ev.stage_status === "completed_with_variance" ||
+        ev.status === "failed" ||
         ev.event_type === "reconciliation_failed" ||
-        ev.reason_code ||
-        ev.reason_detail ||
-        row?.outcome?.kind === "variance" ||
-        row?.outcome?.kind === "reconciliation_deferred")
-    ) {
+        hasReconEvidenceFields(ev));
+
+    if (isReconEventFailureOrEvidence) {
       const stInfo = rawStages.reconciliation;
+      const stEv = row?.stage_events?.reconciliation;
+      const hydrationSource: ReconEvidenceCarrier | undefined = canHydrateReconTimelineEventFrom(ev, stInfo)
+        ? stInfo
+        : canHydrateReconTimelineEventFrom(ev, stEv)
+          ? stEv
+          : canHydrateReconTimelineEventFrom(ev, reconOutcome)
+            ? reconOutcome
+            : undefined;
+      const evHasLocal = hasReconEvidenceFields(ev);
       const mergedRecon: ReconciliationEvidenceInput = {
         kind:
-          row?.outcome?.kind === "reconciliation_deferred" || row?.outcome?.kind === "variance"
-            ? row.outcome.kind
+          !evHasLocal &&
+          hydrationSource &&
+          (reconOutcome?.kind === "reconciliation_deferred" || reconOutcome?.kind === "variance") &&
+          areReconCausesCompatible(hydrationSource, reconOutcome)
+            ? reconOutcome.kind
             : undefined,
-        classification: ev.classification ?? stInfo?.classification ?? row?.outcome?.classification,
+        classification: ev.classification !== undefined ? ev.classification : hydrationSource?.classification,
         accounting_variance:
-          ev.accounting_variance ?? stInfo?.accounting_variance ?? row?.outcome?.accounting_variance,
+          ev.accounting_variance !== undefined ? ev.accounting_variance : hydrationSource?.accounting_variance,
         comparison_completed:
-          ev.comparison_completed ?? stInfo?.comparison_completed ?? row?.outcome?.comparison_completed,
-        reason_code:
-          ev.reason_code ??
-          stInfo?.reason_code ??
-          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
-            ? row.outcome.reason_code
-            : undefined),
-        reason_detail:
-          ev.reason_detail ??
-          stInfo?.reason_detail ??
-          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
-            ? row.outcome.reason_detail
-            : undefined),
-        discrepancies: ev.discrepancies ?? stInfo?.discrepancies ?? row?.outcome?.discrepancies,
+          ev.comparison_completed !== undefined ? ev.comparison_completed : hydrationSource?.comparison_completed,
+        reason_code: ev.reason_code !== undefined ? ev.reason_code : hydrationSource?.reason_code,
+        reason_detail: ev.reason_detail !== undefined ? ev.reason_detail : hydrationSource?.reason_detail,
+        discrepancies: ev.discrepancies !== undefined ? ev.discrepancies : hydrationSource?.discrepancies,
         missing_evidence:
-          ev.missing_evidence ??
-          stInfo?.missing_evidence ??
-          (row?.outcome?.kind === "variance" || row?.outcome?.kind === "reconciliation_deferred"
-            ? row.outcome.missing_evidence
-            : undefined),
+          ev.missing_evidence !== undefined
+            ? ev.missing_evidence
+            : evHasLocal
+              ? undefined
+              : hydrationSource?.missing_evidence,
         unverified_reason_code:
-          ev.unverified_reason_code ?? stInfo?.unverified_reason_code ?? row?.outcome?.unverified_reason_code,
+          ev.unverified_reason_code !== undefined
+            ? ev.unverified_reason_code
+            : evHasLocal
+              ? undefined
+              : hydrationSource?.unverified_reason_code,
       };
-      const isFailureOrReconOutcome =
-        ev.stage_status === "failed" ||
-        ev.event_type === "reconciliation_failed" ||
-        Boolean(ev.reason_code) ||
-        Boolean(ev.reason_detail);
-      if (isFailureOrReconOutcome) {
-        const reconView = reconciliationAnalysisView(mergedRecon, t);
-        return {
-          ...ev,
-          displayStage: stage,
-          displayStatusLabel: reconView.stageStatusLabel,
-          displayReason: reconView.sentence,
-        };
-      }
+      const reconView = reconciliationAnalysisView(mergedRecon, t);
+      return {
+        ...ev,
+        displayStage: stage,
+        displayStatusLabel: reconView.stageStatusLabel,
+        displayReason: reconView.sentence,
+      };
     }
 
     const baseStatus = ev.stage_status

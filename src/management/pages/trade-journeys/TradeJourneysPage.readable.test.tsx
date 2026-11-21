@@ -146,7 +146,53 @@ describe("readable trade journey list (zh-TW)", () => {
   });
 
   it("states insufficient evidence when a reason or figure is missing and names an unknown reason code", async () => {
-    items([rejectedUnrecordedRow, rejectedPartialFiguresRow, rejectedUnknownCodeRow]);
+    const rejectedNullDetailRow: api.JourneyRow = {
+      ...rejectedRow,
+      journey_id: "tj_79726064-null-detail",
+      outcome: { ...rejectedRow.outcome!, reason_detail: null, missing_evidence: undefined },
+    };
+    const rejectedEmptyDetailRow: api.JourneyRow = {
+      ...rejectedRow,
+      journey_id: "tj_79726064-empty-detail",
+      outcome: { ...rejectedRow.outcome!, reason_detail: {}, missing_evidence: undefined },
+    };
+    const rejectedMissingRequiredRow: api.JourneyRow = {
+      ...rejectedRow,
+      journey_id: "tj_79726064-missing-required",
+      outcome: { ...rejectedRow.outcome!, reason_detail: { available: 100000 }, missing_evidence: undefined },
+    };
+    const positionNullDetailRow: api.JourneyRow = {
+      ...rejectedRow,
+      journey_id: "tj_79726064-position-null",
+      side: "sell",
+      outcome: {
+        ...rejectedRow.outcome!,
+        reason_code: "insufficient_position",
+        reason_detail: null,
+        missing_evidence: undefined,
+      },
+    };
+    const positionMissingRequestedRow: api.JourneyRow = {
+      ...rejectedRow,
+      journey_id: "tj_79726064-position-partial",
+      side: "sell",
+      outcome: {
+        ...rejectedRow.outcome!,
+        reason_code: "sell_without_holdings",
+        reason_detail: { holding_quantity: 0 },
+        missing_evidence: undefined,
+      },
+    };
+    items([
+      rejectedUnrecordedRow,
+      rejectedPartialFiguresRow,
+      rejectedNullDetailRow,
+      rejectedEmptyDetailRow,
+      rejectedMissingRequiredRow,
+      positionNullDetailRow,
+      positionMissingRequestedRow,
+      rejectedUnknownCodeRow,
+    ]);
     renderList();
     expect(
       await screen.findByText("風控駁回（風險評估 · 未送單）：此筆記錄沒有保存原因 · 證據不足（缺少：駁回原因）"),
@@ -154,6 +200,31 @@ describe("readable trade journey list (zh-TW)", () => {
     expect(
       screen.getByText(
         "風控駁回（風險評估 · 未送單）：現金不足：需要 100,034.3461 · 證據不足（缺少：可用金額）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(rowOf(rejectedNullDetailRow.journey_id)).getByText(
+        "風控駁回（風險評估 · 未送單）：現金不足 · 證據不足（缺少：所需金額、可用金額）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(rowOf(rejectedEmptyDetailRow.journey_id)).getByText(
+        "風控駁回（風險評估 · 未送單）：現金不足 · 證據不足（缺少：所需金額、可用金額）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(rowOf(rejectedMissingRequiredRow.journey_id)).getByText(
+        "風控駁回（風險評估 · 未送單）：現金不足：可用 100,000 · 證據不足（缺少：所需金額）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(rowOf(positionNullDetailRow.journey_id)).getByText(
+        "風控駁回（風險評估 · 未送單）：持股不足 · 證據不足（缺少：持有股數、委託股數）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(rowOf(positionMissingRequestedRow.journey_id)).getByText(
+        "風控駁回（風險評估 · 未送單）：無持股不可賣出：持有 0 · 證據不足（缺少：委託股數）",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("券商駁回（券商確認）：原因代碼 venue_halted_9")).toBeInTheDocument();
@@ -503,5 +574,297 @@ describe("readable trade journey detail (zh-TW)", () => {
     renderDetail(completedRow, [], lineage);
     await screen.findByText(/上游研究到部署階段未連結到此旅程/);
     expect(screen.queryByRole("heading", { name: "需要處理" })).toBeNull();
+  });
+
+  it("preserves event-local reconciliation cause/comparison across historical timeline items and only hydrates matching source_event_id across multi-event refresh", async () => {
+    // 1. Exact P1 reproduction: makeTj57418ba7Timeline(tj57418ba7GenuineMismatchRow) against current tj57418ba7RepairedRuntimeRow
+    renderDetail(tj57418ba7RepairedRuntimeRow, makeTj57418ba7Timeline(tj57418ba7GenuineMismatchRow), {
+      stages: { reconciliation: { status: "failed", ...tj57418ba7RepairedRuntimeRow.outcome } },
+    });
+    let panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      within(panel).getByText(
+        /對帳待確認：對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度） · 證據不足（缺少：帳務比對明細）/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("對帳: 對帳待確認")).toHaveTextContent(
+      "執行環境健康度",
+    );
+    // Timeline item preserves its event-local accounting_variance cause and compared values (217.5331 / 172.5331 / -45)
+    expect(screen.getByText("對帳 · 失敗")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
+      ),
+    ).toBeInTheDocument();
+    cleanup();
+
+    // 2. Converse P1 reproduction: old failed event without reason/evidence and unverified event against current tj57418ba7GenuineMismatchRow
+    const bareOldFailedEvent: api.JourneyTimelineEvent = {
+      event_id: "recon-old-bare-failed",
+      stage: "reconciliation",
+      event_type: "reconciliation_failed",
+      stage_status: "failed",
+      status: "failed",
+      occurred_at: "2026-11-16T06:54:00.000000Z",
+      source: "reconciliation-drift.scheduled",
+    };
+    const matchingSparseCurrentEvent: api.JourneyTimelineEvent = {
+      event_id: "48c946c8-39d1-52bd-b1a1-ce72dc7f6e14",
+      source_event_id: "48c946c8-39d1-52bd-b1a1-ce72dc7f6e14",
+      stage: "reconciliation",
+      event_type: "reconciliation_failed",
+      stage_status: "failed",
+      status: "failed",
+      occurred_at: "2026-11-16T06:58:29.000000Z",
+      source: "reconciliation-drift.scheduled",
+    };
+    renderDetail(
+      tj57418ba7GenuineMismatchRow,
+      [bareOldFailedEvent, ...makeTj57418ba7Timeline(tj57418ba7UnverifiedRow)],
+      { stages: { reconciliation: { status: "failed", ...tj57418ba7GenuineMismatchRow.outcome } } },
+    );
+    panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      within(panel).getByText(
+        "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
+      ),
+    ).toBeInTheDocument();
+    // Neither the bare old failed event nor the unverified event inherits the row's 217.5331 / 172.5331 / -45 variance
+    expect(screen.getAllByText("對帳 · 對帳待確認")).toHaveLength(2);
+    expect(
+      screen.getAllByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）"),
+    ).toHaveLength(2);
+    expect(screen.queryByText("對帳 · 失敗")).toBeNull();
+    cleanup();
+
+    // 3. Multi-event refresh regression control: pre-repair -> post-repair with historical unrecorded + historical variance + latest matching hydrated runtime event
+    const historicalVarianceEvent: api.JourneyTimelineEvent = {
+      ...makeTj57418ba7Timeline(tj57418ba7GenuineMismatchRow)[1],
+      event_id: "recon-historical-variance",
+      source_event_id: "recon-historical-variance",
+      occurred_at: "2026-11-16T06:55:00.000000Z",
+    };
+    vi.mocked(api.getTradeJourney)
+      .mockResolvedValueOnce({
+        data: {
+          ...tj57418ba7UnverifiedRow,
+          stages: { reconciliation: { status: "failed", ...tj57418ba7UnverifiedRow.outcome } },
+        },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          ...tj57418ba7RepairedRuntimeRow,
+          stages: { reconciliation: { status: "failed", ...tj57418ba7RepairedRuntimeRow.outcome } },
+        },
+        meta: fixtureMeta,
+      });
+    vi.mocked(api.getTradeJourneyTimeline)
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            makeTj57418ba7Timeline(tj57418ba7UnverifiedRow)[0],
+            bareOldFailedEvent,
+            historicalVarianceEvent,
+          ],
+        },
+        page_info: { total: 3, page_size: 100 },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            makeTj57418ba7Timeline(tj57418ba7RepairedRuntimeRow)[0],
+            bareOldFailedEvent,
+            historicalVarianceEvent,
+            matchingSparseCurrentEvent,
+          ],
+        },
+        page_info: { total: 4, page_size: 100 },
+        meta: fixtureMeta,
+      });
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fixtureMeta });
+
+    render(
+      <MemoryRouter initialEntries={[`/management/trade-journeys/${tj57418ba7UnverifiedRow.journey_id}`]}>
+        <Routes>
+          <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      screen.getByText(
+        "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "這筆旅程的情況" })).getByText(
+          /對帳待確認：對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度） · 證據不足（缺少：帳務比對明細）/,
+        ),
+      ).toBeInTheDocument(),
+    );
+    // After refresh:
+    // - bareOldFailedEvent still displays missing evidence (did not inherit runtime health or variance)
+    // - historicalVarianceEvent still displays proven variance 217.5331 / 172.5331 / -45 with 對帳 · 失敗
+    // - matchingSparseCurrentEvent hydrated from matching source_event_id 48c946c8-... and displays runtime health
+    expect(
+      screen.getByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("對帳 · 失敗")).toBeInTheDocument();
+    expect(screen.getAllByText("對帳 · 對帳待確認")).toHaveLength(2);
+    expect(
+      screen.getAllByText(
+        "對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度） · 證據不足（缺少：帳務比對明細）",
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("infers missing required/available and position figures independently across banner, stage and timeline when detail is null, empty or partial", async () => {
+    // 1. Cash rejection with reason_detail: null
+    const cashNullRow: api.JourneyRow = {
+      ...rejectedRow,
+      outcome: {
+        ...rejectedRow.outcome!,
+        reason_code: "insufficient_cash",
+        reason_detail: null,
+        missing_evidence: undefined,
+      },
+    };
+    const cashNullTimeline: api.JourneyTimelineEvent[] = [
+      rejectedTimeline[0],
+      rejectedTimeline[1],
+      {
+        ...rejectedTimeline[2],
+        reason_code: "insufficient_cash",
+        reason_detail: null,
+        missing_evidence: undefined,
+      },
+    ];
+    renderDetail(cashNullRow, cashNullTimeline, {
+      stages: {
+        ...rejectedDetailStages,
+        risk_evaluation: {
+          ...rejectedDetailStages!.risk_evaluation,
+          reason_code: "insufficient_cash",
+          reason_detail: null,
+          missing_evidence: undefined,
+        },
+      },
+    });
+    let panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      within(panel).getByText(
+        "風控駁回（風險評估 · 未送單）：現金不足 · 證據不足（缺少：所需金額、可用金額）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("風險評估: 風控駁回")).toHaveTextContent(
+      "現金不足 · 證據不足（缺少：所需金額、可用金額）",
+    );
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("下單送出: 未送單")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("現金不足 · 證據不足（缺少：所需金額、可用金額）").length,
+    ).toBeGreaterThanOrEqual(2);
+    cleanup();
+
+    // 2. Cash rejection with only available figure (required absent)
+    const cashOnlyAvailableRow: api.JourneyRow = {
+      ...rejectedRow,
+      outcome: {
+        ...rejectedRow.outcome!,
+        reason_code: "insufficient_cash",
+        reason_detail: { available: 100000 },
+        missing_evidence: undefined,
+      },
+    };
+    const cashOnlyAvailableTimeline: api.JourneyTimelineEvent[] = [
+      rejectedTimeline[0],
+      rejectedTimeline[1],
+      {
+        ...rejectedTimeline[2],
+        reason_code: "insufficient_cash",
+        reason_detail: { available: 100000 },
+        missing_evidence: undefined,
+      },
+    ];
+    renderDetail(cashOnlyAvailableRow, cashOnlyAvailableTimeline, {
+      stages: {
+        ...rejectedDetailStages,
+        risk_evaluation: {
+          ...rejectedDetailStages!.risk_evaluation,
+          reason_code: "insufficient_cash",
+          reason_detail: { available: 100000 },
+          missing_evidence: undefined,
+        },
+      },
+    });
+    panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      within(panel).getByText(
+        "風控駁回（風險評估 · 未送單）：現金不足：可用 100,000 · 證據不足（缺少：所需金額）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("風險評估: 風控駁回")).toHaveTextContent(
+      "現金不足：可用 100,000 · 證據不足（缺少：所需金額）",
+    );
+    expect(
+      screen.getAllByText("現金不足：可用 100,000 · 證據不足（缺少：所需金額）").length,
+    ).toBeGreaterThanOrEqual(2);
+    cleanup();
+
+    // 3. Position rejection with reason_detail: {} (empty object, both holding_quantity and requested_quantity absent)
+    const posEmptyRow: api.JourneyRow = {
+      ...rejectedRow,
+      side: "sell",
+      outcome: {
+        ...rejectedRow.outcome!,
+        reason_code: "insufficient_position",
+        reason_detail: {},
+        missing_evidence: undefined,
+      },
+    };
+    const posEmptyTimeline: api.JourneyTimelineEvent[] = [
+      rejectedTimeline[0],
+      rejectedTimeline[1],
+      {
+        ...rejectedTimeline[2],
+        reason_code: "insufficient_position",
+        reason_detail: {},
+        missing_evidence: undefined,
+      },
+    ];
+    renderDetail(posEmptyRow, posEmptyTimeline, {
+      stages: {
+        ...rejectedDetailStages,
+        risk_evaluation: {
+          ...rejectedDetailStages!.risk_evaluation,
+          reason_code: "insufficient_position",
+          reason_detail: {},
+          missing_evidence: undefined,
+        },
+      },
+    });
+    panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      within(panel).getByText(
+        "風控駁回（風險評估 · 未送單）：持股不足 · 證據不足（缺少：持有股數、委託股數）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText(/檢查該 persona 的持股部位與委託設定/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("風險評估: 風控駁回")).toHaveTextContent(
+      "持股不足 · 證據不足（缺少：持有股數、委託股數）",
+    );
+    expect(
+      screen.getAllByText("持股不足 · 證據不足（缺少：持有股數、委託股數）").length,
+    ).toBeGreaterThanOrEqual(2);
   });
 });

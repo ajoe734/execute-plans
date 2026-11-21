@@ -43,8 +43,12 @@
       "missing_evidence": {
         "missing_reject_reason_zh_tw": "風控駁回（風險評估 · 未送單）：此筆記錄沒有保存原因 · 證據不足（缺少：駁回原因）",
         "missing_available_cash_zh_tw": "風控駁回（風險評估 · 未送單）：現金不足：需要 100,034.3461 · 證據不足（缺少：可用金額）",
+        "missing_required_cash_zh_tw": "風控駁回（風險評估 · 未送單）：現金不足：可用 100,000 · 證據不足（缺少：所需金額）",
+        "missing_both_cash_figures_zh_tw": "風控駁回（風險評估 · 未送單）：現金不足 · 證據不足（缺少：所需金額、可用金額）",
+        "missing_position_figures_zh_tw": "風控駁回（風險評估 · 未送單）：持股不足 · 證據不足（缺少：持有股數、委託股數）",
         "missing_booking_actual_zh_tw": "對帳待確認：對帳比對證據不完整 · 待查證原因：現金餘額與成交後應有的金額不符 · 現金變動（預期 217.5331、實際 缺少） · 證據不足（缺少：現金變動（實際值））",
         "missing_reconciliation_reason_zh_tw": "對帳待確認：此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）",
+        "historical_timeline_event_isolation": "Preserves event-local reconciliation cause/comparison across historical timeline items and only hydrates when source_event_id/event_id matches and causes are compatible.",
         "grounded_action": "補齊缺少的對帳證據並確認帳務紀錄 -> /management/personas/{persona_id}"
       }
     },
