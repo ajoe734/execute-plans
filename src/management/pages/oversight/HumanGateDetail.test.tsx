@@ -4,7 +4,10 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { setMockResolver } from "@/lib/bff-v1/client";
+import { makeBffError } from "@/lib/bff-v1/errors";
 import { adaptHumanInboxDetail } from "@/lib/bff-v1/management";
+import { MeetingDetailPage } from "../meetings/MeetingDetailPage";
 import { HumanGateDetailPage } from "./HumanGateDetail";
 import type { HumanInboxDetail } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
@@ -120,6 +123,7 @@ describe("HumanGateDetailPage", () => {
   });
 
   afterEach(() => {
+    setMockResolver(undefined);
     vi.restoreAllMocks();
   });
 
@@ -532,5 +536,344 @@ describe("HumanGateDetailPage", () => {
     renderDetail(realPendingIncidentRow.id);
     expect(screen.getByRole("heading", { name: "Cannot proceed" })).toBeInTheDocument();
     expect(screen.getByText("Safe mode lock held by operator")).toBeInTheDocument();
+  });
+
+  it("localizes synthesis_review_required on the legacy MT-1 meeting_review inbox item in zh-TW and en-US, surfaces meeting evidence and explanation, and navigates directly to MeetingDetailPage for review (FE-MEETING-REVIEW-DISPOSITION-20261121)", async () => {
+    const legacyMt1InboxDetail = adaptHumanInboxDetail({
+      data: {
+        item: {
+          id: "meeting_review:mtg-2c016da5651a0dc4",
+          item_id: "mtg-2c016da5651a0dc4",
+          inbox_id: "meeting_review:mtg-2c016da5651a0dc4",
+          kind: "meeting_review",
+          inboxType: "meeting",
+          inbox_type: "meeting",
+          source_type: "meeting",
+          source_dataset: "consultation_meetings",
+          source_id: "mtg-2c016da5651a0dc4",
+          meeting_id: "mtg-2c016da5651a0dc4",
+          meeting_type: "MT-1",
+          persona_id: "persona-2448c7053e33ea48da47",
+          persona_display_name: "澄川",
+          title: "Meeting synthesis requires operator review (MT-1)",
+          summary:
+            "Meeting mtg-2c016da5651a0dc4 (MT-1) ended with REVIEW synthesis and requires operator attention.",
+          status: "pending",
+          action_state: "pending",
+          outcome: "REVIEW",
+          reason: "synthesis_review_required",
+          blocking_reasons: ["synthesis_review_required"],
+          evidence_refs: [],
+          required_role: "operator",
+          can_decide: true,
+          can_proceed: false,
+          href: "/management/meetings/mtg-2c016da5651a0dc4",
+          route: "/management/meetings/mtg-2c016da5651a0dc4",
+          detail_href: "/management/meetings/mtg-2c016da5651a0dc4",
+          links: {
+            manageHref: "/management/meetings/mtg-2c016da5651a0dc4",
+            primaryObjectHref: "/management/meetings/mtg-2c016da5651a0dc4",
+            meeting: "/management/meetings/mtg-2c016da5651a0dc4",
+          },
+        },
+      },
+    })!;
+
+    setMockResolver((method, path) => {
+      if (method === "GET" && path === "/bff/management/meetings/mtg-2c016da5651a0dc4") {
+        return () => ({
+          kind: "json",
+          status: 200,
+          body: {
+            status: "ok",
+            owner: "consultation",
+            data: {
+              meeting_id: "mtg-2c016da5651a0dc4",
+              meeting_type: "MT-1",
+              topic: "Weekly pool evolution review",
+              status: "closed",
+              outcome: "REVIEW",
+              chair_persona_id: "persona-2448c7053e33ea48da47",
+              chair_persona_display_name: "澄川",
+              participants: [
+                {
+                  persona_id: "persona-2448c7053e33ea48da47",
+                  persona_display_name: "澄川",
+                  role: "chair",
+                },
+              ],
+              case_file_items: [
+                {
+                  item_id: "facts:pool:persona-2448c7053e33ea48da47:v1",
+                  kind: "pool_health",
+                  relevance_scope: "committee",
+                  excerpt: "Pool health snapshot for 澄川",
+                },
+              ],
+              rounds: [
+                {
+                  round: 1,
+                  positions: [
+                    {
+                      label: "participant:chair:momentum",
+                      stance: "request_more_research",
+                      rationale: "Request more research before reweighting.",
+                      citations: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+                    },
+                  ],
+                },
+                {
+                  round: 2,
+                  positions: [
+                    {
+                      label: "participant:chair:momentum",
+                      stance: "request_more_research",
+                      rationale: "Second round still requests more research.",
+                      citations: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+                    },
+                  ],
+                },
+              ],
+              synthesis: {
+                proposals: [],
+                outcome: "REVIEW",
+                unreadable_reason: null,
+                summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+              },
+              proposals: [],
+              operator_review: null,
+            },
+          },
+        });
+      }
+      return undefined;
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      data: legacyMt1InboxDetail,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter
+          initialEntries={["/management/human-inbox/meeting_review%3Amtg-2c016da5651a0dc4"]}
+        >
+          <Routes>
+            <Route path="/management/human-inbox/:id" element={<HumanGateDetailPage />} />
+            <Route path="/management/meetings/:id" element={<MeetingDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(
+      screen.getByText("會議綜合結論為待人工審查（REVIEW，零提案），需操作員審核處置"),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("inbox-meeting-review-cause")).toHaveTextContent(
+      "未記錄詳細舊版原因（舊紀錄未保存具體原因代碼）",
+    );
+    expect(screen.getByTestId("inbox-meeting-review-transcript-stats")).toHaveTextContent(
+      "已記錄 2 輪討論（共 2 則發言立場）、1 筆共享事實卷宗、0 筆提案",
+    );
+    // Evidence populated from meeting detail even when legacy inbox row had evidence_refs: []
+    expect(await screen.findByText("facts:pool:persona-2448c7053e33ea48da47:v1")).toBeInTheDocument();
+
+    // Navigate directly from the inbox card to the meeting review page
+    fireEvent.click(screen.getByTestId("inbox-open-meeting-review-link"));
+    expect(await screen.findByTestId("meeting-detail-review-disposition")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-review-note-input")).toBeInTheDocument();
+    unmount();
+
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("submits meeting review from HumanGateDetailPage, reports backend failures truthfully, refreshes the pending queue on success, shows persisted disposition, and hides write controls for read-only users", async () => {
+    await i18n.changeLanguage("en-US");
+    const refresh = vi.fn();
+    let shouldFail = true;
+    const inboxDetail = adaptHumanInboxDetail({
+      data: {
+        item: {
+          id: "meeting_review:mtg-review-02",
+          item_id: "mtg-review-02",
+          inbox_id: "meeting_review:mtg-review-02",
+          kind: "meeting_review",
+          source_type: "meeting",
+          source_id: "mtg-review-02",
+          meeting_id: "mtg-review-02",
+          meeting_type: "MT-2",
+          persona_id: "persona-alpha",
+          title: "Meeting synthesis requires operator review (MT-2)",
+          summary: "Meeting mtg-review-02 (MT-2) ended with REVIEW synthesis.",
+          status: "pending",
+          action_state: "pending",
+          outcome: "REVIEW",
+          reason: "synthesis_review_required",
+          unreadable_reason: "model_output_missing",
+          blocking_reasons: ["synthesis_review_required"],
+          evidence_refs: [],
+          required_role: "operator",
+          can_decide: true,
+          can_proceed: false,
+          href: "/management/meetings/mtg-review-02",
+          links: {
+            manageHref: "/management/meetings/mtg-review-02",
+          },
+        },
+      },
+    })!;
+
+    setMockResolver((method, path) => {
+      if (method === "GET" && path === "/bff/management/meetings/mtg-review-02") {
+        return () => ({
+          kind: "json",
+          status: 200,
+          body: {
+            status: "ok",
+            owner: "consultation",
+            data: {
+              meeting_id: "mtg-review-02",
+              meeting_type: "MT-2",
+              status: "closed",
+              outcome: "REVIEW",
+              unreadable_reason: "model_output_missing",
+              synthesis_unreadable_reason: "model_output_missing",
+              case_file_items: [],
+              rounds: [],
+              proposals: [],
+              synthesis: {
+                outcome: "REVIEW",
+                proposals: [],
+                unreadable_reason: "model_output_missing",
+                summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+              },
+              operator_review: null,
+            },
+          },
+        });
+      }
+      if (method === "POST" && path === "/bff/management/meetings/mtg-review-02/review") {
+        return (req) => {
+          if (shouldFail) {
+            return {
+              kind: "error",
+              error: makeBffError({
+                code: "STATE_CONFLICT",
+                message: "Consultation owner rejected review request: meeting_already_reviewed",
+              }),
+            };
+          }
+          const body = req.body as { note: string };
+          return {
+            kind: "json",
+            status: 200,
+            body: {
+              status: "ok",
+              owner: "consultation",
+              data: {
+                meeting_id: "mtg-review-02",
+                meeting_type: "MT-2",
+                status: "closed",
+                outcome: "REVIEW",
+                unreadable_reason: "model_output_missing",
+                operator_review: {
+                  status: "reviewed",
+                  disposition: "closed_no_proposal",
+                  note: body.note,
+                  reviewed_by: "op-gate-1",
+                  reviewed_at: "2026-11-21T14:45:00Z",
+                  cause: "model_output_missing",
+                },
+                case_file_items: [],
+                rounds: [],
+                proposals: [],
+                synthesis: {
+                  outcome: "REVIEW",
+                  proposals: [],
+                  summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+                },
+              },
+            },
+          };
+        };
+      }
+      return undefined;
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      data: inboxDetail,
+      loading: false,
+      refresh,
+    });
+
+    const { unmount } = renderDetail("meeting_review:mtg-review-02");
+
+    expect(
+      screen.getByText(
+        "Meeting synthesis ended in REVIEW with no proposal and requires operator review disposition",
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("inbox-meeting-review-cause")).toHaveTextContent(
+      "Model did not return a parseable synthesis output",
+    );
+    expect(screen.getByTestId("inbox-meeting-evidence-empty")).toHaveTextContent(
+      "No evidence reference IDs were attached to this meeting record",
+    );
+    expect(screen.getByTestId("inbox-meeting-review-consequence")).toHaveTextContent(
+      "closed_no_proposal",
+    );
+
+    // Supplementary-plane CJK/emoji Unicode code-point boundary: 2001 rejected before network, 2000 accepted
+    const supplementary2001 = "𠮷".repeat(1001) + "🧪".repeat(1000);
+    fireEvent.change(screen.getByTestId("inbox-meeting-review-note-input"), {
+      target: { value: supplementary2001 },
+    });
+    expect(screen.getByTestId("inbox-meeting-review-submit")).toBeDisabled();
+    fireEvent.submit(screen.getByTestId("inbox-meeting-review-form"));
+    expect(await screen.findByTestId("inbox-meeting-review-error")).toHaveTextContent(
+      "review_note_too_long",
+    );
+
+    const noteText = "𠮷".repeat(1000) + "🧪".repeat(1000);
+    fireEvent.change(screen.getByTestId("inbox-meeting-review-note-input"), {
+      target: { value: noteText },
+    });
+    expect(screen.getByTestId("inbox-meeting-review-submit")).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId("inbox-meeting-review-submit"));
+
+    const err = await screen.findByTestId("inbox-meeting-review-error");
+    expect(err).toHaveTextContent(
+      "This meeting review has already been recorded and cannot be overwritten",
+    );
+    expect(refresh).not.toHaveBeenCalled();
+
+    shouldFail = false;
+    fireEvent.click(screen.getByTestId("inbox-meeting-review-submit"));
+
+    expect(await screen.findByTestId("inbox-meeting-review-recorded")).toBeInTheDocument();
+    expect(screen.getByTestId("inbox-meeting-review-recorded-by")).toHaveTextContent("op-gate-1");
+    expect(screen.getByTestId("inbox-meeting-review-recorded-at")).toHaveTextContent(
+      "2026-11-21T14:45:00Z",
+    );
+    expect(screen.getByTestId("inbox-meeting-review-recorded-note")).toHaveTextContent(noteText);
+    expect(screen.queryByTestId("inbox-meeting-review-submit")).not.toBeInTheDocument();
+    expect(refresh).toHaveBeenCalled();
+    unmount();
+
+    // Read-only user inspection without write controls
+    mocks.useV5Live.mockReturnValue({
+      data: {
+        ...inboxDetail,
+        canDecide: false,
+      },
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderDetail("meeting_review:mtg-review-02");
+    expect(await screen.findByTestId("inbox-meeting-review-read-only")).toBeInTheDocument();
+    expect(screen.queryByTestId("inbox-meeting-review-submit")).not.toBeInTheDocument();
   });
 });
