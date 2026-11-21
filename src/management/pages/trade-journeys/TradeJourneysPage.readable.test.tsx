@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { TradeJourneyDetailPage, TradeJourneysPage } from "./TradeJourneysPage";
 import * as api from "@/lib/bff-v1/tradeJourneys";
-import { UPSTREAM_STAGES, KNOWN_REASON_CODES } from "./journeyReadable";
+import { UPSTREAM_STAGES, KNOWN_REASON_CODES, reconciliationAnalysisView } from "./journeyReadable";
 import {
   completedRow,
   deferredRow,
@@ -23,6 +23,8 @@ import {
   rejectedUnknownCodeRow,
   rejectedUnrecordedRow,
   tj57418ba7BrokerUnavailableRow,
+  tj57418ba7DeferredOmittedCauseRow,
+  tj57418ba7DeferredUnrecordedCauseRow,
   tj57418ba7GenuineMismatchRow,
   tj57418ba7RepairedRuntimeRow,
   tj57418ba7UnverifiedRow,
@@ -1077,5 +1079,297 @@ describe("readable trade journey detail (zh-TW)", () => {
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("對帳待確認");
     expect(document.body.textContent).not.toContain("此筆記錄沒有保存原因");
+  });
+
+  it("requires positive runtime classification/code/check evidence before naming runtime health, and keeps omitted and reason_not_recorded deferred causes on 對帳待確認 with missing evidence and grounded actions across list/banner/stage/timeline refresh", async () => {
+    const t = i18n.t.bind(i18n);
+
+    // 1. Direct unit checks on reconciliationAnalysisView with real zh-TW i18next
+    const omittedDeferredView = reconciliationAnalysisView(
+      { kind: "reconciliation_deferred", reason_code: null, reason_detail: null },
+      t,
+    );
+    expect(omittedDeferredView.isUnverified).toBe(true);
+    expect(omittedDeferredView.isDeferred).toBe(false);
+    expect(omittedDeferredView.badge).toBe("對帳待確認");
+    expect(omittedDeferredView.stageStatusLabel).toBe("對帳待確認");
+    expect(omittedDeferredView.sentence).toBe("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）");
+    expect(omittedDeferredView.sentence).not.toContain("對帳時執行環境不健康");
+
+    const unrecordedDeferredView = reconciliationAnalysisView(
+      {
+        kind: "reconciliation_deferred",
+        reason_code: "reason_not_recorded",
+        reason_detail: null,
+        missing_evidence: ["reconciliation_reason"],
+      },
+      t,
+    );
+    expect(unrecordedDeferredView.isUnverified).toBe(true);
+    expect(unrecordedDeferredView.isDeferred).toBe(false);
+    expect(unrecordedDeferredView.badge).toBe("對帳待確認");
+    expect(unrecordedDeferredView.stageStatusLabel).toBe("對帳待確認");
+    expect(unrecordedDeferredView.sentence).toBe("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）");
+    expect(unrecordedDeferredView.sentence).not.toContain("對帳時執行環境不健康");
+
+    const positiveRuntimeByClass = reconciliationAnalysisView(
+      { kind: "reconciliation_deferred", classification: "runtime_health", reason_code: null, reason_detail: null },
+      t,
+    );
+    expect(positiveRuntimeByClass.isDeferred).toBe(true);
+    expect(positiveRuntimeByClass.isUnverified).toBe(false);
+    expect(positiveRuntimeByClass.sentence).toBe("對帳時執行環境不健康，等待下次排程重新對帳");
+
+    const positiveRuntimeByCode = reconciliationAnalysisView(
+      { kind: "reconciliation_deferred", reason_code: "runtime_unhealthy_at_reconciliation", reason_detail: null },
+      t,
+    );
+    expect(positiveRuntimeByCode.isDeferred).toBe(true);
+    expect(positiveRuntimeByCode.isUnverified).toBe(false);
+    expect(positiveRuntimeByCode.sentence).toBe("對帳時執行環境不健康，等待下次排程重新對帳");
+
+    const positiveRuntimeByCheck = reconciliationAnalysisView(
+      {
+        kind: "reconciliation_deferred",
+        reason_code: null,
+        reason_detail: [{ check: "runtime_health_summary", status: "warning" }],
+      },
+      t,
+    );
+    expect(positiveRuntimeByCheck.isDeferred).toBe(true);
+    expect(positiveRuntimeByCheck.isUnverified).toBe(false);
+    expect(positiveRuntimeByCheck.sentence).toBe("對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度）");
+
+    // 2. List refresh regression: omitted and reason_not_recorded deferred causes -> known runtime/broker and completed rows
+    const omittedListRow: api.JourneyRow = {
+      ...tj57418ba7DeferredOmittedCauseRow,
+      journey_id: "tj_57418ba7-deferred-omitted",
+    };
+    const unrecordedListRow: api.JourneyRow = {
+      ...tj57418ba7DeferredUnrecordedCauseRow,
+      journey_id: "tj_57418ba7-deferred-unrecorded",
+    };
+    const runtimeListRow: api.JourneyRow = {
+      ...tj57418ba7RepairedRuntimeRow,
+      journey_id: "tj_57418ba7-deferred-omitted",
+    };
+    const brokerListRow: api.JourneyRow = {
+      ...tj57418ba7BrokerUnavailableRow,
+      journey_id: "tj_57418ba7-deferred-unrecorded",
+    };
+
+    vi.mocked(api.listTradeJourneys)
+      .mockResolvedValueOnce({
+        data: { items: [omittedListRow, unrecordedListRow, completedRow] },
+        page_info: { total: 3, page_size: 25 },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: { items: [runtimeListRow, brokerListRow, completedRow] },
+        page_info: { total: 3, page_size: 25 },
+        meta: fixtureMeta,
+      });
+
+    renderList();
+    await screen.findByText(omittedListRow.journey_id);
+    expect(within(rowOf(omittedListRow.journey_id)).getByText("對帳待確認")).toBeInTheDocument();
+    expect(
+      within(rowOf(omittedListRow.journey_id)).getByText(
+        "此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(rowOf(unrecordedListRow.journey_id)).getByText("對帳待確認")).toBeInTheDocument();
+    expect(
+      within(rowOf(unrecordedListRow.journey_id)).getByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）"),
+    ).toBeInTheDocument();
+    expect(within(rowOf(completedRow.journey_id)).getByText("已完成")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("對帳時執行環境不健康");
+
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    await waitFor(() =>
+      expect(
+        within(rowOf(runtimeListRow.journey_id)).getByText(
+          "對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度） · 證據不足（缺少：帳務比對明細）",
+        ),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      within(rowOf(brokerListRow.journey_id)).getByText(
+        "對帳時無法連到券商，等待下次排程重新對帳（檢查項目：券商訂單紀錄（HTTP 503））",
+      ),
+    ).toBeInTheDocument();
+    expect(within(rowOf(completedRow.journey_id)).getByText("已完成")).toBeInTheDocument();
+    cleanup();
+
+    // 3. Detail banner + stage + timeline refresh regression: omitted deferred -> reason_not_recorded deferred -> repaired runtime health (retaining historical omitted, unrecorded, and passed-check timeline events)
+    const historicalOmittedEvent: api.JourneyTimelineEvent = {
+      ...makeTj57418ba7Timeline(tj57418ba7DeferredOmittedCauseRow)[1],
+      event_id: "recon-deferred-omitted-hist",
+      source_event_id: "recon-deferred-omitted-hist",
+      occurred_at: "2026-11-16T06:53:00.000000Z",
+    };
+    const historicalUnrecordedEvent: api.JourneyTimelineEvent = {
+      ...makeTj57418ba7Timeline(tj57418ba7DeferredUnrecordedCauseRow)[1],
+      event_id: "recon-deferred-unrecorded-hist",
+      source_event_id: "recon-deferred-unrecorded-hist",
+      occurred_at: "2026-11-16T06:55:00.000000Z",
+    };
+    const historicalPassedCheckEvent: api.JourneyTimelineEvent = {
+      event_id: "recon-passed-check-hist",
+      source_event_id: "recon-passed-check-hist",
+      stage: "reconciliation",
+      event_type: "reconciliation_completed",
+      stage_status: "succeeded",
+      status: "succeeded",
+      occurred_at: "2026-11-16T06:54:00.000000Z",
+      source: "reconciliation-drift.scheduled",
+      reason_detail: [
+        { check: "broker_fill_qty", status: "passed", expected: 1, actual: 1, difference: 0 },
+        { check: "cash_change", status: "passed", expected: 2206, actual: 2206, difference: 0 },
+      ],
+    };
+
+    vi.mocked(api.getTradeJourney)
+      .mockResolvedValueOnce({
+        data: {
+          ...tj57418ba7DeferredOmittedCauseRow,
+          stages: { reconciliation: { status: "failed", ...tj57418ba7DeferredOmittedCauseRow.outcome } },
+        },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          ...tj57418ba7DeferredUnrecordedCauseRow,
+          stages: { reconciliation: { status: "failed", ...tj57418ba7DeferredUnrecordedCauseRow.outcome } },
+        },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          ...tj57418ba7RepairedRuntimeRow,
+          stages: { reconciliation: { status: "failed", ...tj57418ba7RepairedRuntimeRow.outcome } },
+        },
+        meta: fixtureMeta,
+      });
+    vi.mocked(api.getTradeJourneyTimeline)
+      .mockResolvedValueOnce({
+        data: { items: makeTj57418ba7Timeline(tj57418ba7DeferredOmittedCauseRow) },
+        page_info: { total: 2, page_size: 100 },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            makeTj57418ba7Timeline(tj57418ba7DeferredUnrecordedCauseRow)[0],
+            historicalOmittedEvent,
+            makeTj57418ba7Timeline(tj57418ba7DeferredUnrecordedCauseRow)[1],
+          ],
+        },
+        page_info: { total: 3, page_size: 100 },
+        meta: fixtureMeta,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            makeTj57418ba7Timeline(tj57418ba7RepairedRuntimeRow)[0],
+            historicalOmittedEvent,
+            historicalPassedCheckEvent,
+            historicalUnrecordedEvent,
+            makeTj57418ba7Timeline(tj57418ba7RepairedRuntimeRow)[1],
+          ],
+        },
+        page_info: { total: 5, page_size: 100 },
+        meta: fixtureMeta,
+      });
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fixtureMeta });
+
+    render(
+      <MemoryRouter initialEntries={[`/management/trade-journeys/${tj57418ba7DeferredOmittedCauseRow.journey_id}`]}>
+        <Routes>
+          <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // State 1: Omitted deferred cause ({kind: "reconciliation_deferred", reason_code: null, reason_detail: null})
+    let panel = await screen.findByRole("region", { name: "這筆旅程的情況" });
+    expect(
+      within(panel).getByText("對帳待確認：此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）"),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText("目前沒有事件單，也沒有人被指派。")).toBeInTheDocument();
+    expect(within(panel).getByText(/補齊缺少的對帳證據並確認帳務紀錄/)).toBeInTheDocument();
+    expect(within(panel).getByRole("link", { name: /開啟/ })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-6507750312870d03a241",
+    );
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("對帳: 對帳待確認")).toHaveTextContent(
+      "此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）",
+    );
+    expect(screen.getByText("對帳 · 對帳待確認")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(document.body.textContent).not.toContain("對帳時執行環境不健康");
+    expect(document.body.textContent).not.toContain("等待下次排程對帳，無需動作。");
+
+    // State 2: Click refresh -> reason_not_recorded deferred cause with missing_evidence: ["reconciliation_reason"]
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "這筆旅程的情況" })).getByText(
+          "對帳待確認：此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）",
+        ),
+      ).toBeInTheDocument(),
+    );
+    panel = screen.getByRole("region", { name: "這筆旅程的情況" });
+    expect(within(panel).getByText("目前沒有事件單，也沒有人被指派。")).toBeInTheDocument();
+    expect(within(panel).getByText(/補齊缺少的對帳證據並確認帳務紀錄/)).toBeInTheDocument();
+    expect(within(panel).getByRole("link", { name: /開啟/ })).toHaveAttribute(
+      "href",
+      "/management/personas/persona-6507750312870d03a241",
+    );
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("對帳: 對帳待確認")).toHaveTextContent(
+      "此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）",
+    );
+    expect(screen.getAllByText("對帳 · 對帳待確認")).toHaveLength(2);
+    expect(
+      screen.getByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(document.body.textContent).not.toContain("對帳時執行環境不健康");
+
+    // State 3: Click refresh -> repaired known runtime health while retaining historical omitted, passed-check, and unrecorded timeline items
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "這筆旅程的情況" })).getByText(
+          "對帳待確認：對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度） · 證據不足（缺少：帳務比對明細）",
+        ),
+      ).toBeInTheDocument(),
+    );
+    panel = screen.getByRole("region", { name: "這筆旅程的情況" });
+    expect(within(panel).getByText("系統會在下次排程自動重新對帳。")).toBeInTheDocument();
+    expect(within(panel).getByText("等待下次排程對帳，無需動作。")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("旅程階段")).getByLabelText("對帳: 對帳待確認")).toHaveTextContent(
+      "對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度） · 證據不足（缺少：帳務比對明細）",
+    );
+    expect(screen.getAllByText("對帳 · 對帳待確認")).toHaveLength(3);
+    expect(screen.getByText("對帳 · 成功")).toBeInTheDocument();
+    expect(
+      screen.getByText("券商成交數量（預期 1、實際 1、差額 0）、現金變動（預期 2,206、實際 2,206、差額 0）"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度） · 證據不足（缺少：帳務比對明細）",
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
   });
 });

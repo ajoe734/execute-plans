@@ -489,6 +489,33 @@ export const tj57418ba7UpstreamOmissionRow: JourneyRow = {
   },
 };
 
+/** Deferred reconciliation with omitted cause ({kind: "reconciliation_deferred", reason_code: null, reason_detail: null}). */
+export const tj57418ba7DeferredOmittedCauseRow: JourneyRow = {
+  ...tj57418ba7UnverifiedRow,
+  flags: noFlags,
+  outcome: {
+    kind: "reconciliation_deferred",
+    reason_code: null,
+    reason_detail: null,
+    source_event_id: "48c946c8-39d1-52bd-b1a1-ce72dc7f6e14",
+  },
+  next_step: null,
+};
+
+/** Deferred reconciliation with reason_not_recorded and missing_evidence: ["reconciliation_reason"]. */
+export const tj57418ba7DeferredUnrecordedCauseRow: JourneyRow = {
+  ...tj57418ba7UnverifiedRow,
+  flags: noFlags,
+  outcome: {
+    kind: "reconciliation_deferred",
+    reason_code: "reason_not_recorded",
+    reason_detail: null,
+    missing_evidence: ["reconciliation_reason"],
+    source_event_id: "48c946c8-39d1-52bd-b1a1-ce72dc7f6e14",
+  },
+  next_step: { action_needed: "review_reconciliation_variance", href: "/personas/persona-6507750312870d03a241" },
+};
+
 export function makeTj57418ba7Timeline(row: JourneyRow): JourneyTimelineEvent[] {
   const out = row.outcome!;
   return [
@@ -511,6 +538,7 @@ export function makeTj57418ba7Timeline(row: JourneyRow): JourneyTimelineEvent[] 
       occurred_at: "2026-11-16T06:58:29.000000Z",
       recorded_at: "2026-11-16T06:58:29.106651Z",
       source: "reconciliation-drift.scheduled",
+      kind: out.kind,
       classification: out.classification,
       accounting_variance: out.accounting_variance,
       comparison_completed: out.comparison_completed,

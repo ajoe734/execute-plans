@@ -455,19 +455,24 @@ export function reconciliationAnalysisView(
     nonOkDetailItems.length > 0 &&
     nonOkDetailItems.every(item => RUNTIME_HEALTH_CHECKS.has(String(item.check ?? "").trim()));
 
+  const hasExplicitMissingCause =
+    rawCode === "reason_not_recorded" ||
+    (Array.isArray(input.missing_evidence) &&
+      input.missing_evidence.some(m => String(m ?? "").trim() === "reconciliation_reason"));
+
   const isBrokerDeferred =
-    classification === "broker_unavailable" ||
-    DEFERRED_BROKER_CODES.has(rawCode) ||
-    hasBrokerUnavailableCheck;
+    classification !== "accounting_variance" &&
+    classification !== "unverified_evidence" &&
+    (DEFERRED_BROKER_CODES.has(rawCode) ||
+      hasBrokerUnavailableCheck ||
+      (classification === "broker_unavailable" && !hasExplicitMissingCause));
   const isRuntimeDeferred =
     !isBrokerDeferred &&
-    (classification === "runtime_health" ||
-      DEFERRED_RUNTIME_CODES.has(rawCode) ||
+    classification !== "accounting_variance" &&
+    classification !== "unverified_evidence" &&
+    (DEFERRED_RUNTIME_CODES.has(rawCode) ||
       onlyRuntimeHealthChecks ||
-      (input.kind === "reconciliation_deferred" &&
-        classification !== "accounting_variance" &&
-        classification !== "unverified_evidence" &&
-        !SPECIFIC_VARIANCE_CODES.has(rawCode)));
+      (classification === "runtime_health" && !hasExplicitMissingCause));
 
   if (isBrokerDeferred || isRuntimeDeferred) {
     const effectiveCode = isBrokerDeferred
@@ -619,13 +624,24 @@ export function reconciliationAnalysisView(
   }
 
   if (inferredMissing.length === 0) {
-    if (effectiveCode === "reason_not_recorded") {
+    if (effectiveCode === "reason_not_recorded" || input.kind === "reconciliation_deferred") {
       inferredMissing.push("reconciliation_reason", "booking_comparison");
     } else if (effectiveCode === "reconciliation_identity_unverified") {
       inferredMissing.push("authoritative_actual_identity");
     } else {
       inferredMissing.push("booking_comparison");
     }
+  } else if (
+    (effectiveCode === "reason_not_recorded" || input.kind === "reconciliation_deferred") &&
+    !inferredMissing.includes("reconciliation_reason") &&
+    !inferredMissing.some(
+      m =>
+        m.startsWith("cash_change:") ||
+        m.startsWith("position_change:") ||
+        m.startsWith("committed_snapshot_"),
+    )
+  ) {
+    inferredMissing.unshift("reconciliation_reason");
   }
 
   const missingPhrase = missingEvidenceText(inferredMissing, t);
@@ -849,9 +865,16 @@ function isExplicitReconFailureStatus(record: ReconStatusCarrier | null | undefi
   return (
     stageStatus === "failed" ||
     stageStatus === "completed_with_variance" ||
+    stageStatus === "unreconciled" ||
+    stageStatus === "reconciliation_deferred" ||
+    stageStatus === "deferred" ||
     status === "failed" ||
     status === "completed_with_variance" ||
-    eventType === "reconciliation_failed"
+    status === "unreconciled" ||
+    status === "reconciliation_deferred" ||
+    status === "deferred" ||
+    eventType === "reconciliation_failed" ||
+    eventType === "reconciliation_deferred"
   );
 }
 
@@ -910,12 +933,16 @@ function hasLocalReconFailureAnalysisPayload(record: ReconEvidenceCarrier | null
   if (!record || typeof record !== "object") return false;
   const evClass = String(record.classification ?? "").trim();
   const hasNonPassedDetail =
-    record.reason_detail !== undefined && !passedReconChecksList(record.reason_detail);
+    record.reason_detail !== undefined &&
+    record.reason_detail !== null &&
+    (Array.isArray(record.reason_detail)
+      ? record.reason_detail.length > 0 && !passedReconChecksList(record.reason_detail)
+      : Object.keys(record.reason_detail).length > 0);
   return (
     Boolean(evClass) ||
     hasNonPassedDetail ||
-    record.discrepancies !== undefined ||
-    record.missing_evidence !== undefined
+    (Array.isArray(record.discrepancies) && record.discrepancies.length > 0) ||
+    (Array.isArray(record.missing_evidence) && record.missing_evidence.length > 0)
   );
 }
 
@@ -930,6 +957,21 @@ function areReconCausesCompatible(
   const pCode = String(primary.reason_code ?? "").trim();
   const sCode = String(secondary.reason_code ?? "").trim();
   if (pCode && sCode && pCode !== sCode) return false;
+  const pMissingCause =
+    pCode === "reason_not_recorded" ||
+    (Array.isArray(primary.missing_evidence) && primary.missing_evidence.includes("reconciliation_reason"));
+  const sMissingCause =
+    sCode === "reason_not_recorded" ||
+    (Array.isArray(secondary.missing_evidence) && secondary.missing_evidence.includes("reconciliation_reason"));
+  const pHasKnownCause =
+    (Boolean(pCode) && pCode !== "reason_not_recorded") ||
+    (Boolean(pClass) && pClass !== "unverified_evidence");
+  const sHasKnownCause =
+    (Boolean(sCode) && sCode !== "reason_not_recorded") ||
+    (Boolean(sClass) && sClass !== "unverified_evidence");
+  if ((pMissingCause && sHasKnownCause) || (sMissingCause && pHasKnownCause)) {
+    return false;
+  }
   if (
     typeof primary.accounting_variance === "boolean" &&
     typeof secondary.accounting_variance === "boolean" &&
@@ -1166,27 +1208,27 @@ export function resolveDetailStagesAndTimeline(
             : undefined;
         const primaryHasLocalPayload = hasLocalReconFailureAnalysisPayload(stagePrimary);
         const mergedRecon: ReconciliationEvidenceInput = {
-          kind: effStageKind,
+          kind: stagePrimary?.kind ?? effStageKind,
           classification: stagePrimary?.classification ?? stageFallback?.classification,
           accounting_variance: stagePrimary?.accounting_variance ?? stageFallback?.accounting_variance,
           comparison_completed: stagePrimary?.comparison_completed ?? stageFallback?.comparison_completed,
           reason_code: stagePrimary?.reason_code ?? stageFallback?.reason_code,
           reason_detail:
-            stagePrimary?.reason_detail !== undefined
+            stagePrimary?.reason_detail !== undefined && stagePrimary?.reason_detail !== null
               ? stagePrimary.reason_detail
               : stageFallback?.reason_detail,
           discrepancies:
-            stagePrimary?.discrepancies !== undefined
+            stagePrimary?.discrepancies !== undefined && stagePrimary?.discrepancies !== null
               ? stagePrimary.discrepancies
               : stageFallback?.discrepancies,
           missing_evidence:
-            stagePrimary?.missing_evidence !== undefined
+            stagePrimary?.missing_evidence !== undefined && stagePrimary?.missing_evidence !== null
               ? stagePrimary.missing_evidence
               : primaryHasLocalPayload
                 ? undefined
                 : stageFallback?.missing_evidence,
           unverified_reason_code:
-            stagePrimary?.unverified_reason_code !== undefined
+            stagePrimary?.unverified_reason_code !== undefined && stagePrimary?.unverified_reason_code !== null
               ? stagePrimary.unverified_reason_code
               : primaryHasLocalPayload
                 ? undefined
@@ -1307,30 +1349,48 @@ export function resolveDetailStagesAndTimeline(
             ? reconOutcome
             : undefined;
       const evHasLocalPayload = hasLocalReconFailureAnalysisPayload(ev);
+      const evKind = typeof ev.kind === "string" ? ev.kind : undefined;
       const mergedRecon: ReconciliationEvidenceInput = {
         kind:
-          !evHasLocalPayload &&
+          evKind ??
+          (!evHasLocalPayload &&
           hydrationSource &&
           (reconOutcome?.kind === "reconciliation_deferred" || reconOutcome?.kind === "variance") &&
           areReconCausesCompatible(hydrationSource, reconOutcome)
             ? reconOutcome.kind
-            : undefined,
-        classification: ev.classification !== undefined ? ev.classification : hydrationSource?.classification,
+            : hydrationSource?.kind ?? undefined),
+        classification:
+          ev.classification !== undefined && ev.classification !== null
+            ? ev.classification
+            : hydrationSource?.classification,
         accounting_variance:
-          ev.accounting_variance !== undefined ? ev.accounting_variance : hydrationSource?.accounting_variance,
+          ev.accounting_variance !== undefined && ev.accounting_variance !== null
+            ? ev.accounting_variance
+            : hydrationSource?.accounting_variance,
         comparison_completed:
-          ev.comparison_completed !== undefined ? ev.comparison_completed : hydrationSource?.comparison_completed,
-        reason_code: ev.reason_code !== undefined ? ev.reason_code : hydrationSource?.reason_code,
-        reason_detail: ev.reason_detail !== undefined ? ev.reason_detail : hydrationSource?.reason_detail,
-        discrepancies: ev.discrepancies !== undefined ? ev.discrepancies : hydrationSource?.discrepancies,
+          ev.comparison_completed !== undefined && ev.comparison_completed !== null
+            ? ev.comparison_completed
+            : hydrationSource?.comparison_completed,
+        reason_code:
+          ev.reason_code !== undefined && ev.reason_code !== null && String(ev.reason_code).trim() !== ""
+            ? ev.reason_code
+            : hydrationSource?.reason_code,
+        reason_detail:
+          ev.reason_detail !== undefined && ev.reason_detail !== null
+            ? ev.reason_detail
+            : hydrationSource?.reason_detail,
+        discrepancies:
+          Array.isArray(ev.discrepancies) && ev.discrepancies.length > 0
+            ? ev.discrepancies
+            : hydrationSource?.discrepancies,
         missing_evidence:
-          ev.missing_evidence !== undefined
+          Array.isArray(ev.missing_evidence) && ev.missing_evidence.length > 0
             ? ev.missing_evidence
             : evHasLocalPayload
               ? undefined
               : hydrationSource?.missing_evidence,
         unverified_reason_code:
-          ev.unverified_reason_code !== undefined
+          ev.unverified_reason_code !== undefined && ev.unverified_reason_code !== null
             ? ev.unverified_reason_code
             : evHasLocalPayload
               ? undefined

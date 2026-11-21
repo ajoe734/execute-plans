@@ -505,8 +505,12 @@ function SummaryPanel({ row }: { row: JourneyRow }) {
   const t = useT();
   const view = outcomeView(row, t);
   const kind = view?.kind ?? row.outcome?.kind ?? "normal";
-  const isDeferred = Boolean(view?.isDeferred || kind === "reconciliation_deferred");
-  const step = row.next_step;
+  const isDeferred = Boolean(view ? view.isDeferred : kind === "reconciliation_deferred");
+  const step =
+    row.next_step ??
+    (view?.isUnverified && row.persona_id
+      ? { action_needed: "review_reconciliation_variance", href: `/personas/${row.persona_id}` }
+      : null);
   const what =
     view?.sentence ||
     (kind === "open"
@@ -521,7 +525,9 @@ function SummaryPanel({ row }: { row: JourneyRow }) {
       ? step.href.includes("/incidents/")
         ? t("tradeJourneys.summary.whoIncident")
         : t("tradeJourneys.summary.whoNobody")
-      : t("tradeJourneys.summary.whoNone");
+      : view?.isUnverified
+        ? t("tradeJourneys.summary.whoNobody")
+        : t("tradeJourneys.summary.whoNone");
   const adverse = kind === "rejected" || (kind === "variance" && !view?.isUnverified);
   const todo = isDeferred ? (
     t("tradeJourneys.summary.todoWait")
@@ -532,6 +538,8 @@ function SummaryPanel({ row }: { row: JourneyRow }) {
         {t("tradeJourneys.summary.todoOpen")} <ExternalLink size={13} />
       </Link>
     </>
+  ) : view?.isUnverified ? (
+    t("tradeJourneys.actions.review_missing_reconciliation_evidence")
   ) : (
     t("tradeJourneys.summary.todoNone")
   );

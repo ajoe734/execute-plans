@@ -14,6 +14,8 @@ import {
   rejectedRow,
   rejectedTimeline,
   tj57418ba7BrokerUnavailableRow,
+  tj57418ba7DeferredOmittedCauseRow,
+  tj57418ba7DeferredUnrecordedCauseRow,
   tj57418ba7GenuineMismatchRow,
   tj57418ba7RepairedRuntimeRow,
   tj57418ba7UnverifiedRow,
@@ -179,10 +181,17 @@ describe("FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121 real Chromium browser verifica
   const genuineControlId = "tj_57418ba7-genuine-variance";
   const omissionControlId = "tj_57418ba7-missing-evidence";
   const brokerControlId = "tj_57418ba7-broker-unavailable";
+  const deferredOmittedControlId = "tj_57418ba7-deferred-omitted";
+  const deferredUnrecordedControlId = "tj_57418ba7-deferred-unrecorded";
 
   const genuineControlRow = { ...tj57418ba7GenuineMismatchRow, journey_id: genuineControlId };
   const omissionControlRow = { ...tj57418ba7UpstreamOmissionRow, journey_id: omissionControlId };
   const brokerControlRow = { ...tj57418ba7BrokerUnavailableRow, journey_id: brokerControlId };
+  const deferredOmittedControlRow = { ...tj57418ba7DeferredOmittedCauseRow, journey_id: deferredOmittedControlId };
+  const deferredUnrecordedControlRow = {
+    ...tj57418ba7DeferredUnrecordedCauseRow,
+    journey_id: deferredUnrecordedControlId,
+  };
 
   beforeAll(async () => {
     bffServer = createServer((req, res) => {
@@ -208,12 +217,20 @@ describe("FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121 real Chromium browser verifica
 
       const current7972 = historyRepaired ? rejectedRow : rejectedBeforeRepairRow;
       const current5741 = historyRepaired ? tj57418ba7RepairedRuntimeRow : tj57418ba7UnverifiedRow;
+      const currentDeferredOmitted = historyRepaired
+        ? { ...tj57418ba7RepairedRuntimeRow, journey_id: deferredOmittedControlId }
+        : deferredOmittedControlRow;
+      const currentDeferredUnrecorded = historyRepaired
+        ? { ...tj57418ba7BrokerUnavailableRow, journey_id: deferredUnrecordedControlId }
+        : deferredUnrecordedControlRow;
       const recorded2947 = recordedVarianceDetail.data as unknown as typeof current5741;
 
       if (url.pathname === "/bff/management/trade-journeys") {
         const items = [
           current7972,
           current5741,
+          currentDeferredOmitted,
+          currentDeferredUnrecorded,
           recorded2947,
           genuineControlRow,
           omissionControlRow,
@@ -333,6 +350,8 @@ describe("FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121 real Chromium browser verifica
         }
         const reconMap: Record<string, typeof current5741> = {
           [tj57418ba7UnverifiedRow.journey_id]: current5741,
+          [deferredOmittedControlId]: currentDeferredOmitted,
+          [deferredUnrecordedControlId]: currentDeferredUnrecorded,
           [genuineControlId]: genuineControlRow,
           [omissionControlId]: omissionControlRow,
           [brokerControlId]: brokerControlRow,
@@ -412,6 +431,8 @@ describe("FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121 real Chromium browser verifica
       const listTextBefore = await readableDomText();
       expect(listTextBefore).toContain("風控駁回（風險評估 · 未送單）：此筆記錄沒有保存原因 · 證據不足（缺少：駁回原因）");
       expect(listTextBefore).toContain("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）");
+      expect(listTextBefore).toContain("此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）");
+      expect(listTextBefore).not.toContain("對帳時執行環境不健康");
       expect(listTextBefore).toContain(
         "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
       );
@@ -422,6 +443,31 @@ describe("FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121 real Chromium browser verifica
         "對帳時無法連到券商，等待下次排程重新對帳（檢查項目：券商訂單紀錄（HTTP 503））",
       );
       expect(listTextBefore).not.toMatch(RAW_LEAK_RE);
+
+      // 1b. Open omitted and reason_not_recorded deferred reconciliation controls before repair
+      await page.goto(
+        `${feBase}/management/trade-journeys/${deferredOmittedControlId}?tenant_id=tenant-dev&environment=paper`,
+        { waitUntil: "networkidle" },
+      );
+      await page.waitForSelector("text=對帳 · 對帳待確認");
+      const deferredOmittedText = await readableDomText();
+      expect(deferredOmittedText).toContain(
+        "對帳待確認：此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）",
+      );
+      expect(deferredOmittedText).toContain("補齊缺少的對帳證據並確認帳務紀錄");
+      expect(deferredOmittedText).not.toContain("對帳時執行環境不健康");
+      expect(deferredOmittedText).not.toMatch(RAW_LEAK_RE);
+
+      await page.goto(
+        `${feBase}/management/trade-journeys/${deferredUnrecordedControlId}?tenant_id=tenant-dev&environment=paper`,
+        { waitUntil: "networkidle" },
+      );
+      await page.waitForSelector("text=對帳 · 對帳待確認");
+      const deferredUnrecordedText = await readableDomText();
+      expect(deferredUnrecordedText).toContain("對帳待確認：此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）");
+      expect(deferredUnrecordedText).toContain("補齊缺少的對帳證據並確認帳務紀錄");
+      expect(deferredUnrecordedText).not.toContain("對帳時執行環境不健康");
+      expect(deferredUnrecordedText).not.toMatch(RAW_LEAK_RE);
 
       // 2. Open tj_79726064 detail before history repair, then flip to repaired and refresh in browser
       await page.goto(
