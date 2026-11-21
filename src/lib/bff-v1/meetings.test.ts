@@ -11,6 +11,12 @@ import {
   paths,
   stripPrivateMemory,
 } from "./index";
+import {
+  buildFollowUpConveneInput,
+  mgmtMeetingReviewPath,
+  reviewMeeting,
+} from "./meetings";
+import { onV5Event } from "./sse/bridge";
 
 describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
   const realFetch = globalThis.fetch;
@@ -399,5 +405,236 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
         },
       ],
     });
+  });
+
+  it("normalizes legacy REVIEW detail (null unreadable_reason -> unknown) and specific causes while stripping private item IDs from evidence_refs", async () => {
+    setMockResolver((method, path) => {
+      if (method === "GET" && path === "/bff/management/meetings/mtg-2c016da5651a0dc4") {
+        return () => ({
+          kind: "json",
+          status: 200,
+          body: {
+            status: "ok",
+            owner: "consultation",
+            data: {
+              meeting_id: "mtg-2c016da5651a0dc4",
+              meeting_type: "MT-1",
+              topic: "Weekly pool evolution review",
+              status: "closed",
+              outcome: "REVIEW",
+              chair_persona_id: "persona-2448c7053e33ea48da47",
+              chair_persona_display_name: "澄川",
+              participants: [
+                {
+                  persona_id: "persona-2448c7053e33ea48da47",
+                  persona_display_name: "澄川",
+                  role: "chair",
+                  origin: "institutional",
+                },
+              ],
+              case_file_items: [
+                {
+                  item_id: "facts:pool:persona-2448c7053e33ea48da47:v1",
+                  kind: "pool_health",
+                  relevance_scope: "committee",
+                  excerpt: "Pool Sharpe 1.18",
+                },
+                {
+                  item_id: "secret-private-item",
+                  kind: "memory",
+                  relevance_scope: "persona_private",
+                  excerpt: "PRIVATE_EXCERPT",
+                },
+              ],
+              rounds: [
+                {
+                  round: 1,
+                  positions: [
+                    {
+                      label: "participant:1",
+                      stance: "request_more_research",
+                      citations: ["facts:pool:persona-2448c7053e33ea48da47:v1", "secret-private-item"],
+                    },
+                    {
+                      label: "participant:priv",
+                      is_private: true,
+                      citations: ["secret-private-pos-ref"],
+                    },
+                  ],
+                },
+              ],
+              evidence_refs: [
+                "facts:pool:persona-2448c7053e33ea48da47:v1",
+                "secret-private-item",
+                "secret-private-pos-ref",
+              ],
+              synthesis: {
+                outcome: "REVIEW",
+                proposals: [],
+                unreadable_reason: null,
+                summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+              },
+              proposals: [],
+              operator_review: null,
+            },
+          },
+        });
+      }
+      return undefined;
+    });
+
+    const res = await getMeetingDetail("mtg-2c016da5651a0dc4");
+    expect(res.state).toBe("ok");
+    if (res.state === "ok") {
+      expect(res.data.unreadable_reason).toBe("unknown");
+      expect(res.data.synthesis_unreadable_reason).toBe("unknown");
+      expect(res.data.operator_review).toBeNull();
+      expect(res.data.evidence_refs).toEqual(["facts:pool:persona-2448c7053e33ea48da47:v1"]);
+      expect(res.data.rounds[0].positions).toHaveLength(1);
+      expect(res.data.rounds[0].positions[0].citations).toEqual([
+        "facts:pool:persona-2448c7053e33ea48da47:v1",
+      ]);
+
+      const followUp = buildFollowUpConveneInput(res.data);
+      expect(followUp).toEqual({
+        meeting_type: "MT-1",
+        topic: "Weekly pool evolution review (follow-up research for mtg-2c016da5651a0dc4)",
+        participants: ["persona-2448c7053e33ea48da47"],
+        subject_ref: { source_meeting_id: "mtg-2c016da5651a0dc4" },
+        evidence_refs: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+      });
+    }
+  });
+
+  it("write-gates reviewMeeting, validates 2000-character Unicode notes, emits inbox refresh events on save, and maps backend write errors truthfully", async () => {
+    expect(mgmtMeetingReviewPath("mtg-2c016da5651a0dc4")).toBe(
+      "/bff/management/meetings/mtg-2c016da5651a0dc4/review",
+    );
+
+    // 1. Validation before network call
+    const emptyNote = await reviewMeeting("mtg-2c016da5651a0dc4", { note: "   " });
+    expect(emptyNote).toEqual({
+      state: "unavailable",
+      reason: "review_note_required",
+      owner: "consultation",
+    });
+
+    const overLimitNote = await reviewMeeting("mtg-2c016da5651a0dc4", {
+      note: "審".repeat(2001),
+    });
+    expect(overLimitNote).toEqual({
+      state: "unavailable",
+      reason: "review_note_too_long",
+      owner: "consultation",
+    });
+
+    // 2. Write gate closed when real writes are disabled
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "false");
+    const gated = await reviewMeeting("mtg-2c016da5651a0dc4", {
+      note: "Participants requested more research; closing with no proposal.",
+    });
+    expect(gated).toEqual({
+      state: "unavailable",
+      reason: "live_write_gate_closed",
+      owner: "consultation",
+    });
+    vi.unstubAllEnvs();
+
+    // 3. Backend conflict error mapped truthfully
+    setMockResolver((method, path) => {
+      if (method === "POST" && path === "/bff/management/meetings/mtg-conflict/review") {
+        return () => ({
+          kind: "error",
+          error: makeBffError({
+            code: "STATE_CONFLICT",
+            message: "Consultation owner rejected review request: meeting_already_reviewed",
+          }),
+        });
+      }
+      return undefined;
+    });
+    const conflictRes = await reviewMeeting("mtg-conflict", {
+      note: "Attempt conflicting review.",
+    });
+    expect(conflictRes).toEqual({
+      state: "unavailable",
+      reason: "meeting_already_reviewed",
+    });
+
+    // 4. Successful 2000-character CJK note review with Idempotency-Key & inbox V5 event
+    let capturedHeaders: Record<string, string> = {};
+    let capturedBody: unknown = null;
+    const v5Events: unknown[] = [];
+    const off = onV5Event((ev) => v5Events.push(ev));
+    const maxCjkNote = "審".repeat(2000);
+
+    setMockResolver((method, path) => {
+      if (method === "POST" && path === "/bff/management/meetings/mtg-2c016da5651a0dc4/review") {
+        return (req) => {
+          capturedHeaders = req.headers;
+          capturedBody = req.body;
+          return {
+            kind: "json",
+            status: 200,
+            body: {
+              status: "ok",
+              owner: "consultation",
+              replayed: false,
+              data: {
+                meeting_id: "mtg-2c016da5651a0dc4",
+                meeting_type: "MT-1",
+                status: "closed",
+                outcome: "REVIEW",
+                unreadable_reason: "unknown",
+                synthesis_unreadable_reason: "unknown",
+                operator_review: {
+                  status: "reviewed",
+                  disposition: "closed_no_proposal",
+                  note: maxCjkNote,
+                  reviewed_by: "op-lead",
+                  reviewed_at: "2026-11-21T14:30:00Z",
+                  cause: "unknown",
+                },
+                synthesis: {
+                  outcome: "REVIEW",
+                  proposals: [],
+                  summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+                },
+                rounds: [{ round: 1, positions: [] }],
+                proposals: [],
+              },
+            },
+          };
+        };
+      }
+      return undefined;
+    });
+
+    try {
+      const ok = await reviewMeeting(
+        "mtg-2c016da5651a0dc4",
+        { note: maxCjkNote },
+        "idem-review-2c016da5651a0dc4",
+      );
+      expect(ok.state).toBe("ok");
+      if (ok.state === "ok") {
+        expect(ok.data.outcome).toBe("REVIEW");
+        expect(ok.data.proposals).toEqual([]);
+        expect(ok.data.operator_review).toEqual({
+          status: "reviewed",
+          disposition: "closed_no_proposal",
+          note: maxCjkNote,
+          reviewed_by: "op-lead",
+          reviewed_at: "2026-11-21T14:30:00Z",
+          cause: "unknown",
+          unreadable_reason: "unknown",
+        });
+      }
+      expect(capturedHeaders["Idempotency-Key"]).toBe("idem-review-2c016da5651a0dc4");
+      expect(capturedBody).toEqual({ note: maxCjkNote });
+      expect(v5Events.length).toBeGreaterThan(0);
+    } finally {
+      off();
+    }
   });
 });

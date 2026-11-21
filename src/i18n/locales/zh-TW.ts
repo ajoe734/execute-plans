@@ -295,6 +295,48 @@ export default {
       writebacksTitle: "出席者私人記憶寫回編號",
       usageTitle: "會議用量與額度",
       noPrivateMemoryNote: "私人記憶原文永不進入會議輪次或管理畫面，此處僅記錄寫回編號。",
+      review: {
+        title: "會議綜合結論人工審核與處置",
+        pendingBadge: "待操作員審核",
+        reviewedBadge: "已審核 · 無提案結案",
+        blockingReasonLabel: "收件匣阻擋原因",
+        causeLabel: "修正 / 待審原因",
+        legacyUnknownCauseExplanation:
+          "此筆舊版會議紀錄未保存細部機器原因代碼（cause: unknown）。主席結論已依規範轉為 REVIEW 且未發出任何提案（0 筆提案）；請參考下方實際保存的討論輪次發言與共享事實卷宗進行審核。",
+        specificCauseExplanationFmt:
+          "系統記錄的待審原因為：{{cause}}。本場會議以 REVIEW 結束且未發出提案（0 筆提案）；請核對下方討論輪次發言與共享事實卷宗。",
+        transcriptSummaryTitle: "實際可用討論輪次與卷宗摘要",
+        transcriptSummaryStatsFmt:
+          "已記錄 {{rounds}} 輪討論（共 {{positions}} 則發言立場）、{{caseFiles}} 筆共享事實卷宗、{{proposals}} 筆提案",
+        transcriptEmpty: "此會議未記錄討論輪次發言。",
+        evidenceTitle: "佐證引用與卷宗編號",
+        evidenceEmpty: "此會議紀錄未附帶卷宗引用或佐證編號（舊版或零引用紀錄）。",
+        followUpTitle: "需要更多研究？以本場會議脈絡另行召開會議",
+        followUpBody:
+          "若與會者要求補充研究或您希望重新審議，可使用既有會議召開流程帶入本場會議脈絡（類型、主持與出席 Persona、卷宗引用）另開新會議。此操作與「以無提案結案本場審核」完全獨立，頁面載入時不會自動執行。",
+        followUpOpenCenter: "前往會議中心召開流程",
+        followUpConveneNow: "以本場脈絡召開後續研究會議",
+        followUpConvening: "正在召開後續會議…",
+        followUpReceiptFmt: "已召開後續研究會議：{{id}}（{{status}}）",
+        consequenceTitle: "送出審核前請確認後果",
+        consequenceBodyFmt:
+          "送出後將透過正式會議審核 API 以「審畢無提案（closed_no_proposal）」結案，並把 meeting_review:{{id}} 從人類收件匣待處理佇列移除。原始會議結果（REVIEW）、主席綜合結論、討論輪次紀錄與零提案（0 筆）皆原樣保留不變。",
+        noteLabel: "操作員審核備註",
+        notePlaceholder:
+          "記錄審核結論與處置理由（例如：兩位與會者兩輪皆要求補充研究，確認本場以零提案結案）…",
+        submitButton: "記錄審核並以無提案結案",
+        submittingButton: "正在儲存審核處置…",
+        errorPrefixFmt: "儲存會議審核失敗：{{reason}}",
+        recordedTitle: "已保存的操作員審核處置",
+        recordedByLabel: "審核操作員",
+        recordedAtLabel: "審核時間",
+        recordedDispositionLabel: "處置結果",
+        recordedNoteLabel: "審核備註",
+        recordedPreservedNote:
+          "此會議已從人類收件匣待處理佇列移除；原始會議結果（REVIEW）、主席結論、討論紀錄與零提案均完整保留。",
+        readOnlyNotice:
+          "目前為唯讀檢視模式：您可檢視會議修正原因、討論輪次紀錄、共享事實卷宗與審核狀態，但不顯示寫入控制項。",
+      },
     },
   },
   governanceDecisions: {
@@ -4506,6 +4548,9 @@ export default {
       decisionFailedFmt: "決策失敗：{{message}}",
       expandSummary: "展開全文",
       collapseSummary: "收合",
+      openMeetingReview: "前往會議審核頁",
+      meetingEvidenceEmpty:
+        "此會議紀錄未附帶卷宗引用編號；請開啟會議詳情檢視完整討論輪次與主席結論。",
     },
     pulse: {
       title: "交易脈動",
@@ -5244,6 +5289,21 @@ export default {
       missing_meeting_id: "缺少會議識別碼",
       invalid_owner_response: "主控服務回傳格式無效",
       meeting_outcome_review: "需送交治理審查",
+      synthesis_review_required:
+        "會議綜合結論為待人工審查（REVIEW，零提案），需操作員審核處置",
+      unknown: "未記錄詳細舊版原因（舊紀錄未保存具體原因代碼）",
+      closed_no_proposal: "已審核結案（無提案）",
+      model_output_missing: "模型未回傳可解析的綜合結論輸出",
+      synthesis_empty: "主席綜合結論為空白",
+      synthesis_unreadable: "主席綜合結論無法解析",
+      invalid_json: "綜合結論 JSON 格式無效",
+      more_research_requested: "與會者要求補充更多研究證據",
+      review_note_required: "請輸入非空白的操作員審核備註",
+      review_note_too_long: "操作員審核備註超過 2000 字元上限",
+      meeting_already_reviewed: "此會議已完成審核處置，不可覆寫既有紀錄",
+      meeting_not_in_review: "僅已結束且結果為 REVIEW 的會議可記錄審核處置",
+      insufficient_role: "角色權限不足：需要操作員（operator）權限",
+      operator_required: "需要已驗證的操作員身分才能記錄會議審核",
       proposal_waiting_for_operator: "等待操作員審核",
       cooldown_active: "會議冷卻期間尚未結束",
       no_eligible_peers: "無符合資格的同儕 Persona",

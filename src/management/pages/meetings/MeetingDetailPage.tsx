@@ -12,16 +12,29 @@
 //   - Usage
 // Renders an honest not-found on 404 and explicit unavailable with reason on consultation owner outage.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+import { detectMode, getMockResolver } from "@/lib/bff-v1/client";
+import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 import { reasonCodeDisplay, resolveBffSubjectDisplay, statusLabel } from "@/lib/enumLabels";
 import {
+  MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS,
+  buildFollowUpConveneInput,
+  collectMeetingEvidenceRefs,
+  conveneMeeting,
   getMeetingDetail,
+  normalizeOperatorReview,
+  resolveMeetingReviewCause,
+  reviewMeeting,
   stripPrivateMemory,
+  type ConveneMeetingReceipt,
   type MeetingDetail,
   type MeetingPreReadInterpretation,
   type MeetingsRead,
@@ -97,12 +110,25 @@ function formatAgenda(agenda: MeetingDetail["agenda"]): string[] {
 export const MeetingDetailPage = () => {
   const { id = "" } = useParams<{ id: string }>();
   const { t } = useTranslation();
+  const access = useAgoraWriteAccess();
   const [read, setRead] = useState<MeetingsRead<MeetingDetail> | null>(null);
   const [showReveal, setShowReveal] = useState(true);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [followUpBusy, setFollowUpBusy] = useState(false);
+  const [followUpReceipt, setFollowUpReceipt] = useState<ConveneMeetingReceipt | null>(null);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const reviewIdemRef = useRef<{ key: string; signature: string } | null>(null);
 
   useEffect(() => {
     let live = true;
     setRead(null);
+    setReviewNote("");
+    setReviewError(null);
+    setFollowUpReceipt(null);
+    setFollowUpError(null);
+    reviewIdemRef.current = null;
     if (!id) {
       setRead({ state: "not_found", reason: "missing_meeting_id" });
       return;
@@ -208,7 +234,110 @@ export const MeetingDetailPage = () => {
   const canRevealLabels = Boolean(m.anonymised_labels_revealed && labelReveal);
   const isReview =
     String(m.outcome ?? "").toUpperCase() === "REVIEW" ||
-    String(m.status ?? "").toUpperCase() === "REVIEW";
+    String(m.status ?? "").toUpperCase() === "REVIEW" ||
+    String(m.synthesis?.outcome ?? "").toUpperCase() === "REVIEW" ||
+    Boolean(m.operator_review);
+  const reviewCause =
+    resolveMeetingReviewCause(m as unknown as Record<string, unknown>, m.synthesis) ?? "unknown";
+  const isLegacyUnknownCause = !reviewCause || reviewCause.toLowerCase() === "unknown";
+  const causeDisplay = reasonCodeDisplay(reviewCause, t);
+  const blockingReasonDisplay = reasonCodeDisplay("synthesis_review_required", t);
+  const operatorReview = normalizeOperatorReview(m.operator_review, reviewCause);
+  const isReviewed = operatorReview?.status === "reviewed";
+  const evidenceRefs = collectMeetingEvidenceRefs(m as unknown as Record<string, unknown>);
+  const totalPositionsCount = m.rounds.reduce(
+    (acc, r) => acc + (Array.isArray(r.positions) ? r.positions.length : 0),
+    0,
+  );
+  const operatorWriteRoles = new Set([
+    "operator",
+    "approver",
+    "admin",
+    "ops",
+    "platform_admin",
+    "portfolio_manager",
+  ]);
+  const normalizedRoles = Array.isArray(access.roles)
+    ? access.roles.map((r) => String(r).trim().toLowerCase()).filter(Boolean)
+    : [];
+  const hasExplicitOperatorRole = normalizedRoles.some((r) => operatorWriteRoles.has(r));
+  const hasExplicitNonOperatorRole =
+    normalizedRoles.length > 0 && !hasExplicitOperatorRole;
+  const isUnmockedMockResolverSession =
+    detectMode() !== "live" &&
+    Boolean(getMockResolver()) &&
+    Array.isArray(access.agoraCapabilities) &&
+    readBffEnv()?.VITE_BFF_REAL_WRITES !== "false";
+  const isReadOnlyViewer =
+    m.anonymised_labels_revealed === false ||
+    hasExplicitNonOperatorRole ||
+    (!isUnmockedMockResolverSession &&
+      !access.loading &&
+      (access.writeAllowed === false ||
+        (!hasExplicitOperatorRole && access.interactionAllowed === false)));
+  const canWriteReview = (isUnmockedMockResolverSession || !access.loading) && !isReadOnlyViewer;
+  const trimmedReviewNote = reviewNote.trim();
+  const reviewNoteCharCount = Array.from(trimmedReviewNote).length;
+  const followUpCenterHref = `/management/meetings?tab=upcoming&type=${encodeURIComponent(
+    m.meeting_type || "MT-1",
+  )}${m.chair_persona_id ? `&persona_id=${encodeURIComponent(m.chair_persona_id)}` : ""}&source_meeting_id=${encodeURIComponent(m.meeting_id)}`;
+
+  const handleReviewSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!canWriteReview || isReviewed || reviewBusy) return;
+    if (!trimmedReviewNote) {
+      setReviewError("review_note_required");
+      return;
+    }
+    if (
+      reviewNoteCharCount > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS ||
+      trimmedReviewNote.length > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS
+    ) {
+      setReviewError("review_note_too_long");
+      return;
+    }
+    const sig = `${m.meeting_id}:${trimmedReviewNote}`;
+    if (!reviewIdemRef.current || reviewIdemRef.current.signature !== sig) {
+      reviewIdemRef.current = {
+        signature: sig,
+        key: `idem-review-${m.meeting_id}-${Date.now()}`,
+      };
+    }
+    setReviewBusy(true);
+    setReviewError(null);
+    try {
+      const res = await reviewMeeting(
+        m.meeting_id,
+        { note: trimmedReviewNote },
+        reviewIdemRef.current.key,
+      );
+      if (res.state === "ok") {
+        setRead(res);
+        setReviewNote("");
+      } else {
+        setReviewError(res.reason);
+      }
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
+  const handleFollowUpConvene = async () => {
+    if (!canWriteReview || followUpBusy) return;
+    setFollowUpBusy(true);
+    setFollowUpError(null);
+    setFollowUpReceipt(null);
+    try {
+      const res = await conveneMeeting(buildFollowUpConveneInput(m));
+      if (res.state === "ok") {
+        setFollowUpReceipt(res.data);
+      } else {
+        setFollowUpError(res.reason);
+      }
+    } finally {
+      setFollowUpBusy(false);
+    }
+  };
 
   return (
     <section
@@ -329,6 +458,458 @@ export const MeetingDetailPage = () => {
           </div>
         </div>
       </Card>
+
+      {/* 1b. Meeting Synthesis Review & Operator Disposition (FE-MEETING-REVIEW-DISPOSITION-20261121) */}
+      {isReview ? (
+        <Card
+          id="meeting-review-disposition"
+          data-testid="meeting-detail-review-disposition"
+          className="p-5 space-y-4 border-primary/40"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">
+                {t("meetingsCenter.detail.review.title", {
+                  defaultValue: "Meeting Synthesis Review & Operator Disposition",
+                })}
+              </h2>
+              <Badge
+                variant={isReviewed ? "secondary" : "destructive"}
+                data-testid="meeting-review-status-badge"
+              >
+                {isReviewed
+                  ? t("meetingsCenter.detail.review.reviewedBadge", {
+                      defaultValue: "Reviewed · Closed with No Proposal",
+                    })
+                  : t("meetingsCenter.detail.review.pendingBadge", {
+                      defaultValue: "Pending Operator Review",
+                    })}
+              </Badge>
+            </div>
+            <code className="text-xs font-mono text-muted-foreground">
+              meeting_review:{m.meeting_id}
+            </code>
+          </div>
+
+          {/* Explanation & Localized Blocking / Cause Reason */}
+          <div
+            className="rounded border border-border bg-muted/20 p-3.5 space-y-2 text-xs"
+            data-testid="meeting-review-explanation"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div>
+                <span className="font-semibold text-muted-foreground">
+                  {t("meetingsCenter.detail.review.blockingReasonLabel", {
+                    defaultValue: "Inbox Blocking Reason",
+                  })}
+                  :{" "}
+                </span>
+                <span className="text-foreground" data-testid="meeting-review-blocking-reason">
+                  {blockingReasonDisplay.text}
+                </span>{" "}
+                <code className="font-mono text-[11px] text-muted-foreground">
+                  (synthesis_review_required)
+                </code>
+              </div>
+              <div>
+                <span className="font-semibold text-muted-foreground">
+                  {t("meetingsCenter.detail.review.causeLabel", {
+                    defaultValue: "Review / Synthesis Cause",
+                  })}
+                  :{" "}
+                </span>
+                <span className="text-foreground" data-testid="meeting-review-cause">
+                  {causeDisplay.text}
+                </span>{" "}
+                <code className="font-mono text-[11px] text-muted-foreground">
+                  ({reviewCause})
+                </code>
+              </div>
+            </div>
+            <p className="text-sm text-foreground" data-testid="meeting-review-cause-explanation">
+              {isLegacyUnknownCause
+                ? t("meetingsCenter.detail.review.legacyUnknownCauseExplanation", {
+                    defaultValue:
+                      "This legacy meeting record did not store a detailed machine cause code (cause: unknown). The chair synthesis was recorded as REVIEW with zero proposals (0 proposals); inspect the actual deliberation rounds and shared case-file facts below to complete the review.",
+                  })
+                : t("meetingsCenter.detail.review.specificCauseExplanationFmt", {
+                    cause: causeDisplay.text,
+                    defaultValue: `Recorded synthesis review cause: ${causeDisplay.text}. This meeting closed in REVIEW with zero proposals (0 proposals); verify the deliberation transcript and shared case-file facts below.`,
+                  })}
+            </p>
+            {m.synthesis?.summary ? (
+              <p
+                className="text-xs font-mono text-muted-foreground"
+                data-testid="meeting-review-synthesis-summary"
+              >
+                synthesis: {m.synthesis.summary}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Actual Available Transcript & Case-File Summary Alongside Reason */}
+          <div
+            className="rounded border border-border p-3.5 space-y-2 text-xs"
+            data-testid="meeting-review-transcript-summary"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-foreground">
+                {t("meetingsCenter.detail.review.transcriptSummaryTitle", {
+                  defaultValue: "Available Transcript & Case-File Summary",
+                })}
+              </h3>
+              <span className="font-mono text-muted-foreground">
+                {t("meetingsCenter.detail.review.transcriptSummaryStatsFmt", {
+                  rounds: m.rounds.length,
+                  positions: totalPositionsCount,
+                  caseFiles: m.case_file_items.length,
+                  proposals: proposals.length,
+                  defaultValue: `${m.rounds.length} deliberation round(s) (${totalPositionsCount} recorded position(s)), ${m.case_file_items.length} shared case-file item(s), ${proposals.length} proposal(s)`,
+                })}
+              </span>
+            </div>
+            {m.rounds.length === 0 ? (
+              <p className="text-muted-foreground">
+                {t("meetingsCenter.detail.review.transcriptEmpty", {
+                  defaultValue: "No deliberation round positions were recorded for this meeting.",
+                })}
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {m.rounds.map((r) => (
+                  <li
+                    key={`review-round-summary-${r.round}`}
+                    className="rounded bg-muted/15 px-2.5 py-1.5 space-y-1"
+                  >
+                    <div className="font-mono font-semibold text-foreground">
+                      {t("meetingsCenter.detail.roundLabel", {
+                        round: r.round,
+                        defaultValue: `Round ${r.round}`,
+                      })}
+                      {r.evidence_note ? ` · ${r.evidence_note}` : ""}
+                    </div>
+                    {r.positions.map((pos, idx) => (
+                      <div
+                        key={`review-pos-${r.round}-${pos.label}-${idx}`}
+                        className="pl-2 border-l border-border text-muted-foreground"
+                      >
+                        <span className="font-mono text-foreground">{pos.label}</span>
+                        {pos.stance ? (
+                          <>
+                            {" "}
+                            · <span className="font-mono font-medium text-foreground">{pos.stance}</span>
+                          </>
+                        ) : null}
+                        {pos.rationale || pos.summary ? (
+                          <span> — {pos.rationale ?? pos.summary}</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {m.case_file_items.length > 0 ? (
+              <div className="pt-1 space-y-1">
+                {m.case_file_items.map((cf) => (
+                  <div key={`review-cf-${cf.item_id}`} className="text-muted-foreground">
+                    <code className="font-mono text-foreground">{cf.item_id}</code>
+                    {cf.excerpt || cf.raw_text ? `: ${cf.excerpt ?? cf.raw_text}` : ""}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Evidence Citations & Case-File References */}
+          <div
+            className="rounded border border-border p-3.5 space-y-2 text-xs"
+            data-testid="meeting-review-evidence"
+          >
+            <h3 className="font-semibold text-foreground">
+              {t("meetingsCenter.detail.review.evidenceTitle", {
+                defaultValue: "Evidence Citations & Case-File References",
+              })}
+            </h3>
+            {evidenceRefs.length > 0 ? (
+              <ul
+                className="flex flex-wrap gap-1.5"
+                data-testid="meeting-review-evidence-list"
+              >
+                {evidenceRefs.map((ref) => (
+                  <li key={ref}>
+                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
+                      {ref}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p
+                className="text-muted-foreground"
+                data-testid="meeting-review-evidence-empty"
+              >
+                {t("meetingsCenter.detail.review.evidenceEmpty", {
+                  defaultValue:
+                    "No case-file citations or evidence references were recorded on this meeting.",
+                })}
+              </p>
+            )}
+          </div>
+
+          {/* Separate Path: Convene Follow-Up Meeting for More Research */}
+          <div
+            className="rounded border border-border bg-muted/10 p-3.5 space-y-2 text-xs"
+            data-testid="meeting-review-followup-convene"
+          >
+            <h3 className="font-semibold text-foreground">
+              {t("meetingsCenter.detail.review.followUpTitle", {
+                defaultValue:
+                  "Need More Research? Convene a Follow-Up Meeting with Source Context",
+              })}
+            </h3>
+            <p className="text-muted-foreground">
+              {t("meetingsCenter.detail.review.followUpBody", {
+                defaultValue:
+                  "If participants requested more research or you want a fresh deliberation, use the existing convene flow with this source meeting's context (type, chair/participants, and evidence refs). This path is separate from closing this review with no proposal and never runs automatically.",
+              })}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  to={followUpCenterHref}
+                  data-testid="meeting-review-convene-followup-link"
+                >
+                  {t("meetingsCenter.detail.review.followUpOpenCenter", {
+                    defaultValue: "Open Convene Flow in Meetings Center",
+                  })}
+                </Link>
+              </Button>
+              {canWriteReview ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  data-testid="meeting-review-convene-followup-button"
+                  disabled={followUpBusy}
+                  onClick={() => void handleFollowUpConvene()}
+                >
+                  {followUpBusy
+                    ? t("meetingsCenter.detail.review.followUpConvening", {
+                        defaultValue: "Convening Follow-Up Meeting…",
+                      })
+                    : t("meetingsCenter.detail.review.followUpConveneNow", {
+                        defaultValue: "Convene Follow-Up Meeting with Source Context",
+                      })}
+                </Button>
+              ) : null}
+            </div>
+            {followUpReceipt ? (
+              <div
+                className="rounded border border-border bg-muted/30 p-2 text-xs"
+                data-testid="meeting-review-followup-receipt"
+              >
+                {t("meetingsCenter.detail.review.followUpReceiptFmt", {
+                  id: followUpReceipt.meeting_id,
+                  status: followUpReceipt.status,
+                  defaultValue: `Follow-up research meeting convened: ${followUpReceipt.meeting_id} (${followUpReceipt.status})`,
+                })}{" "}
+                <Link
+                  to={`/management/meetings/${encodeURIComponent(followUpReceipt.meeting_id)}`}
+                  className="font-mono underline text-primary"
+                >
+                  {followUpReceipt.meeting_id}
+                </Link>
+              </div>
+            ) : null}
+            {followUpError ? (
+              <div
+                role="alert"
+                data-testid="meeting-review-followup-error"
+                className="rounded border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"
+              >
+                {reasonCodeDisplay(followUpError, t).text}{" "}
+                <code className="font-mono">({followUpError})</code>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Persisted Operator Review OR Actionable Close-Review Form OR Read-Only Notice */}
+          {isReviewed && operatorReview ? (
+            <div
+              className="rounded border border-primary/30 bg-primary/5 p-4 space-y-2 text-xs"
+              data-testid="meeting-review-recorded"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-foreground">
+                  {t("meetingsCenter.detail.review.recordedTitle", {
+                    defaultValue: "Persisted Operator Review Disposition",
+                  })}
+                </h3>
+                <Badge variant="secondary" data-testid="meeting-review-recorded-disposition">
+                  {reasonCodeDisplay(operatorReview.disposition ?? "closed_no_proposal", t).text}{" "}
+                  <code className="ml-1 font-mono text-[10px]">
+                    ({operatorReview.disposition ?? "closed_no_proposal"})
+                  </code>
+                </Badge>
+              </div>
+              <dl className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div>
+                  <dt className="text-muted-foreground">
+                    {t("meetingsCenter.detail.review.recordedByLabel", {
+                      defaultValue: "Reviewed By",
+                    })}
+                  </dt>
+                  <dd
+                    className="font-mono font-semibold text-foreground"
+                    data-testid="meeting-review-recorded-by"
+                  >
+                    {operatorReview.reviewed_by ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">
+                    {t("meetingsCenter.detail.review.recordedAtLabel", {
+                      defaultValue: "Reviewed At",
+                    })}
+                  </dt>
+                  <dd
+                    className="font-mono text-foreground"
+                    data-testid="meeting-review-recorded-at"
+                  >
+                    {operatorReview.reviewed_at ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">
+                    {t("meetingsCenter.detail.review.causeLabel", {
+                      defaultValue: "Review / Synthesis Cause",
+                    })}
+                  </dt>
+                  <dd className="text-foreground" data-testid="meeting-review-recorded-cause">
+                    {reasonCodeDisplay(operatorReview.cause ?? reviewCause, t).text}{" "}
+                    <code className="font-mono text-[11px] text-muted-foreground">
+                      ({operatorReview.cause ?? reviewCause})
+                    </code>
+                  </dd>
+                </div>
+              </dl>
+              <div>
+                <div className="text-muted-foreground">
+                  {t("meetingsCenter.detail.review.recordedNoteLabel", {
+                    defaultValue: "Review Note",
+                  })}
+                </div>
+                <p
+                  className="mt-1 rounded border border-border bg-background p-2.5 text-sm text-foreground whitespace-pre-wrap"
+                  data-testid="meeting-review-recorded-note"
+                >
+                  {operatorReview.note ?? "—"}
+                </p>
+              </div>
+              <p className="text-muted-foreground">
+                {t("meetingsCenter.detail.review.recordedPreservedNote", {
+                  defaultValue:
+                    "This meeting has been removed from the pending Human Inbox queue; the original outcome (REVIEW), chair synthesis, transcript, and zero proposals remain intact.",
+                })}
+              </p>
+            </div>
+          ) : canWriteReview ? (
+            <form
+              onSubmit={(e) => void handleReviewSubmit(e)}
+              className="rounded border border-border p-4 space-y-3"
+              data-testid="meeting-review-form"
+            >
+              <div
+                className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-xs space-y-1"
+                data-testid="meeting-review-consequence"
+              >
+                <div className="font-semibold text-foreground">
+                  {t("meetingsCenter.detail.review.consequenceTitle", {
+                    defaultValue: "Consequence Before Submission",
+                  })}
+                </div>
+                <p className="text-muted-foreground">
+                  {t("meetingsCenter.detail.review.consequenceBodyFmt", {
+                    id: m.meeting_id,
+                    defaultValue: `Submitting records an operator review with disposition closed_no_proposal via the meeting review API and removes meeting_review:${m.meeting_id} from the pending Human Inbox queue. The original meeting outcome (REVIEW), chair synthesis, deliberation transcript, and zero proposals (0) remain intact.`,
+                  })}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="meeting-review-note-input" className="text-xs font-semibold">
+                    {t("meetingsCenter.detail.review.noteLabel", {
+                      defaultValue: "Operator Review Note",
+                    })}
+                  </Label>
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    {reviewNoteCharCount} / {MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS}
+                  </span>
+                </div>
+                <Textarea
+                  id="meeting-review-note-input"
+                  data-testid="meeting-review-note-input"
+                  rows={3}
+                  value={reviewNote}
+                  onChange={(e) => setReviewNote(e.target.value)}
+                  disabled={reviewBusy}
+                  placeholder={t("meetingsCenter.detail.review.notePlaceholder", {
+                    defaultValue:
+                      "Record your review rationale and disposition note (e.g. two participants requested more research across two rounds; closing review with no proposal)…",
+                  })}
+                />
+              </div>
+
+              {reviewError ? (
+                <div
+                  role="alert"
+                  data-testid="meeting-review-error"
+                  className="rounded border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive"
+                >
+                  {t("meetingsCenter.detail.review.errorPrefixFmt", {
+                    reason: reasonCodeDisplay(reviewError, t).text,
+                    defaultValue: `Failed to save meeting review: ${reasonCodeDisplay(reviewError, t).text}`,
+                  })}{" "}
+                  <code className="font-mono">({reviewError})</code>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  data-testid="meeting-review-submit"
+                  disabled={
+                    reviewBusy ||
+                    !trimmedReviewNote ||
+                    reviewNoteCharCount > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS
+                  }
+                >
+                  {reviewBusy
+                    ? t("meetingsCenter.detail.review.submittingButton", {
+                        defaultValue: "Saving Review Disposition…",
+                      })
+                    : t("meetingsCenter.detail.review.submitButton", {
+                        defaultValue: "Close Review with No Proposal",
+                      })}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div
+              className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground"
+              data-testid="meeting-review-read-only"
+            >
+              {t("meetingsCenter.detail.review.readOnlyNotice", {
+                defaultValue:
+                  "Read-only view: you may inspect the synthesis review reason, deliberation transcript, shared case-file facts, and review status without write controls.",
+              })}
+            </div>
+          )}
+        </Card>
+      ) : null}
 
       {/* 2. MT-4 Attribution Record (above rounds when present, per design §12.9) */}
       {m.attribution_record ? (

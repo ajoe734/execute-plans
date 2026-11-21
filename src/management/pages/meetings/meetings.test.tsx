@@ -1100,3 +1100,348 @@ describe("MeetingsCenterPage failed meetings (FE-RISK-STRATEGY-RESEARCH-UI-20261
     await i18n.changeLanguage("en-US");
   });
 });
+
+describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20261121)", () => {
+  const makeLegacyMt1ReviewMeeting = (
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    status: "ok",
+    owner: "consultation",
+    data: {
+      id: "mtg-2c016da5651a0dc4",
+      meeting_id: "mtg-2c016da5651a0dc4",
+      meeting_type: "MT-1",
+      topic: "Weekly pool evolution review for 澄川",
+      status: "closed",
+      outcome: "REVIEW",
+      chair_persona_id: "persona-2448c7053e33ea48da47",
+      chair_persona_display_name: "澄川",
+      chair_persona_name_missing: false,
+      participants: [
+        {
+          persona_id: "persona-2448c7053e33ea48da47",
+          persona_display_name: "澄川",
+          role: "chair",
+          origin: "institutional",
+        },
+        {
+          persona_id: "persona-risk-officer",
+          persona_display_name: "風控官",
+          role: "risk",
+          origin: "institutional",
+        },
+      ],
+      case_file_items: [
+        {
+          item_id: "facts:pool:persona-2448c7053e33ea48da47:v1",
+          kind: "pool_health",
+          relevance_scope: "committee",
+          source_owner: "evaluation",
+          excerpt: "Shared pool momentum member 2317 allocation & turnover summary",
+        },
+      ],
+      rounds: [
+        {
+          round: 1,
+          positions: [
+            {
+              label: "participant:chair:momentum",
+              stance: "request_more_research",
+              rationale: "Need more chip-flow evidence before changing pool weights.",
+              citations: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+            },
+            {
+              label: "participant:risk:guardian",
+              stance: "request_more_research",
+              rationale: "Hold pool composition until next week's regime evidence is complete.",
+              citations: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+            },
+          ],
+        },
+        {
+          round: 2,
+          positions: [
+            {
+              label: "participant:chair:momentum",
+              stance: "request_more_research",
+              rationale: "Second round confirms no reweight proposal is warranted today.",
+              citations: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+            },
+            {
+              label: "participant:risk:guardian",
+              stance: "request_more_research",
+              rationale: "Agree to close without proposal and revisit after fresh research.",
+              citations: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+            },
+          ],
+        },
+      ],
+      anonymised_labels_revealed: true,
+      synthesis: {
+        proposals: [],
+        outcome: "REVIEW",
+        unreadable_reason: null,
+        summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+      },
+      proposals: [],
+      writebacks: [],
+      operator_review: null,
+      created_at: "2026-11-20T17:38:10Z",
+      closed_at: "2026-11-20T17:40:52Z",
+      ...overrides,
+    },
+  });
+
+  it("navigates from MeetingsCenterPage history to the legacy MT-1 REVIEW meeting, explains the missing legacy reason alongside the 2-round transcript and case-file citations in zh-TW and en-US, and makes no automatic writes on load", async () => {
+    on("GET", "/bff/management/meetings", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        items: [
+          {
+            id: "mtg-2c016da5651a0dc4",
+            meeting_id: "mtg-2c016da5651a0dc4",
+            meeting_type: "MT-1",
+            topic: "Weekly pool evolution review for 澄川",
+            status: "closed",
+            outcome: "REVIEW",
+            chair_persona_id: "persona-2448c7053e33ea48da47",
+            chair_persona_display_name: "澄川",
+            participants: [
+              {
+                persona_id: "persona-2448c7053e33ea48da47",
+                persona_display_name: "澄川",
+                role: "chair",
+              },
+            ],
+            round: 2,
+            closed_at: "2026-11-20T17:40:52Z",
+            href: "/management/meetings/mtg-2c016da5651a0dc4",
+          },
+        ],
+      },
+    });
+    on("GET", "/bff/management/meetings/proposals", { status: "ok", owner: "consultation", data: { items: [] } });
+    on("GET", "/bff/management/meetings/catalogue", recordedCatalogueResponse);
+    on("GET", "/bff/management/meetings/mtg-2c016da5651a0dc4", makeLegacyMt1ReviewMeeting());
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/management/meetings?tab=history"]}>
+        <Routes>
+          <Route path="/management/meetings" element={<MeetingsCenterPage />} />
+          <Route path="/management/meetings/:id" element={<MeetingDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const historyLink = await screen.findByTestId("meeting-link-mtg-2c016da5651a0dc4");
+    fireEvent.click(historyLink);
+
+    const reviewCard = await screen.findByTestId("meeting-detail-review-disposition");
+    expect(reviewCard).toHaveTextContent("會議綜合結論人工審核與處置");
+    expect(screen.getByTestId("meeting-review-blocking-reason")).toHaveTextContent(
+      "會議綜合結論為待人工審查（REVIEW，零提案），需操作員審核處置",
+    );
+    expect(screen.getByTestId("meeting-review-cause")).toHaveTextContent(
+      "未記錄詳細舊版原因（舊紀錄未保存具體原因代碼）",
+    );
+    expect(screen.getByTestId("meeting-review-cause-explanation")).toHaveTextContent(
+      "此筆舊版會議紀錄未保存細部機器原因代碼（cause: unknown）",
+    );
+    expect(screen.getByTestId("meeting-review-transcript-summary")).toHaveTextContent(
+      "已記錄 2 輪討論（共 4 則發言立場）、1 筆共享事實卷宗、0 筆提案",
+    );
+    expect(screen.getByTestId("meeting-review-transcript-summary")).toHaveTextContent(
+      "Need more chip-flow evidence before changing pool weights.",
+    );
+    expect(screen.getByTestId("meeting-review-evidence-list")).toHaveTextContent(
+      "facts:pool:persona-2448c7053e33ea48da47:v1",
+    );
+    expect(screen.getByTestId("meeting-review-consequence")).toHaveTextContent(
+      "closed_no_proposal",
+    );
+    expect(screen.getByTestId("meeting-review-convene-followup-link")).toHaveAttribute(
+      "href",
+      "/management/meetings?tab=upcoming&type=MT-1&persona_id=persona-2448c7053e33ea48da47&source_meeting_id=mtg-2c016da5651a0dc4",
+    );
+    // Zero automatic writes on load
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    unmount();
+
+    await i18n.changeLanguage("en-US");
+    renderDetail("/management/meetings/mtg-2c016da5651a0dc4");
+    expect(await screen.findByTestId("meeting-review-blocking-reason")).toHaveTextContent(
+      "Meeting synthesis ended in REVIEW with no proposal and requires operator review disposition",
+    );
+    expect(screen.getByTestId("meeting-review-cause")).toHaveTextContent(
+      "No detailed legacy reason recorded (specific cause was not stored on this legacy record)",
+    );
+    expect(screen.getByTestId("meeting-review-consequence")).toHaveTextContent(
+      "Submitting records an operator review with disposition closed_no_proposal via the meeting review API",
+    );
+  });
+
+  it("renders fresh specific cause, handles write failure truthfully, saves review with no proposal, prevents accidental resubmits, persists across refresh, and keeps follow-up convene separate", async () => {
+    await i18n.changeLanguage("en-US");
+    let currentMeeting = makeLegacyMt1ReviewMeeting({
+      unreadable_reason: "model_output_missing",
+      synthesis_unreadable_reason: "model_output_missing",
+      synthesis: {
+        proposals: [],
+        outcome: "REVIEW",
+        unreadable_reason: "model_output_missing",
+        summary: "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+      },
+    });
+    let shouldFailReview = true;
+
+    on("GET", "/bff/management/meetings/mtg-2c016da5651a0dc4", () => json(currentMeeting));
+    on("POST", "/bff/management/meetings/mtg-2c016da5651a0dc4/review", (req) => {
+      if (shouldFailReview) {
+        return {
+          kind: "error" as const,
+          error: makeBffError({
+            code: "BACKEND_UNAVAILABLE",
+            message: "Consultation owner rejected review request: consultation_owner_unavailable",
+            cause: "consultation_owner_unavailable",
+          }),
+        };
+      }
+      const body = req.body as { note: string };
+      const reviewedData = {
+        ...(currentMeeting.data as Record<string, unknown>),
+        operator_review: {
+          status: "reviewed",
+          disposition: "closed_no_proposal",
+          note: body.note,
+          reviewed_by: "op-reviewer-1",
+          reviewed_at: "2026-11-21T14:40:00Z",
+          cause: "model_output_missing",
+        },
+      };
+      currentMeeting = {
+        ...currentMeeting,
+        data: reviewedData,
+      };
+      return json(currentMeeting);
+    });
+    on("POST", "/bff/management/meetings", {
+      status: "ok",
+      meeting_id: "mtg-followup-777",
+      data: {
+        meeting_id: "mtg-followup-777",
+        status: "convened",
+        meeting_type: "MT-1",
+      },
+    });
+
+    const { unmount } = renderDetail("/management/meetings/mtg-2c016da5651a0dc4");
+
+    // 1. Fresh specific cause rendered
+    expect(await screen.findByTestId("meeting-review-cause")).toHaveTextContent(
+      "Model did not return a parseable synthesis output",
+    );
+    expect(screen.getByTestId("meeting-review-explanation")).toHaveTextContent(
+      "model_output_missing",
+    );
+
+    // 2. Separate follow-up convene button works only when explicitly clicked and does not close review
+    fireEvent.click(screen.getByTestId("meeting-review-convene-followup-button"));
+    expect(await screen.findByTestId("meeting-review-followup-receipt")).toHaveTextContent(
+      "mtg-followup-777",
+    );
+    const convenePost = calls.find(
+      (c) => c.method === "POST" && c.path === "/bff/management/meetings",
+    );
+    expect(convenePost).toBeDefined();
+    expect(convenePost!.body).toMatchObject({
+      meeting_type: "MT-1",
+      participants: ["persona-2448c7053e33ea48da47", "persona-risk-officer"],
+      evidence_refs: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+    });
+    expect(screen.getByTestId("meeting-review-form")).toBeInTheDocument();
+
+    // 3. First review submission fails; error reported truthfully and note preserved
+    const noteText =
+      "Both participants requested more research across two rounds; closing review with no proposal.";
+    fireEvent.change(screen.getByTestId("meeting-review-note-input"), {
+      target: { value: noteText },
+    });
+    fireEvent.click(screen.getByTestId("meeting-review-submit"));
+
+    const errBanner = await screen.findByTestId("meeting-review-error");
+    expect(errBanner).toHaveTextContent("Consultation owner service is unavailable");
+    expect(errBanner).toHaveTextContent("consultation_owner_unavailable");
+    expect(screen.getByTestId("meeting-review-note-input")).toHaveValue(noteText);
+
+    // 4. Retry succeeds; form disappears (preventing accidental resubmits), recorded disposition shown, REVIEW outcome & 0 proposals intact
+    shouldFailReview = false;
+    fireEvent.click(screen.getByTestId("meeting-review-submit"));
+
+    const recorded = await screen.findByTestId("meeting-review-recorded");
+    expect(screen.getByTestId("meeting-review-status-badge")).toHaveTextContent(
+      "Reviewed · Closed with No Proposal",
+    );
+    expect(recorded).toHaveTextContent("Reviewed and closed with no proposal");
+    expect(recorded).toHaveTextContent("closed_no_proposal");
+    expect(screen.getByTestId("meeting-review-recorded-by")).toHaveTextContent("op-reviewer-1");
+    expect(screen.getByTestId("meeting-review-recorded-at")).toHaveTextContent(
+      "2026-11-21T14:40:00Z",
+    );
+    expect(screen.getByTestId("meeting-review-recorded-note")).toHaveTextContent(noteText);
+    expect(screen.queryByTestId("meeting-review-submit")).not.toBeInTheDocument();
+    expect(screen.getByTestId("meeting-detail-synthesis")).toHaveTextContent("REVIEW");
+    expect(screen.getByTestId("meeting-detail-proposals")).toHaveTextContent(
+      "No proposals issued in this meeting.",
+    );
+
+    const reviewPosts = calls.filter(
+      (c) => c.method === "POST" && c.path === "/bff/management/meetings/mtg-2c016da5651a0dc4/review",
+    );
+    expect(reviewPosts).toHaveLength(2);
+    expect(reviewPosts[0].headers["Idempotency-Key"]).toBeTruthy();
+    // Retry with identical note reuses the same Idempotency-Key
+    expect(reviewPosts[1].headers["Idempotency-Key"]).toBe(
+      reviewPosts[0].headers["Idempotency-Key"],
+    );
+
+    // 5. Re-entry / refetch across unmount & remount shows persisted note, reviewer, and time
+    unmount();
+    renderDetail("/management/meetings/mtg-2c016da5651a0dc4");
+    expect(await screen.findByTestId("meeting-review-recorded-note")).toHaveTextContent(noteText);
+    expect(screen.getByTestId("meeting-review-recorded-by")).toHaveTextContent("op-reviewer-1");
+    expect(screen.getByTestId("meeting-review-recorded-at")).toHaveTextContent(
+      "2026-11-21T14:40:00Z",
+    );
+    expect(screen.queryByTestId("meeting-review-form")).not.toBeInTheDocument();
+  });
+
+  it("allows a read-only user to inspect the meeting review explanation, transcript, case-file facts, and evidence without write controls", async () => {
+    access.value = {
+      loading: false,
+      interactionAllowed: false,
+      interactionDisabledReason: "Read-only viewer role",
+      writeAllowed: false,
+      writeDisabledReason: "Read-only viewer role",
+    };
+    on(
+      "GET",
+      "/bff/management/meetings/mtg-2c016da5651a0dc4",
+      makeLegacyMt1ReviewMeeting({
+        anonymised_labels_revealed: false,
+        case_file_items: [],
+        rounds: [],
+      }),
+    );
+
+    renderDetail("/management/meetings/mtg-2c016da5651a0dc4");
+
+    expect(await screen.findByTestId("meeting-detail-review-disposition")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-review-read-only")).toHaveTextContent(/Read-only view|唯讀檢視模式/);
+    expect(screen.getByTestId("meeting-review-evidence-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-review-form")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-review-submit")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-review-convene-followup-button")).not.toBeInTheDocument();
+  });
+});
