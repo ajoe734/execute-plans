@@ -1,0 +1,199 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PLAYWRIGHT-UBUNTU26-READONLY-QA-20261121",
+  "title": "Upgrade Playwright for the existing Ubuntu 26.04 Dev browser QA",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-PLAYWRIGHT-UBUNTU26-READONLY-QA-20261121",
+  "problem_register": {
+    "root_cause_class": "RC1",
+    "work_package": "WP1.2",
+    "register_pr": "https://github.com/ajoe734/pantheon/pull/7731"
+  },
+  "original_failure_evidence": {
+    "root_run_id": 44915049855,
+    "release_controller": "accepted",
+    "accepted_pair": {
+      "fe_sha": "84ac2ac67fd2abc56ba22230fa7065f0c97342e8",
+      "bff_sha": "20ad89fe3cddc6c1426ea3b139a9de3c94a1fc7c"
+    },
+    "job_id": 136888734968,
+    "job_url": "https://github.com/ajoe734/pantheon/actions/runs/44915049855/job/136888734968",
+    "artifact_id": 14714227520,
+    "log_sha256": "10e5c3df873d4b22da0ec354edda8767499c6093c3a3c49a95eb980a4fa5938a",
+    "root_cause_summary_sha256": "3ccc9ecc33740b26543b1a79bbad42b6ab2d467179c7a316acfae472566e9576",
+    "supplementary_original_four_role_qa": {
+      "outcome": "unproven",
+      "reason_code": "cli_not_ready",
+      "ready_exit": 3,
+      "raw_sha256": "a1ef0cdf189a86c0fc021adf95bd7ba091712811e02b2b2cdccbfd1ee5ad8909"
+    },
+    "job_denial_markers": [
+      "BEWARE: your OS is not officially supported by Playwright; installing dependencies for ubuntu26.04-x64 as a fallback.",
+      "Cannot install dependencies for ubuntu26.04-x64 with Playwright 1.60.0!",
+      "Failed to install browsers"
+    ],
+    "primary_sources": [
+      "https://playwright.dev/docs/release-notes#version-161",
+      "https://github.com/microsoft/playwright/releases/tag/v1.65.1",
+      "https://github.com/actions/runner-images/issues/14748"
+    ]
+  },
+  "dependency_resolution": {
+    "package_json": {
+      "@playwright/test": {
+        "before": "^1.60.0",
+        "after": "^1.65.1"
+      }
+    },
+    "package_lock_json": {
+      "node_modules/@playwright/test": {
+        "before": "1.60.0",
+        "after": "1.65.1",
+        "resolved": "https://registry.npmjs.org/@playwright/test/-/test-1.65.1.tgz",
+        "integrity": "sha512-y+NCIRm2LvY4slUVWvGh1nujJ8RF/hEisIsq2mtUPgdQC4L701bq5hZGMhrpeXjACvwvO9tj5dJqhvM6TP9lbw=="
+      },
+      "node_modules/playwright": {
+        "before": "1.60.0",
+        "after": "1.65.1",
+        "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.65.1.tgz",
+        "integrity": "sha512-vJ1FuoOrNwOKHUIVEvSt3jT1L+wjjDpwhwIstKtfvTh8XIG4FG4bIFuvNdMxi81LGfAhUgUZleVFaOLY4RIUUw=="
+      },
+      "node_modules/playwright-core": {
+        "before": "1.63.0 (top-level peer) + 1.60.0 (nested node_modules/playwright/node_modules/playwright-core)",
+        "after": "1.65.1 (single top-level deduplicated resolution shared by @playwright/test, playwright, and @axe-core/playwright@4.11.3)",
+        "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.65.1.tgz",
+        "integrity": "sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw=="
+      },
+      "node_modules/@axe-core/playwright": {
+        "version": "4.11.3",
+        "peer_playwright_core_resolved": "1.65.1 (deduped)"
+      },
+      "unrelated_dependencies_modified": 0
+    },
+    "observed_cli_version": "Version 1.65.1",
+    "bundled_browser_revisions": {
+      "chromium": "159.0.8154.6 (playwright chromium v1255)",
+      "chromium_headless_shell": "159.0.8154.6 (playwright chromium-headless-shell v1255)",
+      "ffmpeg": "v1013"
+    },
+    "vitest_jsdom_compatibility": {
+      "file": "src/test/setup.ts",
+      "reason": "Playwright 1.65.1 crPage.ts webUIHost(url) and checkUrlAllowed(url) call static URL.canParse(...). Vitest's jsdom@20.0.3 (whatwg-url@11.0.0) overwrites Node 22 globalThis.URL with a window.URL constructor that lacks static URL.canParse. Shimming URL.canParse in src/test/setup.ts restores standard WHATWG URL.canParse in Vitest without upgrading unrelated jsdom/whatwg-url dependencies."
+    }
+  },
+  "ubuntu_26_04_verification": {
+    "environment": {
+      "os_pretty_name": "Ubuntu 26.04.1 LTS",
+      "version_id": "26.04",
+      "version_codename": "resolute",
+      "container_image_digest": "sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db",
+      "node_version": "v22.23.2",
+      "npm_version": "10.9.8",
+      "dev_credentials_present": false
+    },
+    "control_before_1_60_0": {
+      "npm_ci_command": "npm ci --ignore-scripts --no-audit --no-fund",
+      "npm_ci_exit": 0,
+      "playwright_version": "Version 1.60.0",
+      "playwright_install_command": "npx --no-install playwright install --with-deps chromium",
+      "playwright_install_exit": 1,
+      "playwright_install_stderr_markers": [
+        "BEWARE: your OS is not officially supported by Playwright; installing dependencies for ubuntu26.04-x64 as a fallback.",
+        "Cannot install dependencies for ubuntu26.04-x64 with Playwright 1.60.0!",
+        "Failed to install browsers",
+        "Error: ERROR: Playwright does not support chromium on ubuntu26.04-x64"
+      ],
+      "caller_ready_script_exit": 3
+    },
+    "upgraded_after_1_65_1": {
+      "npm_ci_command": "npm ci --ignore-scripts --no-audit --no-fund",
+      "npm_ci_exit": 0,
+      "packages_installed": 947,
+      "npm_ls": {
+        "@axe-core/playwright": "4.11.3 -> playwright-core@1.65.1",
+        "@playwright/test": "1.65.1 -> playwright@1.65.1 -> playwright-core@1.65.1 deduped"
+      },
+      "playwright_version": "Version 1.65.1",
+      "playwright_install_command": "npx --no-install playwright install --with-deps chromium",
+      "playwright_install_exit": 0,
+      "ubuntu_26_04_apt_packages_installed": 117,
+      "caller_ready_script_command": "node --input-type=module -e READY_SCRIPT (from scripts/run_dev_paired_readonly_qa.py)",
+      "caller_ready_script_exit": 0,
+      "resolved_executable_path": "/root/.cache/ms-playwright/chromium-1255/chrome-linux64/chrome",
+      "headless_browser_launch": {
+        "exit_code": 0,
+        "browser_version": "159.0.8154.6",
+        "rendered_heading": "Ubuntu 26.04 Playwright 1.65.1 OK",
+        "headless_launch_ok": true
+      }
+    }
+  },
+  "preserved_original_paired_readonly_qa_contract": {
+    "cli_path": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+    "cli_sha256": "c8354cbebe09cd56b46132ea3d5f83146bd718e08a38b7fc28530d5d5ae4e329",
+    "test_path": "src/test/persona-strategy-hosted-readonly.test.ts",
+    "test_sha256": "fd0df18e83a411cb7bccd7ef36b8466d31d623afdcb26d52d182e43262e3f3ef",
+    "unchanged": true,
+    "protected_caller_note": "Existing Pantheon protected caller (scripts/run_dev_paired_readonly_qa.py in .github/workflows/nonprod-deploy.yml) and its credential-free setup step, stdin-only four-role credential transport, thresholds, and supplementary reporting remain untouched. Actual hosted public-origin report awaits the next accepted FE/BFF pair containing this frontend commit."
+  },
+  "component_and_browser_checks": {
+    "lint": {
+      "command": "npm run lint",
+      "exit_code": 0,
+      "summary": "0 errors (105 warnings)"
+    },
+    "typecheck_app": {
+      "command": "npm run typecheck:app",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.app.json --noEmit passed with 0 errors"
+    },
+    "typecheck_agora": {
+      "command": "npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.agora.json --noEmit passed with 0 errors"
+    },
+    "contract_tests": {
+      "command": "PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT npm run test:contract",
+      "exit_code": 0,
+      "summary": "49 schemas, 99 routes, 75 sha256 entries aligned; 11/11 contract-drift tests passed"
+    },
+    "ubuntu_ci_apt_and_deploy_safety": {
+      "command": "node --test scripts/__tests__/prepare-ubuntu-ci-apt.test.mjs && npx vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
+      "exit_code": 0,
+      "summary": "5/5 Ubuntu APT preparation tests and 70/70 deploy safety/workflow tests passed"
+    },
+    "original_four_role_readonly_qa_suite": {
+      "command": "npx vitest run src/test/persona-strategy-hosted-readonly.test.ts",
+      "exit_code": 0,
+      "summary": "37/37 tests passed (including real-Chromium abort accounting and full four-role/admin-batch/supplementary loopback protocol)"
+    },
+    "browser_launching_vitest_suites": {
+      "command": "npx vitest run src/test/public-build-auth-contract.test.ts src/test/accept-management-route-attribution.test.ts src/test/hosted-browser-release-policy.test.ts",
+      "exit_code": 0,
+      "summary": "3/3 test files, 221/221 tests passed"
+    },
+    "full_vitest_suite": {
+      "command": "npm run test",
+      "exit_code": 0,
+      "summary": "288/288 test files passed, 3329/3329 tests passed"
+    },
+    "production_build_and_credential_scan": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build && npm run scan:bundle-credentials",
+      "exit_code": 0,
+      "bundle_digest_sha256": "fcf815b56e2f6fa88574381b48c73d6ffc3c0714b623f04cb63781489f7a6b86"
+    },
+    "playwright_e2e_and_a11y": {
+      "command": "PANTHEON_RELEASE_GATE_CONTEXT=pull_request npx --no-install playwright test e2e/17-a11y-v5.spec.ts e2e/01-startup-session.spec.ts --project=chromium --grep-invert 'asserts MeResponse tenant/env/user/capabilities shape' --retries=0 --trace=off --reporter=list",
+      "exit_code": 0,
+      "summary": "12/12 Playwright E2E and @axe-core/playwright v5 accessibility/keyboard tests passed"
+    }
+  },
+  "runtime_budget": {
+    "persistent_writers_added": false,
+    "recurring_jobs_or_emitters_added": false,
+    "temporary_verification_cleanup": "Temporary ubuntu:26.04 Docker container (--rm), image, and /tmp/npm-cache-fe-playwright-20261121 removed after verification; 0 ubuntu images and 0 scratch dirs remain."
+  }
+}

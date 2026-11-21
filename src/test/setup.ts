@@ -64,3 +64,16 @@ const ep = Element.prototype as unknown as {
 };
 if (!ep.hasPointerCapture) ep.hasPointerCapture = () => false;
 if (!ep.scrollIntoView) ep.scrollIntoView = () => {};
+
+// jsdom 20 (whatwg-url 11) overwrites globalThis.URL without static URL.canParse,
+// which Playwright 1.65+ requires during page navigation inside Vitest.
+if (typeof URL !== "undefined" && typeof URL.canParse !== "function") {
+  URL.canParse = (url: string, base?: string) => {
+    try {
+      new URL(url, base);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+}
