@@ -1,0 +1,78 @@
+{
+  "schema_version": "task_evidence.v1",
+  "task_id": "FE-AGORA-DELIBERATIVE-MEMO-CASE-FILE-20261121",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "branch": "task/FE-AGORA-DELIBERATIVE-MEMO-CASE-FILE-20261121",
+  "register_class": "RC6",
+  "work_package": "WP6.3",
+  "title": "Show the recorded case-file state on Agora meeting memos",
+  "delivery_state": "source_verified_pending_deploy",
+  "follow_up_to": [
+    {
+      "task_id": "FE-DECISION-CASE-FILE-VIEWS-20261113",
+      "pr": 1006,
+      "merge_commit": "b2831fc0de46bc3d3933be92512e06581e4ae73c"
+    },
+    {
+      "task_id": "FE-AGORA-LEARNING-SURFACES-20261112",
+      "status": "done"
+    }
+  ],
+  "incident": {
+    "dev_root_run_id": "44915049855",
+    "fe_gate_run_id": "44918407417",
+    "observed_fe_sha": "84ac2ac67fd2abc56ba22230fa7065f0c97342e8",
+    "observed_bff_sha": "20ad89fe3cddc6c1426ea3b139a9de3c94a1fc7c",
+    "deliberative_meetings_returned": 13,
+    "deliberative_memos_returned": 14,
+    "sample_meeting_id": "mtg-0f7fa4993625ca47",
+    "sample_memo_ids": [
+      "mem-859108aab82a9ef57033",
+      "mem-9f855b503b53a654b2d5"
+    ],
+    "recorded_case_file_view": {
+      "status": "unavailable",
+      "reason": "no_case_file_recorded",
+      "case_file": null
+    },
+    "defect": "DeliberativeMeetingDetail in src/agora/pages/learning/CommitteePage.tsx loaded memos via GET /bff/agora/committee/sessions/{meetingId}/memos and rendered dissent-memo-{memo_id} rows with id, status, summary, and recommendation, but omitted the CaseFileViewPanel binding that gate-panel Memos rendered."
+  },
+  "owned_layer": "Frontend deliberative meeting and gate-panel memo case-file rendering in src/agora/pages/learning/CommitteePage.tsx and unavailable title labeling in src/management/components/case-file/CaseFileViewPanel.tsx",
+  "not_changing": [
+    "BFF routes and owners (uses existing GET /bff/agora/committee/sessions/{id}/memos and existing CaseFileViewPanel)",
+    "Locale dictionary files (reuses existing zh-TW and en-US caseFile.* strings: 決策卷宗, 無法讀取, 未記錄原因)",
+    "No synthetic case-file items, memos, or memories"
+  ],
+  "changes": {
+    "src/agora/pages/learning/CommitteePage.tsx": "Bound CaseFileViewPanel (view={m.case_file_view}, scope={`memo-${m.memo_id}`}, testId={`memo-${m.memo_id}-case-file`}) inside each deliberative meeting memo row (dissent-memo-${m.memo_id}) in DeliberativeMeetingDetail, and applied existing stripPrivateMemory privacy projection to memo payloads in both DeliberativeMeetingDetail and gate-panel Memos while preserving recommendation display, draft/published memo state, and publish receipt behavior.",
+    "src/management/components/case-file/CaseFileViewPanel.tsx": "Included existing caseFile.title ('決策卷宗' / 'Decision case file') on top-level unavailable case-file views alongside caseFile.unavailable ('無法讀取' / 'Unavailable') and the recorded reason code (or caseFile.reasonNotRecorded fallback '未記錄原因').",
+    "src/agora/pages/learning/CommitteePage.test.tsx": "Added focused tests verifying: (1) a natural deliberative meeting memo (mtg-0f7fa4993625ca47 / mem-859108aab82a9ef57033) displays the exact recorded unavailable reason (no_case_file_recorded) and existing zh-TW strings (決策卷宗, 無法讀取); (2) a deliberative memo with a valid case-file fixture renders groups, excerpts, sources, retrieval mode, empty-group reason, unresolved citation marker, rejected contribution reason, and focuses the cited item on citation click; (3) private memory items on deliberative and gate-panel memos are stripped while private_items_withheld badges and gate-panel draft->published memo state behavior remain intact."
+  },
+  "acceptance_mapping": {
+    "1": "Bound the existing CaseFileViewPanel to natural deliberative meeting memos in CommitteePage.tsx using the existing GET /bff/agora/committee/sessions/{id}/memos data (memo.case_file_view) and existing zh-TW caseFile strings (決策卷宗, 無法讀取, 未記錄原因).",
+    "2": "Verified in CommitteePage.test.tsx that a natural deliberative memo displays the exact recorded unavailable reason (no_case_file_recorded), that a valid case-file fixture renders excerpts, sources, retrieval mode, and citation focus, and that gate-panel memo rendering, privacy projection (stripPrivateMemory + private_items_withheld), and memo publish state behavior are preserved.",
+    "3": "Focused tests pass locally and read-only hosted browser steps on the exact FE/BFF pair are documented below. End-to-end acceptance on FE-DECISION-CASE-FILE-VIEWS-20261113 retains the requirement for real positive case-file content when an actual record with status='ok' is available on hosted dev."
+  },
+  "hosted_browser_acceptance_steps_for_coordinator": [
+    "1. Pre-check exact FE/BFF pair: Query https://app.dev.mvl-cap.tw/deployment.json and https://api.dev.mvl-cap.tw/bff/version before and after the browser session. Confirm deploymentState is accepted/healthy and frontendSha includes this execute-plans merge commit paired with the deployed Pantheon dev BFF.",
+    "2. Authenticate read-only Dev browser session: Use the existing short-lived OPERATOR_A Dev login scoped to tenant-dev (verify GET /bff/me returns 200 and block all non-GET/HEAD/OPTIONS requests).",
+    "3. Open Agora Committee page: Navigate to https://app.dev.mvl-cap.tw/agora/committee in Chromium (locale zh-TW) and wait for GET /bff/agora/committee/sessions (200) to render the session list.",
+    "4. Inspect natural deliberative meeting memo case-file state: Click a natural deliberative meeting row with recorded memos (e.g. data-testid='committee-session-mtg-0f7fa4993625ca47') and wait for GET /bff/agora/committee/sessions/mtg-0f7fa4993625ca47/memos (200). Locate data-testid='dissent-memo-mem-859108aab82a9ef57033' (and 'dissent-memo-mem-9f855b503b53a654b2d5').",
+    "5. Verify recorded unavailable reason or positive case-file content: When the BFF memo payload has case_file_view.status === 'unavailable' (e.g. reason 'no_case_file_recorded'), confirm data-testid='memo-mem-859108aab82a9ef57033-case-file-unavailable' is visible inside the memo row, shows '決策卷宗 · 無法讀取', and data-testid='memo-mem-859108aab82a9ef57033-case-file-unavailable-reason' displays '(no_case_file_recorded)'. When an actual memo record with case_file_view.status === 'ok' is available on hosted dev (required for full FE-DECISION-CASE-FILE-VIEWS-20261113 end-to-end closure), confirm data-testid='memo-<memo_id>-case-file' renders the case-file groups, excerpts, source owner/id, retrieval mode, and claim citation focus links."
+  ],
+  "validation": {
+    "commands": [
+      {
+        "command": "./node_modules/.bin/vitest run src/agora/pages/learning/CommitteePage.test.tsx src/agora/pages/learning/learning.pages.test.tsx src/management/components/case-file/CaseFileViewPanel.test.tsx src/management/components/persona/PersonaCyclePanel.test.tsx src/agora/i18n.guard.test.ts",
+        "status": "passed",
+        "summary": "5 test files passed, 40 tests passed"
+      },
+      {
+        "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+        "status": "passed",
+        "summary": "exit 0, 0 errors"
+      }
+    ]
+  }
+}
