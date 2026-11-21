@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -11,6 +12,7 @@ vi.mock("tsx/esm/api", () => ({
 import { setMockResolver, type MockHandler } from "@/lib/bff-v1/client";
 import { makeBffError } from "@/lib/bff-v1/errors";
 import { bffV1, managementConsoleReads } from "@/lib/bff-v1";
+import { adaptHumanInboxList } from "@/lib/bff-v1/management";
 import {
   CANONICAL_CENTERS,
   MANAGEMENT_SIDEBAR_GROUPS,
@@ -22,6 +24,7 @@ import {
 import { MeetingsCenterPage } from "./MeetingsCenterPage";
 import { MeetingDetailPage } from "./MeetingDetailPage";
 import { ConsultRulesPage } from "../governance/ConsultRulesPage";
+import { HumanInboxPage } from "../oversight/_core";
 
 void i18n.changeLanguage("en-US");
 
@@ -1459,5 +1462,118 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
     expect(screen.queryByTestId("meeting-review-form")).not.toBeInTheDocument();
     expect(screen.queryByTestId("meeting-review-submit")).not.toBeInTheDocument();
     expect(screen.queryByTestId("meeting-review-convene-followup-button")).not.toBeInTheDocument();
+  });
+
+  it("refreshes the provider-owned HumanInboxPage pending queue across inbox -> meeting review -> back to inbox navigation lifecycle", async () => {
+    await i18n.changeLanguage("en-US");
+    const appQueryClient = new QueryClient();
+    let meetingReviewed = false;
+    let inboxListFetches = 0;
+    let currentMeeting = makeLegacyMt1ReviewMeeting();
+
+    vi.spyOn(bffV1.mgmt.humanInbox, "list").mockImplementation(async () => {
+      inboxListFetches += 1;
+      return adaptHumanInboxList({
+        data: {
+          items: meetingReviewed
+            ? []
+            : [
+                {
+                  id: "meeting_review:mtg-2c016da5651a0dc4",
+                  item_id: "mtg-2c016da5651a0dc4",
+                  inbox_id: "meeting_review:mtg-2c016da5651a0dc4",
+                  kind: "meeting_review",
+                  inbox_type: "meeting",
+                  source_type: "meeting",
+                  source_id: "mtg-2c016da5651a0dc4",
+                  meeting_id: "mtg-2c016da5651a0dc4",
+                  meeting_type: "MT-1",
+                  persona_id: "persona-2448c7053e33ea48da47",
+                  persona_display_name: "澄川",
+                  title: "Meeting synthesis requires operator review (MT-1)",
+                  summary:
+                    "Meeting mtg-2c016da5651a0dc4 (MT-1) ended with REVIEW synthesis and requires operator attention.",
+                  status: "pending",
+                  action_state: "pending",
+                  outcome: "REVIEW",
+                  reason: "synthesis_review_required",
+                  blocking_reasons: ["synthesis_review_required"],
+                  evidence_refs: ["facts:pool:persona-2448c7053e33ea48da47:v1"],
+                  required_role: "operator",
+                  can_decide: true,
+                  can_proceed: false,
+                  href: "/management/meetings/mtg-2c016da5651a0dc4",
+                  links: {
+                    manageHref: "/management/meetings/mtg-2c016da5651a0dc4",
+                  },
+                },
+              ],
+          summary: { total: meetingReviewed ? 0 : 1 },
+        },
+      })!;
+    });
+
+    on("GET", "/bff/management/meetings/mtg-2c016da5651a0dc4", () => json(currentMeeting));
+    on("POST", "/bff/management/meetings/mtg-2c016da5651a0dc4/review", (req) => {
+      const body = req.body as { note: string };
+      meetingReviewed = true;
+      currentMeeting = {
+        ...currentMeeting,
+        data: {
+          ...(currentMeeting.data as Record<string, unknown>),
+          operator_review: {
+            status: "reviewed",
+            disposition: "closed_no_proposal",
+            note: body.note,
+            reviewed_by: "op-reviewer-1",
+            reviewed_at: "2026-11-21T15:15:00Z",
+            cause: "unknown",
+          },
+        },
+      };
+      return json(currentMeeting);
+    });
+
+    render(
+      <QueryClientProvider client={appQueryClient}>
+        <MemoryRouter initialEntries={["/management/human-inbox"]}>
+          <Routes>
+            <Route path="/management/human-inbox" element={<HumanInboxPage />} />
+            <Route path="/management/meetings/:id" element={<MeetingDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // 1. Pending item loads into provider-owned QueryClient cache on HumanInboxPage
+    const inboxCard = await screen.findByTestId("inbox-card-meeting_review:mtg-2c016da5651a0dc4");
+    expect(inboxCard).toBeInTheDocument();
+    expect(inboxListFetches).toBe(1);
+
+    // 2. Navigate from inbox card to MeetingDetailPage (unmounting HumanInboxPage & its V5 event listener)
+    const openMeetingLink = inboxCard.querySelector(
+      'a[href="/management/meetings/mtg-2c016da5651a0dc4"]',
+    );
+    expect(openMeetingLink).not.toBeNull();
+    fireEvent.click(openMeetingLink!);
+
+    expect(await screen.findByTestId("meeting-detail-review-disposition")).toBeInTheDocument();
+
+    // 3. Submit review on MeetingDetailPage
+    fireEvent.change(screen.getByTestId("meeting-review-note-input"), {
+      target: { value: "Reviewed transcript; closing with no proposal." },
+    });
+    fireEvent.click(screen.getByTestId("meeting-review-submit"));
+    expect(await screen.findByTestId("meeting-review-recorded")).toBeInTheDocument();
+
+    // 4. Navigate back to HumanInboxPage under the same QueryClientProvider within the 60s staleTime window
+    fireEvent.click(screen.getByTestId("meeting-detail-back-to-inbox"));
+
+    await waitFor(() => expect(inboxListFetches).toBe(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("inbox-card-meeting_review:mtg-2c016da5651a0dc4"),
+      ).not.toBeInTheDocument(),
+    );
   });
 });

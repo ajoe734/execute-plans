@@ -1,4 +1,8 @@
+import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { setMockResolver } from "./client";
 import { makeBffError } from "./errors";
 import { liveStatus } from "./liveStatus";
@@ -719,5 +723,118 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
     } finally {
       off();
     }
+  });
+
+  it("invalidates and clears inactive inbox/detail queries in a provider-owned QueryClient when unmounted during reviewMeeting", async () => {
+    const providerClient = new QueryClient();
+    let pendingList = ["meeting_review:mtg-cache"];
+    const inboxLoader = vi.fn(async () => pendingList);
+    const gateLoader = vi.fn(async () => ({
+      id: "meeting_review:mtg-cache",
+      status: pendingList.length > 0 ? "pending" : "reviewed",
+    }));
+
+    function InboxProbe() {
+      const inbox = useV5Live(inboxLoader, [], { cacheKey: "oversight.humanInbox" });
+      const detail = useV5Live(gateLoader, ["meeting_review:mtg-cache"], {
+        cacheKey: "oversight.humanGateDetail.meeting_review:mtg-cache",
+      });
+      return React.createElement(
+        "div",
+        null,
+        React.createElement(
+          "div",
+          { "data-testid": "provider-inbox-items" },
+          inbox.loading ? "loading" : JSON.stringify(inbox.data ?? []),
+        ),
+        React.createElement(
+          "div",
+          { "data-testid": "provider-gate-status" },
+          detail.loading ? "loading" : (detail.data?.status ?? "none"),
+        ),
+      );
+    }
+
+    const firstRender = render(
+      React.createElement(
+        QueryClientProvider,
+        { client: providerClient },
+        React.createElement(InboxProbe),
+      ),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-inbox-items")).toHaveTextContent(
+        JSON.stringify(["meeting_review:mtg-cache"]),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-gate-status")).toHaveTextContent("pending"),
+    );
+    expect(inboxLoader).toHaveBeenCalledTimes(1);
+    expect(gateLoader).toHaveBeenCalledTimes(1);
+
+    // Unmount inbox while review happens on the meeting route (no active V5 event listener on inbox)
+    firstRender.unmount();
+
+    setMockResolver((method, path) => {
+      if (method === "POST" && path === "/bff/management/meetings/mtg-cache/review") {
+        return () => {
+          pendingList = [];
+          return {
+            kind: "json",
+            status: 200,
+            body: {
+              status: "ok",
+              owner: "consultation",
+              data: {
+                meeting_id: "mtg-cache",
+                meeting_type: "MT-1",
+                status: "closed",
+                outcome: "REVIEW",
+                operator_review: {
+                  status: "reviewed",
+                  disposition: "closed_no_proposal",
+                  note: "Closed with no proposal after review.",
+                  reviewed_by: "op-lead",
+                  reviewed_at: "2026-11-21T15:10:00Z",
+                  cause: "unknown",
+                },
+                synthesis: { outcome: "REVIEW", proposals: [] },
+                rounds: [],
+                proposals: [],
+              },
+            },
+          };
+        };
+      }
+      return undefined;
+    });
+
+    const reviewRes = await reviewMeeting("mtg-cache", {
+      note: "Closed with no proposal after review.",
+    });
+    expect(reviewRes.state).toBe("ok");
+
+    // Remount under the same provider-owned QueryClient within the 60s staleTime window
+    const secondRender = render(
+      React.createElement(
+        QueryClientProvider,
+        { client: providerClient },
+        React.createElement(InboxProbe),
+      ),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-inbox-items")).toHaveTextContent("[]"),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-gate-status")).toHaveTextContent("reviewed"),
+    );
+    expect(inboxLoader).toHaveBeenCalledTimes(2);
+    expect(gateLoader).toHaveBeenCalledTimes(2);
+
+    secondRender.unmount();
+    cleanup();
   });
 });

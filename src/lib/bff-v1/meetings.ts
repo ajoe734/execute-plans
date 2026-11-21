@@ -5,6 +5,7 @@
 // `unavailable` with the recorded reason; unknown meeting IDs surface as `not_found`.
 // Private memory is stripped everywhere as defense-in-depth.
 
+import { QueryClient } from "@tanstack/react-query";
 import { bffFetch, detectMode, getMockResolver } from "./client";
 import { BffError } from "./errors";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";
@@ -13,6 +14,62 @@ import { getSharedQueryClient } from "./queryKeys";
 import { readBffEnv } from "./runtimeEnv";
 import { emitV5Event } from "./sse/bridge";
 import { liveWriteGated } from "./writeGate";
+
+const knownQueryClients = new Set<QueryClient>();
+const QUERY_CLIENT_TRACKED = Symbol.for("pantheon.meetings.queryClientTracked");
+
+export function registerMeetingQueryClient(client: QueryClient | null | undefined): void {
+  if (
+    client &&
+    typeof client.invalidateQueries === "function" &&
+    typeof client.removeQueries === "function"
+  ) {
+    if (knownQueryClients.has(client)) {
+      knownQueryClients.delete(client);
+    } else if (knownQueryClients.size >= 32) {
+      const oldest = knownQueryClients.values().next().value;
+      if (oldest) knownQueryClients.delete(oldest);
+    }
+    knownQueryClients.add(client);
+  }
+}
+
+function installQueryClientTracker(): void {
+  const proto = QueryClient?.prototype as
+    | (QueryClient & { [QUERY_CLIENT_TRACKED]?: boolean })
+    | undefined;
+  if (!proto || proto[QUERY_CLIENT_TRACKED]) return;
+  Object.defineProperty(proto, QUERY_CLIENT_TRACKED, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+
+  const origMount = proto.mount;
+  if (typeof origMount === "function") {
+    proto.mount = function (this: QueryClient, ...args: Parameters<QueryClient["mount"]>) {
+      registerMeetingQueryClient(this);
+      return origMount.apply(this, args);
+    };
+  }
+
+  const origDefaultQueryOptions = proto.defaultQueryOptions;
+  if (typeof origDefaultQueryOptions === "function") {
+    proto.defaultQueryOptions = function (
+      this: QueryClient,
+      options: Parameters<QueryClient["defaultQueryOptions"]>[0],
+    ) {
+      registerMeetingQueryClient(this);
+      return (origDefaultQueryOptions as (opts: unknown) => unknown).call(
+        this,
+        options,
+      ) as ReturnType<QueryClient["defaultQueryOptions"]>;
+    } as QueryClient["defaultQueryOptions"];
+  }
+}
+
+installQueryClientTracker();
 
 export type MeetingsRead<T> =
   | { state: "ok"; data: T; owner?: string; meta?: Record<string, unknown> }
@@ -1080,18 +1137,61 @@ export async function reviewMeeting(
     normalizeMeetingDetailPayload,
   );
   if (res.state === "ok") {
-    try {
-      const qc = getSharedQueryClient();
-      const matchInboxQuery = (q: { queryKey: readonly unknown[] }) =>
-        q.queryKey.some(
-          (part) =>
-            typeof part === "string" &&
-            (part.includes("humanInbox") || part.includes("humanGateDetail")),
+    const inboxItemId = `meeting_review:${cleanId}`;
+    const matchInboxQuery = (q: {
+      queryKey: readonly unknown[];
+      state?: { data?: unknown };
+    }) => {
+      const keyMatch = q.queryKey.some((part) => {
+        if (typeof part !== "string") return false;
+        const lower = part.toLowerCase();
+        return (
+          lower.includes("humaninbox") ||
+          lower.includes("human_inbox") ||
+          lower.includes("human-inbox") ||
+          lower.includes("humangate") ||
+          lower.includes("human_gate") ||
+          lower.includes("human-gate") ||
+          lower.includes("governancedecisionqueue") ||
+          lower.includes("inbox") ||
+          lower === "v5.live.anonymous" ||
+          part === cleanId ||
+          part === inboxItemId
         );
-      await qc.invalidateQueries({ predicate: matchInboxQuery });
-      qc.removeQueries({ predicate: matchInboxQuery, type: "inactive" });
-    } catch {
-      // Query client invalidation is best-effort.
+      });
+      if (keyMatch) return true;
+      const data = q.state?.data;
+      if (Array.isArray(data)) {
+        return data.some(
+          (entry) =>
+            (typeof entry === "string" &&
+              (entry === inboxItemId || entry === cleanId || entry.includes(cleanId))) ||
+            (isRecord(entry) &&
+              (entry.id === inboxItemId ||
+                entry.inbox_id === inboxItemId ||
+                entry.meetingId === cleanId ||
+                entry.meeting_id === cleanId ||
+                entry.kind === "meeting_review")),
+        );
+      }
+      if (isRecord(data)) {
+        return (
+          data.id === inboxItemId ||
+          data.inbox_id === inboxItemId ||
+          data.meetingId === cleanId ||
+          data.meeting_id === cleanId
+        );
+      }
+      return false;
+    };
+    const clients = new Set<QueryClient>([getSharedQueryClient(), ...knownQueryClients]);
+    for (const qc of clients) {
+      try {
+        await qc.invalidateQueries({ predicate: matchInboxQuery });
+        qc.removeQueries({ predicate: matchInboxQuery, type: "inactive" });
+      } catch {
+        // Query client invalidation is best-effort per client.
+      }
     }
     try {
       emitV5Event({
@@ -1099,7 +1199,7 @@ export async function reviewMeeting(
         type: "meeting_review.resolved",
         payload: {
           meeting_id: cleanId,
-          inbox_id: `meeting_review:${cleanId}`,
+          inbox_id: inboxItemId,
           operator_review: res.data.operator_review ?? null,
         },
       });

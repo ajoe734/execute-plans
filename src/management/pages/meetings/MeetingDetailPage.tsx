@@ -13,6 +13,7 @@
 // Renders an honest not-found on 404 and explicit unavailable with reason on consultation owner outage.
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ import {
   countMeetingReviewNoteChars,
   getMeetingDetail,
   normalizeOperatorReview,
+  registerMeetingQueryClient,
   resolveMeetingReviewCause,
   reviewMeeting,
   stripPrivateMemory,
@@ -112,6 +114,11 @@ export const MeetingDetailPage = () => {
   const { id = "" } = useParams<{ id: string }>();
   const { t } = useTranslation();
   const access = useAgoraWriteAccess();
+  try {
+    registerMeetingQueryClient(useQueryClient());
+  } catch {
+    // No external QueryClientProvider mounted; shared fallback client is used.
+  }
   const [read, setRead] = useState<MeetingsRead<MeetingDetail> | null>(null);
   const [showReveal, setShowReveal] = useState(true);
   const [reviewNote, setReviewNote] = useState("");
@@ -344,12 +351,19 @@ export const MeetingDetailPage = () => {
       data-testid="meeting-detail-page"
     >
       {/* Back navigation */}
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <Button asChild size="sm" variant="outline">
           <Link to="/management/meetings">
             ← {t("meetingsCenter.detail.backToCenter", { defaultValue: "Back to Meetings Center" })}
           </Link>
         </Button>
+        {isReview ? (
+          <Button asChild size="sm" variant="outline">
+            <Link to="/management/human-inbox" data-testid="meeting-detail-back-to-inbox">
+              {t("mgmt.inbox.backToInbox", { defaultValue: "Back to Human Inbox" })}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {/* 1. Header & Roster */}
