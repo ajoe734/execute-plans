@@ -1,0 +1,71 @@
+管理控制台
+事件（Incidents）
+事件（Incidents）
+
+事件（Incidents）：已成立且需協調追蹤的正式問題。每個事件設有指揮官與時間軸。
+
+嚴重度	標題	狀態	開啟時間
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午8:40:00
+高	
+BFF downstream degradation: paper-signal-producer
+	成功	2026/11/20 上午8:25:00
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午8:25:00
+高	
+BFF downstream degradation: source-ingest
+	成功	2026/11/20 上午8:25:00
+高	
+BFF downstream degradation: source-ingest
+	成功	2026/11/20 上午8:20:00
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午8:15:00
+高	
+BFF downstream degradation: source-ingest
+	成功	2026/11/20 上午8:15:00
+高	
+BFF downstream degradation: paper-signal-producer
+	成功	2026/11/20 上午8:15:00
+高	
+BFF downstream degradation: paper-signal-producer
+	成功	2026/11/20 上午8:11:30
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午8:10:00
+高	
+BFF downstream degradation: paper-signal-producer
+	成功	2026/11/20 上午8:10:00
+高	
+BFF downstream degradation: source-ingest
+	成功	2026/11/20 上午8:10:00
+高	
+BFF downstream degradation: paper-signal-producer
+	成功	2026/11/20 上午8:00:00
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午7:55:30
+中	
+Paper order rejected for insufficient cash, leaving 0% observed fill rate
+	警告	2026/11/20 上午7:55:14
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午7:55:00
+高	
+BFF downstream degradation: source-ingest
+	成功	2026/11/20 上午7:55:00
+高	
+BFF downstream degradation: paper-signal-producer
+	成功	2026/11/20 上午7:55:00
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午7:45:00
+高	
+BFF downstream degradation: paper-fleet-reconciler
+	成功	2026/11/20 上午7:40:00
+顯示第 1–20 筆，共 5321 筆
+第 1 / 267 頁
+上一頁
+下一頁

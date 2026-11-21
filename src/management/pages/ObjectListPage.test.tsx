@@ -9,6 +9,7 @@ import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref, shouldNavigateOnCreatedEntity } from "./ObjectListPage";
 import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList, StrategiesList } from "./Lists";
+import { ToolsList, McpServersList, SkillsList } from "./CapabilitiesLists";
 import { StrategyDetail } from "./StrategyDetail";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
@@ -2567,5 +2568,50 @@ describe("ObjectListPage", () => {
     );
 
     expect(await screen.findByText("Mean Reversion Intraday Draft")).toBeInTheDocument();
+  });
+
+  it("renders translated capabilities.actions.disabledReason on ToolsList, McpServersList, and SkillsList and never prints the raw translation key", async () => {
+    mocks.useLiveListV1.mockReturnValue({ items: [], pending: 0, refresh: vi.fn(), meta: {} });
+
+    await i18n.changeLanguage("zh-TW");
+    const { container, rerender } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/tools"]}>
+            <ToolsList />
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const createBtn = screen.getByRole("button", { name: "建立" });
+    expect(createBtn).toBeDisabled();
+    expect(createBtn).toHaveAttribute(
+      "title",
+      "此能力目錄為唯讀；新增、匯入、發佈與退役動作需透過受治理的命令端點執行。",
+    );
+    expect(container.textContent).not.toContain("capabilities.actions.disabledReason");
+
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/mcp"]}>
+            <McpServersList />
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+    expect(container.textContent).not.toContain("capabilities.actions.disabledReason");
+
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/skills"]}>
+            <SkillsList />
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+    expect(container.textContent).not.toContain("capabilities.actions.disabledReason");
   });
 });

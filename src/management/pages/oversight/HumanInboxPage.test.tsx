@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -746,5 +746,50 @@ describe("HumanInboxPage", () => {
     expect(hrefs).toContain("/management/meetings/mtg-review-01");
     expect(hrefs).toContain("/management/meetings?tab=budget");
     expect(hrefs).toContain("/management/meetings/mtg-normal-02");
+  });
+
+  it("clamps the human inbox card body to three lines by default and toggles expansion on click", () => {
+    const longDriftSummary =
+      "[older entries dropped] DriftReport drift-76586033-ad6a-4f09-ae0d-9a2e756617a5-drawdown; cluster=drift:drawdown; reconciliation_ids=drift-76586033; worst_metric=drawdown; threshold_metric=rolling_drawdown_multiple; observed=9.609309450237793; comparator=gt; threshold_value=1.25; threshold_window=paper-daily-sweep; policy_source=EVOLUTION_REVIEW_AND_THRESHOLDS.md section 7.1";
+    const items = [
+      {
+        id: "incident:inc-drift-5f668ec4c8d9",
+        kind: "incident" as const,
+        title: "Drift threshold breach: drift:drawdown",
+        summary: longDriftSummary,
+        requiredRole: "risk_owner",
+        consequenceIfApproved: "",
+        consequenceIfRejected: "",
+        consequenceIfIgnored: "",
+        canDecide: false,
+        canProceed: true,
+        detailHref: "/management/human-inbox/incident%3Ainc-drift-5f668ec4c8d9",
+      },
+    ] as unknown as HumanInboxList;
+
+    mocks.useV5Live.mockReturnValue({
+      data: items,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+
+    const body = screen.getByTestId("inbox-summary-incident:inc-drift-5f668ec4c8d9");
+    const toggle = screen.getByTestId("inbox-summary-toggle-incident:inc-drift-5f668ec4c8d9");
+
+    expect(body).toHaveClass("line-clamp-3");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("Show more");
+
+    fireEvent.click(toggle);
+    expect(body).not.toHaveClass("line-clamp-3");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveTextContent("Show less");
+
+    fireEvent.click(toggle);
+    expect(body).toHaveClass("line-clamp-3");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 });

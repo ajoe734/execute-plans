@@ -491,7 +491,17 @@ export type RuntimeListItem = Runtime & {
 
 export const stringFrom = (...values: unknown[]): string | undefined => {
   for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (
+        trimmed.length > 0 &&
+        trimmed.toLowerCase() !== "nan" &&
+        trimmed.toLowerCase() !== "undefined" &&
+        trimmed.toLowerCase() !== "null"
+      ) {
+        return trimmed;
+      }
+    }
   }
   return undefined;
 };

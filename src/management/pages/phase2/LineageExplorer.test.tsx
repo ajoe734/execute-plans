@@ -223,7 +223,7 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
     const unknownNode = screen.getByTestId("lineage-node-feature-05246");
     expect(unknownNode).toBeInTheDocument();
     expect(unknownNode).toHaveAttribute("data-node-type", "feature_set");
-    expect(unknownNode).toHaveTextContent("feature_set · draft");
+    expect(unknownNode).toHaveTextContent(/feature_set · (草稿|Draft)/i);
     expect(unknownNode).toHaveTextContent("feature-05246");
   });
 

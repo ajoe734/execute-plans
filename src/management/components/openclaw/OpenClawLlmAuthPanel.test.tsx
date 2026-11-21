@@ -358,6 +358,8 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(screen.getByText("OpenClaw adapter")).toBeInTheDocument();
     expect(screen.getByText("openclaw_gateway_agent_cli")).toBeInTheDocument();
     expect(screen.getByText("Claude CLI")).toBeInTheDocument();
+    expect(screen.getByText(/Claude authentication probe exited with an error|Claude 驗證探針以非零狀態碼退出/)).toBeInTheDocument();
+    expect(screen.getByText("claude_auth_probe_non_zero_exit")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /adapter reauth missing/i })).toBeDisabled();
     expect(screen.queryByRole("button", { name: /OpenClaw/i })).not.toBeInTheDocument();
   });
