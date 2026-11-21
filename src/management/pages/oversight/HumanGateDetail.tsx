@@ -1,7 +1,7 @@
 // 2026-05-20 PM-6 — Human Inbox detail page (/management/human-inbox/:id).
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useContext, useEffect, useRef, useState, type FormEvent } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
@@ -51,11 +51,7 @@ export function personaIdFromDetail(itemId: string, manageHref?: string): string
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
-  try {
-    registerMeetingQueryClient(useQueryClient());
-  } catch {
-    // No external QueryClientProvider mounted; shared fallback client is used.
-  }
+  registerMeetingQueryClient(useContext(QueryClientContext));
   const { data, loading, error, refresh } = useV5Live((signal) => mgmt.humanInbox.get(id, { signal }), [id], {
     cacheKey: `oversight.humanGateDetail.${id}`,
   });
