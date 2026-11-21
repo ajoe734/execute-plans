@@ -18,6 +18,8 @@ import { DataSourceInstancesTable } from "./DataSourceInstancesTable";
 import {
   MISSING_DATA_SOURCE_FIELD_LABEL,
   fmtToken,
+  resolveLegacyProviderKeyLabel,
+  resolveLegacyProviderLabel,
   v2ToLegacyRecord,
 } from "./dataSourceModels";
 
@@ -348,10 +350,18 @@ describe("DataSourceControlCenter — unavailable, degraded legacy, and nan-free
     expect(within(table).queryByText(/^data-source-1$/i)).not.toBeInTheDocument();
   });
 
-  it("renders 未回報 for a legacy record with a real connector ID when provider is omitted, and preserves authoritative source-1 / connector-1 view routing IDs", () => {
+  it("renders 未回報 for a legacy record with a real connector ID when provider is omitted, preserves explicit provider equal to connector key or provider-only responses, and preserves authoritative source-1 / connector-1 view routing IDs", () => {
     const legacyWithConnectorOnly = adaptDataSource(
       { connector_id: "tw-registry", status: "enabled" },
       0,
+    );
+    const legacyWithMatchingProviderAndConnector = adaptDataSource(
+      { connector_id: "twse", provider: "twse", status: "enabled" },
+      1,
+    );
+    const legacyWithProviderOnly = adaptDataSource(
+      { provider: "TWSE", status: "enabled" },
+      2,
     );
     const v2WithNumericId = adaptDataSourceV2OrLegacy(
       {
@@ -363,13 +373,26 @@ describe("DataSourceControlCenter — unavailable, degraded legacy, and nan-free
       },
       0,
     );
+
+    expect(resolveLegacyProviderLabel(legacyWithConnectorOnly)).toBe("未回報");
+    expect(resolveLegacyProviderKeyLabel(legacyWithConnectorOnly)).toBe("tw-registry");
+    expect(resolveLegacyProviderLabel(legacyWithMatchingProviderAndConnector)).toBe("twse");
+    expect(resolveLegacyProviderKeyLabel(legacyWithMatchingProviderAndConnector)).toBe("twse");
+    expect(resolveLegacyProviderLabel(legacyWithProviderOnly)).toBe("TWSE");
+    expect(resolveLegacyProviderKeyLabel(legacyWithProviderOnly)).toBe("TWSE");
+
     const select = vi.fn();
 
     render(
       <I18nextProvider i18n={i18n}>
         <MemoryRouter>
           <DataSourceInstancesTable
-            records={[legacyWithConnectorOnly, v2WithNumericId]}
+            records={[
+              legacyWithConnectorOnly,
+              legacyWithMatchingProviderAndConnector,
+              legacyWithProviderOnly,
+              v2WithNumericId,
+            ]}
             onSelectSource={select}
             onExecuteAction={vi.fn()}
           />
@@ -378,15 +401,31 @@ describe("DataSourceControlCenter — unavailable, degraded legacy, and nan-free
     );
 
     const rows = screen.getAllByRole("row");
-    const legacyProviderCell = within(rows[1]).getAllByRole("cell")[0];
-    expect(legacyProviderCell.querySelector(".font-semibold")).toHaveTextContent(
+    const connectorOnlyCell = within(rows[1]).getAllByRole("cell")[0];
+    expect(connectorOnlyCell.querySelector(".font-semibold")).toHaveTextContent(
       "未回報",
     );
-    expect(legacyProviderCell.querySelector(".font-mono")).toHaveTextContent(
+    expect(connectorOnlyCell.querySelector(".font-mono")).toHaveTextContent(
       "tw-registry",
     );
 
-    fireEvent.click(within(rows[2]).getByRole("button", { name: "檢視" }));
+    const matchingProviderCell = within(rows[2]).getAllByRole("cell")[0];
+    expect(matchingProviderCell.querySelector(".font-semibold")).toHaveTextContent(
+      "twse",
+    );
+    expect(matchingProviderCell.querySelector(".font-mono")).toHaveTextContent(
+      "twse",
+    );
+
+    const providerOnlyCell = within(rows[3]).getAllByRole("cell")[0];
+    expect(providerOnlyCell.querySelector(".font-semibold")).toHaveTextContent(
+      "TWSE",
+    );
+    expect(providerOnlyCell.querySelector(".font-mono")).toHaveTextContent(
+      "TWSE",
+    );
+
+    fireEvent.click(within(rows[4]).getByRole("button", { name: "檢視" }));
     expect(select).toHaveBeenCalledWith("source-1", v2WithNumericId);
   });
 

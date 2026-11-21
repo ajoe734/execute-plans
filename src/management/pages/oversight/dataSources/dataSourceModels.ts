@@ -82,15 +82,26 @@ export interface LegacyProviderRecordLike {
 export function resolveLegacyProviderKey(
   record: LegacyProviderRecordLike,
 ): string | undefined {
-  const rawKey =
-    cleanSourceToken(record.providerKey) ??
-    cleanSourceToken(typeof record.provider_key === "string" ? record.provider_key : undefined) ??
-    cleanSourceToken(typeof record.connector_id === "string" ? record.connector_id : undefined) ??
-    cleanSourceToken(typeof record.id === "string" ? record.id : undefined);
-  if (!rawKey || ADAPTER_SYNTHETIC_LEGACY_KEY_RE.test(rawKey)) {
-    return undefined;
+  const candidates = [
+    record.providerKey,
+    typeof record.provider_key === "string" ? record.provider_key : undefined,
+    typeof record.connector_id === "string" ? record.connector_id : undefined,
+    typeof record.id === "string" ? record.id : undefined,
+    record.provider,
+    typeof record.name === "string" ? record.name : undefined,
+    typeof record.display_name === "string" ? record.display_name : undefined,
+  ];
+  for (const candidate of candidates) {
+    const cleaned = cleanSourceToken(candidate);
+    if (
+      cleaned &&
+      cleaned !== MISSING_DATA_SOURCE_FIELD_LABEL &&
+      !ADAPTER_SYNTHETIC_LEGACY_KEY_RE.test(cleaned)
+    ) {
+      return cleaned;
+    }
   }
-  return rawKey;
+  return undefined;
 }
 
 export function resolveLegacyProviderKeyLabel(
@@ -104,18 +115,22 @@ export function resolveLegacyProviderLabel(
   record: LegacyProviderRecordLike,
   fallback = MISSING_DATA_SOURCE_FIELD_LABEL,
 ): string {
-  const cleanedProvider =
-    cleanSourceToken(record.provider) ??
-    cleanSourceToken(typeof record.name === "string" ? record.name : undefined) ??
-    cleanSourceToken(typeof record.display_name === "string" ? record.display_name : undefined);
-  if (!cleanedProvider || ADAPTER_SYNTHETIC_LEGACY_KEY_RE.test(cleanedProvider)) {
-    return fallback;
+  const candidates = [
+    record.provider,
+    typeof record.name === "string" ? record.name : undefined,
+    typeof record.display_name === "string" ? record.display_name : undefined,
+  ];
+  for (const candidate of candidates) {
+    const cleaned = cleanSourceToken(candidate);
+    if (
+      cleaned &&
+      cleaned !== MISSING_DATA_SOURCE_FIELD_LABEL &&
+      !ADAPTER_SYNTHETIC_LEGACY_KEY_RE.test(cleaned)
+    ) {
+      return cleaned;
+    }
   }
-  const cleanedKey = resolveLegacyProviderKey(record);
-  if (cleanedKey && cleanedProvider === cleanedKey) {
-    return fallback;
-  }
-  return cleanedProvider;
+  return fallback;
 }
 
 export function fmtToken(

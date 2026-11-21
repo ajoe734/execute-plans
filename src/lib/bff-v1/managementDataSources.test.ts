@@ -659,6 +659,43 @@ describe("managementDataSources client", () => {
       expect(projected.credentialState).toBe("unknown");
       expect(projected.liveIngestionEnabled).toBe(false);
     });
+
+    it("preserves explicit provider provenance in adaptDataSource without copying connector_id into missing provider", async () => {
+      const { adaptDataSource } = await import("./managementConsoleReads");
+      const {
+        resolveLegacyProviderKeyLabel,
+        resolveLegacyProviderLabel,
+      } = await import(
+        "@/management/pages/oversight/dataSources/dataSourceModels"
+      );
+
+      const connectorOnly = adaptDataSource(
+        { connector_id: "twse", status: "enabled" },
+        0,
+      );
+      expect(connectorOnly.providerKey).toBe("twse");
+      expect(connectorOnly.provider).toBe("unknown");
+      expect(resolveLegacyProviderKeyLabel(connectorOnly)).toBe("twse");
+      expect(resolveLegacyProviderLabel(connectorOnly)).toBe("未回報");
+
+      const matchingProviderAndConnector = adaptDataSource(
+        { connector_id: "twse", provider: "twse", status: "enabled" },
+        0,
+      );
+      expect(matchingProviderAndConnector.providerKey).toBe("twse");
+      expect(matchingProviderAndConnector.provider).toBe("twse");
+      expect(resolveLegacyProviderKeyLabel(matchingProviderAndConnector)).toBe("twse");
+      expect(resolveLegacyProviderLabel(matchingProviderAndConnector)).toBe("twse");
+
+      const providerOnly = adaptDataSource(
+        { provider: "TWSE", status: "enabled" },
+        0,
+      );
+      expect(providerOnly.providerKey).toBe("TWSE");
+      expect(providerOnly.provider).toBe("TWSE");
+      expect(resolveLegacyProviderKeyLabel(providerOnly)).toBe("TWSE");
+      expect(resolveLegacyProviderLabel(providerOnly)).toBe("TWSE");
+    });
   });
 
   describe("normalizeManagementDataSourceDetail", () => {
