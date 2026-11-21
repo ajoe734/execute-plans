@@ -441,18 +441,53 @@ export interface MeetingProposalsData {
   items: MeetingProposalItem[];
 }
 
+export interface MeetingRosterRule {
+  chair?: string | null;
+  participants?: string[];
+  min_trading_personas?: number | null;
+  requires_risk?: boolean | null;
+  requires_red_team?: boolean | null;
+  red_team_assigned_case?: string | null;
+  allow_agora_advisor?: boolean | null;
+  allow_owning_user_servant?: boolean | null;
+  allow_subject_trader_servant?: boolean | null;
+  description?: string | null;
+  [key: string]: unknown;
+}
+
+export type MeetingRosterRuleValue = MeetingRosterRule | string | null;
+
+export interface MeetingRosterRuleDisplay {
+  /** Primary readable summary line (never an object; safe to render as React text). */
+  summary: string;
+  /** True when the owner payload provided a non-empty description string. */
+  hasDescription: boolean;
+  /** Explicit description string when provided by the owner, or null when absent. */
+  description: string | null;
+  /** Readable breakdown of governed chair, participant, and requirement fields when present. */
+  details: string | null;
+  chair: string | null;
+  participants: string[];
+  requirements: string[];
+}
+
 export interface MeetingTypeRule {
   meeting_type: string;
+  slug?: string;
+  title?: string;
+  title_zh?: string;
   name?: string;
   purpose?: string;
   enabled: boolean;
   cadence?: string;
   weekly_cadence_day?: string;
-  roster_rule?: string;
+  roster_rule?: MeetingRosterRuleValue;
   budget?: {
     max_participants?: number;
     max_rounds?: number;
+    max_rounds_with_evidence?: number;
     weekly_limit?: number;
+    max_meetings_per_persona_per_week?: number;
     max_calls_per_meeting?: number;
   };
   [key: string]: unknown;
@@ -753,6 +788,162 @@ export function getMeetingProposals(
   );
 }
 
+export function normalizeMeetingRosterRule(raw: unknown): MeetingRosterRuleValue | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    return trimmed || null;
+  }
+  if (!isRecord(raw)) return null;
+
+  const out: MeetingRosterRule = { ...raw };
+  if ("chair" in raw) {
+    out.chair = typeof raw.chair === "string" && raw.chair.trim() ? raw.chair.trim() : null;
+  }
+  if ("participants" in raw) {
+    out.participants = Array.isArray(raw.participants)
+      ? raw.participants.map((p) => String(p ?? "").trim()).filter(Boolean)
+      : [];
+  }
+  if ("min_trading_personas" in raw) {
+    out.min_trading_personas =
+      typeof raw.min_trading_personas === "number" && Number.isFinite(raw.min_trading_personas)
+        ? raw.min_trading_personas
+        : null;
+  }
+  if ("requires_risk" in raw) {
+    out.requires_risk = typeof raw.requires_risk === "boolean" ? raw.requires_risk : null;
+  }
+  if ("requires_red_team" in raw) {
+    out.requires_red_team =
+      typeof raw.requires_red_team === "boolean" ? raw.requires_red_team : null;
+  }
+  if ("red_team_assigned_case" in raw) {
+    out.red_team_assigned_case =
+      typeof raw.red_team_assigned_case === "string" && raw.red_team_assigned_case.trim()
+        ? raw.red_team_assigned_case.trim()
+        : null;
+  }
+  if ("allow_agora_advisor" in raw) {
+    out.allow_agora_advisor =
+      typeof raw.allow_agora_advisor === "boolean" ? raw.allow_agora_advisor : null;
+  }
+  if ("allow_owning_user_servant" in raw) {
+    out.allow_owning_user_servant =
+      typeof raw.allow_owning_user_servant === "boolean" ? raw.allow_owning_user_servant : null;
+  }
+  if ("allow_subject_trader_servant" in raw) {
+    out.allow_subject_trader_servant =
+      typeof raw.allow_subject_trader_servant === "boolean"
+        ? raw.allow_subject_trader_servant
+        : null;
+  }
+  if ("description" in raw) {
+    out.description =
+      typeof raw.description === "string" && raw.description.trim()
+        ? raw.description.trim()
+        : null;
+  }
+  return out;
+}
+
+export function interpretMeetingRosterRule(raw: unknown): MeetingRosterRuleDisplay {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    return {
+      summary: trimmed || "—",
+      hasDescription: Boolean(trimmed),
+      description: trimmed || null,
+      details: null,
+      chair: null,
+      participants: [],
+      requirements: [],
+    };
+  }
+  if (!isRecord(raw)) {
+    return {
+      summary: "—",
+      hasDescription: false,
+      description: null,
+      details: null,
+      chair: null,
+      participants: [],
+      requirements: [],
+    };
+  }
+
+  const description =
+    typeof raw.description === "string" && raw.description.trim()
+      ? raw.description.trim()
+      : null;
+  const chair =
+    typeof raw.chair === "string" && raw.chair.trim() ? raw.chair.trim() : null;
+  const participants = Array.isArray(raw.participants)
+    ? raw.participants.map((p) => String(p ?? "").trim()).filter(Boolean)
+    : [];
+  const requirements: string[] = [];
+
+  if (typeof raw.min_trading_personas === "number" && Number.isFinite(raw.min_trading_personas)) {
+    requirements.push(`min_trading_personas=${raw.min_trading_personas}`);
+  }
+  if (raw.requires_risk === true) {
+    requirements.push("requires_risk");
+  }
+  if (raw.requires_red_team === true) {
+    const redTeamCase =
+      typeof raw.red_team_assigned_case === "string" && raw.red_team_assigned_case.trim()
+        ? raw.red_team_assigned_case.trim()
+        : null;
+    requirements.push(redTeamCase ? `requires_red_team (${redTeamCase})` : "requires_red_team");
+  }
+  if (raw.allow_agora_advisor === true) {
+    requirements.push("allow_agora_advisor");
+  }
+  if (raw.allow_owning_user_servant === true) {
+    requirements.push("allow_owning_user_servant");
+  }
+  if (raw.allow_subject_trader_servant === true) {
+    requirements.push("allow_subject_trader_servant");
+  }
+
+  const detailClauses: string[] = [];
+  if (chair) {
+    detailClauses.push(`chair: ${chair}`);
+  }
+  if (participants.length > 0) {
+    detailClauses.push(`participants: ${participants.join(" + ")}`);
+  }
+  if (requirements.length > 0) {
+    detailClauses.push(...requirements);
+  }
+  const details = detailClauses.length > 0 ? detailClauses.join(" · ") : null;
+
+  return {
+    summary: description ?? details ?? "—",
+    hasDescription: description !== null,
+    description,
+    details,
+    chair,
+    participants,
+    requirements,
+  };
+}
+
+export function formatMeetingRosterRule(raw: unknown): string {
+  return interpretMeetingRosterRule(raw).summary;
+}
+
+function normalizeMeetingTypeRule(item: Record<string, unknown>): MeetingTypeRule {
+  const normalizedRoster = normalizeMeetingRosterRule(item.roster_rule);
+  return {
+    ...item,
+    meeting_type: String(item.meeting_type ?? "").trim(),
+    enabled: typeof item.enabled === "boolean" ? item.enabled : Boolean(item.enabled ?? true),
+    ...(normalizedRoster !== undefined ? { roster_rule: normalizedRoster } : {}),
+  } as MeetingTypeRule;
+}
+
 export function getMeetingCatalogue(
   filters: { personaId?: string } = {},
 ): Promise<MeetingsRead<MeetingCatalogueData>> {
@@ -779,7 +970,7 @@ export function getMeetingCatalogue(
           : [];
       if (!typesRaw) return undefined;
       return {
-        types: typesRaw.filter(isRecord) as unknown as MeetingTypeRule[],
+        types: typesRaw.filter(isRecord).map(normalizeMeetingTypeRule),
         schedule: scheduleRaw.filter(isRecord) as unknown as MeetingScheduleEntry[],
         refusals: refusalsRaw.filter(isRecord) as unknown as MeetingRefusalEntry[],
         summary: isRecord(data.summary) ? (data.summary as MeetingCatalogueData["summary"]) : undefined,

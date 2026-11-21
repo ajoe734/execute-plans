@@ -193,14 +193,42 @@ const recordedCatalogueResponse = {
         meeting_type: "MT-1",
         enabled: true,
         cadence: "weekly",
-        roster_rule: "owner_plus_peer_plus_risk",
+        roster_rule: {
+          chair: "owning_persona",
+          participants: ["owning_persona", "peer_different_style", "persona-risk-officer"],
+          min_trading_personas: 1,
+          requires_risk: true,
+          requires_red_team: false,
+          allow_agora_advisor: true,
+          allow_owning_user_servant: true,
+          allow_subject_trader_servant: false,
+          description: "owner + 1 peer trading persona of a different style (rotating) + risk persona",
+        },
         budget: { max_participants: 5, max_rounds: 2, weekly_limit: 3 },
       },
       {
         meeting_type: "MT-4",
         enabled: true,
         cadence: "event_attribution",
-        roster_rule: "subject_plus_counterparty_plus_risk_plus_red_team",
+        roster_rule: {
+          chair: "closest_institutional_persona",
+          participants: [
+            "subject_persona_or_trader_servant",
+            "counter_party_persona",
+            "peers_same_strategy_family",
+            "persona-risk-officer",
+            "persona-red-team",
+          ],
+          min_trading_personas: 1,
+          requires_risk: true,
+          requires_red_team: true,
+          red_team_assigned_case: "luck_or_small_sample_or_confounder",
+          allow_agora_advisor: true,
+          allow_owning_user_servant: true,
+          allow_subject_trader_servant: true,
+          description:
+            "subject (persona or trader's own servant) + party that decided the other way + peers of same strategy family + risk persona + red-team persona",
+        },
         budget: { max_participants: 5, max_rounds: 2, weekly_limit: 3 },
       },
     ],
@@ -538,7 +566,18 @@ describe("MeetingsCenterPage (AC1, AC5, AC6, AC7)", () => {
     // Rules & Budget tab (reachable via ?tab=rules and ?tab=budget) shows types, schedule, and refusals
     const { unmount: unmountRules } = renderCenter("/management/meetings?tab=budget");
     expect(await screen.findByTestId("meetings-catalogue-view")).toBeInTheDocument();
-    expect(screen.getByTestId("catalogue-type-MT-1")).toBeInTheDocument();
+    expect(screen.getByTestId("catalogue-type-MT-1")).toHaveTextContent(
+      "owner + 1 peer trading persona of a different style (rotating) + risk persona",
+    );
+    expect(screen.getByTestId("catalogue-roster-details-MT-1")).toHaveTextContent(
+      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
+    );
+    expect(screen.getByTestId("catalogue-type-MT-4")).toHaveTextContent(
+      "subject (persona or trader's own servant) + party that decided the other way + peers of same strategy family + risk persona + red-team persona",
+    );
+    expect(screen.getByTestId("catalogue-roster-details-MT-4")).toHaveTextContent(
+      "chair: closest_institutional_persona · participants: subject_persona_or_trader_servant + counter_party_persona + peers_same_strategy_family + persona-risk-officer + persona-red-team · min_trading_personas=1 · requires_risk · requires_red_team (luck_or_small_sample_or_confounder)",
+    );
     expect(screen.getByTestId("catalogue-schedule-persona-alpha-MT-1")).toHaveTextContent(
       "2026-11-16T10:00:00Z",
     );
@@ -989,6 +1028,18 @@ describe("ConsultRulesPage (AC3 & AC7)", () => {
       expect(screen.getByTestId("consult-deliberative-type-MT-1")).toBeInTheDocument();
       expect(screen.getByTestId("consult-deliberative-type-MT-4")).toBeInTheDocument();
     });
+    expect(screen.getByTestId("consult-deliberative-type-MT-1")).toHaveTextContent(
+      "owner + 1 peer trading persona of a different style (rotating) + risk persona",
+    );
+    expect(screen.getByTestId("consult-deliberative-roster-details-MT-1")).toHaveTextContent(
+      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
+    );
+    expect(screen.getByTestId("consult-deliberative-type-MT-4")).toHaveTextContent(
+      "subject (persona or trader's own servant) + party that decided the other way + peers of same strategy family + risk persona + red-team persona",
+    );
+    expect(screen.getByTestId("consult-deliberative-roster-details-MT-4")).toHaveTextContent(
+      "chair: closest_institutional_persona · participants: subject_persona_or_trader_servant + counter_party_persona + peers_same_strategy_family + persona-risk-officer + persona-red-team · min_trading_personas=1 · requires_risk · requires_red_team (luck_or_small_sample_or_confounder)",
+    );
     expect(screen.getByTestId("consult-link-meetings-rules")).toHaveAttribute(
       "href",
       "/management/meetings?tab=rules",
@@ -996,6 +1047,99 @@ describe("ConsultRulesPage (AC3 & AC7)", () => {
     expect(screen.getByTestId("consult-section-link-meetings-rules")).toHaveAttribute(
       "href",
       "/management/meetings?tab=rules",
+    );
+  });
+
+  it("renders governed participant and requirement fields honestly when structured roster_rule omits description and preserves navigation and unavailable states on both catalogue pages (FE-MEETING-ROSTER-CATALOGUE-20261121)", async () => {
+    vi.spyOn(managementConsoleReads, "consultRules").mockResolvedValue({
+      items: [],
+      degradation: { kind: "complete" },
+    } as unknown as Awaited<ReturnType<typeof managementConsoleReads.consultRules>>);
+    vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+    on("GET", "/bff/management/meetings", recordedListResponse);
+    on("GET", "/bff/management/meetings/proposals", recordedProposalsResponse);
+    on("GET", "/bff/management/meetings/catalogue", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        types: [
+          {
+            meeting_type: "MT-1",
+            enabled: true,
+            cadence: "weekly",
+            roster_rule: {
+              chair: "owning_persona",
+              participants: ["owning_persona", "peer_different_style", "persona-risk-officer"],
+              min_trading_personas: 1,
+              requires_risk: true,
+              requires_red_team: false,
+            },
+            budget: { max_participants: 5, max_rounds: 2, max_meetings_per_persona_per_week: 3 },
+          },
+          {
+            meeting_type: "MT-4",
+            enabled: false,
+            cadence: "weekly_and_event",
+            roster_rule: {},
+            budget: { max_participants: 5, max_rounds: 2, weekly_limit: 3 },
+          },
+        ],
+        schedule: recordedCatalogueResponse.data.schedule,
+        refusals: recordedCatalogueResponse.data.refusals,
+      },
+    });
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/management/governance/consult"]}>
+        <Routes>
+          <Route path="/management/governance/consult" element={<ConsultRulesPage />} />
+          <Route path="/management/meetings" element={<MeetingsCenterPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const consultMt1 = await screen.findByTestId("consult-deliberative-roster-MT-1");
+    expect(consultMt1).toHaveTextContent(
+      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
+    );
+    expect(screen.queryByTestId("consult-deliberative-roster-details-MT-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("consult-deliberative-roster-MT-4")).toHaveTextContent("Roster Rule: —");
+
+    // Navigate from ConsultRulesPage to MeetingsCenterPage Rules & Budget tab
+    fireEvent.click(screen.getByTestId("consult-link-meetings-rules"));
+    expect(await screen.findByTestId("meetings-catalogue-view")).toBeInTheDocument();
+    expect(screen.getByTestId("catalogue-roster-MT-1")).toHaveTextContent(
+      "chair: owning_persona · participants: owning_persona + peer_different_style + persona-risk-officer · min_trading_personas=1 · requires_risk",
+    );
+    expect(screen.getByTestId("catalogue-roster-MT-4")).toHaveTextContent("Roster: —");
+    unmount();
+
+    // Unavailable catalogue state on both routes
+    routes = [];
+    on("GET", "/bff/management/meetings", recordedListResponse);
+    on("GET", "/bff/management/meetings/proposals", recordedProposalsResponse);
+    on("GET", "/bff/management/meetings/catalogue", {
+      status: "unavailable",
+      owner: "consultation",
+      reason: "consultation_owner_unavailable",
+      data: { status: "unavailable", reason: "consultation_owner_unavailable", types: [], schedule: [], refusals: [] },
+    });
+
+    const { unmount: unmountUnavailConsult } = render(
+      <MemoryRouter initialEntries={["/management/governance/consult"]}>
+        <Routes>
+          <Route path="/management/governance/consult" element={<ConsultRulesPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("consult-deliberative-unavailable")).toHaveTextContent(
+      "consultation_owner_unavailable",
+    );
+    unmountUnavailConsult();
+
+    renderCenter("/management/meetings?tab=rules");
+    expect(await screen.findByTestId("meetings-catalogue-unavailable")).toHaveTextContent(
+      "consultation_owner_unavailable",
     );
   });
 });

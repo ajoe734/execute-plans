@@ -22,6 +22,7 @@ import {
   getMeetingCatalogue,
   getMeetingProposals,
   getMeetings,
+  interpretMeetingRosterRule,
   type ConveneMeetingReceipt,
   type MeetingCatalogueData,
   type MeetingProposalItem,
@@ -846,31 +847,44 @@ export const MeetingsCenterPage = () => {
                   <p className="text-xs text-muted-foreground">No meeting types configured.</p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {catalogueRead.data.types.map((mt) => (
-                      <div
-                        key={mt.meeting_type}
-                        data-testid={`catalogue-type-${mt.meeting_type}`}
-                        className="rounded border border-border p-3 text-xs space-y-1"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono font-semibold text-sm">{mt.meeting_type}</span>
-                          <Badge variant={mt.enabled ? "default" : "outline"}>
-                            {mt.enabled ? "enabled" : "disabled"}
-                          </Badge>
-                        </div>
-                        <div>
-                          Cadence: <code>{mt.cadence ?? "—"}</code> · Roster:{" "}
-                          <code>{mt.roster_rule ?? "—"}</code>
-                        </div>
-                        {mt.budget ? (
-                          <div className="text-muted-foreground font-mono">
-                            max_participants: {mt.budget.max_participants ?? 5} · max_rounds:{" "}
-                            {mt.budget.max_rounds ?? 2} · weekly_limit:{" "}
-                            {mt.budget.weekly_limit ?? 3}
+                    {catalogueRead.data.types.map((mt) => {
+                      const roster = interpretMeetingRosterRule(mt.roster_rule);
+                      return (
+                        <div
+                          key={mt.meeting_type}
+                          data-testid={`catalogue-type-${mt.meeting_type}`}
+                          className="rounded border border-border p-3 text-xs space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono font-semibold text-sm">{mt.meeting_type}</span>
+                            <Badge variant={mt.enabled ? "default" : "outline"}>
+                              {mt.enabled ? "enabled" : "disabled"}
+                            </Badge>
                           </div>
-                        ) : null}
-                      </div>
-                    ))}
+                          <div data-testid={`catalogue-roster-${mt.meeting_type}`}>
+                            Cadence: <code>{mt.cadence ?? "—"}</code> · Roster:{" "}
+                            <code>{roster.summary}</code>
+                            {roster.description && roster.details ? (
+                              <div
+                                className="mt-0.5 font-mono text-[11px] text-muted-foreground"
+                                data-testid={`catalogue-roster-details-${mt.meeting_type}`}
+                              >
+                                {roster.details}
+                              </div>
+                            ) : null}
+                          </div>
+                          {mt.budget ? (
+                            <div className="text-muted-foreground font-mono">
+                              max_participants: {mt.budget.max_participants ?? 5} · max_rounds:{" "}
+                              {mt.budget.max_rounds ?? 2} · weekly_limit:{" "}
+                              {mt.budget.weekly_limit ??
+                                mt.budget.max_meetings_per_persona_per_week ??
+                                3}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </Card>
