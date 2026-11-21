@@ -84,9 +84,10 @@
         "src/test/setup.ts",
         "src/test/accept-management-route-attribution.test.ts",
         "src/test/hosted-browser-release-policy.test.ts",
-        "src/test/persona-strategy-hosted-readonly.test.ts"
+        "src/test/persona-strategy-hosted-readonly.test.ts",
+        "src/management/pages/trade-journeys/TradeJourneysPage.failureCause.browser.test.ts"
       ],
-      "reason": "Playwright 1.65.1 crPage.ts webUIHost(url) and checkUrlAllowed(url) call static URL.canParse(...). Because the three host-side Playwright driver suites run a Node HTTP/CLI/Playwright driver while Chromium owns its real page DOM, they declare Vitest's file-level '// @vitest-environment node' directive and src/test/setup.ts places its existing DOM-only shims under the existing 'typeof window !== \"undefined\"' guard. This uses native Node 22 URL.canParse without adding any global polyfill or modifying jsdom@20.0.3."
+      "reason": "Playwright 1.65.1 crPage.ts webUIHost(url) and checkUrlAllowed(url) call static URL.canParse(...). Because the four host-side Playwright driver suites (including TradeJourneysPage.failureCause.browser.test.ts added by merged PR #1055) run a Node HTTP/CLI/Playwright driver while Chromium owns its real page DOM, they declare Vitest's file-level '// @vitest-environment node' directive and src/test/setup.ts places its existing DOM-only shims under the existing 'typeof window !== \"undefined\"' guard. This uses native Node 22 URL.canParse without adding any global polyfill or modifying jsdom@20.0.3, while sibling DOM suites (such as TradeJourneysPage.readable.test.tsx and TradeJourneysPage.recorded.test.tsx) remain in default jsdom."
     }
   },
   "ubuntu_26_04_verification": {
@@ -178,19 +179,19 @@
       "summary": "37/37 tests passed (including real-Chromium abort accounting and full four-role/admin-batch/supplementary loopback protocol)"
     },
     "browser_launching_vitest_suites": {
-      "command": "npx vitest run src/test/public-build-auth-contract.test.ts src/test/accept-management-route-attribution.test.ts src/test/hosted-browser-release-policy.test.ts",
+      "command": "npx vitest run src/test/public-build-auth-contract.test.ts src/test/accept-management-route-attribution.test.ts src/test/hosted-browser-release-policy.test.ts src/management/pages/trade-journeys/TradeJourneysPage.failureCause.browser.test.ts src/management/pages/trade-journeys/TradeJourneysPage.readable.test.tsx src/management/pages/trade-journeys/TradeJourneysPage.recorded.test.tsx",
       "exit_code": 0,
-      "summary": "3/3 test files, 221/221 tests passed"
+      "summary": "6/6 test files (4 browser-launching suites + 2 sibling TradeJourneys DOM suites), 246/246 tests passed"
     },
     "full_vitest_suite": {
       "command": "npm run test",
       "exit_code": 0,
-      "summary": "288/288 test files passed, 3331/3331 tests passed"
+      "summary": "289/289 test files passed, 3339/3339 tests passed"
     },
     "production_build_and_credential_scan": {
       "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build && npm run scan:bundle-credentials",
       "exit_code": 0,
-      "bundle_digest_sha256": "879e0a0f33b744cde40de2356d2bac620d8d2070780215be87b4aa08326feb19"
+      "bundle_digest_sha256": "d19ab53f64c05d0136bf8eca20d0db88597ed0b5cb0a97e5f85a9bfa48305271"
     },
     "playwright_e2e_and_a11y": {
       "command": "PANTHEON_RELEASE_GATE_CONTEXT=pull_request npx --no-install playwright test e2e/17-a11y-v5.spec.ts e2e/01-startup-session.spec.ts --project=chromium --grep-invert 'asserts MeResponse tenant/env/user/capabilities shape' --retries=0 --trace=off --reporter=list",
