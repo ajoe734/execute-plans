@@ -13,7 +13,22 @@ export interface JourneyMeta {
 }
 
 export type JourneyFlags = Record<string, boolean>;
-export interface JourneyStage { status?: string; updated_at?: string; owner?: string; block_reason?: string; [key: string]: unknown }
+export type JourneyReconciliationClassification =
+  | "accounting_variance"
+  | "runtime_health"
+  | "broker_unavailable"
+  | "unverified_evidence";
+
+export interface JourneyDiscrepancy {
+  check: string;
+  status?: string;
+  expected?: unknown;
+  actual?: unknown;
+  difference?: number | null;
+  delta?: number | null;
+  broker_order_id?: string | null;
+  [key: string]: unknown;
+}
 
 export type JourneyOutcomeKind = "normal" | "no_trade" | "rejected" | "reconciliation_deferred" | "variance" | "open";
 export interface JourneyOutcome {
@@ -22,12 +37,43 @@ export interface JourneyOutcome {
   /** Rejection: `{required, available, limit, holding_quantity, requested_quantity}`; reconciliation: a list of per-check records. */
   reason_detail?: Record<string, unknown> | Array<Record<string, unknown>> | null;
   rejected_stage?: string | null;
+  expression_reason_code?: string | null;
+  submitted_to_broker?: boolean | null;
+  order_status?: string | null;
+  source_event_id?: string | null;
+  missing_evidence?: string[] | null;
+  classification?: JourneyReconciliationClassification | null;
+  accounting_variance?: boolean | null;
+  comparison_completed?: boolean | null;
+  discrepancies?: JourneyDiscrepancy[] | null;
+  unverified_reason_code?: string | null;
+}
+
+export interface JourneyStage {
+  status?: string;
+  updated_at?: string;
+  owner?: string;
+  block_reason?: string;
+  reason_code?: string | null;
+  reason_detail?: JourneyOutcome["reason_detail"];
+  expression_reason_code?: string | null;
+  submitted_to_broker?: boolean | null;
+  order_status?: string | null;
+  source_event_id?: string | null;
+  missing_evidence?: string[] | null;
+  classification?: JourneyReconciliationClassification | null;
+  accounting_variance?: boolean | null;
+  comparison_completed?: boolean | null;
+  discrepancies?: JourneyDiscrepancy[] | null;
+  unverified_reason_code?: string | null;
+  [key: string]: unknown;
 }
 /** A link for the operator, never an action: governed actions stay on the actions route. */
 export interface JourneyNextStep { action_needed: string; href: string }
 
 export interface JourneyRow {
   journey_id: string;
+  tenant_id?: string | null;
   environment: JourneyEnvironment;
   status: string;
   current_stage: string;
@@ -36,13 +82,19 @@ export interface JourneyRow {
   persona_name?: string | null;
   persona_is_probe?: boolean;
   strategy_id?: string | null;
+  strategy_version?: string | null;
+  artifact_id?: string | null;
+  capital_pool_id?: string | null;
+  runtime_id?: string | null;
   symbol?: string | null;
   side?: string | null;
   quantity?: number | null;
+  price?: number | null;
   filled_quantity?: number | null;
   outcome?: JourneyOutcome | null;
   next_step?: JourneyNextStep | null;
   decision_id?: string | null;
+  order_id?: string | null;
   broker_order_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -54,6 +106,7 @@ export interface JourneyRow {
 
 export interface JourneyDetail extends JourneyRow {
   stages?: Record<string, JourneyStage>;
+  stage_events?: Record<string, JourneyTimelineEvent>;
   diagnostics?: Array<Record<string, unknown>> | Record<string, unknown>;
   identifiers?: Record<string, unknown>;
   [key: string]: unknown;
@@ -67,13 +120,26 @@ export interface JourneyListEnvelope {
 
 export interface JourneyTimelineEvent {
   event_id: string;
+  source_event_id?: string | null;
   stage?: string;
+  rejected_stage?: string | null;
+  event_type?: string;
   stage_status?: string;
+  status?: string;
   occurred_at?: string;
   recorded_at?: string;
   source?: string;
   reason_code?: string | null;
   reason_detail?: JourneyOutcome["reason_detail"];
+  expression_reason_code?: string | null;
+  submitted_to_broker?: boolean | null;
+  order_status?: string | null;
+  missing_evidence?: string[] | null;
+  classification?: JourneyReconciliationClassification | null;
+  accounting_variance?: boolean | null;
+  comparison_completed?: boolean | null;
+  discrepancies?: JourneyDiscrepancy[] | null;
+  unverified_reason_code?: string | null;
   [key: string]: unknown;
 }
 
