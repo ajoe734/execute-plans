@@ -16,6 +16,10 @@
     {
       "cmd": "npx vitest run src/management/pages/centers src/management/pages/performance src/lib/bff-v1/attribution.test.ts",
       "result": "pass"
+    },
+    {
+      "cmd": "./node_modules/.bin/tsc --noEmit -p . && ./node_modules/.bin/vitest run src/management/pages/centers src/management/pages/performance src/lib/bff-v1/attribution.test.ts src/test/accept-management-honest-not-found.test.ts",
+      "result": "pass (0 tsc errors; 6 test files, 31 tests passed on dev-refreshed branch)"
     }
   ],
   "notes": [
@@ -31,6 +35,6 @@
     ],
     "pull_request": 1031,
     "merge_commit": "ee6b70650",
-    "statement": "These delivery commits were written by Claude2 (worker run claude2-20261116T204001Z-05a71239). Their LLM-Agent trailer 'Claude' is wrong; the correct author is Claude2. No owner reassignment occurred."
+    "statement": "These delivery commits were written by Claude2 (worker run claude2-20261116T204001Z-05a71239). Their LLM-Agent trailer 'Claude' is wrong; the correct author is Claude2. Subsequent supervisor recovery reassigned task owner from Claude2 to Antigravity2 and reviewer from Antigravity to Codex (event supervisor-task-reassigned-ced3c3368eef967b2049138a4597a1948646976ea248813890729df6ae8d2fba)."
   }
 }
