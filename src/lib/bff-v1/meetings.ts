@@ -441,6 +441,20 @@ export interface MeetingProposalsData {
   items: MeetingProposalItem[];
 }
 
+export interface MeetingRosterRule {
+  chair?: string;
+  participants?: string[];
+  min_trading_personas?: number;
+  requires_risk?: boolean;
+  requires_red_team?: boolean;
+  red_team_assigned_case?: string;
+  allow_agora_advisor?: boolean;
+  allow_owning_user_servant?: boolean;
+  allow_subject_trader_servant?: boolean;
+  description?: string;
+  [key: string]: unknown;
+}
+
 export interface MeetingTypeRule {
   meeting_type: string;
   name?: string;
@@ -448,7 +462,7 @@ export interface MeetingTypeRule {
   enabled: boolean;
   cadence?: string;
   weekly_cadence_day?: string;
-  roster_rule?: string;
+  roster_rule?: MeetingRosterRule;
   budget?: {
     max_participants?: number;
     max_rounds?: number;
@@ -751,6 +765,37 @@ export function getMeetingProposals(
       };
     },
   );
+}
+
+export function formatMeetingRosterRule(rule?: MeetingRosterRule | null): string {
+  if (!isRecord(rule)) return "—";
+  const description = typeof rule.description === "string" ? rule.description.trim() : "";
+  if (description) return description;
+
+  const parts: string[] = [];
+  if (typeof rule.chair === "string" && rule.chair.trim()) {
+    parts.push(`chair: ${rule.chair.trim()}`);
+  }
+  const participants = Array.isArray(rule.participants)
+    ? rule.participants
+        .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+        .map((p) => p.trim())
+    : [];
+  if (participants.length > 0) {
+    parts.push(`participants: ${participants.join(" + ")}`);
+  }
+  if (typeof rule.min_trading_personas === "number" && Number.isFinite(rule.min_trading_personas)) {
+    parts.push(`min_trading_personas=${rule.min_trading_personas}`);
+  }
+  if (rule.requires_risk === true) {
+    parts.push("requires_risk");
+  }
+  if (rule.requires_red_team === true) {
+    const assignedCase =
+      typeof rule.red_team_assigned_case === "string" ? rule.red_team_assigned_case.trim() : "";
+    parts.push(assignedCase ? `requires_red_team (${assignedCase})` : "requires_red_team");
+  }
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
 export function getMeetingCatalogue(
