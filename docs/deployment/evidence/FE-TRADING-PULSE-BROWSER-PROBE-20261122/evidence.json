@@ -12,15 +12,6 @@
   },
   "delivery_scope": "Trading Pulse viewer mode of the existing hosted read-only runner, page assertions/helpers, offline controls and retained measured legacy baseline. E owns repaired-page full proof.",
   "artifacts": {
-    "cli": {
-      "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
-      "sha256": "e343f195eab6aa7bdf554aefaa217e00f87fc120718554441e82ddecd68d4ae0",
-      "role": "Page assertions/helpers only; no executable CLI or browser orchestration remains."
-    },
-    "tests": {
-      "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
-      "sha256": "c9207344b46396b61640181566cf63b946db14178f2ca808b37a52e3f522c296"
-    },
     "runner": {
       "path": "scripts/accept-persona-strategy-hosted-readonly.mjs",
       "sha256": "0338da866a173ccf0e9de2b6b6c839a112ed1ea26203d30bf2f376b6894095a0"
@@ -28,6 +19,15 @@
     "runner_tests": {
       "path": "src/test/persona-strategy-hosted-readonly.test.ts",
       "sha256": "4c8c813a5df692a842424132dfd145383c214114bec7caf4c6b8909afae59b7a"
+    },
+    "page_helpers": {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
+      "sha256": "e343f195eab6aa7bdf554aefaa217e00f87fc120718554441e82ddecd68d4ae0",
+      "role": "Page assertions/helpers only; no executable CLI or browser orchestration remains."
+    },
+    "helper_tests": {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "sha256": "c9207344b46396b61640181566cf63b946db14178f2ca808b37a52e3f522c296"
     }
   },
   "commands": {
@@ -63,10 +63,25 @@
       "includes": "Actual Node CLI subprocess dispatch/exit2 negative controls (no circular top-level-await deadlock), option/input validation, and all three real Chromium synthetic viewer sessions through the shared runner. Each context passes same tenant/viewer-only verification and read-only request guard, browser navigation and evidence cap. All fixture traffic intercepted; not hosted proof."
     },
     {
-      "command": "timeout 180s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1",
+      "command": "timeout 90s npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "Verify unchanged original legacy_baseline plus all declared source SHA256 hashes and retained three-file bundle",
       "exit_code": 0,
-      "passed": 40,
-      "scope": "Initial shared-runner version: original 38 cases plus two new mode tests; followed by static import fix and actual-process regression. Final full-suite rerun collecting terminal output."
+      "retained_bundle_bytes": 196259
+    },
+    {
+      "command": "timeout 200s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1",
+      "exit_code": 0,
+      "passed": 41,
+      "failed": 0,
+      "duration_seconds": 137.49,
+      "includes": "Final unchanged shared runner at f9aac3a043c48c161527cd8ab6a2d2db94a8851a: all original role/strategy/performance/parity/error/redaction/write controls, actual-process CLI dispatch and all three synthetic real Chromium viewer sessions. Terminal output collected; no hosted result inferred."
+    },
+    {
+      "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs",
+      "exit_code": 0
     }
   ],
   "independent_owner_context": {
@@ -203,11 +218,16 @@
     "hosted_accepted": false
   },
   "shared_runner_verification": {
-    "status": "pending_coordinator_real_viewer_execution",
+    "status": "awaiting_coordinator_real_viewer_receipt",
     "mode": "trading-pulse",
     "entry": "scripts/accept-persona-strategy-hosted-readonly.mjs",
     "scope": "Confirm existing runner mode executes using the existing real dev viewer. Retained old exact stable baseline is unchanged; E does the repaired-pair full proof.",
     "terminal_exit_code": null,
-    "implementation": "Existing CLI owns mode dispatch, stdin/exit handling, Playwright loader and all browser/session orchestration; page-specific module exports assertions and helpers only. Existing original four-role mode is unchanged by default. Static helper loading avoids actual-process top-level-await circular import."
+    "implementation": "Existing CLI owns mode dispatch, stdin/exit handling, Playwright loader and all browser/session orchestration; page-specific module exports assertions and helpers only. Existing original four-role mode is unchanged by default. Static helper loading avoids actual-process top-level-await circular import.",
+    "ready_code_commit": "f9aac3a043c48c161527cd8ab6a2d2db94a8851a",
+    "runner_sha256": "0338da866a173ccf0e9de2b6b6c839a112ed1ea26203d30bf2f376b6894095a0",
+    "pending": "Coordinator real dev viewer terminal receipt and masked summary/digest; this worker has no provisioned viewer credentials. No real-viewer new-mode success is claimed. Normal independent handoff waits for that evidence.",
+    "coordination": "Governed progress requests published for corrected f9aac3a04; intermediate 0c39a2c48 is explicitly excluded because subprocess controls exposed circular top-level-await there. Corrected actual-process entry and all local controls pass.",
+    "review_admission": "Not handed off: latest canonical next requires real dev viewer confirmation through coordinator before normal independent review. Source is committed and pushed; no claim of hosted acceptance, dev merge or deployment."
   }
 }
