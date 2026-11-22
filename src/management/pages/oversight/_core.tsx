@@ -55,9 +55,14 @@ import {
   type ManagementEvolutionJournalSummary,
   type ManagementPersonaFleetRow,
   type ManagementTradingPulseCard,
+  type ManagementTradingPulseLatestOutcome,
   type ManagementTradingPulseModel,
+  type ManagementTradingPulsePnlGroup,
   type ManagementTradingPulseRuntimeRow,
   type ManagementTradingPulseSurface,
+  type TradingPulseComparisonScope,
+  type TradingPulseRankBlock,
+  type TradingPulseRankRow,
 } from "@/lib/bff-v1/management";
 import {
   submitEvidenceOperation,
@@ -1923,53 +1928,18 @@ export const HumanInboxPage = () => {
 // Trading Pulse
 // =====================================================================
 
-const CARD_ORDER = ["runtime-status", "row-health", "pnl", "drawdown", "execution-quality", "baseline-comparison"];
-
-const orderedCards = (cards: ManagementTradingPulseCard[]): ManagementTradingPulseCard[] =>
-  [...cards].sort((a, b) => {
-    const ai = CARD_ORDER.indexOf(a.cardId);
-    const bi = CARD_ORDER.indexOf(b.cardId);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-  });
-
-const fallbackCardsFromSummary = (model: ManagementTradingPulseModel): ManagementTradingPulseCard[] => ([
-  { cardId: "runtime-status", label: "Runtime Status", value: model.summary.runtimeCount, details: { byStatus: model.summary.byStatus, byStage: model.summary.byStage } },
-  { cardId: "row-health", label: "Row Health", value: Number(model.summary.rowHealthDegradedCount ?? model.summary.row_health_degraded_count ?? 0), details: { rowHealthStatusCounts: model.summary.rowHealthStatusCounts ?? model.summary.row_health_status_counts } },
-  { cardId: "pnl", label: "P&L", value: model.summary.totalPnl, details: { telemetryCoverageCount: model.summary.telemetryCoverageCount } },
-  { cardId: "drawdown", label: "Worst Drawdown", value: model.summary.worstDrawdown, details: {} },
-  { cardId: "execution-quality", label: "Execution Quality", value: model.summary.averageFillRate, details: { worstSlippageBps: model.summary.worstSlippageBps } },
-  { cardId: "baseline-comparison", label: "Baseline Comparison", value: model.summary.baselineBreachedCount, details: { baselineComparisonCount: model.summary.baselineComparisonCount, byBaselineStatus: model.summary.byBaselineStatus } },
-]);
-
-const formatPulseValue = (value: unknown, cardId?: string): string => {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "string") return value;
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  if (["runtime-status", "row-health", "baseline-comparison", "total-trades"].includes(cardId ?? "")) {
-    return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-  if (cardId === "execution-quality") {
-    return n.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-  }
-  return n.toLocaleString(undefined, { maximumFractionDigits: 3 });
-};
-
 const statusTone = (status: unknown): string => {
   const normalized = String(status ?? "").toLowerCase();
-  if (["ok", "live", "fresh", "active"].includes(normalized)) return "bg-status-success/15 text-status-success border-status-success/30";
-  if (["watch", "degraded", "missing", "unavailable", "unverifiable"].includes(normalized)) return "bg-status-warning/15 text-status-warning border-status-warning/30";
-  if (["breached", "failed", "error"].includes(normalized)) return "bg-status-failed/15 text-status-failed border-status-failed/30";
+  if (["ok", "live", "fresh", "active", "verified", "available"].includes(normalized)) {
+    return "bg-status-success/15 text-status-success border-status-success/30";
+  }
+  if (["watch", "degraded", "missing", "unavailable", "unverifiable", "unverified", "partial", "stale"].includes(normalized)) {
+    return "bg-status-warning/15 text-status-warning border-status-warning/30";
+  }
+  if (["breached", "failed", "error"].includes(normalized)) {
+    return "bg-status-failed/15 text-status-failed border-status-failed/30";
+  }
   return "bg-muted text-muted-foreground border-border";
-};
-
-const compactCounts = (value: unknown, formatKey?: (key: string) => string): string => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "—";
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length === 0) return "—";
-  return entries
-    .map(([key, item]) => `${formatKey ? formatKey(key) : key}: ${formatPulseValue(item, "runtime-status")}`)
-    .join(" · ");
 };
 
 const pulseRecord = (value: unknown): Record<string, unknown> =>
@@ -1981,43 +1951,355 @@ const pulseNumber = (value: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const pulseStringList = (value: unknown): string[] =>
-  Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+const PULSE_TECHNICAL_ID_RE =
+  /^(?:rt|rb|persona|strategy|runtime|binding|tj|dec|ord)_[a-z0-9_-]+$|^(?:rt|rb|persona|strategy|runtime|binding|tj|dec|ord)-[a-z0-9_-]+$/i;
 
-const pulseCoverage = (model: ManagementTradingPulseModel): Record<string, unknown> =>
-  pulseRecord(model.summary.coverage ?? model.meta.coverage);
-
-const coverageCount = (coverage: Record<string, unknown>, availableKey: string, totalKey = "runtimeCount"): string => {
-  const available = pulseNumber(coverage[availableKey]);
-  const explicitTotal = pulseNumber(coverage[totalKey]);
-  const missing = pulseNumber(coverage.missingCount ?? coverage.missing_count);
-  const total = explicitTotal ?? (available !== null && missing !== null ? available + missing : null);
-  if (available === null || total === null) return "—";
-  return `${formatPulseValue(available, "runtime-status")}/${formatPulseValue(total, "runtime-status")}`;
+const isPulseTechnicalId = (value: unknown): boolean => {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return PULSE_TECHNICAL_ID_RE.test(trimmed);
 };
 
-const shortList = (items: string[], limit = 3): string => {
-  if (items.length === 0) return "—";
-  const visible = items.slice(0, limit).join(", ");
-  return items.length > limit ? `${visible} +${items.length - limit}` : visible;
+const isExplicitPulseProbeRecord = (record: unknown): boolean => {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return false;
+  const r = record as Record<string, unknown>;
+  if (r.persona_is_probe === true || r.personaIsProbe === true || r.is_probe === true || r.isProbe === true) {
+    return true;
+  }
+  const scope = String(
+    r.persona_data_scope ?? r.personaDataScope ?? r.data_scope ?? r.dataScope ?? "",
+  ).trim().toLowerCase();
+  return scope === "test" || scope === "probe";
 };
 
-const rowHealth = (row: ManagementTradingPulseRuntimeRow): Record<string, unknown> =>
-  pulseRecord(row.rowHealth ?? row.row_health);
-
-const rowHealthStatus = (row: ManagementTradingPulseRuntimeRow): string =>
-  String(rowHealth(row).status ?? "unknown");
-
-const rowHealthChecks = (row: ManagementTradingPulseRuntimeRow): string[] =>
-  pulseStringList(rowHealth(row).degraded_checks ?? rowHealth(row).degradedChecks);
-
-const pulsePersonaId = (row: ManagementTradingPulseRuntimeRow): string | undefined => {
-  const value = row.personaId ?? row.persona_id;
-  return typeof value === "string" && value.trim() ? value : undefined;
+const formatPulseInt = (value: unknown): string => {
+  const n = pulseNumber(value);
+  if (n === null) return "—";
+  return Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
 };
 
-const cardMetricCoverage = (card: ManagementTradingPulseCard): Record<string, unknown> =>
-  pulseRecord(card.details?.metricCoverage ?? card.details?.metric_coverage);
+const formatPulseCurrencyAmount = (value: unknown, currency?: string | null): string => {
+  const n = pulseNumber(value);
+  if (n === null) return "—";
+  const formatted = n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const cur = typeof currency === "string" && currency.trim() ? currency.trim() : "";
+  return cur ? `${cur} ${formatted}` : formatted;
+};
+
+const formatPulsePercentFromFraction = (fraction: unknown): string | null => {
+  const n = pulseNumber(fraction);
+  if (n === null) return null;
+  const pct = n * 100;
+  if (Math.abs(pct - Math.round(pct)) < 1e-7) {
+    return `${Math.round(pct)}%`;
+  }
+  const fixed = Number(pct.toFixed(2));
+  const minDec = Math.abs(fixed * 10 - Math.round(fixed * 10)) < 1e-7 ? 1 : 2;
+  return `${fixed.toLocaleString("en-US", {
+    minimumFractionDigits: minDec,
+    maximumFractionDigits: 2,
+  })}%`;
+};
+
+const formatPulseBps = (value: unknown): string | null => {
+  const n = pulseNumber(value);
+  if (n === null) return null;
+  if (Math.abs(n - Math.round(n)) < 1e-7) {
+    return Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  }
+  return Number(n.toFixed(2)).toLocaleString("en-US", { maximumFractionDigits: 2 });
+};
+
+const formatPulseRatio = (value: unknown): string => {
+  const n = pulseNumber(value);
+  if (n === null) return "—";
+  return n.toLocaleString("en-US", { maximumFractionDigits: 3 });
+};
+
+type PulseTranslate = (key: string, options?: Record<string, unknown>) => string;
+
+const formatPulseStage = (stage: unknown, t: PulseTranslate): string => {
+  const s = String(stage ?? "").trim().toLowerCase();
+  if (s === "paper" || s === "paper_running") return t("mgmt.pulse.stagePaper");
+  if (s === "canary" || s === "canary_running") return t("mgmt.pulse.stageCanary");
+  if (s === "live" || s === "live_running") return t("mgmt.pulse.stageLive");
+  return t("mgmt.pulse.stageUnknown");
+};
+
+const formatPulseExecutionStatus = (status: unknown, t: PulseTranslate): string => {
+  const s = String(status ?? "").trim().toLowerCase();
+  if (s === "active") return t("mgmt.pulse.statusActive");
+  if (["running", "paper_running", "canary_running", "live_running"].includes(s)) {
+    return t("mgmt.pulse.statusRunning");
+  }
+  if (s === "paused") return t("mgmt.pulse.statusPaused");
+  if (s === "stopped") return t("mgmt.pulse.statusStopped");
+  if (s === "degraded" || s === "watch") return t("mgmt.pulse.statusDegraded");
+  if (["failed", "error", "breached"].includes(s)) return t("mgmt.pulse.statusFailed");
+  if (s === "idle" || s === "ready") return t("mgmt.pulse.statusIdle");
+  return t("mgmt.pulse.statusUnknown");
+};
+
+const formatPulsePnlDefinition = (def: unknown, t: PulseTranslate): string => {
+  const d = String(def ?? "").trim().toLowerCase();
+  if (["realized_plus_unrealized", "combined", "total", "realized_and_unrealized"].includes(d)) {
+    return t("mgmt.pulse.pnlDefCombined");
+  }
+  if (d === "realized" || d === "realized_only") return t("mgmt.pulse.pnlDefRealized");
+  if (d === "unrealized" || d === "unrealized_only") return t("mgmt.pulse.pnlDefUnrealized");
+  return t("mgmt.pulse.pnlDefUnverified");
+};
+
+const formatPulseQuantityUnit = (
+  unit: unknown,
+  t: PulseTranslate,
+): { localized: string; raw: string | null } => {
+  const raw = typeof unit === "string" && unit.trim() && !isPulseTechnicalId(unit) ? unit.trim() : null;
+  const norm = (raw ?? "").toLowerCase();
+  if (!raw || ["shares", "share", "absolute_order_quantity", "股"].includes(norm)) {
+    return { localized: t("mgmt.pulse.unitShares"), raw };
+  }
+  return { localized: raw, raw };
+};
+
+const formatPulseMetricReason = (reason: unknown, t: PulseTranslate): string => {
+  const r = String(reason ?? "").trim().toLowerCase();
+  if (r === "no_fills") return t("mgmt.pulse.reasonNoFills");
+  if (["min_10_daily_returns_required", "insufficient_samples", "insufficient_data"].includes(r)) {
+    return t("mgmt.pulse.reasonMin10DailyReturns");
+  }
+  if (["zero_return_variance", "zero_variance"].includes(r)) {
+    return t("mgmt.pulse.reasonZeroVariance");
+  }
+  if (r === "no_submitted_orders") return t("mgmt.pulse.reasonNoSubmittedOrders");
+  if (["source_unavailable", "telemetry_unavailable", "unavailable"].includes(r)) {
+    return t("mgmt.pulse.reasonSourceUnavailable");
+  }
+  if (["stale", "telemetry_stale"].includes(r)) return t("mgmt.pulse.reasonStale");
+  if (["uncomparable_pnl", "missing_pnl_scope"].includes(r)) {
+    return t("mgmt.pulse.reasonUncomparablePnl");
+  }
+  return t("mgmt.pulse.reasonUnknown");
+};
+
+const formatPulseOutcomeReason = (reasonCode: unknown, t: PulseTranslate): string => {
+  const raw = typeof reasonCode === "string" ? reasonCode.trim() : "";
+  const r = raw.toLowerCase();
+  if (["insufficient_cash", "insufficient_buying_power", "insufficient_funds"].includes(r)) {
+    return t("mgmt.pulse.eventReasonInsufficientCash");
+  }
+  if (r === "reason_not_recorded") return t("mgmt.pulse.eventReasonNotRecorded");
+  if (["risk_limit_exceeded", "max_position_exceeded", "exposure_limit_exceeded"].includes(r)) {
+    return t("mgmt.pulse.eventReasonRiskLimit");
+  }
+  if (raw) {
+    const resolved = reasonCodeDisplay(raw, t);
+    if (resolved.isKnown && resolved.text && !isPulseTechnicalId(resolved.text)) {
+      return resolved.text;
+    }
+  }
+  return t("mgmt.pulse.eventReasonUnavailable");
+};
+
+const resolvePulsePersonaDisplayName = (
+  row: {
+    personaName?: string | null;
+    persona_name?: string | null;
+    strategyName?: string | null;
+    strategy_name?: string | null;
+    subjectLabel?: string | null;
+  },
+  t: PulseTranslate,
+): string => {
+  const candidates = [
+    row.personaName,
+    row.persona_name,
+    row.subjectLabel,
+    row.strategyName,
+    row.strategy_name,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim() && !isPulseTechnicalId(candidate)) {
+      return candidate.trim();
+    }
+  }
+  return t("mgmt.pulse.unnamedPersona");
+};
+
+const resolvePulseStrategyDisplayName = (
+  row: ManagementTradingPulseRuntimeRow,
+  personaDisplayName: string,
+): string | null => {
+  const raw = row.strategyName ?? row.strategy_name;
+  if (typeof raw !== "string" || !raw.trim() || isPulseTechnicalId(raw)) return null;
+  const trimmed = raw.trim();
+  return trimmed !== personaDisplayName ? trimmed : null;
+};
+
+const resolvePulseRowSymbol = (row: {
+  underlyingSymbol?: string | null;
+  underlying_symbol?: string | null;
+  latestOutcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
+  latest_outcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
+}): string | null => {
+  const sym = row.underlyingSymbol ?? row.underlying_symbol;
+  if (typeof sym === "string" && sym.trim() && !isPulseTechnicalId(sym)) {
+    return sym.trim();
+  }
+  const outcome = pulseRecord(row.latestOutcome ?? row.latest_outcome);
+  const outcomeSym = outcome.symbol;
+  if (typeof outcomeSym === "string" && outcomeSym.trim() && !isPulseTechnicalId(outcomeSym)) {
+    return outcomeSym.trim();
+  }
+  return null;
+};
+
+const resolvePulseRowFillCount = (row: ManagementTradingPulseRuntimeRow): number | null => {
+  const perf = row.performanceContext ?? row.performance_context;
+  const sourceStatus = String(perf?.sourceStatus ?? perf?.source_status ?? "").toLowerCase();
+  const ledgerFills = pulseNumber(perf?.ledgerFillCount ?? perf?.ledger_fill_count);
+  if (ledgerFills !== null && ledgerFills >= 0) return ledgerFills;
+  if (sourceStatus === "unavailable") return null;
+  const executed = pulseNumber(row.executedTradeCount ?? row.executed_trade_count);
+  if (executed !== null && executed >= 0) return executed;
+  const total = pulseNumber(
+    row.totalTrades ?? row.total_trades ?? row.metrics?.total_trades ?? row.metrics?.totalTrades,
+  );
+  return total !== null && total >= 0 ? total : null;
+};
+
+const pulseReturnOrigin = (location: { pathname: string; search: string }): string =>
+  location.pathname.startsWith("/management/")
+    ? `${location.pathname}${location.search || ""}`
+    : "/management/trading-pulse";
+
+const isSafePulseInternalHref = (href: unknown): href is string => {
+  if (typeof href !== "string") return false;
+  const trimmed = href.trim();
+  if (!trimmed || trimmed === "#" || trimmed.startsWith("//") || !trimmed.startsWith("/management/")) {
+    return false;
+  }
+  return true;
+};
+
+const withPulseReturnTo = (
+  href: unknown,
+  location: { pathname: string; search: string },
+  returnLabel: string,
+): string | null => {
+  if (!isSafePulseInternalHref(href)) return null;
+  const trimmed = href.trim();
+  if (!trimmed.startsWith("/management/trade-journeys")) return trimmed;
+  const [pathname, query = ""] = trimmed.split("?");
+  if (pathname === "/management/trade-journeys" && !query) return null;
+  const params = new URLSearchParams(query);
+  if (!params.get("return_to")) {
+    params.set("return_to", pulseReturnOrigin(location));
+  }
+  if (returnLabel && !params.get("return_label")) {
+    params.set("return_label", returnLabel);
+  }
+  const qs = params.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+};
+
+const resolveRowPersonaHref = (row: {
+  personaId?: string | null;
+  persona_id?: string | null;
+  links?: {
+    persona?: string;
+    personaHref?: string;
+    persona_href?: string;
+    manageHref?: string;
+    primaryObjectHref?: string;
+  };
+}): string | null => {
+  const candidates = [
+    row.links?.persona,
+    row.links?.personaHref,
+    row.links?.persona_href,
+    row.links?.manageHref,
+    row.links?.primaryObjectHref,
+  ];
+  for (const c of candidates) {
+    if (isSafePulseInternalHref(c) && c.startsWith("/management/personas/")) {
+      return c.trim();
+    }
+  }
+  const pid = row.personaId ?? row.persona_id;
+  if (typeof pid === "string" && pid.trim() && row.links !== undefined) {
+    return `/management/personas/${encodeURIComponent(pid.trim())}`;
+  }
+  return null;
+};
+
+const resolveRowLatestJourneyHref = (
+  row: {
+    latestOutcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
+    latest_outcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
+    links?: {
+      journey?: string;
+      journeyHref?: string;
+      journey_href?: string;
+    };
+  },
+  location: { pathname: string; search: string },
+  returnLabel: string,
+): string | null => {
+  const outcome = pulseRecord(row.latestOutcome ?? row.latest_outcome);
+  const candidates = [
+    outcome.journeyHref,
+    outcome.journey_href,
+    row.links?.journey,
+    row.links?.journeyHref,
+    row.links?.journey_href,
+  ];
+  for (const c of candidates) {
+    const resolved = withPulseReturnTo(c, location, returnLabel);
+    if (resolved) return resolved;
+  }
+  return null;
+};
+
+const resolveRowPersonaJourneysHref = (
+  row: {
+    personaId?: string | null;
+    persona_id?: string | null;
+    tenantId?: string | null;
+    tenant_id?: string | null;
+    deploymentStage?: string | null;
+    deployment_stage?: string | null;
+    links?: unknown;
+  },
+  location: { pathname: string; search: string },
+  returnLabel: string,
+): string | null => {
+  const pid = row.personaId ?? row.persona_id;
+  if (typeof pid !== "string" || !pid.trim() || row.links === undefined) return null;
+  const incoming = new URLSearchParams(location.search);
+  const params = new URLSearchParams();
+  const tenantId = (row.tenantId ?? row.tenant_id ?? incoming.get("tenant_id") ?? "").trim();
+  const rawStage = String(row.deploymentStage ?? row.deployment_stage ?? incoming.get("environment") ?? "")
+    .trim()
+    .toLowerCase();
+  const env = rawStage.startsWith("paper")
+    ? "paper"
+    : rawStage.startsWith("canary")
+      ? "canary"
+      : rawStage.startsWith("live")
+        ? "live"
+        : "";
+  if (tenantId) params.set("tenant_id", tenantId);
+  if (env) params.set("environment", env);
+  params.set("persona_id", pid.trim());
+  params.set("return_to", pulseReturnOrigin(location));
+  if (returnLabel) params.set("return_label", returnLabel);
+  return `/management/trade-journeys?${params.toString()}`;
+};
 
 export const TradingPulsePage = () => {
   const { t } = useTranslation();
@@ -2026,7 +2308,7 @@ export const TradingPulsePage = () => {
   });
   if (!model) {
     return (
-      <section className="p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
+      <section className="p-4 sm:p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
         <header>
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.pulse.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.pulse.subtitle")}</p>
@@ -2042,328 +2324,1315 @@ export const TradingPulsePage = () => {
       </section>
     );
   }
-  const cards = orderedCards(model.cards.length > 0 ? model.cards : fallbackCardsFromSummary(model));
+
+  const operationalRows = model.runtimeRows.filter((row) => !isExplicitPulseProbeRecord(row));
+  const snapshotAt = model.summary.snapshotAt ?? model.summary.snapshot_at ?? model.meta.snapshotAt ?? model.meta.snapshot_at;
 
   return (
-    <section className="p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
-      <header>
-        <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.pulse.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("mgmt.pulse.subtitle")}</p>
+    <section className="p-4 sm:p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.pulse.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("mgmt.pulse.subtitle")}</p>
+        </div>
+        {snapshotAt && (
+          <div className="text-xs text-muted-foreground">
+            {t("mgmt.pulse.snapshotAt")}：{safeDateTime(snapshotAt)}
+          </div>
+        )}
       </header>
 
-      <TradingPulseSurfaceHealth model={model} />
+      <TradingPulseOperatorScopeSection model={model} rows={operationalRows} />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        {cards.map((card) => (
-          <Card key={card.cardId} className="p-4">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">{card.label}</Badge>
-            </div>
-            <div className="mt-3 text-2xl font-semibold">{formatPulseValue(card.value, card.cardId)}</div>
-            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-              {card.cardId === "runtime-status" && (
-                <>
-                  <div>{t("mgmt.pulse.byStatus")}: {compactCounts(card.details?.byStatus)}</div>
-                  <div>{t("mgmt.pulse.byStage")}: {compactCounts(card.details?.byStage)}</div>
-                </>
-              )}
-              {card.cardId === "row-health" && (
-                <>
-                  <div>{t("mgmt.pulse.rowHealth")}: {compactCounts(card.details?.rowHealthStatusCounts)}</div>
-                  <div>{t("mgmt.pulse.degradedRows")}: {shortList(pulseStringList(card.details?.degradedRuntimeIds))}</div>
-                </>
-              )}
-              {card.cardId === "pnl" && (
-                <>
-                  <div>{t("mgmt.pulse.telemetryCoverage")}: {formatPulseValue(card.details?.telemetryCoverageCount, "runtime-status")}</div>
-                  <div>{t("mgmt.pulse.metricCoverage")}: {coverageCount(cardMetricCoverage(card), "availableCount", "runtimeCount")}</div>
-                </>
-              )}
-              {card.cardId === "drawdown" && (
-                <div>{t("mgmt.pulse.metricCoverage")}: {coverageCount(cardMetricCoverage(card), "availableCount", "runtimeCount")}</div>
-              )}
-              {card.cardId === "execution-quality" && (
-                <>
-                  <div>{t("mgmt.pulse.worstSlippage")}: {formatPulseValue(card.details?.worstSlippageBps)}</div>
-                  <div>{t("mgmt.pulse.metricCoverage")}: {coverageCount(cardMetricCoverage(card), "availableCount", "runtimeCount")}</div>
-                </>
-              )}
-              {card.cardId === "baseline-comparison" && (
-                <>
-                  <div>{t("mgmt.pulse.baselineCoverage")}: {formatPulseValue(card.details?.baselineComparisonCount, "runtime-status")}</div>
-                  <div>{t("mgmt.pulse.byBaseline")}: {compactCounts(card.details?.byBaselineStatus, (key) => key === "not_required" ? t("mgmt.pulse.notRequired") : key)}</div>
-                  <div>{t("mgmt.pulse.missing")}: {shortList(pulseStringList(card.details?.missingBaselineRuntimeIds))}</div>
-                </>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
+      <TradingPulsePnlGroupsSection model={model} rows={operationalRows} />
 
-      <RuntimeRowsPanel rows={model.runtimeRows} />
+      <TradingPulseNotableEventsSection rows={operationalRows} />
 
-      <RankingBlocks />
+      <TradingPulsePersonaDetailsSection model={model} rows={operationalRows} />
+
+      <TradingPulseRankingsSection runtimeRows={operationalRows} />
+
+      <TradingPulseDiagnosticsSection model={model} rows={operationalRows} />
     </section>
   );
 };
 
-const TradingPulseSurfaceHealth = ({ model }: { model: ManagementTradingPulseModel }) => {
+const TradingPulseOperatorScopeSection = ({
+  model,
+  rows,
+}: {
+  model: ManagementTradingPulseModel;
+  rows: ManagementTradingPulseRuntimeRow[];
+}) => {
   const { t } = useTranslation();
+  const scope = model.summary.operatorScope ?? model.summary.operator_scope;
+  const scopeStatus = String(scope?.status ?? "unverified").trim().toLowerCase();
+  const rawPersonaCount = pulseNumber(scope?.personaCount ?? scope?.persona_count);
+  const rawRuntimeCount = pulseNumber(scope?.runtimeCount ?? scope?.runtime_count ?? model.summary.runtimeCount);
+  const removedProbeCount = model.runtimeRows.length - rows.length;
+  const personaCount =
+    rawPersonaCount !== null && removedProbeCount > 0 && rows.length < rawPersonaCount
+      ? rows.length
+      : rawPersonaCount;
+  const runtimeCount =
+    rawRuntimeCount !== null && removedProbeCount > 0 && rows.length < rawRuntimeCount
+      ? rows.length
+      : rawRuntimeCount;
+
+  const badgeLabel =
+    scopeStatus === "verified"
+      ? t("mgmt.pulse.scopeVerifiedBadge")
+      : scopeStatus === "partial"
+        ? t("mgmt.pulse.scopePartialBadge")
+        : scopeStatus === "unavailable"
+          ? t("mgmt.pulse.scopeUnavailableBadge")
+          : t("mgmt.pulse.scopeUnverifiedBadge");
+
+  const byStageRecord = scope?.byStage ?? scope?.by_stage ?? {};
+  const stageChips: string[] = [];
+  for (const [stageKey, entry] of Object.entries(byStageRecord)) {
+    const pc = pulseNumber(entry?.personaCount ?? entry?.persona_count);
+    const rc = pulseNumber(entry?.runtimeCount ?? entry?.runtime_count);
+    const stageLabel = formatPulseStage(stageKey, t);
+    if (pc !== null) {
+      stageChips.push(t("mgmt.pulse.scopeStagePersonaCountFmt", { stage: stageLabel, count: formatPulseInt(pc) }));
+    } else if (rc !== null) {
+      stageChips.push(t("mgmt.pulse.scopeStageRuntimeOnlyFmt", { stage: stageLabel, count: formatPulseInt(rc) }));
+    }
+  }
+  if (stageChips.length === 0 && scopeStatus !== "unavailable") {
+    for (const [stageKey, count] of Object.entries(model.summary.byStage ?? {})) {
+      const rc = pulseNumber(count);
+      if (rc !== null) {
+        stageChips.push(
+          t("mgmt.pulse.scopeStageRuntimeOnlyFmt", {
+            stage: formatPulseStage(stageKey, t),
+            count: formatPulseInt(rc),
+          }),
+        );
+      }
+    }
+  }
+
+  const excludedProbeCount = pulseNumber(
+    (scope as Record<string, unknown> | undefined)?.excludedProbeCount
+      ?? (scope as Record<string, unknown> | undefined)?.excluded_probe_count
+      ?? (model.summary as Record<string, unknown>).excludedProbeCount
+      ?? (model.summary as Record<string, unknown>).excluded_probe_count,
+  );
+  const scopeReason = String(scope?.reason ?? "").trim().toLowerCase();
+  const isAllProbesEmpty =
+    rows.length === 0
+    && (personaCount === 0 || (personaCount === null && removedProbeCount > 0))
+    && ((excludedProbeCount !== null && excludedProbeCount > 0)
+      || removedProbeCount > 0
+      || /probe|test/.test(scopeReason));
+
+  const baselineRequired = pulseNumber(
+    model.summary.baselineRequiredCount ?? model.summary.coverage?.baselineRequiredCount,
+  );
+  const allPaperBaselineNotRequired =
+    rows.length > 0
+    && (baselineRequired === 0
+      || rows.every(
+        (r) => (r.baselineComparison?.status ?? r.baseline_comparison?.status ?? "not_required") === "not_required",
+      ));
+
   const surfaces = Object.entries(model.meta.surfaces ?? {});
-  const degraded = surfaces.filter(([, surface]) => !["ok", "live", "fresh"].includes(String(surface.status ?? "").toLowerCase()));
+  const hasSurfaceIssue = surfaces.some(
+    ([, s]) => !["ok", "live", "fresh", "available"].includes(String(s.status ?? "").toLowerCase()),
+  );
+  const hasRowSourceIssue = rows.some((r) => {
+    const st = String(r.performanceContext?.sourceStatus ?? r.performance_context?.source_status ?? "").toLowerCase();
+    return st === "unavailable" || st === "stale";
+  });
+  const showSourceIssueReminder =
+    hasSurfaceIssue || hasRowSourceIssue || scopeStatus === "partial" || scopeStatus === "unavailable";
+
   return (
-    <Card className="p-4">
+    <Card className="p-4 space-y-3" data-testid="trading-pulse-operator-scope">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.coverageTitle")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("mgmt.pulse.snapshotAt")}: {safeDateTime(model.meta.snapshotAt ?? model.meta.snapshot_at)}
-          </p>
+          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.scopeSectionTitle")}</h2>
+          <div className="mt-1 flex flex-wrap items-baseline gap-2">
+            <span className="text-lg font-semibold text-foreground">
+              {personaCount !== null && scopeStatus !== "unavailable"
+                ? t("mgmt.pulse.scopePersonaCountFmt", { count: formatPulseInt(personaCount) })
+                : t("mgmt.pulse.scopePersonaCountUnknown")}
+            </span>
+            {runtimeCount !== null && personaCount !== null && runtimeCount !== personaCount && (
+              <span className="text-xs text-muted-foreground">
+                {t("mgmt.pulse.scopeRuntimeCountDiffFmt", { count: formatPulseInt(runtimeCount) })}
+              </span>
+            )}
+          </div>
         </div>
-        <Badge variant="outline" className={statusTone(degraded.length > 0 ? "degraded" : "ok")}>
-          {degraded.length > 0 ? t("mgmt.pulse.degraded") : t("mgmt.pulse.live")}
+        <Badge variant="outline" className={statusTone(scopeStatus)}>
+          {badgeLabel}
         </Badge>
       </div>
-      <TradingPulseCoverageSummary model={model} />
-      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {surfaces.map(([key, surface]) => (
-          <SurfaceBadge key={key} name={key} surface={surface} />
-        ))}
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">{t("mgmt.pulse.scopeStageBreakdownLabel")}：</span>
+        {stageChips.length > 0 ? (
+          stageChips.map((chip) => (
+            <Badge key={chip} variant="secondary">
+              {chip}
+            </Badge>
+          ))
+        ) : (
+          <span className="text-muted-foreground">{t("mgmt.pulse.scopeNoStageBreakdown")}</span>
+        )}
       </div>
+
+      {scopeStatus === "unverified" && (
+        <p className="text-xs text-status-warning" data-testid="trading-pulse-scope-unverified">
+          {t("mgmt.pulse.scopeUnverifiedNotice")}
+        </p>
+      )}
+      {scopeStatus === "unavailable" && (
+        <p className="text-xs text-status-warning" data-testid="trading-pulse-scope-unavailable">
+          {t("mgmt.pulse.scopeUnavailableNotice")}
+        </p>
+      )}
+      {scopeStatus === "partial" && (
+        <p className="text-xs text-status-warning" data-testid="trading-pulse-scope-partial">
+          {t("mgmt.pulse.scopePartialNotice")}
+        </p>
+      )}
+      {scopeStatus === "verified" && personaCount === 0 && rows.length === 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="trading-pulse-scope-empty">
+          {isAllProbesEmpty ? t("mgmt.pulse.scopeEmptyAllProbesNotice") : t("mgmt.pulse.scopeEmptyNormalNotice")}
+        </p>
+      )}
+
+      {allPaperBaselineNotRequired && (
+        <p className="text-xs text-muted-foreground">
+          {t("mgmt.pulse.scopePaperBaselineSummary")}
+        </p>
+      )}
+      {!allPaperBaselineNotRequired && baselineRequired !== null && baselineRequired > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t("mgmt.pulse.scopeBaselineSummaryFmt", {
+            covered: formatPulseInt(model.summary.baselineComparisonCount),
+            required: formatPulseInt(baselineRequired),
+            watch: formatPulseInt(model.summary.baselineWatchCount),
+            breached: formatPulseInt(model.summary.baselineBreachedCount),
+          })}
+        </p>
+      )}
+
+      {showSourceIssueReminder && (
+        <p className="text-xs text-status-warning" data-testid="trading-pulse-source-issue-reminder">
+          {t("mgmt.pulse.sourceIssueSummaryAlert")}
+        </p>
+      )}
     </Card>
   );
 };
 
-const TradingPulseCoverageSummary = ({ model }: { model: ManagementTradingPulseModel }) => {
+const TradingPulsePnlGroupsSection = ({
+  model,
+  rows,
+}: {
+  model: ManagementTradingPulseModel;
+  rows: ManagementTradingPulseRuntimeRow[];
+}) => {
   const { t } = useTranslation();
-  const coverage = pulseCoverage(model);
-  const rowHealthCounts = coverage.rowHealthStatusCounts ?? coverage.row_health_status_counts;
-  const missingTelemetry = pulseStringList(coverage.missingTelemetryRuntimeIds ?? coverage.missing_telemetry_runtime_ids);
-  const missingMonitoring = pulseStringList(coverage.missingMonitoringRuntimeIds ?? coverage.missing_monitoring_runtime_ids);
-  const missingBaseline = pulseStringList(coverage.missingBaselineRuntimeIds ?? coverage.missing_baseline_runtime_ids);
-  const degradedRows = pulseStringList(coverage.degradedRuntimeIds ?? coverage.degraded_runtime_ids);
-  const baselineRequired = pulseNumber(coverage.baselineRequiredCount);
-  const baselineCoverageValue = baselineRequired === 0
-    ? t("mgmt.pulse.notRequired")
-    : coverageCount(
-        coverage,
-        "baselineComparisonCount",
-        baselineRequired !== null ? "baselineRequiredCount" : "runtimeCount",
-      );
-  const retiredCount = pulseNumber(model.summary.retiredRuntimeCount);
-  const statusDetail = compactCounts(model.summary.byStatus);
-  const retiredDetail = retiredCount !== null
-    ? t("mgmt.pulse.retiredExcludedFmt", { count: formatPulseValue(retiredCount, "runtime-status") })
-    : null;
-  const runtimeDetail = retiredDetail
-    ? (statusDetail === "—" ? retiredDetail : `${statusDetail} · ${retiredDetail}`)
-    : statusDetail;
+  const groups: ManagementTradingPulsePnlGroup[] = model.summary.pnlGroups ?? model.summary.pnl_groups ?? [];
+  const hasAnyRowPnl = rows.some((r) => pulseNumber(r.metrics?.pnl) !== null);
+
   return (
-    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-      <CoverageStat
-        label={t("mgmt.pulse.runtimeRows")}
-        value={formatPulseValue(coverage.runtimeCount ?? model.summary.runtimeCount, "runtime-status")}
-        detail={runtimeDetail}
-      />
-      <CoverageStat
-        label={t("mgmt.pulse.telemetryCoverage")}
-        value={coverageCount(coverage, "telemetryCoverageCount")}
-        detail={`${t("mgmt.pulse.missing")}: ${shortList(missingTelemetry)}`}
-        status={missingTelemetry.length > 0 ? "degraded" : "ok"}
-      />
-      <CoverageStat
-        label={t("mgmt.pulse.monitoringCoverage")}
-        value={coverageCount(coverage, "monitoringCoverageCount", "paperRuntimeCount")}
-        detail={`${t("mgmt.pulse.missing")}: ${shortList(missingMonitoring)}`}
-        status={missingMonitoring.length > 0 ? "degraded" : "ok"}
-      />
-      <CoverageStat
-        label={t("mgmt.pulse.baselineCoverage")}
-        value={baselineCoverageValue}
-        detail={`${t("mgmt.pulse.missing")}: ${shortList(missingBaseline)}`}
-        status={missingBaseline.length > 0 ? "degraded" : "ok"}
-      />
-      <CoverageStat
-        label={t("mgmt.pulse.rowHealth")}
-        value={formatPulseValue(coverage.rowHealthDegradedCount ?? coverage.row_health_degraded_count, "row-health")}
-        detail={`${compactCounts(rowHealthCounts)} · ${shortList(degradedRows)}`}
-        status={degradedRows.length > 0 ? "degraded" : "ok"}
-      />
-    </div>
+    <Card className="p-4 space-y-3" data-testid="trading-pulse-pnl-groups">
+      <div>
+        <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.pnlSectionTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("mgmt.pulse.pnlSectionSubtitle")}</p>
+      </div>
+
+      {groups.length === 0 ? (
+        <p className="text-xs text-muted-foreground" data-testid="trading-pulse-pnl-groups-empty">
+          {hasAnyRowPnl ? t("mgmt.pulse.pnlEmptyUncomparable") : t("mgmt.pulse.pnlEmptyNoFills")}
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {groups.map((g, idx) => {
+            const val = pulseNumber(g.value);
+            const covP = pulseNumber(g.coveredPersonaCount ?? g.covered_persona_count);
+            const eligP = pulseNumber(g.eligiblePersonaCount ?? g.eligible_persona_count);
+            const covR = pulseNumber(g.coveredRuntimeCount ?? g.covered_runtime_count);
+            const eligR = pulseNumber(g.eligibleRuntimeCount ?? g.eligible_runtime_count);
+            const startAt = g.periodStartAt ?? g.period_start_at;
+            const endAt = g.periodEndAt ?? g.period_end_at;
+            const asOf = g.asOf ?? g.as_of;
+            const rawPeriodTokens = Array.from(
+              new Set(
+                [
+                  (g as Record<string, unknown>).period,
+                  (g as Record<string, unknown>).period_label,
+                  (g as Record<string, unknown>).periodLabel,
+                  startAt,
+                  endAt,
+                ]
+                  .filter((x): x is string => typeof x === "string" && Boolean(x.trim()) && !isPulseTechnicalId(x))
+                  .map((x) => x.trim()),
+              ),
+            );
+
+            return (
+              <div
+                key={`${g.stage ?? "stage"}-${g.currency ?? "cur"}-${startAt ?? idx}`}
+                role="group"
+                className="rounded-md border border-border bg-background p-3 space-y-1.5 text-xs"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline">{formatPulseStage(g.stage, t)}</Badge>
+                    <Badge variant="secondary">
+                      {g.currency || t("mgmt.pulse.pnlCurrencyUnverified")}
+                    </Badge>
+                  </div>
+                  <span className="text-muted-foreground">
+                    {formatPulsePnlDefinition(g.pnlDefinition ?? g.pnl_definition, t)}
+                  </span>
+                </div>
+
+                <div className="text-lg font-semibold text-foreground">
+                  {val !== null ? (
+                    <>
+                      {formatPulseCurrencyAmount(val, g.currency)}
+                      {val < 0 ? `（${t("mgmt.pulse.pnlLossTag")}）` : val === 0 ? `（${t("mgmt.pulse.pnlFlatTag")}）` : ""}
+                    </>
+                  ) : (
+                    t("mgmt.pulse.pnlUnknown")
+                  )}
+                </div>
+
+                <div className="font-medium text-foreground">
+                  {covP !== null && eligP !== null
+                    ? t("mgmt.pulse.pnlCoveragePersonaFmt", {
+                        covered: formatPulseInt(covP),
+                        eligible: formatPulseInt(eligP),
+                      })
+                    : covR !== null && eligR !== null
+                      ? t("mgmt.pulse.pnlCoverageRuntimeFmt", {
+                          covered: formatPulseInt(covR),
+                          eligible: formatPulseInt(eligR),
+                        })
+                      : t("mgmt.pulse.pnlCoverageUnconfirmed")}
+                </div>
+
+                {covP !== null && eligP !== null && eligP > covP && (
+                  <div className="text-[11px] text-muted-foreground">
+                    {t("mgmt.pulse.pnlUncoveredHintFmt", { missing: formatPulseInt(eligP - covP) })}
+                  </div>
+                )}
+
+                <div className="text-[11px] text-muted-foreground">
+                  {startAt && (endAt || asOf)
+                    ? t("mgmt.pulse.pnlPeriodRangeFmt", {
+                        start: safeDateTime(startAt),
+                        end: safeDateTime(endAt ?? asOf),
+                      })
+                    : startAt
+                      ? t("mgmt.pulse.pnlPeriodStartOnlyFmt", { start: safeDateTime(startAt) })
+                      : t("mgmt.pulse.pnlPeriodUnverified")}
+                </div>
+
+                {asOf && (
+                  <div className="text-[11px] text-muted-foreground">
+                    {t("mgmt.pulse.pnlAsOfFmt", { asOf: safeDateTime(asOf) })}
+                  </div>
+                )}
+
+                {rawPeriodTokens.length > 0 && (
+                  <div className="text-[11px] font-mono text-muted-foreground break-all">
+                    {rawPeriodTokens.join(" · ")}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 };
 
-const CoverageStat = ({ label, value, detail, status }: { label: string; value: string; detail: string; status?: string }) => (
-  <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      {status && <Badge variant="outline" className={statusTone(status)}>{status}</Badge>}
-    </div>
-    <div className="mt-1 text-lg font-semibold text-foreground">{value}</div>
-    <div className="mt-1 truncate text-muted-foreground" title={detail}>{detail}</div>
-  </div>
-);
+const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
+  const outcome = row.latestOutcome ?? row.latest_outcome;
+  const perf = row.performanceContext ?? row.performance_context;
+  const fillDetails = perf?.fillRateDetails ?? perf?.fill_rate_details;
+  const num = pulseNumber(fillDetails?.numerator);
+  const den = pulseNumber(fillDetails?.denominator);
+  if (outcome && outcome.status === "available") return true;
+  if (outcome?.submittedToBroker === false || outcome?.submitted_to_broker === false) return true;
+  if (outcome?.reasonCode || outcome?.reason_code) return true;
+  if (num === 0 && den !== null && den > 0) return true;
+  return false;
+};
 
-const SurfaceBadge = ({ name, surface }: { name: string; surface: ManagementTradingPulseSurface }) => (
-  <div className="rounded-md border border-border bg-background p-3 text-xs">
-    <div className="flex min-w-0 items-center justify-between gap-2">
-      <span className="min-w-0 truncate font-mono text-foreground" title={name}>{name}</span>
-      <Badge variant="outline" className={`shrink-0 ${statusTone(surface.status)}`}>{surface.status}</Badge>
-    </div>
-    <div className="mt-1 text-muted-foreground">{surface.source || "—"}</div>
-    {surface.message && <div className="mt-2 text-muted-foreground">{surface.message}</div>}
-  </div>
-);
+const notableOutcomePriority = (row: ManagementTradingPulseRuntimeRow): number => {
+  const outcome = row.latestOutcome ?? row.latest_outcome;
+  if (outcome?.submittedToBroker === false || outcome?.submitted_to_broker === false) return 0;
+  const reason = String(outcome?.reasonCode ?? outcome?.reason_code ?? "").toLowerCase();
+  if (reason && reason !== "reason_not_recorded") return 1;
+  return 2;
+};
 
-const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }) => {
+const TradingPulseNotableEventsSection = ({
+  rows,
+}: {
+  rows: ManagementTradingPulseRuntimeRow[];
+}) => {
   const { t } = useTranslation();
   const location = useLocation();
-  const degradedCount = rows.filter((row) => rowHealthStatus(row) !== "ok").length;
+  const notableRows = [...rows]
+    .filter(isNotableOutcomeRow)
+    .sort((a, b) => notableOutcomePriority(a) - notableOutcomePriority(b));
+
   return (
-    <Card className="p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.runtimeRows")}</h2>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{rows.length}</Badge>
-          <Badge variant="outline" className={statusTone(degradedCount > 0 ? "degraded" : "ok")}>
-            {t("mgmt.pulse.degradedRows")}: {degradedCount}
-          </Badge>
-        </div>
+    <Card className="p-4 space-y-3" data-testid="trading-pulse-notable-events">
+      <div>
+        <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.eventsSectionTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("mgmt.pulse.eventsSectionSubtitle")}</p>
       </div>
-      <ManagementTableScroll
-        className="mt-3"
-        contentClassName="pb-4"
-        viewportClassName="max-h-[640px] overflow-auto pb-4"
-        showPinnedScrollbar={false}
-        testId="trading-pulse-runtime-table-scroll"
-        minScrollWidth={1040}
-      >
-        <table className="w-full min-w-[1040px] text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-card text-muted-foreground">
-            <tr className="border-b border-border">
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.runtime")}</th>
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.rowHealth")}</th>
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.stage")}</th>
-              <th className="py-2 pr-3 font-medium">P&L</th>
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.fillRate")}</th>
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.trades")}</th>
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.baselineStatus")}</th>
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.checks")}</th>
-              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.updated")}</th>
-              <th className="py-2 font-medium">{t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}</th>
+
+      {notableRows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("mgmt.pulse.eventsEmpty")}</p>
+      ) : (
+        <ul className="space-y-2">
+          {notableRows.map((row, idx) => {
+            const outcome = row.latestOutcome ?? row.latest_outcome;
+            const perf = row.performanceContext ?? row.performance_context;
+            const fillDetails = perf?.fillRateDetails ?? perf?.fill_rate_details;
+            const displayName = resolvePulsePersonaDisplayName(row, t);
+            const symbol = resolvePulseRowSymbol(row);
+            const submitted = outcome?.submittedToBroker ?? outcome?.submitted_to_broker;
+            const reasonText = formatPulseOutcomeReason(outcome?.reasonCode ?? outcome?.reason_code, t);
+            const reqQty = pulseNumber(
+              outcome?.requestedQuantity ?? outcome?.requested_quantity ?? fillDetails?.denominator,
+            );
+            const fillQty = pulseNumber(
+              outcome?.filledQuantity ?? outcome?.filled_quantity ?? fillDetails?.numerator,
+            );
+            const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
+            const reqAmt = pulseNumber(outcome?.required);
+            const availAmt = pulseNumber(outcome?.available);
+            const currency = outcome?.currency ?? perf?.pnlCurrency ?? perf?.pnl_currency;
+            const occurredAt = outcome?.occurredAt ?? outcome?.occurred_at;
+            const journeyHref =
+              resolveRowLatestJourneyHref(row, location, t("mgmt.pulse.title"))
+              ?? resolveRowPersonaJourneysHref(row, location, t("mgmt.pulse.title"));
+
+            return (
+              <li
+                key={`notable-${idx}-${displayName}-${symbol ?? ""}`}
+                className="rounded-md border border-border bg-background p-3 text-xs space-y-1.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold text-foreground">{displayName}</span>
+                    {symbol && (
+                      <Badge variant="secondary">
+                        {t("mgmt.pulse.symbolLabelFmt", { symbol })}
+                      </Badge>
+                    )}
+                    <Badge variant="outline">
+                      {formatPulseStage(row.deploymentStage ?? row.deployment_stage, t)}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {submitted === false && (
+                      <Badge variant="outline" className={statusTone("failed")}>
+                        {t("mgmt.pulse.eventPreBrokerRejected")}
+                      </Badge>
+                    )}
+                    {submitted === true && (
+                      <Badge variant="outline" className={statusTone("ok")}>
+                        {t("mgmt.pulse.eventSubmittedToBroker")}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className={statusTone(submitted === false ? "watch" : "ok")}>
+                      {reasonText}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
+                  {reqQty !== null && reqQty > 0 && fillQty !== null ? (
+                    <span className="text-foreground">
+                      {t("mgmt.pulse.eventOrderFillQtyFmt", {
+                        requested: formatPulseInt(reqQty),
+                        filled: formatPulseInt(fillQty),
+                        unit: unitInfo.localized,
+                        rate: formatPulsePercentFromFraction(fillQty / reqQty) ?? "0%",
+                      })}
+                    </span>
+                  ) : reqQty !== null ? (
+                    <span className="text-foreground">
+                      {t("mgmt.pulse.eventOrderRequestedOnlyFmt", {
+                        requested: formatPulseInt(reqQty),
+                        unit: unitInfo.localized,
+                      })}
+                    </span>
+                  ) : null}
+
+                  {reqAmt !== null && availAmt !== null && (
+                    <span>
+                      {t("mgmt.pulse.eventCapitalCompareFmt", {
+                        required: formatPulseCurrencyAmount(reqAmt, currency),
+                        available: formatPulseCurrencyAmount(availAmt, currency),
+                      })}
+                    </span>
+                  )}
+
+                  {occurredAt && (
+                    <span>
+                      {t("mgmt.pulse.eventOccurredAtFmt", { time: safeDateTime(occurredAt) })}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  {journeyHref ? (
+                    <Link
+                      to={journeyHref}
+                      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      {t("mgmt.pulse.eventOpenJourney")}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">{t("mgmt.pulse.eventNoJourneyLink")}</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+};
+
+const TradingPulsePersonaDetailsSection = ({
+  model,
+  rows,
+}: {
+  model: ManagementTradingPulseModel;
+  rows: ManagementTradingPulseRuntimeRow[];
+}) => {
+  const { t } = useTranslation();
+  const location = useLocation();
+  const scope = model.summary.operatorScope ?? model.summary.operator_scope;
+  const scopeStatus = String(scope?.status ?? "unverified").trim().toLowerCase();
+  const excludedProbeCount = pulseNumber(
+    (scope as Record<string, unknown> | undefined)?.excludedProbeCount
+      ?? (scope as Record<string, unknown> | undefined)?.excluded_probe_count
+      ?? (model.summary as Record<string, unknown>).excludedProbeCount
+      ?? (model.summary as Record<string, unknown>).excluded_probe_count,
+  );
+  const removedProbeCount = model.runtimeRows.length - rows.length;
+  const isAllProbesEmpty =
+    rows.length === 0
+    && ((excludedProbeCount !== null && excludedProbeCount > 0)
+      || removedProbeCount > 0
+      || /probe|test/i.test(String(scope?.reason ?? "")));
+
+  return (
+    <Card className="p-3 sm:p-4 space-y-3" data-testid="trading-pulse-persona-details">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.personaSectionTitle")}</h2>
+          <p className="text-xs text-muted-foreground">{t("mgmt.pulse.personaSectionSubtitle")}</p>
+        </div>
+        {scopeStatus !== "unavailable" && (
+          <Badge variant="outline">{formatPulseInt(rows.length)}</Badge>
+        )}
+      </div>
+
+      <div className="overflow-x-auto" data-testid="trading-pulse-runtime-table-scroll">
+        <table className="w-full text-left text-xs">
+          <thead className="border-b border-border bg-card text-muted-foreground">
+            <tr>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.colPersonaSymbol")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.colFills")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.colFillRate")}</th>
+              <th className="py-2 pr-3 font-medium">{t("mgmt.pulse.colPnl")}</th>
+              <th className="py-2 font-medium">{t("mgmt.pulse.colRecentEvent")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="py-3 text-muted-foreground" colSpan={10}>{t("mgmt.pulse.noRows")}</td>
-              </tr>
-            ) : rows.map((row) => {
-              const checks = rowHealthChecks(row);
-              const personaId = pulsePersonaId(row);
-              const baselineStatus = row.baselineComparison?.status ?? row.baseline_comparison?.status;
-              return (
-              <tr key={row.runtimeId || row.runtime_id} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-3 font-mono text-foreground">{row.runtimeId || row.runtime_id || "—"}</td>
-                <td className="py-2 pr-3">
-                  <Badge variant="outline" className={statusTone(rowHealthStatus(row))}>{rowHealthStatus(row)}</Badge>
-                </td>
-                <td className="py-2 pr-3">
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="outline">{row.deploymentStage || row.deployment_stage || "—"}</Badge>
-                    <Badge variant="outline" className={statusTone(row.status)}>{row.status || "—"}</Badge>
-                  </div>
-                </td>
-                <td className="py-2 pr-3">{formatPulseValue(row.metrics.pnl)}</td>
-                <td className="py-2 pr-3">{formatPulseValue(row.metrics.fill_rate ?? row.metrics.fillRate, "execution-quality")}</td>
-                <td className="py-2 pr-3">{formatPulseValue(row.metrics.total_trades ?? row.metrics.totalTrades, "runtime-status")}</td>
-                <td className="py-2 pr-3">
-                  <Badge variant="outline" className={statusTone(baselineStatus)}>
-                    {baselineStatus === "not_required" ? t("mgmt.pulse.notRequired") : (baselineStatus ?? "—")}
-                  </Badge>
-                </td>
-                <td className="max-w-[220px] py-2 pr-3 text-muted-foreground">
-                  <span className="block truncate" title={checks.join(", ")}>
-                    {shortList(checks)}
-                  </span>
-                </td>
-                <td className="py-2 pr-3 text-muted-foreground">{safeDateTime(row.lastUpdatedAt ?? row.last_updated_at)}</td>
-                <td className="py-2">
-                  {personaId ? (
-                    <Link aria-label={`${personaId} trade journeys`} to={tradeJourneyHref(location, { personaId }, "Trading Pulse")} className="text-primary underline-offset-4 hover:underline">
-                      {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
-                    </Link>
-                  ) : "—"}
+                <td className="py-4 text-muted-foreground" colSpan={5}>
+                  {scopeStatus === "unavailable"
+                    ? t("mgmt.pulse.scopeUnavailableNotice")
+                    : isAllProbesEmpty
+                      ? t("mgmt.pulse.scopeEmptyAllProbesNotice")
+                      : t("mgmt.pulse.scopeEmptyNormalNotice")}
                 </td>
               </tr>
-              );
-            })}
+            ) : (
+              rows.map((row, idx) => {
+                const displayName = resolvePulsePersonaDisplayName(row, t);
+                const strategyName = resolvePulseStrategyDisplayName(row, displayName);
+                const symbol = resolvePulseRowSymbol(row);
+                const personaHref = resolveRowPersonaHref(row);
+                const latestJourneyHref = resolveRowLatestJourneyHref(row, location, t("mgmt.pulse.title"));
+                const personaJourneysHref = resolveRowPersonaJourneysHref(row, location, t("mgmt.pulse.title"));
+                const perf = row.performanceContext ?? row.performance_context;
+                const sourceStatus = String(perf?.sourceStatus ?? perf?.source_status ?? "").toLowerCase();
+                const fillCount = resolvePulseRowFillCount(row);
+                const fillDetails = perf?.fillRateDetails ?? perf?.fill_rate_details;
+                const fillRateReason =
+                  perf?.metricReasons?.fill_rate
+                  ?? perf?.metric_reasons?.fill_rate
+                  ?? fillDetails?.reason;
+                const rawFillRate = pulseNumber(row.metrics?.fill_rate ?? row.metrics?.fillRate);
+                const num = pulseNumber(fillDetails?.numerator);
+                const den = pulseNumber(fillDetails?.denominator);
+                const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
+
+                const pnlVal = pulseNumber(row.metrics?.pnl);
+                const pnlCurrency = perf?.pnlCurrency ?? perf?.pnl_currency ?? null;
+                const pnlDef = perf?.pnlDefinition ?? perf?.pnl_definition ?? null;
+                const pnlReason = perf?.metricReasons?.pnl ?? perf?.metric_reasons?.pnl ?? null;
+                const pnlStart = perf?.pnlPeriodStartAt ?? perf?.pnl_period_start_at;
+                const pnlAt = perf?.pnlAt ?? perf?.pnl_at;
+
+                const outcome = row.latestOutcome ?? row.latest_outcome;
+                const outcomeSubmitted = outcome?.submittedToBroker ?? outcome?.submitted_to_broker;
+                const outcomeReasonCode = outcome?.reasonCode ?? outcome?.reason_code;
+                const outcomeOccurredAt = outcome?.occurredAt ?? outcome?.occurred_at;
+                const outcomeReqQty = pulseNumber(outcome?.requestedQuantity ?? outcome?.requested_quantity);
+                const outcomeRequired = pulseNumber(outcome?.required);
+                const outcomeAvailable = pulseNumber(outcome?.available);
+                const outcomeCurrency = outcome?.currency ?? pnlCurrency;
+
+                const slippageBps = formatPulseBps(
+                  row.metrics?.avg_slippage_bps ?? row.metrics?.avgSlippageBps ?? row.metrics?.slippage_bps,
+                );
+                const drawdownPct = formatPulsePercentFromFraction(
+                  row.metrics?.drawdown ?? row.metrics?.max_drawdown ?? row.metrics?.maxDrawdown,
+                );
+                const lastFillAt = perf?.lastFillAt ?? perf?.last_fill_at;
+                const latestReportAt =
+                  perf?.latestReportAt ?? perf?.latest_report_at ?? row.lastUpdatedAt ?? row.last_updated_at;
+
+                return (
+                  <tr
+                    key={`pulse-row-${idx}-${displayName}-${symbol ?? ""}`}
+                    className="border-b border-border/60 last:border-0"
+                  >
+                    <td className="w-[180px] max-w-[180px] sm:w-auto sm:max-w-[280px] py-3 pr-3 align-top break-words">
+                      <div>
+                        {personaHref ? (
+                          <Link
+                            to={personaHref}
+                            className="inline-block max-w-full break-words font-semibold text-primary underline-offset-4 hover:underline"
+                          >
+                            {displayName}
+                          </Link>
+                        ) : (
+                          <span className="inline-block max-w-full break-words font-semibold text-foreground">
+                            {displayName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {symbol ? (
+                          <Badge variant="secondary">
+                            {t("mgmt.pulse.symbolLabelFmt", { symbol })}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground">
+                            {t("mgmt.pulse.symbolUnspecified")}
+                          </Badge>
+                        )}
+                        <Badge variant="outline">
+                          {formatPulseStage(row.deploymentStage ?? row.deployment_stage, t)}
+                        </Badge>
+                        <Badge variant="outline" className={statusTone(row.status)}>
+                          {formatPulseExecutionStatus(row.status, t)}
+                        </Badge>
+                        {sourceStatus === "stale" && (
+                          <Badge variant="outline" className={statusTone("watch")}>
+                            {t("mgmt.pulse.staleDataBadge")}
+                          </Badge>
+                        )}
+                        {sourceStatus === "unavailable" && (
+                          <Badge variant="outline" className={statusTone("unavailable")}>
+                            {t("mgmt.pulse.sourceUnavailableBadge")}
+                          </Badge>
+                        )}
+                      </div>
+                      {strategyName && (
+                        <div className="mt-1 text-[11px] text-muted-foreground break-words">
+                          {t("mgmt.pulse.strategyLabelFmt", { strategy: strategyName })}
+                        </div>
+                      )}
+                      <div className="mt-1.5 flex flex-col items-start gap-1 text-[11px]">
+                        {latestJourneyHref && (
+                          <Link
+                            to={latestJourneyHref}
+                            className="inline-block max-w-full break-words font-medium text-primary underline-offset-4 hover:underline"
+                          >
+                            {t("mgmt.pulse.openLatestJourney")}
+                          </Link>
+                        )}
+                        {personaJourneysHref && personaJourneysHref !== latestJourneyHref && (
+                          <Link
+                            to={personaJourneysHref}
+                            className="inline-block max-w-full break-words text-primary underline-offset-4 hover:underline"
+                          >
+                            {t("mgmt.pulse.openPersonaJourneys")}
+                          </Link>
+                        )}
+                        {!latestJourneyHref && !personaJourneysHref && (
+                          <span className="text-muted-foreground">{t("mgmt.pulse.eventNoJourneyLink")}</span>
+                        )}
+                        {!personaHref && (
+                          <span className="text-muted-foreground">{t("mgmt.pulse.noPersonaLink")}</span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="py-3 pr-3 align-top">
+                      {fillCount !== null ? (
+                        <div>
+                          <div className="font-medium text-foreground">
+                            {fillCount === 1
+                              ? t("mgmt.pulse.fillsCountOne")
+                              : t("mgmt.pulse.fillsCountFmt", { count: formatPulseInt(fillCount) })}
+                          </div>
+                          {fillCount === 0 && (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("mgmt.pulse.fillsZeroHint")}
+                            </div>
+                          )}
+                        </div>
+                      ) : sourceStatus === "unavailable"
+                        || perf?.metricReasons?.total_trades === "source_unavailable" ? (
+                        <span className="text-status-warning">{t("mgmt.pulse.fillsUnavailable")}</span>
+                      ) : sourceStatus === "stale" ? (
+                        <span className="text-status-warning">{t("mgmt.pulse.fillsStaleUnknown")}</span>
+                      ) : (
+                        <span className="text-muted-foreground">{t("mgmt.pulse.fillsUnrecorded")}</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 pr-3 align-top">
+                      {rawFillRate !== null && sourceStatus !== "unavailable" ? (
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-foreground">
+                            {num !== null && den !== null && den > 0
+                              ? t("mgmt.pulse.fillRateKnownWithBasisFmt", {
+                                  rate: formatPulsePercentFromFraction(rawFillRate) ?? "0%",
+                                  requested: formatPulseInt(den),
+                                  filled: formatPulseInt(num),
+                                  unit: unitInfo.localized,
+                                })
+                              : (formatPulsePercentFromFraction(rawFillRate) ?? "0%")}
+                          </div>
+                          {num !== null && den !== null && den > 0 && unitInfo.raw && unitInfo.raw !== unitInfo.localized && (
+                            <div className="text-[11px] text-muted-foreground">
+                              {formatPulseInt(num)}/{formatPulseInt(den)} {unitInfo.raw}
+                            </div>
+                          )}
+                        </div>
+                      ) : fillRateReason === "no_submitted_orders" || (den !== null && den <= 0) ? (
+                        <span className="text-muted-foreground">{t("mgmt.pulse.fillRateNoOrders")}</span>
+                      ) : sourceStatus === "stale" || fillRateReason === "stale" || fillRateReason === "telemetry_stale" ? (
+                        <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
+                      ) : sourceStatus === "unavailable"
+                        || fillRateReason === "source_unavailable"
+                        || fillRateReason === "telemetry_unavailable"
+                        || fillDetails?.status === "unknown" ? (
+                        <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
+                      ) : (
+                        <span className="text-muted-foreground">{t("mgmt.pulse.fillRateUnknown")}</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 pr-3 align-top">
+                      {pnlVal !== null && sourceStatus !== "unavailable" ? (
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-foreground">
+                            {formatPulseCurrencyAmount(pnlVal, pnlCurrency)}
+                            {!pnlCurrency ? ` (${t("mgmt.pulse.pnlCurrencyUnverified")})` : ""}
+                            {pnlVal < 0
+                              ? `（${t("mgmt.pulse.pnlLossTag")}）`
+                              : pnlVal === 0
+                                ? `（${t("mgmt.pulse.pnlFlatTag")}）`
+                                : ""}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {formatPulsePnlDefinition(pnlDef, t)}
+                          </div>
+                          {pnlStart && pnlAt ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("mgmt.pulse.pnlPeriodRangeFmt", {
+                                start: safeDateTime(pnlStart),
+                                end: safeDateTime(pnlAt),
+                              })}
+                            </div>
+                          ) : pnlStart ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("mgmt.pulse.pnlPeriodStartOnlyFmt", { start: safeDateTime(pnlStart) })}
+                            </div>
+                          ) : pnlAt ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("mgmt.pulse.pnlAsOfFmt", { asOf: safeDateTime(pnlAt) })}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : sourceStatus === "unavailable" || pnlReason === "source_unavailable" ? (
+                        <span className="text-status-warning">{t("mgmt.pulse.pnlSourceUnavailable")}</span>
+                      ) : sourceStatus === "stale" || pnlReason === "stale" ? (
+                        <span className="text-status-warning">{t("mgmt.pulse.pnlStaleUnknown")}</span>
+                      ) : pnlReason === "no_fills" || fillCount === 0 ? (
+                        <span className="text-muted-foreground">
+                          {pnlCurrency
+                            ? t("mgmt.pulse.pnlNoFillsWithCurrencyFmt", { currency: pnlCurrency })
+                            : t("mgmt.pulse.pnlNoFills")}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">{t("mgmt.pulse.pnlUnknown")}</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 align-top space-y-1 text-muted-foreground">
+                      {outcome && (outcome.status === "available" || outcomeReasonCode || outcomeSubmitted !== null) ? (
+                        <div className="space-y-0.5 text-foreground">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {outcomeSubmitted === false && (
+                              <Badge variant="outline" className={statusTone("failed")}>
+                                {t("mgmt.pulse.eventPreBrokerRejected")}
+                              </Badge>
+                            )}
+                            {outcomeSubmitted === true && (
+                              <Badge variant="outline" className={statusTone("ok")}>
+                                {t("mgmt.pulse.eventSubmittedToBroker")}
+                              </Badge>
+                            )}
+                            <span className="font-medium">{formatPulseOutcomeReason(outcomeReasonCode, t)}</span>
+                          </div>
+                          {outcomeReqQty !== null && (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("mgmt.pulse.eventOrderRequestedOnlyFmt", {
+                                requested: formatPulseInt(outcomeReqQty),
+                                unit: unitInfo.localized,
+                              })}
+                            </div>
+                          )}
+                          {outcomeRequired !== null && outcomeAvailable !== null && (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("mgmt.pulse.eventCapitalCompareFmt", {
+                                required: formatPulseCurrencyAmount(outcomeRequired, outcomeCurrency),
+                                available: formatPulseCurrencyAmount(outcomeAvailable, outcomeCurrency),
+                              })}
+                            </div>
+                          )}
+                          {outcomeOccurredAt && (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("mgmt.pulse.eventOccurredAtFmt", { time: safeDateTime(outcomeOccurredAt) })}
+                            </div>
+                          )}
+                        </div>
+                      ) : sourceStatus === "unavailable" ? (
+                        <div className="text-status-warning">{t("mgmt.pulse.sourceUnavailableBadge")}</div>
+                      ) : sourceStatus === "stale" ? (
+                        <div className="text-status-warning">{t("mgmt.pulse.staleDataBadge")}</div>
+                      ) : fillCount !== null && fillCount > 0 ? (
+                        <div>{t("mgmt.pulse.noAbnormalEvents")}</div>
+                      ) : (
+                        <div>{t("mgmt.pulse.noTradeEventsYet")}</div>
+                      )}
+
+                      {(slippageBps !== null || drawdownPct !== null) && (
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px]">
+                          {slippageBps !== null && (
+                            <span>{t("mgmt.pulse.slippageBpsFmt", { bps: slippageBps })}</span>
+                          )}
+                          {drawdownPct !== null && (
+                            <span>{t("mgmt.pulse.drawdownPctFmt", { pct: drawdownPct })}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {lastFillAt && (
+                        <div className="text-[11px]">
+                          {t("mgmt.pulse.lastFillAtFmt", { time: safeDateTime(lastFillAt) })}
+                        </div>
+                      )}
+                      {latestReportAt && (
+                        <div className="text-[11px]">
+                          {t("mgmt.pulse.latestReportAtFmt", { time: safeDateTime(latestReportAt) })}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
-      </ManagementTableScroll>
+      </div>
     </Card>
   );
 };
 
-const RankingBlocks = () => {
+const formatRankingBlockTitle = (block: TradingPulseRankBlock, t: PulseTranslate): string => {
+  const kind = String(block.kind ?? block.blockId ?? block.block_id ?? "").toLowerCase();
+  const metric = String(block.metric ?? "").toLowerCase();
+  if (kind === "pnl-leaders" || metric === "pnl") return t("mgmt.pulse.rankingTitlePnl");
+  if (kind === "drawdown-control" || metric === "drawdown") return t("mgmt.pulse.rankingTitleDrawdown");
+  if (kind === "execution-quality" || metric === "fill_rate") return t("mgmt.pulse.rankingTitleExecution");
+  if (kind === "sharpe-leaders" || metric === "sharpe_ratio") return t("mgmt.pulse.rankingTitleSharpe");
+  return block.label || kind;
+};
+
+const formatRankingRowMetricValue = (
+  block: TradingPulseRankBlock,
+  row: TradingPulseRankRow,
+  t: PulseTranslate,
+): string => {
+  const kind = String(block.kind ?? block.blockId ?? "").toLowerCase();
+  const metric = String(block.metric ?? row.rankingMetric ?? row.ranking_metric ?? "").toLowerCase();
+  const unit = String(row.metricUnit ?? row.metric_unit ?? row.rankingUnit ?? row.ranking_unit ?? "").trim();
+  const val = pulseNumber(row.metricValue ?? row.rankingMetricValue ?? row.ranking_metric_value);
+  if (val === null) return "—";
+
+  if (kind === "pnl-leaders" || metric === "pnl" || ["TWD", "USD", "EUR", "JPY", "HKD"].includes(unit.toUpperCase())) {
+    const currency = unit && unit.toLowerCase() !== "fraction" && unit.toLowerCase() !== "ratio" ? unit : null;
+    const base = formatPulseCurrencyAmount(val, currency);
+    if (val < 0) return `${base}（${t("mgmt.pulse.pnlLossTag")}）`;
+    if (val === 0) return `${base}（${t("mgmt.pulse.pnlFlatTag")}）`;
+    return base;
+  }
+
+  if (
+    kind === "drawdown-control"
+    || metric === "drawdown"
+    || kind === "execution-quality"
+    || metric === "fill_rate"
+    || unit.toLowerCase() === "fraction"
+  ) {
+    const pct = formatPulsePercentFromFraction(val) ?? `${val}%`;
+    const slippage = formatPulseBps(
+      (row as Record<string, unknown>).avg_slippage_bps ?? (row as Record<string, unknown>).avgSlippageBps,
+    );
+    if ((kind === "execution-quality" || metric === "fill_rate") && slippage !== null) {
+      return `${pct} · ${t("mgmt.pulse.slippageBpsFmt", { bps: slippage })}`;
+    }
+    return pct;
+  }
+
+  if (unit === "%") {
+    return `${Number(val.toFixed(2)).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+  }
+  if (unit.toLowerCase() === "bps") {
+    return `${formatPulseBps(val)} bps`;
+  }
+  return `${formatPulseRatio(val)}${unit && unit.toLowerCase() !== "ratio" ? ` ${unit}` : ""}`;
+};
+
+const formatRankingComparisonScopeText = (
+  scope: TradingPulseComparisonScope | null | undefined,
+  t: PulseTranslate,
+): string | null => {
+  if (!scope) return null;
+  const parts: string[] = [];
+  if (scope.stage) parts.push(formatPulseStage(scope.stage, t));
+  if (scope.unit && !["fraction", "ratio"].includes(scope.unit.toLowerCase())) {
+    parts.push(scope.unit);
+  }
+  if (scope.definition) {
+    parts.push(formatPulsePnlDefinition(scope.definition, t));
+  }
+  if (scope.period && typeof scope.period === "object") {
+    const start = scope.period.startAt ?? scope.period.start_at;
+    const end = scope.period.endAt ?? scope.period.end_at ?? scope.period.asOf ?? scope.period.as_of;
+    if (start && end) {
+      parts.push(`${safeDateTime(start)} – ${safeDateTime(end)}`);
+    } else if (start) {
+      parts.push(safeDateTime(start));
+    }
+  } else if (typeof scope.period === "string" && scope.period.trim()) {
+    parts.push(scope.period.trim());
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+};
+
+const summarizeBlockMissingReasons = (
+  block: TradingPulseRankBlock,
+  runtimeRows: ManagementTradingPulseRuntimeRow[],
+  t: PulseTranslate,
+): string | null => {
+  const reasonsMap = block.metricReasons ?? block.metric_reasons ?? {};
+  const entries = Object.entries(reasonsMap);
+  const missingCount = pulseNumber(block.missingMetricCount ?? block.missing_metric_count) ?? entries.length;
+  if (missingCount <= 0 && entries.length === 0) return null;
+
+  const runtimeNameById = new Map<string, string>();
+  for (const r of runtimeRows) {
+    const rid = r.runtimeId || r.runtime_id;
+    const name = resolvePulsePersonaDisplayName(r, t);
+    if (rid) runtimeNameById.set(rid, name);
+  }
+
+  if (entries.length > 0) {
+    const details = entries
+      .map(([rid, reason]) => {
+        const personaLabel = runtimeNameById.get(rid);
+        const reasonLabel = formatPulseMetricReason(reason, t);
+        return personaLabel ? `${personaLabel}（${reasonLabel}）` : reasonLabel;
+      })
+      .join("、");
+    return details;
+  }
+
+  const isSharpe = String(block.kind ?? block.blockId ?? "").toLowerCase() === "sharpe-leaders";
+  return isSharpe ? t("mgmt.pulse.reasonMin10DailyReturns") : t("mgmt.pulse.reasonUnknown");
+};
+
+const TradingPulseRankingsSection = ({
+  runtimeRows,
+}: {
+  runtimeRows: ManagementTradingPulseRuntimeRow[];
+}) => {
   const { t } = useTranslation();
-  const { data } = useV5Live((signal) => mgmt.tradingPulse.rankingsLiveOnly({ signal }), [], {
-    cacheKey: "oversight.tradingPulse.rankings",
-  });
-  const blocks = data ?? [];
+  const location = useLocation();
+  const { data, loading, error = null } = useV5Live(
+    (signal) => mgmt.tradingPulse.rankingsLiveOnly({ signal }),
+    [],
+    { cacheKey: "oversight.tradingPulse.rankings" },
+  );
+
+  const runtimeById = useMemo(() => {
+    const map = new Map<string, ManagementTradingPulseRuntimeRow>();
+    for (const r of runtimeRows) {
+      if (r.runtimeId) map.set(r.runtimeId, r);
+      if (r.runtime_id) map.set(r.runtime_id, r);
+      if (r.runtimeBindingId) map.set(r.runtimeBindingId, r);
+      if (r.personaId) map.set(r.personaId, r);
+    }
+    return map;
+  }, [runtimeRows]);
+
+  if (loading && !data) {
+    return (
+      <Card className="p-4 space-y-2" aria-label={t("mgmt.pulse.rankingsLabel")} data-testid="trading-pulse-rankings">
+        <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.rankingsSectionTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("mgmt.pulse.rankingsLoading")}</p>
+      </Card>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <Card className="p-4 space-y-2" aria-label={t("mgmt.pulse.rankingsLabel")} data-testid="trading-pulse-rankings">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.rankingsUnavailableTitle")}</h2>
+          <Badge variant="outline" className={statusTone("unavailable")}>
+            {t("mgmt.pulse.rankingsUnavailableTitle")}
+          </Badge>
+        </div>
+        <p className="text-xs text-status-warning" data-testid="trading-pulse-rankings-unavailable">
+          {t("mgmt.pulse.rankingsUnavailableBody")}
+        </p>
+      </Card>
+    );
+  }
+
+  const sanitizedBlocks: TradingPulseRankBlock[] = data.map((block) => ({
+    ...block,
+    rows: (block.rows ?? []).filter((r) => !isExplicitPulseProbeRecord(r)),
+  }));
+
+  const populatedBlocks = sanitizedBlocks.filter((b) => (b.rows?.length ?? 0) > 0);
+  const omittedBlocks = sanitizedBlocks.filter((b) => (b.rows?.length ?? 0) === 0);
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("mgmt.pulse.rankingsLabel")}>
-      {blocks.length === 0 ? (
-        <LiveOnlyNotice
-          title={t("mgmt.pulse.rankingsLabel")}
-          body={t("mgmt.pulse.noRows")}
-        />
-      ) : blocks.map((b) => {
-        const isSharpeLeaders = b.kind === "sharpe-leaders";
-        return (
-        <Card key={b.kind} className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{b.label}</h3>
-            <div className="flex shrink-0 flex-wrap justify-end gap-1">
-              {"eligibleItemCount" in b && (
-                <Badge variant="outline">{formatPulseValue(b.eligibleItemCount, "runtime-status")}</Badge>
-              )}
-              {(b.missingMetricCount ?? b.missing_metric_count ?? 0) > 0 && (
-                <Badge variant="outline" className={statusTone(isSharpeLeaders ? "building" : "degraded")}>
-                  {t(isSharpeLeaders ? "mgmt.pulse.sharpeBuildingBadge" : "mgmt.pulse.metricMissing")}: {formatPulseValue(b.missingMetricCount ?? b.missing_metric_count, "runtime-status")}
-                </Badge>
-              )}
+    <Card className="p-4 space-y-3" aria-label={t("mgmt.pulse.rankingsLabel")} data-testid="trading-pulse-rankings">
+      <div>
+        <h2 className="text-sm font-semibold text-foreground">{t("mgmt.pulse.rankingsSectionTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("mgmt.pulse.rankingsSectionSubtitle")}</p>
+      </div>
+
+      {populatedBlocks.length === 0 ? (
+        <p className="text-xs text-muted-foreground" data-testid="trading-pulse-rankings-empty">
+          {runtimeRows.length === 0
+            ? t("mgmt.pulse.rankingsEmptyNoPersonas")
+            : t("mgmt.pulse.rankingsEmptyNoComparable")}
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {populatedBlocks.map((b) => {
+            const kind = String(b.kind ?? b.blockId ?? "").toLowerCase();
+            const isSharpeLeaders = kind === "sharpe-leaders" || b.metric === "sharpe_ratio";
+            const isPnlBlock = kind === "pnl-leaders" || b.metric === "pnl";
+            const blockTitle = formatRankingBlockTitle(b, t);
+            const allNegativePnl =
+              isPnlBlock
+              && b.rows.length > 0
+              && b.rows.every((r) => {
+                const v = pulseNumber(r.metricValue ?? r.rankingMetricValue);
+                return v !== null && v < 0;
+              });
+            const scopeText = formatRankingComparisonScopeText(
+              b.rows[0]?.comparisonScope ?? b.rows[0]?.comparison_scope,
+              t,
+            );
+            const missingCount = pulseNumber(b.missingMetricCount ?? b.missing_metric_count) ?? 0;
+            const missingDetails = summarizeBlockMissingReasons(b, runtimeRows, t);
+
+            return (
+              <div
+                key={b.kind}
+                className="rounded-md border border-border bg-background p-3 space-y-2 text-xs"
+                data-testid={`trading-pulse-ranking-block-${b.kind}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold text-foreground">{blockTitle}</h3>
+                  <Badge variant="outline">
+                    {t("mgmt.pulse.rankingEligibleCountFmt", { count: formatPulseInt(b.rows.length) })}
+                  </Badge>
+                </div>
+
+                {scopeText && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("mgmt.pulse.rankingScopeFmt", { scope: scopeText })}
+                  </p>
+                )}
+
+                {allNegativePnl && (
+                  <p className="text-[11px] text-status-warning">
+                    {t("mgmt.pulse.rankingAllNegativePnlNote")}
+                  </p>
+                )}
+
+                <ul className="space-y-1.5">
+                  {b.rows.map((r, idx) => {
+                    const matchedRuntime =
+                      runtimeById.get(r.runtimeId ?? "")
+                      ?? runtimeById.get(r.runtime_id ?? "")
+                      ?? runtimeById.get(r.subjectId ?? "")
+                      ?? runtimeById.get(r.personaId ?? "");
+                    const displayName = resolvePulsePersonaDisplayName(
+                      {
+                        personaName: r.personaName ?? r.persona_name ?? matchedRuntime?.personaName,
+                        strategyName: r.strategyName ?? r.strategy_name ?? matchedRuntime?.strategyName,
+                        subjectLabel: r.subjectLabel,
+                      },
+                      t,
+                    );
+                    const symbol =
+                      resolvePulseRowSymbol(r) ?? (matchedRuntime ? resolvePulseRowSymbol(matchedRuntime) : null);
+                    const personaHref =
+                      resolveRowPersonaHref(r)
+                      ?? (matchedRuntime ? resolveRowPersonaHref(matchedRuntime) : null);
+                    const journeyHref =
+                      resolveRowLatestJourneyHref(r, location, t("mgmt.pulse.title"))
+                      ?? (matchedRuntime
+                        ? resolveRowLatestJourneyHref(matchedRuntime, location, t("mgmt.pulse.title"))
+                        : null);
+                    const rankNum = pulseNumber(r.rank) ?? idx + 1;
+
+                    return (
+                      <li
+                        key={`${b.kind}-${idx}-${displayName}`}
+                        className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-1.5 last:border-0 last:pb-0"
+                      >
+                        <div className="min-w-0 flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-muted-foreground">#{rankNum}</span>
+                          {personaHref ? (
+                            <Link
+                              to={personaHref}
+                              className="font-medium text-primary underline-offset-4 hover:underline break-words"
+                            >
+                              {displayName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium text-foreground break-words">{displayName}</span>
+                          )}
+                          {symbol && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {symbol}
+                            </Badge>
+                          )}
+                          {journeyHref && (
+                            <Link
+                              to={journeyHref}
+                              className="text-[11px] text-primary underline-offset-4 hover:underline"
+                            >
+                              {t("mgmt.pulse.eventOpenJourney")}
+                            </Link>
+                          )}
+                        </div>
+                        <span className="font-medium text-foreground">
+                          {formatRankingRowMetricValue(b, r, t)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {isSharpeLeaders && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("mgmt.pulse.sharpeShortSampleCaption")}
+                  </p>
+                )}
+
+                {missingCount > 0 && missingDetails && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("mgmt.pulse.rankingExcludedSummaryFmt", {
+                      count: formatPulseInt(missingCount),
+                      details: missingDetails,
+                    })}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {omittedBlocks.length > 0 && (
+        <div
+          className="rounded-md border border-border/70 bg-muted/30 p-3 space-y-1 text-xs"
+          data-testid="trading-pulse-rankings-omitted"
+        >
+          <div className="font-medium text-foreground">{t("mgmt.pulse.rankingOmittedBlocksTitle")}</div>
+          <ul className="space-y-1 text-muted-foreground">
+            {omittedBlocks.map((b) => {
+              const blockTitle = formatRankingBlockTitle(b, t);
+              const missingCount =
+                pulseNumber(b.missingMetricCount ?? b.missing_metric_count) ?? runtimeRows.length;
+              const details =
+                summarizeBlockMissingReasons(b, runtimeRows, t) ?? t("mgmt.pulse.reasonMin10DailyReturns");
+              return (
+                <li key={`omitted-${b.kind}`}>
+                  {t("mgmt.pulse.rankingOmittedBlockLineFmt", {
+                    label: blockTitle,
+                    count: formatPulseInt(missingCount),
+                    details,
+                  })}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </Card>
+  );
+};
+
+const TradingPulseDiagnosticsSection = ({
+  model,
+  rows,
+}: {
+  model: ManagementTradingPulseModel;
+  rows: ManagementTradingPulseRuntimeRow[];
+}) => {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const surfaces = Object.entries(model.meta.surfaces ?? {});
+  const snapshotAt =
+    model.meta.snapshotAt ?? model.meta.snapshot_at ?? model.summary.snapshotAt ?? model.summary.snapshot_at;
+  const fillRateAggregation =
+    model.summary.fillRateAggregation ?? model.summary.fill_rate_aggregation ?? null;
+
+  return (
+    <Card className="p-4 space-y-3" data-testid="trading-pulse-diagnostics">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((prev) => !prev)}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
+          >
+            {t("mgmt.pulse.diagnosticsToggle")}
+          </button>
+          <p className="mt-1 text-xs text-muted-foreground">{t("mgmt.pulse.diagnosticsSubtitle")}</p>
+        </div>
+        {snapshotAt && (
+          <span className="text-xs text-muted-foreground">
+            {t("mgmt.pulse.snapshotAt")}：{safeDateTime(snapshotAt)}
+          </span>
+        )}
+      </div>
+
+      {open && (
+        <div className="space-y-4 border-t border-border pt-3 text-xs" data-testid="trading-pulse-diagnostics-panel">
+          {fillRateAggregation && (
+            <div className="text-muted-foreground">
+              {t("mgmt.pulse.diagnosticsFillRateAggregationFmt", { method: fillRateAggregation })}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <h3 className="font-semibold text-foreground">{t("mgmt.pulse.diagnosticsSourcesTitle")}</h3>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {surfaces.map(([key, surface]) => (
+                <div key={key} className="rounded-md border border-border bg-background p-2.5 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-foreground truncate" title={key}>
+                      {key}
+                    </span>
+                    <Badge variant="outline" className={statusTone(surface.status)}>
+                      {surface.status}
+                    </Badge>
+                  </div>
+                  <div className="text-muted-foreground">{surface.source || "—"}</div>
+                  {surface.message && <div className="text-muted-foreground">{surface.message}</div>}
+                </div>
+              ))}
             </div>
           </div>
-          {(b.rows?.length ?? 0) === 0 ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t(isSharpeLeaders ? "mgmt.pulse.sharpeBuildingHistory" : "mgmt.pulse.noRows")}
-            </p>
-          ) : (
-            <>
-              <ul className="mt-2 space-y-1 text-xs">
-                {(b.rows ?? []).map((r) => (
-                  <li key={r.subjectId} className="flex items-center justify-between gap-2">
-                    <Link to={r.links?.manageHref ?? "#"} className="font-mono text-primary underline-offset-4 hover:underline">
-                      {r.subjectLabel}
-                    </Link>
-                    <span className="text-muted-foreground">
-                      {r.metric}: <span className="text-foreground">{formatPulseValue(r.metricValue)}{r.metricUnit ?? ""}</span>
-                    </span>
+
+          <div className="space-y-2">
+            <h3 className="font-semibold text-foreground">{t("mgmt.pulse.diagnosticsRuntimesTitle")}</h3>
+            <ul className="space-y-1.5">
+              {rows.map((row) => {
+                const displayName = resolvePulsePersonaDisplayName(row, t);
+                const perf = row.performanceContext ?? row.performance_context;
+                const rid = row.runtimeId || row.runtime_id || "—";
+                const rbid = row.runtimeBindingId || row.runtime_binding_id || "—";
+                const pid = row.personaId || row.persona_id || "—";
+                const sid = row.strategyId || row.strategy_id || "—";
+                const reportAt =
+                  perf?.latestReportAt ?? perf?.latest_report_at ?? row.lastUpdatedAt ?? row.last_updated_at;
+                const fillAt = perf?.lastFillAt ?? perf?.last_fill_at;
+
+                return (
+                  <li
+                    key={`diag-${rid}-${rbid}`}
+                    className="rounded-md border border-border bg-background p-2.5 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-medium text-foreground">{displayName}</div>
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {rid} · {rbid} · {pid} · {sid}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground space-x-3">
+                      {reportAt && (
+                        <span>{t("mgmt.pulse.latestReportAtFmt", { time: safeDateTime(reportAt) })}</span>
+                      )}
+                      {fillAt && (
+                        <span>{t("mgmt.pulse.lastFillAtFmt", { time: safeDateTime(fillAt) })}</span>
+                      )}
+                    </div>
                   </li>
-                ))}
-              </ul>
-              {isSharpeLeaders && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {t("mgmt.pulse.sharpeShortSampleCaption")}
-                </p>
-              )}
-            </>
-          )}
-        </Card>
-        );
-      })}
-    </div>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 };
 
