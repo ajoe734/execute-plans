@@ -3,7 +3,14 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
-import { PersonaDetail, personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
+import {
+  PersonaDetail,
+  personaHumanInboxUrl,
+  personaWorkshopEntryUrl,
+  resolvePersonaTradingPulseReturnHref,
+  TRADING_PULSE_RETURN_HREF,
+} from "./PersonaDetail";
+import i18n from "@/i18n";
 import { bffV1, type CapitalPool, type Persona, type Strategy } from "@/lib/bff-v1";
 import { getPersona, getPersonaManagement, runPersonaAction } from "@/lib/bff-v1/personas";
 import * as writes from "@/lib/bff-v1/writes";
@@ -651,6 +658,140 @@ describe("PersonaDetail", () => {
       expect(screen.getByTestId("cycle-memos-unavailable").textContent).toContain("no_consultation_memos");
       expect(screen.getByTestId("cycle-harness-v2").textContent).toContain("patch-9");
       expect(screen.getByTestId("cycle-experiences").textContent).toContain("size down");
+    });
+  });
+
+  describe("Trading Pulse contextual header return link (FE-TRADING-PULSE-PERSONA-RETURN-20261122)", () => {
+    const pulsePersona: Persona = {
+      id: "persona-2448c7053e33ea48da47",
+      name: "青禾｜2330 台股 Paper 學習 R3",
+      owner: "operator",
+      updatedAt: "2026-11-22T12:00:00Z",
+      state: "approved",
+      lifecycleStatus: "paper_running",
+      risk: "low",
+      archetype: "quant",
+      routedStrategies: 1,
+      successRate: 0.5,
+    };
+
+    it("accepts only the canonical fixed in-site /management/trading-pulse return target and rejects direct, foreign, or other-origin state", () => {
+      expect(resolvePersonaTradingPulseReturnHref({ returnTo: TRADING_PULSE_RETURN_HREF })).toBe(
+        "/management/trading-pulse",
+      );
+      for (const invalidState of [
+        undefined,
+        null,
+        "",
+        "/management/trading-pulse",
+        ["/management/trading-pulse"],
+        {},
+        { returnTo: "" },
+        { returnTo: "#" },
+        { returnTo: "/management/personas" },
+        { returnTo: "/management/persona-fleet" },
+        { returnTo: "/management/trading-pulse?tab=rankings" },
+        { returnTo: "/management/trading-pulse#top" },
+        { returnTo: "/management/trading-pulse/extra" },
+        { returnTo: "https://app.dev.mvl-cap.tw/management/trading-pulse" },
+        { returnTo: "https://evil.example/management/trading-pulse" },
+        { returnTo: "//evil.example/management/trading-pulse" },
+        { returnTo: "javascript:alert(1)" },
+      ]) {
+        expect(resolvePersonaTradingPulseReturnHref(invalidState)).toBeNull();
+      }
+    });
+
+    it("renders a visible bilingual return link in PersonaDetail header actions when opened from Trading Pulse and navigates back without writes", async () => {
+      vi.mocked(getPersona).mockResolvedValue(pulsePersona);
+      const runActionSpy = vi.spyOn(writes, "runAction");
+      runActionSpy.mockClear();
+
+      for (const [locale, expectedLabel] of [
+        ["zh-TW", "返回交易脈動"],
+        ["en-US", "Back to Trading Pulse"],
+      ] as const) {
+        await i18n.changeLanguage(locale);
+        const view = render(
+          createElement(
+            MemoryRouter,
+            {
+              initialEntries: [
+                {
+                  pathname: `/management/personas/${pulsePersona.id}`,
+                  state: { returnTo: "/management/trading-pulse" },
+                },
+              ],
+            },
+            createElement(
+              Routes,
+              null,
+              createElement(Route, {
+                path: "/management/personas/:id",
+                element: createElement(PersonaDetail),
+              }),
+              createElement(Route, {
+                path: "/management/trading-pulse",
+                element: createElement("h1", null, locale === "zh-TW" ? "交易脈動" : "Trading Pulse"),
+              }),
+            ),
+          ),
+        );
+
+        expect(await screen.findByRole("heading", { level: 1, name: pulsePersona.name })).toBeInTheDocument();
+        const returnLink = screen.getByRole("link", { name: expectedLabel });
+        expect(returnLink).toHaveAttribute("href", "/management/trading-pulse");
+        fireEvent.click(returnLink);
+        expect(
+          await screen.findByRole("heading", { level: 1, name: locale === "zh-TW" ? "交易脈動" : "Trading Pulse" }),
+        ).toBeInTheDocument();
+        expect(runActionSpy).not.toHaveBeenCalled();
+        view.unmount();
+      }
+      await i18n.changeLanguage("zh-TW");
+    });
+
+    it.each([
+      ["direct navigation without state", "/management/personas/persona-2448c7053e33ea48da47"],
+      [
+        "navigation from Persona Fleet",
+        {
+          pathname: "/management/personas/persona-2448c7053e33ea48da47",
+          state: { returnTo: "/management/persona-fleet" },
+        },
+      ],
+      [
+        "navigation with untrusted foreign URL in state",
+        {
+          pathname: "/management/personas/persona-2448c7053e33ea48da47",
+          state: { returnTo: "https://evil.example/management/trading-pulse" },
+        },
+      ],
+    ] as const)("does not render a Trading Pulse return link on %s", async (_label, initialEntry) => {
+      vi.mocked(getPersona).mockResolvedValue(pulsePersona);
+      await i18n.changeLanguage("zh-TW");
+
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: [initialEntry] },
+          createElement(
+            Routes,
+            null,
+            createElement(Route, {
+              path: "/management/personas/:id",
+              element: createElement(PersonaDetail),
+            }),
+          ),
+        ),
+      );
+
+      expect(await screen.findByRole("heading", { level: 1, name: pulsePersona.name })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /返回交易脈動|Back to Trading Pulse/i })).not.toBeInTheDocument();
+      const pulseAnchors = screen
+        .queryAllByRole("link")
+        .filter((a) => a.getAttribute("href") === "/management/trading-pulse");
+      expect(pulseAnchors).toHaveLength(0);
     });
   });
 });

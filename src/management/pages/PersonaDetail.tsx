@@ -16,7 +16,7 @@ import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff-v1";
-import { Pause, Edit, Beaker, Trophy, Lock, Archive, Inbox, MessageSquare, GitCompare, Lightbulb, History } from "lucide-react";
+import { ArrowLeft, Pause, Edit, Beaker, Trophy, Lock, Archive, Inbox, MessageSquare, GitCompare, Lightbulb, History } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -44,6 +44,14 @@ import { PersonaMeetingsPanel } from "../components/persona/PersonaMeetingsPanel
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
+
+export const TRADING_PULSE_RETURN_HREF = "/management/trading-pulse";
+
+export function resolvePersonaTradingPulseReturnHref(state: unknown): string | null {
+  if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+  const candidate = (state as { returnTo?: unknown }).returnTo;
+  return candidate === TRADING_PULSE_RETURN_HREF ? TRADING_PULSE_RETURN_HREF : null;
+}
 
 export const personaHumanInboxUrl = (personaId: string) =>
   `/management/human-inbox?persona=${encodeURIComponent(personaId)}`;
@@ -338,6 +346,7 @@ export const PersonaDetail = () => {
     .filter((item): item is ImmutableStrategyTarget => Boolean(item));
   const headerState = p.lifecycleStatus?.trim() || p.state;
   const requestedTab = new URLSearchParams(location.search).get("tab")?.trim() || undefined;
+  const tradingPulseReturnHref = resolvePersonaTradingPulseReturnHref(location.state);
 
   return (
     <>
@@ -348,6 +357,14 @@ export const PersonaDetail = () => {
         defaultTab={requestedTab}
         actions={
           <>
+            {tradingPulseReturnHref && (
+              <Button asChild size="sm" variant="outline">
+                <Link to={tradingPulseReturnHref}>
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  {t("mgmt.pulse.returnToTradingPulse", { defaultValue: "返回交易脈動" })}
+                </Link>
+              </Button>
+            )}
             <Button aria-label={`Talk with ${p.name}`} disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("ask")} size="sm" variant="outline">
               <MessageSquare className="h-4 w-4 mr-1" />Talk
             </Button>

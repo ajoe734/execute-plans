@@ -4890,6 +4890,7 @@ export default {
       diagnosticsSourcesTitle: "Data Sources & Effective Timestamps",
       diagnosticsRuntimesTitle: "Runtime & Binding Locator",
       diagnosticsFillRateAggregationFmt: "Fill-rate aggregation: {{method}}",
+      returnToTradingPulse: "Back to Trading Pulse",
     },
     evolution: {
       title: "Evolution Journal",

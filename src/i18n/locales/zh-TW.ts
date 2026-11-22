@@ -4871,6 +4871,7 @@ export default {
       diagnosticsSourcesTitle: "資料來源與有效時間",
       diagnosticsRuntimesTitle: "執行個體與綁定對照",
       diagnosticsFillRateAggregationFmt: "成交率聚合方式：{{method}}",
+      returnToTradingPulse: "返回交易脈動",
     },
     evolution: {
       title: "演化日誌",
