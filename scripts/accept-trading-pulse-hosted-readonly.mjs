@@ -21,6 +21,10 @@
  * evidence location; source and sha256 identify it. E supplies fresh facts from
  * A's owner reads. null means unknown; zero is a measurement. pnl_period is the
  * source's comparable period label (not an invented business timestamp).
+ * pnl_currency/pnl_period are independently string or explicit null, even when
+ * pnl is numeric. Such a row is not evidence for a comparable subtotal.
+ * quantity_unit is optional (null/omitted), a literal label, or locale-keyed
+ * labels such as {"zh-TW":"股","en-US":"shares"}, quoted from the witness.
  * History is separately supplied from an immutable event; never apply its old
  * quantities or amounts to current rows. Missing history is a failed proof.
  *
@@ -68,8 +72,12 @@ export function validateInput(input, now = Date.now(), { baseline = false } = {}
       need(string(r[key]), `source row ${key}`);
     for (const key of ["ledger_fill_count", "pnl", "filled_quantity", "requested_quantity"])
       need(r[key] === null || finite(r[key]), `source row ${key} (number or explicit null)`);
-    need(r.pnl === null || (string(r.pnl_currency) && string(r.pnl_period)), "pnl scope");
-    need(r.requested_quantity === null || string(r.quantity_unit), "quantity unit");
+    for (const key of ["pnl_currency", "pnl_period"])
+      need(r[key] === null || string(r[key]), `source row ${key} (string or explicit null)`);
+    need(r.quantity_unit == null || string(r.quantity_unit) ||
+      (typeof r.quantity_unit === "object" && !Array.isArray(r.quantity_unit) &&
+        Object.keys(r.quantity_unit).length > 0 && Object.entries(r.quantity_unit).every(([l, v]) =>
+          ["zh-TW", "en-US"].includes(l) && (v === null || string(v)))), "optional localized quantity unit");
   }
   need(new Set(s.rows.map((r) => r.runtime_id)).size === s.rows.length, "unique runtimes");
   need(!s.excluded.some((x) => s.rows.some((r) => r.persona_id === x.persona_id)), "operator/excluded separation");
@@ -77,6 +85,7 @@ export function validateInput(input, now = Date.now(), { baseline = false } = {}
     need(["stage", "currency", "period"].every((k) => string(g[k])) && finite(g.value), "group scope/value");
     const eligible = s.rows.filter((r) => r.stage === g.stage && r.pnl_currency === g.currency && r.pnl_period === g.period);
     const covered = eligible.filter((r) => finite(r.pnl));
+    need(covered.length > 0, "group requires comparable measured PnL");
     need(new Set(covered.map((r) => r.persona_id)).size === g.covered_persona_count &&
       new Set(eligible.map((r) => r.persona_id)).size === g.eligible_persona_count, "group denominator");
     need(Math.abs(covered.reduce((n, r) => n + r.pnl, 0) - g.value) < 1e-7, "comparable group sum");
@@ -119,7 +128,7 @@ const LABELS = {
 const stageText = (text, stage) => stage === "paper" ? /模擬|紙上|paper/i.test(text)
   : stage === "canary" ? /canary|金絲雀/i.test(text) : /實盤|live/i.test(text);
 
-export function assessRow(source, row) {
+export function assessRow(source, row, locale = "zh-TW") {
   const failures = [];
   const check = (ok, code) => { if (!ok) failures.push(code); };
   check(row?.text?.includes(source.persona_name), "persona_name");
@@ -128,10 +137,13 @@ export function assessRow(source, row) {
   const field = (kind) => (row?.fields || []).filter((x) => LABELS[kind].test(x.label)).map((x) => x.value).join(" ");
   const fills = field("fills"), pnl = field("pnl"), rate = field("rate");
   check(source.ledger_fill_count === null ? unknownText(fills) : hasNumber(fills, source.ledger_fill_count, 0), "ledger_fill_count");
-  check(source.pnl === null ? unknownText(pnl) && !hasNumber(pnl, 0) : hasNumber(pnl, source.pnl) && pnl.includes(source.pnl_currency), "pnl_value_currency");
+  check(source.pnl === null ? unknownText(pnl) && !hasNumber(pnl, 0)
+    : hasNumber(pnl, source.pnl) && (!string(source.pnl_currency) || pnl.includes(source.pnl_currency)), "pnl_value_currency");
   if (source.requested_quantity > 0 && source.filled_quantity !== null) {
     check(hasNumber(rate, 100 * source.filled_quantity / source.requested_quantity) && rate.includes("%"), "fill_rate_percent");
-    check(hasNumber(rate, source.filled_quantity) && hasNumber(rate, source.requested_quantity) && rate.includes(source.quantity_unit), "fill_rate_basis_unit");
+    const unit = typeof source.quantity_unit === "object" ? source.quantity_unit?.[locale] : source.quantity_unit;
+    check(hasNumber(rate, source.filled_quantity) && hasNumber(rate, source.requested_quantity) &&
+      (!string(unit) || rate.includes(unit)), "fill_rate_basis_unit");
   } else check(unknownText(rate), "fill_rate_unknown");
   check(row?.links?.some((l) => {
     const u = safeTarget(l.href);
@@ -147,7 +159,7 @@ export function assessOverview(sources, snapshot, locale) {
   for (const [i, r] of sources.rows.entries()) {
     const matches = snapshot.rows.filter((x) => x.text.includes(r.persona_name) && x.text.includes(r.underlying_symbol));
     if (matches.length !== 1) failures.push(`row[${i}]:unique_named_runtime_missing`);
-    else failures.push(...assessRow(r, matches[0]).map((f) => `row[${i}]:${f}`));
+    else failures.push(...assessRow(r, matches[0], locale).map((f) => `row[${i}]:${f}`));
   }
   const ids = sources.rows.flatMap((r) => [r.runtime_id, r.binding_id, r.persona_id]);
   if (ids.some((id) => snapshot.text.includes(id))) failures.push("source_ids_visible_by_default");
@@ -165,6 +177,12 @@ export function assessOverview(sources, snapshot, locale) {
     if (!candidate || !hasNumber(candidate, g.value) || !hasNumber(candidate, g.covered_persona_count, 0) ||
       !hasNumber(candidate, g.eligible_persona_count, 0) || !/涵蓋|coverage|covered/i.test(candidate)) failures.push(`group[${i}]:scope_value_coverage`);
   }
+  // Subtotal regions are separate from row PnL: a finite per-row amount does
+  // not authorize summing rows with unverified currency or different periods.
+  for (const text of snapshot.subtotals || []) {
+    if (!sources.pnl_groups.some((g) => stageText(text, g.stage) && text.includes(g.currency) &&
+      text.includes(g.period) && hasNumber(text, g.value))) failures.push("unverified_comparable_subtotal");
+  }
   return failures;
 }
 
@@ -181,7 +199,14 @@ export function assessWire(sources, overview, rankings) {
     if (r?.persona_id !== s.persona_id || r?.persona_name !== s.persona_name ||
       (r?.runtime_binding_id ?? r?.binding_id) !== s.binding_id) failures.push(`row[${i}]:identity_binding`);
     if (c?.ledger_fill_count !== s.ledger_fill_count || r?.metrics?.pnl !== s.pnl) failures.push(`row[${i}]:ledger_values`);
+    if ((c?.pnl_currency ?? null) !== s.pnl_currency ||
+      (c?.pnl_period ?? c?.pnl_period_label ?? c?.pnl_period_start_at ?? null) !== s.pnl_period)
+      failures.push(`row[${i}]:pnl_scope`);
   }
+  const actualGroups = data?.summary?.pnl_groups || [];
+  if (actualGroups.length !== sources.pnl_groups.length || actualGroups.some((x) => !sources.pnl_groups.some((g) =>
+    x.stage === g.stage && x.currency === g.currency && (x.period ?? x.period_label ?? x.period_start_at) === g.period)))
+    failures.push("unverified_comparable_subtotal");
   for (const [i, g] of sources.pnl_groups.entries()) {
     const actual = data?.summary?.pnl_groups?.find((x) => x.stage === g.stage && x.currency === g.currency &&
       (x.period ?? x.period_label ?? x.period_start_at) === g.period);
@@ -265,7 +290,19 @@ export async function snapshotPage(page, sources) {
       }) };
     });
     const groups = [...root.querySelectorAll("article,[role=group],dl,section > div > div")].filter(visible).map(text).filter((s) => s.length < 1800);
-    return { heading: text(h1), text: text(root), rows, groups,
+    const subtotals = [];
+    for (const heading of root.querySelectorAll("h2,h3,h4")) {
+      if (!visible(heading) || !/(?:損益|p&l|pnl).*?(?:小計|subtotal)|(?:小計|subtotal).*?(?:損益|p&l|pnl)/i.test(text(heading))) continue;
+      const region = heading.parentElement?.parentElement;
+      if (!region) continue;
+      const blocks = [...region.querySelectorAll("[role=group],article,dl")].filter(visible);
+      subtotals.push(...blocks.filter((e) => !blocks.some((child) => child !== e && e.contains(child))).map(text));
+      // Also catch a plain numeric subtotal, including an invented zero. Counts
+      // and dates in explanatory prose are not standalone monetary values.
+      if (!blocks.length) subtotals.push(...text(region).split("\n").filter((line) =>
+        /^(?:[A-Z]{3}\s*|[$€£¥]\s*)?[−+-]?\d[\d,]*(?:\.\d+)?(?:\s*[A-Z]{3})?$/.test(line.trim())));
+    }
+    return { heading: text(h1), text: text(root), rows, groups, subtotals,
       summaryText: text(root).split(rows[0]?.text || "\0")[0],
       diagnosticsCollapsed: !!diagnostic && (diagnostic.tagName === "SUMMARY" ? !diagnostic.parentElement.open : diagnostic.getAttribute("aria-expanded") === "false") };
   }, { sources });

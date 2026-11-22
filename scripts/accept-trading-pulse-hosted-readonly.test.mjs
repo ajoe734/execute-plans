@@ -69,6 +69,95 @@ test("comparable sum and coverage use source scope, not arbitrary arithmetic", (
   assert.throws(() => validateInput(i));
 });
 
+test("finite PnL admits independently null currency/period while omitted scope stays invalid", () => {
+  for (const [currency, period] of [[null, null], [null, "valuation-start-a"], ["USD", null]]) {
+    const i = input(); Object.assign(i.sources.rows[0], { pnl: -168.0851249999978, pnl_currency: currency, pnl_period: period });
+    validateInput(i);
+    const r = row(); r.fields[1].value = `${currency || ""} −168.09`;
+    assert.deepEqual(assessRow(i.sources.rows[0], r), []);
+    for (const bad of ["尚無成交損益", "0.00", "168.09", "−9.73"]) {
+      r.fields[1].value = bad;
+      assert.ok(assessRow(i.sources.rows[0], r).includes("pnl_value_currency"));
+    }
+  }
+  for (const key of ["pnl_currency", "pnl_period"]) {
+    const i = input(); delete i.sources.rows[0][key]; assert.throws(() => validateInput(i));
+  }
+});
+
+test("0/452 is measured with optional witnessed units in the selected locale", () => {
+  const s = { ...source, underlying_symbol: "2317", requested_quantity: 452,
+    quantity_unit: { "zh-TW": "股", "en-US": "shares" } };
+  const r = row(); r.text = "離線甲 2317 paper 模擬";
+  for (const [locale, unit] of [["zh-TW", "股"], ["en-US", "shares"]]) {
+    r.fields[2].value = `0% · 0/452 ${unit}`;
+    assert.deepEqual(assessRow(s, r, locale), []);
+    assert.ok(assessRow(s, r, locale === "zh-TW" ? "en-US" : "zh-TW").includes("fill_rate_basis_unit"));
+  }
+  for (const quantity_unit of [null, undefined, { "zh-TW": "股", "en-US": null }]) {
+    const i = input(); Object.assign(i.sources.rows[0], s, { quantity_unit }); validateInput(i);
+    r.fields[2].value = "0% · 0/452";
+    assert.deepEqual(assessRow(i.sources.rows[0], r, "en-US"), []);
+    r.fields[2].value = "0% · 0/451";
+    assert.ok(assessRow(i.sources.rows[0], r, "en-US").includes("fill_rate_basis_unit"));
+  }
+  const i = input(); i.sources.rows[0].quantity_unit = { "en-US": 123 };
+  assert.throws(() => validateInput(i));
+});
+
+const partialScope = () => {
+  const i = input();
+  i.sources.rows = [-168.0851249999978, -9.73402125001303].map((pnl, n) => ({ ...source,
+    persona_id: `persona-measured-${n}`, persona_name: `離線${n}`, runtime_id: `rt-measured-${n}`,
+    binding_id: `rb-measured-${n}`, ledger_fill_count: 1, pnl, pnl_currency: null,
+    pnl_period: `valuation-start-${n}` }));
+  return i;
+};
+const partialView = (s) => ({ ...snapshot(), summaryText: "營運 Persona 2 人", text: "可比損益小計 尚無可比範圍",
+  rows: s.rows.map((r) => ({ ...row(), text: `${r.persona_name} 1234 模擬`,
+    fields: [{ label: "成交筆數", value: "1" }, { label: "損益", value: r.pnl.toFixed(2) }, row().fields[2]],
+    links: [{ href: `/management/personas/${r.persona_id}`, visible: true, inViewportX: true }] })), subtotals: [] });
+const partialWire = (s) => ({ runtime_rows: s.rows.map((r) => ({ runtime_id: r.runtime_id,
+  runtime_binding_id: r.binding_id, persona_id: r.persona_id, persona_name: r.persona_name, metrics: { pnl: r.pnl },
+  performance_context: { ledger_fill_count: r.ledger_fill_count, pnl_currency: r.pnl_currency, pnl_period_start_at: r.pnl_period } })),
+  summary: { operator_scope: { status: "verified", persona_count: 2, runtime_count: 2 }, pnl_groups: [] } });
+
+test("partial PnL scope preserves both row amounts and rejects invented UI/wire subtotals", () => {
+  const i = partialScope(); validateInput(i);
+  const view = partialView(i.sources), wire = partialWire(i.sources), ranks = { ranking_blocks: [] };
+  assert.deepEqual(assessOverview(i.sources, view, "zh-TW"), []);
+  assert.deepEqual(assessWire(i.sources, wire, ranks), []);
+  for (const value of [-177.82, 0]) {
+    view.subtotals = [`模擬 TWD session ${value} 涵蓋 2/2`];
+    assert.ok(assessOverview(i.sources, view, "zh-TW").includes("unverified_comparable_subtotal"));
+    wire.summary.pnl_groups = [{ stage: "paper", currency: "TWD", period: "session", value,
+      covered_persona_count: 2, eligible_persona_count: 2 }];
+    assert.ok(assessWire(i.sources, wire, ranks).includes("unverified_comparable_subtotal"));
+    i.sources.pnl_groups = wire.summary.pnl_groups;
+    assert.throws(() => validateInput(i));
+    i.sources.pnl_groups = [];
+  }
+});
+
+test("known currencies with differing periods do not authorize a combined subtotal", () => {
+  const i = partialScope(); i.sources.rows.forEach((r) => { r.pnl_currency = "USD"; });
+  validateInput(i);
+  i.sources.pnl_groups = [{ stage: "paper", currency: "USD", period: "combined", value: -177.81914625001083,
+    covered_persona_count: 2, eligible_persona_count: 2 }];
+  assert.throws(() => validateInput(i));
+});
+
+test("wire scope and amount are checked independently, including unknown versus zero", () => {
+  const i = partialScope(), wire = partialWire(i.sources), ranks = { ranking_blocks: [] };
+  wire.runtime_rows[0].performance_context.pnl_currency = "TWD";
+  assert.ok(assessWire(i.sources, wire, ranks).includes("row[0]:pnl_scope"));
+  wire.runtime_rows[0].performance_context.pnl_currency = null;
+  wire.runtime_rows[0].metrics.pnl = null;
+  assert.ok(assessWire(i.sources, wire, ranks).includes("row[0]:ledger_values"));
+  i.sources.rows[0].pnl = null; wire.runtime_rows[0].metrics.pnl = 0;
+  assert.ok(assessWire(i.sources, wire, ranks).includes("row[0]:ledger_values"));
+});
+
 for (const [name, mutate, code] of [
   ["zero fills to unknown", (r) => { r.fields[0].value = "—"; }, "ledger_fill_count"],
   ["unknown PnL to zero", (r) => { r.fields[1].value = "TWD 0"; }, "pnl_value_currency"],
@@ -105,7 +194,8 @@ test("group scope, value and covered denominator must be rendered together", () 
 
 test("raw wire roster, ledger values and rankings checked independently of UI", () => {
   const overview = { data: { runtime_rows: [{ runtime_id: source.runtime_id, runtime_binding_id: source.binding_id,
-    persona_id: source.persona_id, persona_name: source.persona_name, metrics: { pnl: null }, performance_context: { ledger_fill_count: 0 } }],
+    persona_id: source.persona_id, persona_name: source.persona_name, metrics: { pnl: null },
+    performance_context: { ledger_fill_count: 0, pnl_currency: "TWD", pnl_period: "session" } }],
     summary: { operator_scope: { status: "verified", persona_count: 1, runtime_count: 1 }, pnl_groups: [] } } };
   const ranks = { data: { ranking_blocks: [{ metric: "pnl", items: [] }], summary: overview.data.summary } };
   assert.deepEqual(assessWire(sources, overview, ranks), []);
@@ -228,6 +318,23 @@ test("real Chromium DOM: narrow clipping, diagnostics, actual Tab/Enter, on-scre
     await page.locator("tbody tr").evaluate((tr) => tr.firstElementChild.append(tr.querySelector("a")));
     const repaired = await snapshotPage(page, sources);
     assert.ok(!assessRow(source, repaired.rows[0]).includes("primary_entry_without_horizontal_scroll"));
+    for (const title of ["可比損益小計", "Comparable P&L subtotal"]) {
+      await page.locator("section").evaluate((section, title) => section.insertAdjacentHTML("beforeend",
+        `<div id="subtotal"><div><h2>${title}</h2><p>Comparable scope</p></div><p>尚無可比範圍</p></div>`), title);
+      assert.deepEqual((await snapshotPage(page, sources)).subtotals, []);
+      await page.locator("#subtotal").evaluate((region) => region.insertAdjacentHTML("beforeend",
+        '<div role="group">模擬 TWD session -177.82 涵蓋 2/2</div>'));
+      let view = await snapshotPage(page, sources);
+      assert.ok(assessOverview(sources, view, "zh-TW").includes("unverified_comparable_subtotal"));
+      const scoped = { ...sources, pnl_groups: [{ stage: "paper", currency: "TWD", period: "session",
+        value: -177.82, covered_persona_count: 2, eligible_persona_count: 2 }] };
+      assert.ok(!assessOverview(scoped, view, "zh-TW").some((f) => f.includes("subtotal") || f.includes("group")));
+      await page.locator('#subtotal [role="group"]').evaluate((group) => { group.outerHTML = "<p>0.00</p>"; });
+      view = await snapshotPage(page, sources);
+      assert.deepEqual(view.subtotals, ["0.00"]);
+      assert.ok(assessOverview(sources, view, "zh-TW").includes("unverified_comparable_subtotal"));
+      await page.locator("#subtotal").evaluate((region) => region.remove());
+    }
     // Mobile shell has no menu button: use its real documented keyboard entry.
     await page.setContent(`<main><p>Fleet</p></main><script>
       document.addEventListener('keydown', (event) => {
