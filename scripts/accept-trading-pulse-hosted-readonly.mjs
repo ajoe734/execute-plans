@@ -284,7 +284,32 @@ export function assessPersona(source, tenant, body, text) {
   return failures;
 }
 
-export function assessJourney(history, detail, text, locale) {
+const escapePattern = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Journey titles put the full/short Persona name directly before the optional
+// localized side and symbol. Whitespace alone cannot delimit the Persona name.
+export function journeyHeadingPattern(history) {
+  const full = history.persona_name.trim();
+  const short = full.split(/[｜|]/)[0].trim() || full;
+  const names = [...new Set([full, short])].map(escapePattern).join("|");
+  const symbols = [...new Set([history.symbol, history.symbol.split(".")[0]])].map(escapePattern).join("|");
+  return new RegExp(`^(?:${names})\\s+(?:(?:買|賣|Buy|Sell)\\s+)?(?:${symbols})(?=\\s|$)`);
+}
+
+export function assessJourneyReads(history, detail, timeline) {
+  const failures = [];
+  for (const [label, capture, suffix] of [["detail", detail, ""], ["timeline", timeline, "/timeline"]]) {
+    if (capture?.path !== `/bff/management/trade-journeys/${history.journey_id}${suffix}` || capture?.status !== 200)
+      failures.push(`journey_${label}_http_200`);
+    const query = new URLSearchParams(capture?.query);
+    if (query.getAll("tenant_id").length !== 1 || query.get("tenant_id") !== history.tenant_id ||
+      query.getAll("environment").length !== 1 || query.get("environment") !== history.environment)
+      failures.push(`journey_${label}_query_scope`);
+  }
+  return failures;
+}
+
+export function assessJourney(history, detail, text, locale, heading = text) {
   if (!history) return ["missing_historical_event_witness"];
   const d = unwrap(detail), r = d?.row ?? d?.journey ?? d;
   const failures = [];
@@ -300,8 +325,14 @@ export function assessJourney(history, detail, text, locale) {
   const amounts = cause?.reason_detail ?? cause;
   for (const k of ["required", "available", "requested_quantity"])
     if (amounts?.[k] !== history[k]) failures.push(`historical_${k}`);
-  if (!text.includes(history.persona_name) || !text.includes(history.symbol) || !stageText(text, history.environment)) failures.push("journey_visible_object_scope");
-  if (!text.includes(history.reason_text[locale]) || !hasNumber(text, history.required) || !hasNumber(text, history.available) ||
+  const symbol = new RegExp(`(?:^|\\s)${escapePattern(history.symbol)}(?=\\s|$)`);
+  if (!journeyHeadingPattern(history).test(heading) ||
+    !(symbol.test(text) || symbol.test(heading)) || !stageText(text, history.environment)) failures.push("journey_visible_object_scope");
+  // The immutable witness may use older business wording; the existing Journey
+  // page translates this same wire reason_code with these canonical labels.
+  const renderedReason = history.reason_code === "insufficient_cash"
+    ? { "zh-TW": "現金不足", "en-US": "Not enough cash" }[locale] : null;
+  if (![history.reason_text[locale], renderedReason].some((reason) => string(reason) && text.includes(reason)) || !hasNumber(text, history.required) || !hasNumber(text, history.available) ||
     !hasNumber(text, history.requested_quantity)) failures.push("journey_visible_source_reason");
   return failures;
 }
