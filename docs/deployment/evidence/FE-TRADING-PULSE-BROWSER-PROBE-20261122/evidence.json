@@ -81,8 +81,8 @@
       "No successful Persona detail or historical rejection roundtrip is claimed. Both are explicit missing-proof failures; E must run normal acceptance with fresh authoritative inputs on the repaired pair."
     ],
     "retained_bundle": {
-      "private_dir": "/tmp/trading-pulse-rc6-baseline.sZZagX/pr1063-06126a238/trading-pulse-d3Yclx",
-      "durable_retention": "Coordinator retention pending: the existing private artifact directory is mounted read-only in this worker; the failed mkdir copied no files and the original three-file bundle remains intact.",
+      "private_dir": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/.orchestrator/assistant-dev-packets/sources/trading-pulse-operator-readability-20261122/pre-fix-browser-masked",
+      "durable_retention": "Coordinator retained the exact three files in the task packet. All three SHA256 digests match the original run; this worker's attempted artifact mkdir was read-only and copied nothing.",
       "bytes": 196259,
       "max_bytes": 5242880,
       "files": [
@@ -103,7 +103,7 @@
       "Narrow shell entry uses the existing Ctrl/Cmd+K command palette when the sidebar is hidden; no assumed mobile menu or direct URL substitution.",
       "Mask the entire top header as well as side navigation and private values: server display names can differ from the supplied GUI login username."
     ],
-    "superseded_attempts": "Initial missing-browser attempt, incomplete pre-SSE-fix attempt and pre-header-mask capture are excluded from the final retained bundle. Cleanup is pending final receipt.",
+    "superseded_attempts": "Removed the initial missing-browser bundle, incomplete pre-SSE-fix bundle, pre-header-mask bundle and duplicate final temporary bundle after verifying all final files against durable retention. The retained runtime bundle has exactly one summary and two masked screenshots. Coordinator packet also contains its independent observation and an older summary outside this final bundle.",
     "hosted_accepted": false
   },
   "runtime_budget": {
