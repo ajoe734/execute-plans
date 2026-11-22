@@ -76,6 +76,8 @@ for (const [name, mutate, code] of [
   ["lost denominator", (r) => { r.fields[2].value = "0%"; }, "fill_rate_basis_unit"],
   ["wrong row", (r) => { r.text = "別人 5678 實盤"; }, "persona_name"],
   ["placeholder target", (r) => { r.links[0].href = "#"; }, "primary_entry_without_horizontal_scroll"],
+  ["wrong Persona target", (r) => { r.links[0].href = "/management/personas/wrong"; }, "primary_entry_without_horizontal_scroll"],
+  ["unfiltered public list", (r) => { r.links[0].href = "/management/trade-journeys"; }, "primary_entry_without_horizontal_scroll"],
   ["horizontally hidden target", (r) => { r.links[0].inViewportX = false; }, "primary_entry_without_horizontal_scroll"],
 ]) test(`row rejects ${name}`, () => { const r = row(); mutate(r); assert.ok(assessRow(source, r).includes(code)); });
 
@@ -173,6 +175,10 @@ test("one summary/two screenshot evidence budget and credential redaction", () =
     writeEvidence(dir, report, makeRedactor([]));
     assert.equal(report.pass, false); assert.ok(report.evidence.bytes < MAX_BYTES);
     assert.ok(!fs.existsSync(path.join(dir, "desktop.png")));
+    report.huge_error = "x".repeat(MAX_BYTES);
+    writeEvidence(dir, report, makeRedactor([]));
+    assert.equal(report.pass, false); assert.ok(report.evidence.bytes < MAX_BYTES);
+    assert.ok(report.failures.includes("evidence_summary_budget_exceeded"));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

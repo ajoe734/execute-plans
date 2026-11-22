@@ -99,7 +99,7 @@ export function safeTarget(href, base = FE) {
   if (!string(href) || href === "#") return null;
   try {
     const u = new URL(href, base);
-    return u.origin === base && u.pathname.startsWith("/management/") && !u.hash ? u : null;
+    return u.origin === base && !u.username && !u.password && u.pathname.startsWith("/management/") && !u.hash ? u : null;
   } catch { return null; }
 }
 
@@ -135,7 +135,12 @@ export function assessRow(source, row) {
     check(hasNumber(rate, 100 * source.filled_quantity / source.requested_quantity) && rate.includes("%"), "fill_rate_percent");
     check(hasNumber(rate, source.filled_quantity) && hasNumber(rate, source.requested_quantity) && rate.includes(source.quantity_unit), "fill_rate_basis_unit");
   } else check(unknownText(rate), "fill_rate_unknown");
-  check(row?.links?.some((l) => safeTarget(l.href) && l.visible && l.inViewportX), "primary_entry_without_horizontal_scroll");
+  check(row?.links?.some((l) => {
+    const u = safeTarget(l.href);
+    const scoped = u?.pathname === `/management/personas/${encodeURIComponent(source.persona_id)}` ||
+      (u?.pathname === "/management/trade-journeys" && u.searchParams.get("persona_id") === source.persona_id);
+    return scoped && l.visible && l.inViewportX;
+  }), "primary_entry_without_horizontal_scroll");
   return failures;
 }
 
@@ -308,6 +313,14 @@ export function writeEvidence(dir, report, redactor) {
   if (report.evidence.bytes > MAX_BYTES) {
     for (const f of images) fs.unlinkSync(path.join(dir, f));
     report.failures.push("evidence_budget_exceeded_screenshots_removed"); report.pass = false;
+    if (images.length === 0) {
+      // A pathological response/error storm must not recurse forever or write
+      // an oversized summary. Retain its digest and an explicit failed result.
+      const overflow = digest(report);
+      for (const key of Object.keys(report)) delete report[key];
+      Object.assign(report, { schema: "trading-pulse-browser-readonly.v1", pass: false,
+        failures: ["evidence_summary_budget_exceeded"], overflow_digest: overflow });
+    }
     return writeEvidence(dir, report, redactor);
   }
   fs.writeFileSync(file, redactor.json(report, 2) + "\n", { mode: 0o600 });
