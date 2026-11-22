@@ -1,4 +1,5 @@
 import type {
+  CollectorQueryPlan,
   ResearchExperiment,
   ResearchTask,
   ResearchTaskLatestRun,
@@ -56,6 +57,7 @@ export function normalizeResearchTask(raw: unknown): ResearchTask | undefined {
     const runStatus = recordString(runRec, "status", "state") ?? "unknown";
     const runCreatedBy = recordString(runRec, "created_by", "createdBy");
     const runCreatedAt = recordString(runRec, "created_at", "createdAt");
+    const artifactRefs = normalizeArtifactIds(runRec.artifact_refs ?? runRec.artifactRefs);
     return {
       ...(runRec as Partial<ResearchTaskRun>),
       id: recordString(runRec, "id", "run_id", "runId") ?? runId,
@@ -73,6 +75,8 @@ export function normalizeResearchTask(raw: unknown): ResearchTask | undefined {
       created_by: runCreatedBy ?? null,
       createdAt: runCreatedAt,
       created_at: runCreatedAt ?? null,
+      artifactRefs,
+      artifact_refs: artifactRefs,
     };
   });
 
@@ -157,7 +161,31 @@ export function normalizeResearchTask(raw: unknown): ResearchTask | undefined {
     is_non_real: typeof record.is_non_real === "boolean" ? record.is_non_real : null,
     name_is_fallback_id: typeof record.name_is_fallback_id === "boolean" ? record.name_is_fallback_id : null,
     display_summary: normalizeDisplaySummary(record.display_summary),
+    query_plan: normalizeQueryPlan(record.query_plan),
   };
+}
+
+function normalizeArtifactIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.flatMap((ref) => {
+    const record = asRecord(ref);
+    const id = typeof ref === "string" ? ref.trim() : record && recordString(record, "artifact_id");
+    return id && /^[a-z0-9][a-z0-9_.:-]*$/i.test(id) ? [id] : [];
+  });
+  return [...new Set(ids)];
+}
+
+function normalizeQueryPlan(raw: unknown): CollectorQueryPlan | undefined {
+  const record = asRecord(raw);
+  if (!record) return undefined;
+  const terms = (value: unknown): string[] => Array.isArray(value)
+    ? value.filter((term): term is string => typeof term === "string")
+    : [];
+  const entries = Object.entries(asRecord(record.changes) ?? {}).flatMap(([source, value]) => {
+    const change = asRecord(value);
+    return change ? [[source, { before: terms(change.before), after: terms(change.after) }]] : [];
+  });
+  return { week: recordString(record, "week"), changes: Object.fromEntries(entries) };
 }
 
 function normalizeDisplaySummary(raw: unknown): ResearchTask["display_summary"] {

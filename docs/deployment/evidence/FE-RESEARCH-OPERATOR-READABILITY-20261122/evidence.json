@@ -1,0 +1,13 @@
+{
+  "task_id": "FE-RESEARCH-OPERATOR-READABILITY-20261122",
+  "work_package": "RC6 WP6.4 / FE-RISK-STRATEGY-RESEARCH-UI-20261120",
+  "prerequisite": "BFF-RESEARCH-TASK-VIEW-FILTER-20261122",
+  "baseline": "FE gate 45022061438 showed internal IDs from the reported rows and used legacy rx_201 for research detail, which returned 404.",
+  "verification": {
+    "research_view_tests": "64 tests passed in list, detail, discovery, and BFF list suites",
+    "typecheck": "npm run typecheck passed",
+    "build": "Vite strict live build passed",
+    "crawl_script": "Node syntax checks passed for the existing Management crawl and route catalog"
+  },
+  "hosted_acceptance": "Pending paired deploy, authenticated browser clicks, and actual result link readback in EVOLUTION-RESEARCH-HOSTED-ACCEPT-20261104."
+}

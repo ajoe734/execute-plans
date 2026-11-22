@@ -445,6 +445,8 @@ export const LIST_CLASS_BY_KEY = {
 
 export interface ResearchListOptions {
   includeNonReal?: boolean;
+  view?: "research" | "collector_checks";
+  pageToken?: string;
 }
 
 export async function listResearchTasksEnvelope(
@@ -453,14 +455,18 @@ export async function listResearchTasksEnvelope(
   const data = await bffFetch<unknown>({
     method: "GET",
     path: paths.researchTasks(),
-    query: { include_non_real: options?.includeNonReal ? "true" : "false" },
+    query: {
+      include_non_real: options?.includeNonReal ? "true" : "false",
+      view: options?.view,
+      page_token: options?.pageToken,
+    },
   });
   const env = normalizeLiveListResponse<unknown>(data, "entityRegistry");
   const all = env.items
     .map((item) => normalizeResearchTask(item))
     .filter((item): item is ResearchTask => Boolean(item));
   const items = options?.includeNonReal ? all : all.filter((row) => row.is_non_real !== true);
-  return { ...env, items, pageSize: items.length } as ListEnvelope<ResearchTask>;
+  return { ...env, items };
 }
 
 
