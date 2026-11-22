@@ -200,7 +200,7 @@ function stripPrivateMemoryInner<T>(obj: T, withheldIds: Set<string>): T {
         continue;
       }
       const candidate =
-        (k === "evidence_refs" || k === "citations") && Array.isArray(v) && withheldIds.size > 0
+        ["evidence_refs", "citations", "accepted", "disputed"].includes(k) && Array.isArray(v) && withheldIds.size > 0
           ? v.filter((entry) => {
               if (typeof entry === "string") return !withheldIds.has(entry.trim());
               if (isRecord(entry)) {
@@ -511,6 +511,9 @@ export interface MeetingCaseFileItem {
   kind?: string;
   relevance_scope?: string;
   source_owner?: string;
+  source_id?: string;
+  status?: string;
+  unavailable_reason?: string;
   excerpt?: string;
   agora_user_id?: string;
   trader_id?: string;
@@ -543,8 +546,8 @@ export interface MeetingRoundPosition {
   confidence?: number;
   citations?: string[];
   changed?: boolean;
-  accepts?: string | string[];
-  disputes?: string | string[];
+  accepted?: string[];
+  disputed?: string[];
   rationale?: string;
   summary?: string;
   proposals?: unknown[];
@@ -561,6 +564,7 @@ export interface MeetingRound {
 export interface MeetingSynthesis {
   proposals: MeetingProposalItem[];
   tally?: {
+    by_stance?: Record<string, number>;
     support?: number;
     dissent?: number;
     binding?: boolean;
@@ -1045,7 +1049,10 @@ function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDet
       ? (cleaned.case_file_items.filter(isRecord) as unknown as MeetingCaseFileItem[])
       : [],
     rounds: Array.isArray(cleaned.rounds)
-      ? (cleaned.rounds.filter(isRecord) as unknown as MeetingRound[])
+      ? cleaned.rounds.filter(isRecord).map((round) => ({
+          ...round,
+          positions: Array.isArray(round.positions) ? round.positions.filter(isRecord) : [],
+        }) as unknown as MeetingRound)
       : [],
     synthesis,
     proposals: proposalsRaw.filter(isRecord) as unknown as MeetingProposalItem[],
