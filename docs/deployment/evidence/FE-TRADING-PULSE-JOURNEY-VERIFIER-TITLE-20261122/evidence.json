@@ -20,18 +20,18 @@
     },
     {
       "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
-      "sha256": "de8d4ceca2c23037cf4dc37aea8463a5a4356943ff501988b0a75e0b84d69427"
+      "sha256": "01c1c484ae93b5292ae9e0eac433610f05dea97df235dbcc0cf51c4101d21721"
     },
     {
       "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
-      "sha256": "c04bc9abdaacaa021b50877d15719e6eff63a397d667ccfe6d416a1969ac0308"
+      "sha256": "8d089c772511c419568bfa0be0525dcbd1d61c342ec4ee4955ea925a79bfed1e"
     }
   ],
   "source_contract": {
     "title": "src/management/pages/trade-journeys/journeyReadable.ts: shortPersonaName splits on the first full/half-width pipe; journeyTitle combines that name, localized side, shortSymbol and quantity. TradeJourneysPage.tsx renders it as h1 and retains full row.symbol in the instrument line.",
     "reason": "The existing tradeJourneys.reasons.insufficient_cash labels are zh-TW 現金不足 and en-US Not enough cash. Accept those code-specific existing labels alongside the independently supplied historical wording; all wire reason_code, source-event, timestamp, quantities and pre-broker assertions remain required.",
     "timeline": "src/lib/bff-v1/tradeJourneys.ts: exact journey /timeline GET with tenant_id and environment query; data.items contains event_id/source_event_id and occurred_at. Existing timeline merging and immutable-history checks are preserved.",
-    "wire_guards": "Both navigation-local detail and timeline observations must have exact object paths, HTTP 200, exactly one matching tenant_id and environment. The UI must reach the exact Journey pathname through a named real link, show a visible h1 with a whole correct short/full name and symbol, retain full source instrument and environment, then return through the existing screen link."
+    "wire_guards": "Both navigation-local detail and timeline observations must have exact object paths, HTTP 200, exactly one matching tenant_id and environment. The UI must reach the exact Journey pathname through a named real link, show a visible h1 with a whole correct short/full name and symbol, retain full source instrument and environment, then return through the existing screen link. The allowed full/short Persona name must immediately precede the optional localized side (買/賣/Buy/Sell) and exact short/full symbol. Extra name tokens separated by whitespace fail."
   },
   "before_after": {
     "kind": "synthetic offline reproduction; no hosted operational data or credentials",
@@ -42,51 +42,24 @@
         "locale": "zh-TW",
         "original_full_name_heading_matches": false,
         "repaired_heading_matches": true,
-        "before": ["journey_visible_object_scope", "journey_visible_source_reason"],
+        "before": [
+          "journey_visible_object_scope",
+          "journey_visible_source_reason"
+        ],
         "after": []
       },
       {
         "locale": "en-US",
         "original_full_name_heading_matches": false,
         "repaired_heading_matches": true,
-        "before": ["journey_visible_object_scope", "journey_visible_source_reason"],
+        "before": [
+          "journey_visible_object_scope",
+          "journey_visible_source_reason"
+        ],
         "after": []
       }
     ]
   },
-  "local_verification": [
-    {
-      "command": "timeout 90s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
-      "exit_code": 0,
-      "passed": 75,
-      "failed": 0,
-      "log_sha256": "e5cfadb15b50f7ea61e375169f695a7c595ea56221783c51c2c339d0611132fb",
-      "includes": "Both pipe styles, full and abbreviated bilingual titles, canonical current reason labels, literal regex metacharacters, wrong/prefix/suffix name, wrong symbol/exchange, incorrect API journey/persona/tenant/environment, original event and date, reason, all three amounts and broker flag negatives. Detail and timeline each reject wrong/missing/ambiguous scope, path and non-200 responses. Real Chromium selects only visible h1; correct identity elsewhere in main cannot rescue wrong/hidden headings. Existing navigation, keyboard, mobile, redaction, write guard and evidence budget tests retained."
-    },
-    {
-      "command": "timeout 240s npm test -- src/test/persona-strategy-hosted-readonly.test.ts",
-      "exit_code": 0,
-      "passed": 44,
-      "failed": 0,
-      "duration_seconds": 167.79,
-      "log_sha256": "963eff3c4fa0381eadb97b471fab33fcc496faffb4f5e1bb7d6b0d74a7eb0024",
-      "includes": "Original shared CLI regression including three actual intercepted Chromium viewer contexts, positive and blocked-write controls and full Persona/Journey roundtrips. Started on the anchor source; the final shortSymbol extension was separately verified below."
-    },
-    {
-      "command": "timeout 90s npx vitest run --maxWorkers=2 src/test/persona-strategy-hosted-readonly.test.ts -t 'completes full Trading Pulse acceptance roundtrips'",
-      "exit_code": 0,
-      "passed": 1,
-      "skipped": 43,
-      "failed": 0,
-      "duration_seconds": 20.30,
-      "log_sha256": "4f17eac6cb04d1bda22f62254d5ad7ddddf7b42d71e354694190c5b4abd6b53c",
-      "includes": "Final source: zh-TW 1440/390 and en-US 1440 real Chromium UI entry, named keyboard Persona navigation, entity GET, on-screen return, exact scoped detail/timeline GET and Journey return. No runtime redeployment."
-    },
-    {
-      "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs && node --check scripts/accept-trading-pulse-hosted-readonly.mjs && node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs && git diff --check",
-      "exit_code": 0
-    }
-  ],
   "hosted_acceptance": {
     "claimed": false,
     "owner_task": "TRADING-PULSE-HOSTED-ACCEPTANCE-20261122",
@@ -110,5 +83,120 @@
     "status": "pending independent exact-head review by Antigravity",
     "publication_order": "Allow the original PR-context Publish canonical review status job to finish naturally before any same-head independent review workflow; no auto-merge armed. Supervisor integration runner owns merge.",
     "dev_deployment_updated": false
-  }
+  },
+  "prior_verification": {
+    "source_head": "f4d91b3635a806e912fe500842aad6668927ae27",
+    "checks": [
+      {
+        "command": "timeout 90s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+        "exit_code": 0,
+        "passed": 75,
+        "failed": 0,
+        "log_sha256": "e5cfadb15b50f7ea61e375169f695a7c595ea56221783c51c2c339d0611132fb",
+        "includes": "Both pipe styles, full and abbreviated bilingual titles, canonical current reason labels, literal regex metacharacters, wrong/prefix/suffix name, wrong symbol/exchange, incorrect API journey/persona/tenant/environment, original event and date, reason, all three amounts and broker flag negatives. Detail and timeline each reject wrong/missing/ambiguous scope, path and non-200 responses. Real Chromium selects only visible h1; correct identity elsewhere in main cannot rescue wrong/hidden headings. Existing navigation, keyboard, mobile, redaction, write guard and evidence budget tests retained."
+      },
+      {
+        "command": "timeout 240s npm test -- src/test/persona-strategy-hosted-readonly.test.ts",
+        "exit_code": 0,
+        "passed": 44,
+        "failed": 0,
+        "duration_seconds": 167.79,
+        "log_sha256": "963eff3c4fa0381eadb97b471fab33fcc496faffb4f5e1bb7d6b0d74a7eb0024",
+        "includes": "Original shared CLI regression including three actual intercepted Chromium viewer contexts, positive and blocked-write controls and full Persona/Journey roundtrips. Started on the anchor source; the final shortSymbol extension was separately verified below."
+      },
+      {
+        "command": "timeout 90s npx vitest run --maxWorkers=2 src/test/persona-strategy-hosted-readonly.test.ts -t 'completes full Trading Pulse acceptance roundtrips'",
+        "exit_code": 0,
+        "passed": 1,
+        "skipped": 43,
+        "failed": 0,
+        "duration_seconds": 20.3,
+        "log_sha256": "4f17eac6cb04d1bda22f62254d5ad7ddddf7b42d71e354694190c5b4abd6b53c",
+        "includes": "Final source: zh-TW 1440/390 and en-US 1440 real Chromium UI entry, named keyboard Persona navigation, entity GET, on-screen return, exact scoped detail/timeline GET and Journey return. No runtime redeployment."
+      },
+      {
+        "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs && node --check scripts/accept-trading-pulse-hosted-readonly.mjs && node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs && git diff --check",
+        "exit_code": 0
+      }
+    ],
+    "scope": "Historical verification from the first delivery; not claimed as runs on the revised source."
+  },
+  "review_revision": {
+    "reopened_head": "f4d91b3635a806e912fe500842aad6668927ae27",
+    "source_anchor_commit": "2d65bfa12a0ff6f61587187c66c2e42b86a397c2",
+    "reviewer_finding": "Acceptance #2: a whitespace-extended different Persona h1 matched the short-name prefix and passed assessJourney despite a correct body. Name, optional side and symbol now form one anchored grammar.",
+    "old_source_regression": {
+      "command": "timeout 30s node --test --test-name-pattern='whitespace-extended Persona' scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "source_head": "f4d91b3635a806e912fe500842aad6668927ae27",
+      "exit_code": 1,
+      "passed": 0,
+      "failed": 2,
+      "log_sha256": "054ac955138a165cdef34cef31b0831add903d447c2950fd3c1b8d145f22c641"
+    },
+    "counterexample_method": "Synthetic offline fixtures, no hosted data. Import f4d91b363 source via git show + data URL with its one relative helper import changed to the local file URL; compare identical synthetic detail, event and main text to the revised source. Correct identity remains in main for every wrong h1.",
+    "counterexample_log_sha256": "bfe79456466a9287d203880375fc2243fb37ac8a89ee07a8414c490bd740e72b",
+    "counterexamples": [
+      {
+        "locale": "zh-TW",
+        "heading": "澄川 買 2317 7 股",
+        "before_matches": true,
+        "before": [],
+        "after_matches": true,
+        "after": []
+      },
+      {
+        "locale": "zh-TW",
+        "heading": "澄川 助理 買 2317 7 股",
+        "before_matches": true,
+        "before": [],
+        "after_matches": false,
+        "after": [
+          "journey_visible_object_scope"
+        ]
+      },
+      {
+        "locale": "en-US",
+        "heading": "離線甲 Buy 1234 7 shares",
+        "before_matches": true,
+        "before": [],
+        "after_matches": true,
+        "after": []
+      },
+      {
+        "locale": "en-US",
+        "heading": "離線甲 助理 Buy 1234 7 shares",
+        "before_matches": true,
+        "before": [],
+        "after_matches": false,
+        "after": [
+          "journey_visible_object_scope"
+        ]
+      }
+    ],
+    "exact_source_binding": "The artifact SHA-256 entries bind all verifier/test bytes tested here. The final evidence-only commit leaves those bytes unchanged; canonical handoff binds the final PR head and evidence blob."
+  },
+  "local_verification": [
+    {
+      "command": "timeout 90s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed": 77,
+      "failed": 0,
+      "log_sha256": "04b281964fc8bb3e97a3845d709f657b0fefb404152817fcc2835ff3933b259b",
+      "includes": "Short/full names, optional side and all four localized side labels, short/full symbols, whitespace-extended names after short AND full name, misplaced side/name tokens, bilingual synthetic counterexamples, actual Chromium rejects wrong visible h1 even with correct body; all previous detail/timeline scope, immutable identity/event/time/reason/amount, navigation, readonly and evidence-budget tests retained."
+    },
+    {
+      "command": "timeout 90s npx vitest run --maxWorkers=2 src/test/persona-strategy-hosted-readonly.test.ts -t 'completes full Trading Pulse acceptance roundtrips'",
+      "exit_code": 0,
+      "passed": 1,
+      "skipped": 43,
+      "failed": 0,
+      "duration_seconds": 20.19,
+      "log_sha256": "34cd97f95ca24f62631e517c4085dffb4e94b1b54e568d04d9c087db27a2918e",
+      "includes": "Revised source in existing CLI: three isolated Chromium viewport/locale runs (zh-TW desktop/mobile and en-US desktop), real screen entry, Persona entity GET, on-screen return, exact scoped HTTP 200 Journey detail/timeline and Journey return."
+    },
+    {
+      "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs && node --check scripts/accept-trading-pulse-hosted-readonly.mjs && node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs && git diff --check",
+      "exit_code": 0
+    }
+  ]
 }
