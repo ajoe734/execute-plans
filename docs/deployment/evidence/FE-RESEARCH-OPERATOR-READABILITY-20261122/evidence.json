@@ -1,0 +1,41 @@
+{
+  "task_id": "FE-RESEARCH-OPERATOR-READABILITY-20261122",
+  "work_package": "RC6 WP6.4 / FE-RISK-STRATEGY-RESEARCH-UI-20261120",
+  "prerequisite": "BFF-RESEARCH-TASK-VIEW-FILTER-20261122",
+  "baseline": "FE gate 45022061438 showed internal IDs from the reported rows and used legacy rx_201 for research detail, which returned 404.",
+  "verification": {
+    "research_view_tests": "64 tests passed in list, detail, discovery, and BFF list suites",
+    "typecheck": "npm run typecheck passed",
+    "build": "Vite strict live build passed",
+    "crawl_script": "Node syntax checks passed for the existing Management crawl and route catalog"
+  },
+  "owner_validation": {
+    "validated_on": "2026-11-22",
+    "integration_base_sha": "42813d3eeac17f211926e42d89cb7abf5d183a6f",
+    "implementation_commit": "63745a0cbd6b26be958d0e381f86bf59471d4314",
+    "pr": "https://github.com/ajoe734/execute-plans/pull/1067",
+    "prerequisite_status": "done; BFF PR #7747 approved head f736fe6d0a410505519465d178306ec077eaf1df merged into pantheon dev as d6f9592222341889b63cb9e775791cdafe88587c",
+    "checks": [
+      {
+        "command": "npm run test -- src/management/pages/ResearchList.test.tsx src/management/pages/ResearchDetail.test.tsx src/management/pages/ResearchDetail.discovery.test.tsx src/management/pages/ObjectListPage.test.tsx src/lib/bff-v1/__tests__/lists.test.ts",
+        "result": "5 files, 64 tests passed",
+        "exit_code": 0
+      },
+      {
+        "command": "npm run typecheck",
+        "exit_code": 0
+      },
+      {
+        "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+        "exit_code": 0
+      },
+      {
+        "command": "node --check scripts/accept-management-hosted-production.mjs && node --check scripts/lib/management-routes.mjs && git diff --check origin/dev...HEAD",
+        "exit_code": 0
+      }
+    ],
+    "scope": "Existing Research list/detail, recorded artifact links and parameters, read-only weekly Collector view, and canonical task discovery in the existing Management crawl.",
+    "hosted_behavior_claimed": false
+  },
+  "hosted_acceptance": "Pending paired deploy, authenticated browser clicks, and actual result link readback in EVOLUTION-RESEARCH-HOSTED-ACCEPT-20261104."
+}

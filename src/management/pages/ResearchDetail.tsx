@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,7 +16,8 @@ import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { DataTable } from "@/platform/components/DataTable";
+import { statusLabel } from "@/lib/enumLabels";
+import { collectorCheckStatus, isCollectorQueryPlan, isNonRealRun, researchTitle } from "./researchPresentation";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
 type ResearchExperimentLive = ResearchTask & {
@@ -33,12 +34,6 @@ type ResearchExperimentLive = ResearchTask & {
   deploymentStage?: string;
   deployment_stage?: string;
 };
-
-function isNonRealRun(adapter?: string, dispatchMode?: string): boolean {
-  const a = String(adapter ?? "").trim().toLowerCase();
-  const d = String(dispatchMode ?? "").trim().toLowerCase();
-  return a === "stub" || a === "manual" || d === "stub" || d === "manual";
-}
 
 type ResearchContext = {
   persona?: ManagementPersonaFleetRow;
@@ -118,11 +113,12 @@ export const ResearchDetail = () => {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [invalidateOpen, setInvalidateOpen] = useState(false);
 
+  const isResearch = Boolean(x && !isCollectorQueryPlan(x));
   useEffect(() => {
-    if (!id) return;
+    if (!id || !isResearch) return;
     bffV1.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research.")))).catch(() => {});
     mgmt.personaFleet.get().then(setFleetRows).catch(() => setFleetRows([]));
-  }, [id]);
+  }, [id, isResearch]);
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!x) {
@@ -157,11 +153,48 @@ export const ResearchDetail = () => {
       </>
     );
   }
+  const title = researchTitle(x, t);
+  if (isCollectorQueryPlan(x)) {
+    const changes = Object.entries(x.query_plan?.changes ?? {});
+    return (
+      <>
+        <PageHeader title={title} />
+        <PageBody>
+          <Link className="mb-4 inline-block text-sm text-primary underline" to="/management/experiments?view=collector_checks">
+            {t("research.collector.title")}
+          </Link>
+          <Section title={collectorCheckStatus(x, t)}>
+            {x.status === "proposed" && (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">{t("research.collector.reviewRequired")}</p>
+                {changes.length === 0 && <p className="text-sm">{t("research.collector.detailsUnavailable")}</p>}
+                {changes.map(([source, terms]) => (
+                  <div key={source} className="space-y-2">
+                    <h3 className="text-sm font-medium">{t("research.collector.sources." + source, { defaultValue: source })}</h3>
+                    <Field label={t("research.collector.before")} value={terms.before.join(", ")} />
+                    <Field label={t("research.collector.after")} value={terms.after.join(", ")} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+        </PageBody>
+      </>
+    );
+  }
+
   const researchContext = researchContextFor(x, fleetRows);
   const frameworks = researchContext.frameworks.length
     ? researchContext.frameworks
     : uniq([x.framework, ...(x.frameworks ?? [])]);
-  const folds: { id: string; fold: number; metric: number; samples: number }[] = [];
+  const lastRun = x.runs?.at(-1);
+  const outputIds = uniq([x.artifactId, ...(x.runs ?? []).flatMap((run) => run.artifactRefs ?? run.artifact_refs ?? [])]);
+  const recordedParameters = Object.entries({
+    symbol: present(lastRun?.parameters?.symbol),
+    sample_window: present(lastRun?.parameters?.sample_window),
+    folds: present(lastRun?.parameters?.folds),
+    seed: present(lastRun?.parameters?.seed),
+  }).filter((entry): entry is [string, string] => Boolean(entry[1]));
 
   const statusLower = (x.status ?? "").toLowerCase();
   const canCancel =
@@ -297,8 +330,8 @@ export const ResearchDetail = () => {
   return (
     <>
       <ObjectDetailLayout
-        object={x}
-        subtitle={x.id}
+        object={{ ...x, name: title }}
+        headerOmit={{ risk: true, state: true }}
         actions={
           <>
             {canCancel && (
@@ -337,7 +370,8 @@ export const ResearchDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label={t("table.status")} value={(x.status ?? "").toUpperCase()} />
+                  <StatCard label={t("research.table.latestRun")}
+                    value={lastRun ? statusLabel(lastRun.status, t) : t("research.noRunsYet")} />
                   <StatCard
                     label={t("research.table.runCount")}
                     value={String(x.runCount ?? x.run_count ?? (x.runs ? x.runs.length : 0))}
@@ -348,12 +382,42 @@ export const ResearchDetail = () => {
                   />
                   <StatCard
                     label={t("research.detail.taskType")}
-                    value={x.taskType || x.task_type || x.metric || "—"}
+                    value={t("research.taskTypes." + (x.taskType ?? x.task_type ?? ""), { defaultValue: notReported })}
                   />
                 </div>
-                <Section title={t("research.detail.objective")}>
-                  <p className="text-sm leading-relaxed">{x.objective || x.hypothesis || "—"}</p>
+                {(x.objective || x.hypothesis) && (
+                  <Section title={t("research.detail.objective")}>
+                    <p className="text-sm leading-relaxed">{x.objective || x.hypothesis}</p>
+                  </Section>
+                )}
+                <Section title={t("research.detail.results")}>
+                  {outputIds.length ? (
+                    <ul className="space-y-2">
+                      {outputIds.map((artifactId, index) => (
+                        <li key={artifactId}>
+                          <Link className="text-sm text-primary underline" to={"/management/artifacts/" + encodeURIComponent(artifactId)}>
+                            {t("research.detail.viewOutput", { number: index + 1 })}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("research.detail.noResults")}</p>
+                  )}
                 </Section>
+                {recordedParameters.length > 0 && (
+                  <Section title={t("research.detail.recordedParameters")}>
+                    <div className="grid grid-cols-2 gap-3">
+                      {recordedParameters.map(([key, value]) => (
+                        <Field key={key} label={t("research.detail.parameters." + key)} value={value} />
+                      ))}
+                    </div>
+                  </Section>
+                )}
+                <details className="text-sm text-muted-foreground">
+                  <summary className="cursor-pointer">{t("research.detail.technicalDetails")}</summary>
+                  <span className="break-all font-mono">{x.taskId ?? x.id}</span>
+                </details>
                 <DiscoverySections record={x} testId="research-discovery" />
                 <Section title={t("research.detail.runsTitle")}>
                   {Array.isArray(x.runs) && x.runs.length > 0 ? (
@@ -373,12 +437,7 @@ export const ResearchDetail = () => {
                             className="rounded-md border p-3 space-y-2"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-mono text-sm font-medium">{runId}</span>
-                                <Badge variant="outline" className="font-mono uppercase text-xs">
-                                  {run.status}
-                                </Badge>
-                              </div>
+                              <Badge variant="outline">{statusLabel(run.status, t)}</Badge>
                               {nonReal && (
                                 <Badge
                                   variant="outline"
@@ -388,13 +447,17 @@ export const ResearchDetail = () => {
                                 </Badge>
                               )}
                             </div>
-                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 text-xs">
-                              <Field label={t("research.detail.adapter")} value={adapter || "—"} mono />
-                              <Field label={t("research.detail.dispatchMode")} value={dispatchMode || "—"} mono />
-                              <Field label={t("research.detail.requestedMode")} value={requestedMode || "—"} mono />
-                              <Field label={t("research.detail.createdBy")} value={createdBy || "—"} mono />
-                              <Field label={t("research.detail.createdAt")} value={safeDateTime(createdAt)} mono />
-                            </div>
+                            <details className="text-xs text-muted-foreground">
+                              <summary className="cursor-pointer">{t("research.detail.technicalDetails")}</summary>
+                              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                                <Field label={t("research.detail.runId")} value={runId} mono />
+                                <Field label={t("research.detail.adapter")} value={present(adapter) ?? notReported} mono />
+                                <Field label={t("research.detail.dispatchMode")} value={present(dispatchMode) ?? notReported} mono />
+                                <Field label={t("research.detail.requestedMode")} value={present(requestedMode) ?? notReported} mono />
+                                <Field label={t("research.detail.createdBy")} value={present(createdBy) ?? notReported} mono />
+                                <Field label={t("research.detail.createdAt")} value={createdAt ? safeDateTime(createdAt) : notReported} mono />
+                              </div>
+                            </details>
                           </div>
                         );
                       })}
@@ -459,45 +522,6 @@ export const ResearchDetail = () => {
                   </div>
                 </Section>
               </>
-            ),
-          },
-          {
-            value: "metrics", label: t("table.metric"),
-            content: (
-              <DataTable rows={folds} columns={[
-                { key: "fold", header: "Fold", cell: (r) => <span className="text-mono text-xs">#{r.fold}</span> },
-                { key: "metric", header: x.metric, cell: (r) => <span className="text-mono text-xs">{(r.metric ?? 0).toFixed(3)}</span> },
-                { key: "samples", header: "Samples", cell: (r) => <span className="text-mono text-xs">{(r.samples ?? 0).toLocaleString()}</span> },
-              ]} />
-            ),
-          },
-          {
-            value: "artifacts", label: "Artifacts",
-            content: x.artifactId ? (
-              <Section>
-                <div
-                  className="flex items-center justify-between p-3 rounded-md bg-muted hover:bg-muted/70 cursor-pointer"
-                  onClick={() => navigate(`/management/artifacts/${x.artifactId}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <Package className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-mono text-sm">{x.artifactId}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">View →</span>
-                </div>
-              </Section>
-            ) : <Section><div className="text-sm text-muted-foreground text-center py-6">{t("common.noArtifactsYet")}</div></Section>,
-          },
-          {
-            value: "params", label: t("section.parameters"),
-            content: (
-              <Section>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <Field label="Sample window" value="2018-2025" mono />
-                  <Field label="Folds" value="5" mono />
-                  <Field label="Seed" value="42" mono />
-                </div>
-              </Section>
             ),
           },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
