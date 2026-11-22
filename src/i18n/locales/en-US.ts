@@ -302,6 +302,48 @@ export default {
       writebacksTitle: "Per-Participant Memory Writeback IDs",
       usageTitle: "Meeting Usage & Budget",
       noPrivateMemoryNote: "Private memory text never enters a round or console view; only writeback IDs are recorded.",
+      review: {
+        title: "Meeting Synthesis Review & Operator Disposition",
+        pendingBadge: "Pending Operator Review",
+        reviewedBadge: "Reviewed · Closed with No Proposal",
+        blockingReasonLabel: "Inbox Blocking Reason",
+        causeLabel: "Review / Synthesis Cause",
+        legacyUnknownCauseExplanation:
+          "This legacy meeting record did not store a detailed machine cause code (cause: unknown). The chair synthesis was recorded as REVIEW with zero proposals (0 proposals); inspect the actual deliberation rounds and shared case-file facts below to complete the review.",
+        specificCauseExplanationFmt:
+          "Recorded synthesis review cause: {{cause}}. This meeting closed in REVIEW with zero proposals (0 proposals); verify the deliberation transcript and shared case-file facts below.",
+        transcriptSummaryTitle: "Available Transcript & Case-File Summary",
+        transcriptSummaryStatsFmt:
+          "{{rounds}} deliberation round(s) ({{positions}} recorded position(s)), {{caseFiles}} shared case-file item(s), {{proposals}} proposal(s)",
+        transcriptEmpty: "No deliberation round positions were recorded for this meeting.",
+        evidenceTitle: "Evidence Citations & Case-File References",
+        evidenceEmpty: "No case-file citations or evidence references were recorded on this meeting.",
+        followUpTitle: "Need More Research? Convene a Follow-Up Meeting with Source Context",
+        followUpBody:
+          "If participants requested more research or you want a fresh deliberation, use the existing convene flow with this source meeting's context (type, chair/participants, and evidence refs). This path is separate from closing this review with no proposal and never runs automatically.",
+        followUpOpenCenter: "Open Convene Flow in Meetings Center",
+        followUpConveneNow: "Convene Follow-Up Meeting with Source Context",
+        followUpConvening: "Convening Follow-Up Meeting…",
+        followUpReceiptFmt: "Follow-up research meeting convened: {{id}} ({{status}})",
+        consequenceTitle: "Consequence Before Submission",
+        consequenceBodyFmt:
+          "Submitting records an operator review with disposition closed_no_proposal via the meeting review API and removes meeting_review:{{id}} from the pending Human Inbox queue. The original meeting outcome (REVIEW), chair synthesis, deliberation transcript, and zero proposals (0) remain intact.",
+        noteLabel: "Operator Review Note",
+        notePlaceholder:
+          "Record your review rationale and disposition note (e.g. two participants requested more research across two rounds; closing review with no proposal)…",
+        submitButton: "Close Review with No Proposal",
+        submittingButton: "Saving Review Disposition…",
+        errorPrefixFmt: "Failed to save meeting review: {{reason}}",
+        recordedTitle: "Persisted Operator Review Disposition",
+        recordedByLabel: "Reviewed By",
+        recordedAtLabel: "Reviewed At",
+        recordedDispositionLabel: "Disposition",
+        recordedNoteLabel: "Review Note",
+        recordedPreservedNote:
+          "This meeting has been removed from the pending Human Inbox queue; the original outcome (REVIEW), chair synthesis, transcript, and zero proposals remain intact.",
+        readOnlyNotice:
+          "Read-only view: you may inspect the synthesis review reason, deliberation transcript, shared case-file facts, and review status without write controls.",
+      },
     },
   },
   governanceDecisions: {
@@ -4525,6 +4567,9 @@ export default {
       decisionFailedFmt: "Decision failed: {{message}}",
       expandSummary: "Show more",
       collapseSummary: "Show less",
+      openMeetingReview: "Open meeting review",
+      meetingEvidenceEmpty:
+        "No evidence reference IDs were attached to this meeting record; open the meeting detail to inspect the deliberation rounds and chair synthesis.",
     },
     pulse: {
       title: "Trading Pulse",
@@ -5263,6 +5308,21 @@ export default {
       missing_meeting_id: "Missing meeting identifier",
       invalid_owner_response: "Invalid response from owner service",
       meeting_outcome_review: "Requires governance review",
+      synthesis_review_required:
+        "Meeting synthesis ended in REVIEW with no proposal and requires operator review disposition",
+      unknown: "No detailed legacy reason recorded (specific cause was not stored on this legacy record)",
+      closed_no_proposal: "Reviewed and closed with no proposal",
+      model_output_missing: "Model did not return a parseable synthesis output",
+      synthesis_empty: "Chair synthesis output was empty",
+      synthesis_unreadable: "Chair synthesis output could not be parsed",
+      invalid_json: "Synthesis output contained invalid JSON",
+      more_research_requested: "Participants requested additional research evidence",
+      review_note_required: "A non-empty operator review note is required",
+      review_note_too_long: "Operator review note exceeds the 2000-character limit",
+      meeting_already_reviewed: "This meeting review has already been recorded and cannot be overwritten",
+      meeting_not_in_review: "Only closed meetings with outcome REVIEW can record a review disposition",
+      insufficient_role: "Insufficient role: operator permission is required",
+      operator_required: "Authenticated operator identity is required to record a meeting review",
       proposal_waiting_for_operator: "Waiting for operator review",
       cooldown_active: "Meeting cooldown window is active",
       no_eligible_peers: "No eligible peer personas available",

@@ -92,6 +92,10 @@ export interface HumanInboxItem {
   comparator?: string;
   reviewId?: string;
   reviewType?: string;
+  meetingId?: string;
+  meetingType?: string;
+  unreadableReason?: string | null;
+  cause?: string | null;
   decisionHref?: string;
   allowedActions?: HumanInboxAllowedActions;
   /** Optional blocking reason when canProceed=false. */
@@ -163,4 +167,75 @@ export function humanInboxRank(kind: HumanInboxKind): number {
     case "approval": return 2;
     case "ask": return 1;
   }
+}
+
+export function meetingIdFromInboxItem(
+  item: Pick<HumanInboxItem, "id" | "kind" | "sourceId" | "reviewId" | "decisionHref" | "links"> & {
+    meetingId?: string;
+  },
+): string | undefined {
+  const explicit = item.meetingId?.trim();
+  if (explicit) return explicit;
+  const decodedId = (() => {
+    try {
+      return decodeURIComponent(item.id);
+    } catch {
+      return item.id;
+    }
+  })();
+  if (decodedId.startsWith("meeting_review:")) {
+    const rest = decodedId.slice("meeting_review:".length).trim();
+    if (rest) return rest;
+  }
+  if (item.kind === "meeting_review") {
+    for (const candidate of [item.sourceId, item.reviewId]) {
+      const clean = candidate?.trim();
+      if (clean) {
+        return clean.startsWith("meeting_review:")
+          ? clean.slice("meeting_review:".length).trim()
+          : clean;
+      }
+    }
+  }
+  for (const href of [item.decisionHref, item.links?.manageHref, item.links?.primaryObjectHref]) {
+    if (!href) continue;
+    const match = /\/management\/meetings\/([^/?#]+)/.exec(href);
+    if (match?.[1]) {
+      try {
+        return decodeURIComponent(match[1]);
+      } catch {
+        return match[1];
+      }
+    }
+  }
+  return undefined;
+}
+
+export function meetingReviewHrefFromInboxItem(
+  item: Pick<HumanInboxItem, "id" | "kind" | "sourceId" | "reviewId" | "decisionHref" | "links"> & {
+    meetingId?: string;
+  },
+): string | undefined {
+  const meetingId = meetingIdFromInboxItem(item);
+  if (meetingId) {
+    return `/management/meetings/${encodeURIComponent(meetingId)}`;
+  }
+  if (item.links?.manageHref?.startsWith("/management/meetings")) {
+    return item.links.manageHref;
+  }
+  return undefined;
+}
+
+export function meetingTypeFromInboxItem(
+  item: Pick<HumanInboxItem, "title" | "titleDisplay" | "rawTitle" | "summary"> & {
+    meetingType?: string;
+  },
+): string | undefined {
+  if (item.meetingType?.trim()) return item.meetingType.trim().toUpperCase();
+  for (const text of [item.titleDisplay, item.title, item.rawTitle, item.summary]) {
+    if (!text) continue;
+    const match = /\b(MT-[1-6])\b/i.exec(text);
+    if (match?.[1]) return match[1].toUpperCase();
+  }
+  return undefined;
 }
