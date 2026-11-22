@@ -668,6 +668,26 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
 });
 
 describe("Trading Pulse mode in the existing viewer runner", () => {
+  it("shares pair and strict auth checks while keeping each mode's extra posture requirements", () => {
+    const manifest = { frontendSha: PAIR.fe, bffCommit: PAIR.bff,
+      buildMode: { VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict" } };
+    const version = { source_commit_sha: PAIR.bff, config_posture: { auth_mode: "strict", auth_stub: false } };
+    const pulse = { mode: "trading-pulse" };
+    expect(cli.assessPair(manifest, version, PAIR, pulse).ok).toBe(true);
+    expect(cli.assessPair(manifest, version, PAIR).failures).toEqual(expect.arrayContaining([
+      "deploymentState mismatch", "root mismatch", "pairId mismatch", "mfa_required mismatch",
+    ]));
+    for (const options of [undefined, pulse]) {
+      expect(cli.assessPair({ ...manifest, frontendSha: "wrong" }, version, PAIR, options).failures).toContain("frontendSha mismatch");
+      expect(cli.assessPair({ ...manifest, bffCommit: "wrong" }, version, PAIR, options).failures).toContain("bffCommit mismatch");
+      expect(cli.assessPair(manifest, { ...version, source_commit_sha: "wrong" }, PAIR, options).failures).toContain("version.source_commit_sha mismatch");
+      expect(cli.assessPair(manifest, { ...version, config_posture: { auth_mode: "stub", auth_stub: true } }, PAIR, options).failures)
+        .toEqual(expect.arrayContaining(["auth_mode mismatch", "auth_stub mismatch"]));
+    }
+    expect(cli.assessPair({ ...manifest, buildMode: {} }, version, PAIR, pulse).failures)
+      .toEqual(["VITE_BFF_MODE mismatch", "VITE_BFF_FALLBACK mismatch"]);
+  });
+
   it("routes the actual process entry without circular-import deadlock and returns terminal input exits", () => {
     for (const [options, error] of [
       [["--mode", "trading-pulse"], "viewer GUI credentials"],
@@ -697,7 +717,7 @@ describe("Trading Pulse mode in the existing viewer runner", () => {
     expect(helper).not.toContain("chromium.launch");
   });
 
-  it("runs all three real Chromium viewer sessions through shared mode without hosted writes", async () => {
+  it.each([false, true])("runs three real Chromium viewer sessions through shared mode (blocked attempts=%s)", async (attemptWrites) => {
     const FE = "https://app.dev.mvl-cap.tw", BFF = "https://api.dev.mvl-cap.tw";
     const fe = "a".repeat(40), bff = "b".repeat(40);
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "shared-pulse-fixture-"));
@@ -713,6 +733,7 @@ describe("Trading Pulse mode in the existing viewer runner", () => {
         const api = '${BFF}';
         document.querySelector('button').onclick = async () => {
           await fetch(api+'/bff/auth/dev-login', {method:'POST',body:JSON.stringify({client_id:document.querySelector('#dev-account').value,client_secret:document.querySelector('#dev-password').value})});
+          ${attemptWrites ? "await fetch(api+'/bff/strategies', {method:'POST',body:'{}'}).catch(()=>{}); await fetch('https://foreign.invalid/probe').catch(()=>{});" : ""}
         };
         document.querySelector('a').onclick = async (e) => {
           e.preventDefault(); history.pushState({},'', '/management/trading-pulse');
@@ -751,7 +772,10 @@ describe("Trading Pulse mode in the existing viewer runner", () => {
       expect(result.out.mode).toBe("baseline_failure_record_only");
       expect(result.out.pass).toBe(false);
       expect(result.out.pair_before).toEqual(result.out.pair_after);
-      expect(result.out.blocked_writes).toEqual([]);
+      expect(result.out.blocked_writes).toEqual(attemptWrites ? Array.from({ length: 3 }, () => [
+        { method: "POST", path: "/bff/strategies", foreign_origin: false },
+        { method: "GET", path: "/probe", foreign_origin: true },
+      ]).flat() : []);
       expect(result.out.runs.every((r: any) => r.entry === "sidebar" && r.checks.includes("masked_screenshot") === (r.locale === "zh-TW"))).toBe(true);
       expect(result.out.failures.join(" ")).toContain("missing_current_roster_witness");
       expect(result.out.failures.join(" ")).toContain("missing_historical_event_witness");

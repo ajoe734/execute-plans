@@ -269,18 +269,24 @@ export function validateInput(input, { isAllowedOrigin = isPantheonHttpsOrigin }
   return { baseline, personaPath };
 }
 
-export function assessPair(manifest, version, expected) {
+export function assessPair(manifest, version, expected, { mode = "persona-strategy" } = {}) {
   const failures = [];
   const eq = (label, a, b) => a !== b && failures.push(`${label} mismatch`);
-  eq("deploymentState", manifest?.deploymentState, "accepted");
   eq("frontendSha", manifest?.frontendSha, expected.fe);
   eq("bffCommit", manifest?.bffCommit, expected.bff);
   eq("version.source_commit_sha", version?.source_commit_sha, expected.bff);
-  eq("root", String(manifest?.releaseAdmission?.controller?.runId), String(expected.root));
-  eq("pairId", manifest?.pairId, expected.pair);
   eq("auth_mode", version?.config_posture?.auth_mode, "strict");
   eq("auth_stub", version?.config_posture?.auth_stub, false);
-  eq("mfa_required", version?.config_posture?.mfa_required, false);
+  if (mode === "trading-pulse") {
+    eq("VITE_BFF_MODE", manifest?.buildMode?.VITE_BFF_MODE, "live");
+    eq("VITE_BFF_FALLBACK", manifest?.buildMode?.VITE_BFF_FALLBACK, "strict");
+  } else {
+    assert.equal(mode, "persona-strategy", "invalid QA mode");
+    eq("deploymentState", manifest?.deploymentState, "accepted");
+    eq("root", String(manifest?.releaseAdmission?.controller?.runId), String(expected.root));
+    eq("pairId", manifest?.pairId, expected.pair);
+    eq("mfa_required", version?.config_posture?.mfa_required, false);
+  }
   return {
     ok: failures.length === 0,
     failures,
@@ -367,6 +373,26 @@ async function loadChromium() {
   throw new Error("Playwright package not resolvable (install playwright or @playwright/test)");
 }
 
+async function guardedLogin(page, profile, { api, timeout = THRESHOLDS.navigation_timeout_ms } = {}) {
+  await page.locator("#dev-account").fill(profile.client_id, { timeout });
+  await page.locator("#dev-password").fill(profile.client_secret);
+  const login = page.waitForResponse((r) => {
+    const url = new URL(r.url());
+    return (!api || url.origin === api) && url.pathname === "/bff/auth/dev-login" && r.request().method() === "POST";
+  }, { timeout });
+  return { login, click: () => page.getByRole("button", { name: "Sign in", exact: true }).click() };
+}
+
+function installReadOnlyGuard(ctx, API, { onBlockedWrite, allowedOrigins }) {
+  return ctx.route(allowedOrigins ? "**/*" : API + "/**", async (route) => {
+    const req = route.request(), url = new URL(req.url());
+    const foreign = allowedOrigins && !allowedOrigins.includes(url.origin);
+    if (!foreign && classifyRequest(req.method(), url.pathname) === "allow") return route.continue();
+    onBlockedWrite({ method: req.method(), path: url.pathname, ...(allowedOrigins ? { foreign_origin: Boolean(foreign) } : {}) });
+    return route.abort("blockedbyclient");
+  });
+}
+
 // Fold every observation that arrived up to session shutdown (incl. during logout/close) into row.errors,
 // so row.pass is derived from the FINAL state, never from a pre-logout snapshot.
 export function foldFinalObservations(row, label) {
@@ -435,13 +461,7 @@ export function observe(ctx, page, row, API, { onBlockedWrite }) {
       row.failed_api_requests.push(e);
     }
   });
-  return { state, install: () => ctx.route(API + "/**", async (route) => {
-    const req = route.request();
-    const pathname = new URL(req.url()).pathname;
-    if (classifyRequest(req.method(), pathname) === "allow") return route.continue();
-    onBlockedWrite({ method: req.method(), path: pathname });
-    return route.abort("blockedbyclient");
-  }) };
+  return { state, install: () => installReadOnlyGuard(ctx, API, { onBlockedWrite }) };
 }
 
 const newRow = (redact) => {
@@ -504,12 +524,6 @@ export async function run(input, deps = {}) {
     assert.ok(assessed.ok, `pair ${label}: ${assessed.failures.join(", ")}`);
     return assessed.identity;
   }
-  const guardedLogin = async (page, profile, row) => {
-    await page.locator("#dev-account").fill(profile.client_id, { timeout: THRESHOLDS.navigation_timeout_ms });
-    await page.locator("#dev-password").fill(profile.client_secret);
-    const login = page.waitForResponse((r) => new URL(r.url()).pathname === "/bff/auth/dev-login" && r.request().method() === "POST", { timeout: THRESHOLDS.navigation_timeout_ms });
-    return { login, click: () => page.getByRole("button", { name: "Sign in", exact: true }).click(), row };
-  };
 
   // ---- Phase 1: four-role sequential real GUI protocol
   async function runProfile(name) {
@@ -521,7 +535,7 @@ export async function run(input, deps = {}) {
     await obs.install();
     try {
       await page.goto(WEB + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-      const step = await guardedLogin(page, profile, row);
+      const step = await guardedLogin(page, profile);
       const firstFleet = page
         .waitForResponse((r) => new URL(r.url()).pathname === FLEET_PATH && r.request().method() === "GET", { timeout: THRESHOLDS.navigation_timeout_ms })
         .then(async (response) => {
@@ -647,7 +661,7 @@ export async function run(input, deps = {}) {
     };
     try {
       await page.goto(WEB + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-      const step = await guardedLogin(page, profile, row);
+      const step = await guardedLogin(page, profile);
       await step.click();
       S.gui_login_status = (await step.login).status();
       assert.equal(S.gui_login_status, 200, "admin batch GUI login");
@@ -772,7 +786,7 @@ export async function run(input, deps = {}) {
     };
     try {
       await page.goto(WEB + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-      const step = await guardedLogin(page, profile, row);
+      const step = await guardedLogin(page, profile);
       await step.click();
       row.ui_login_status = (await step.login).status();
       assert.equal(row.ui_login_status, 200, "supplementary GUI login");
@@ -943,13 +957,8 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
   };
   const pair = async () => {
     const [m, v] = await Promise.all([publicRead(FE + "/deployment.json"), publicRead(BFF + "/bff/version")]);
-    assert.equal(m.frontendSha, input.expected.fe, "FE changed");
-    assert.equal(m.bffCommit, input.expected.bff, "paired BFF changed");
-    assert.equal(v.source_commit_sha, input.expected.bff, "actual BFF changed");
-    assert.equal(v.config_posture?.auth_mode, "strict", "strict auth");
-    assert.equal(v.config_posture?.auth_stub, false, "no stub");
-    assert.equal(m.buildMode?.VITE_BFF_MODE, "live", "live mode");
-    assert.equal(m.buildMode?.VITE_BFF_FALLBACK, "strict", "strict fallback");
+    const assessed = assessPair(m, v, input.expected, { mode: "trading-pulse" });
+    assert.ok(assessed.ok, `pair: ${assessed.failures.join(", ")}`);
     return { fe: m.frontendSha, bff: v.source_commit_sha, pair: m.pairId, deployment_state: m.deploymentState,
       hosted_write_flag: m.buildMode?.VITE_BFF_REAL_WRITES, probe_business_writes: "blocked" };
   };
@@ -966,15 +975,8 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
       };
       page.on("pageerror", (e) => run.failures.push(`render: ${redact(e.message)}`));
       await context.addInitScript((l) => localStorage.setItem("pantheon.locale", l), locale);
-      await context.route("**/*", async (route) => {
-        const req = route.request(), u = new URL(req.url());
-        const allowedOrigin = [FE, BFF].includes(u.origin);
-        if (!allowedOrigin || classifyRequest(req.method(), u.pathname) === "block") {
-          report.blocked_writes.push({ method: req.method(), path: u.pathname, foreign_origin: !allowedOrigin });
-          return route.abort("blockedbyclient");
-        }
-        return route.continue();
-      });
+      await installReadOnlyGuard(context, BFF, { allowedOrigins: [FE, BFF],
+        onBlockedWrite: (write) => report.blocked_writes.push(write) });
       page.on("response", (res) => {
         const u = new URL(res.url());
         if (u.origin !== BFF || !u.pathname.startsWith("/bff/")) return;
@@ -986,11 +988,9 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
       });
       try {
         await page.goto(FE + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-        await page.locator("#dev-account").fill(input.profile.client_id);
-        await page.locator("#dev-password").fill(input.profile.client_secret);
-        const login = page.waitForResponse((r) => r.url() === BFF + "/bff/auth/dev-login" && r.request().method() === "POST");
-        await page.getByRole("button", { name: "Sign in", exact: true }).click();
-        assert.equal((await login).status(), 200, "GUI login");
+        const step = await guardedLogin(page, input.profile, { api: BFF, timeout: TIMEOUT });
+        await step.click();
+        assert.equal((await step.login).status(), 200, "GUI login");
         authenticated = true;
         const me = unwrap(await browserRead(page, "/bff/me"));
         const roles = me.roles ?? me.user?.roles ?? [];
