@@ -5,6 +5,7 @@
  */
 import { chromium } from "@playwright/test";
 import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -664,4 +665,103 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     expect(out.strategy.data_sources.pass).toBe(true);
     expect(out.profiles.TEST_ADMIN.errors).toEqual([]);
   }, 120_000);
+});
+
+describe("Trading Pulse mode in the existing viewer runner", () => {
+  it("routes the actual process entry without circular-import deadlock and returns terminal input exits", () => {
+    for (const [options, error] of [
+      [["--mode", "trading-pulse"], "viewer GUI credentials"],
+      [[], "profiles"],
+      [["--record-baseline"], "requires trading-pulse mode"],
+    ] as [string[], string][]) {
+      const child = spawnSync(process.execPath, ["scripts/accept-persona-strategy-hosted-readonly.mjs", "--out-dir", "/unused", ...options], {
+        input: "{}", encoding: "utf8", timeout: 10_000,
+      });
+      expect(child.error).toBeUndefined();
+      expect(child.status).toBe(2);
+      expect(child.stderr).toContain(error);
+      expect(child.stderr).not.toContain("unsettled top-level await");
+    }
+  });
+  it("keeps the original default and rejects ambiguous modes/options", async () => {
+    expect(cli.parseArgs(["--out-dir", "/private"])).toEqual({ outDir: "/private", mode: "persona-strategy", baseline: false });
+    expect(cli.parseArgs(["--mode", "trading-pulse", "--out-dir", "/private", "--record-baseline"])).toEqual({ outDir: "/private", mode: "trading-pulse", baseline: true });
+    for (const args of [["--out-dir"], ["--out-dir", "/x", "--mode", "other"],
+      ["--out-dir", "/x", "--record-baseline"], ["--out-dir", "/x", "--out-dir", "/y"], ["--unknown", "/x"]]) {
+      expect(() => cli.parseArgs(args)).toThrow();
+    }
+    await expect(cli.run({}, { mode: "trading-pulse", outDir: "/unused" })).rejects.toThrow("viewer GUI credentials");
+    await expect(cli.run({}, { outDir: "/unused" })).rejects.toThrow("profiles");
+    const helper = fs.readFileSync("scripts/accept-trading-pulse-hosted-readonly.mjs", "utf8");
+    expect(helper).not.toContain("process.argv");
+    expect(helper).not.toContain("chromium.launch");
+  });
+
+  it("runs all three real Chromium viewer sessions through shared mode without hosted writes", async () => {
+    const FE = "https://app.dev.mvl-cap.tw", BFF = "https://api.dev.mvl-cap.tw";
+    const fe = "a".repeat(40), bff = "b".repeat(40);
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "shared-pulse-fixture-"));
+    const browser = await chromium.launch({ headless: true });
+    const credentials = { client_id: "offline-viewer", client_secret: "offline-viewer-secret" };
+    const logins: unknown[] = [], viewports: unknown[] = [];
+    const manifest = { frontendSha: fe, bffCommit: bff, pairId: "offline-pair", deploymentState: "accepted",
+      buildMode: { VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict", VITE_BFF_REAL_WRITES: "false" } };
+    const version = { source_commit_sha: bff, config_posture: { auth_mode: "strict", auth_stub: false } };
+    const html = `<html><body><header>Private session</header><nav><a href="/management/trading-pulse">交易脈動 Trading Pulse</a></nav>
+      <main><h1>Persona Fleet</h1><input id="dev-account"><input id="dev-password"><button>Sign in</button></main>
+      <script>
+        const api = '${BFF}';
+        document.querySelector('button').onclick = async () => {
+          await fetch(api+'/bff/auth/dev-login', {method:'POST',body:JSON.stringify({client_id:document.querySelector('#dev-account').value,client_secret:document.querySelector('#dev-password').value})});
+        };
+        document.querySelector('a').onclick = async (e) => {
+          e.preventDefault(); history.pushState({},'', '/management/trading-pulse');
+          await fetch(api+'/bff/management/trading-pulse');
+          document.querySelector('main').innerHTML = '<h1>'+ (localStorage.getItem('pantheon.locale') === 'en-US' ? 'Trading Pulse' : '交易脈動') +'</h1><details><summary>資料診斷 Diagnostics</summary><p>rt-offline</p></details>';
+          await fetch(api+'/bff/management/trading-pulse/rankings');
+        };
+      </script></body></html>`;
+    // Preserve the runner's route guard; fulfill only requests it explicitly allows.
+    // All fixture traffic is intercepted before network; no real credentials or BFF.
+    const fixtureChromium = { launch: async () => ({
+      newContext: async (options: any) => {
+        viewports.push({ locale: options.locale, width: options.viewport.width });
+        const ctx = await browser.newContext(options), install = ctx.route.bind(ctx);
+        ctx.route = async (pattern: any, guard: any) => install(pattern, async (route: any) => guard({
+          request: () => route.request(), abort: (reason: string) => route.abort(reason),
+          continue: async () => {
+            const request = route.request(), url = new URL(request.url());
+            expect([FE, BFF]).toContain(url.origin);
+            if (url.pathname === "/bff/auth/dev-login") logins.push(request.postDataJSON());
+            if (url.origin === FE) return route.fulfill({ contentType: "text/html; charset=utf-8", body: html });
+            const body = url.pathname === "/bff/me" ? { data: { tenant_id: "offline-tenant", roles: ["viewer"] } } : { data: {} };
+            return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+          },
+        }));
+        return ctx;
+      }, close: () => browser.close(),
+    }) };
+    try {
+      const result = await cli.run({ profile: credentials, expected: { fe, bff, tenant_id: "offline-tenant" } }, {
+        mode: "trading-pulse", baseline: true, outDir, chromium: fixtureChromium,
+        fetchImpl: async (url: string) => ({ status: 200, json: async () => url === FE + "/deployment.json" ? manifest : version }),
+      });
+      expect(logins).toEqual([credentials, credentials, credentials]);
+      expect(viewports).toEqual([{ locale: "zh-TW", width: 1440 }, { locale: "zh-TW", width: 390 }, { locale: "en-US", width: 1440 }]);
+      expect(result.out.mode).toBe("baseline_failure_record_only");
+      expect(result.out.pass).toBe(false);
+      expect(result.out.pair_before).toEqual(result.out.pair_after);
+      expect(result.out.blocked_writes).toEqual([]);
+      expect(result.out.runs.every((r: any) => r.entry === "sidebar" && r.checks.includes("masked_screenshot") === (r.locale === "zh-TW"))).toBe(true);
+      expect(result.out.failures.join(" ")).toContain("missing_current_roster_witness");
+      expect(result.out.failures.join(" ")).toContain("missing_historical_event_witness");
+      const files = fs.readdirSync(result.dir);
+      expect(files.sort()).toEqual(["desktop.png", "narrow.png", "summary.json"]);
+      expect(result.out.evidence.bytes).toBe(files.reduce((n, f) => n + fs.statSync(path.join(result.dir, f)).size, 0));
+      expect(result.out.evidence.bytes).toBeLessThanOrEqual(5 * 1024 * 1024);
+      expect(fs.readFileSync(path.join(result.dir, "summary.json"), "utf8")).not.toContain(credentials.client_secret);
+    } finally {
+      await browser.close(); fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

@@ -5,7 +5,8 @@
  * protocol WITHOUT changing any original threshold, sample count, check or diff rule.
  * It is a caller-run tool: the protected original dev workflow supplies credentials,
  * the exact expected pair, source-owner inventory and the ORIGINAL baseline as one
- * JSON document on stdin. Nothing is read from env/files/argv except `--out-dir`.
+ * JSON document on stdin. Credentials are never read from env/files/argv;
+ * argv selects only the output directory, mode and baseline option.
  *
  *   node scripts/accept-persona-strategy-hosted-readonly.mjs --out-dir <private-dir> < input.json
  *
@@ -41,6 +42,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import * as pulseHelpers from "./accept-trading-pulse-hosted-readonly.mjs";
 
 export const ROLE_ORDER = Object.freeze(["TEST_ADMIN", "OPERATOR_A", "OPERATOR_B", "VIEWER"]);
 export const ALLOWED_WRITE_PATHS = Object.freeze([
@@ -911,7 +913,7 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
   const { FE, BFF, PULSE, digest, validateInput: validatePulseInput, browserRead, readObservedJson,
     enterPulseViaScreen, snapshotPage, assessOverview, assessWire, keyboardActivate,
     assessPersona, assessJourney, returnViaScreen, safeTarget, writeEvidence } =
-    await import("./accept-trading-pulse-hosted-readonly.mjs");
+    pulseHelpers;
   const TIMEOUT = 20_000;
   const string = (v) => typeof v === "string" && v.trim().length > 0;
   const unwrap = (v) => v?.data ?? v;

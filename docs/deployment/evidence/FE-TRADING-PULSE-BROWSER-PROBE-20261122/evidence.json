@@ -6,22 +6,34 @@
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-TRADING-PULSE-BROWSER-PROBE-20261122",
-  "problem_register": { "root_cause_class": "RC6", "work_package": "WP6.5" },
-  "delivery_scope": "Independent caller-run read-only browser probe, offline positive/negative controls, and measured legacy baseline. Successful repaired-page source comparison and journey roundtrip belong to TRADING-PULSE-HOSTED-ACCEPTANCE-20261122 (E).",
+  "problem_register": {
+    "root_cause_class": "RC6",
+    "work_package": "WP6.5"
+  },
+  "delivery_scope": "Trading Pulse viewer mode of the existing hosted read-only runner, page assertions/helpers, offline controls and retained measured legacy baseline. E owns repaired-page full proof.",
   "artifacts": {
     "cli": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
-      "sha256": "3b4c7e211d9af18c9b9434b92024fcf41a7bef034dc87d0dec3f5695ef712c68"
+      "sha256": "e343f195eab6aa7bdf554aefaa217e00f87fc120718554441e82ddecd68d4ae0",
+      "role": "Page assertions/helpers only; no executable CLI or browser orchestration remains."
     },
     "tests": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
       "sha256": "c9207344b46396b61640181566cf63b946db14178f2ca808b37a52e3f522c296"
+    },
+    "runner": {
+      "path": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+      "sha256": "0338da866a173ccf0e9de2b6b6c839a112ed1ea26203d30bf2f376b6894095a0"
+    },
+    "runner_tests": {
+      "path": "src/test/persona-strategy-hosted-readonly.test.ts",
+      "sha256": "4c8c813a5df692a842424132dfd145383c214114bec7caf4c6b8909afae59b7a"
     }
   },
   "commands": {
-    "acceptance": "node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir <private-dir> < <private-input.json>",
-    "legacy_baseline": "node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir <private-dir> --record-baseline < <private-input.json>",
-    "input_contract": "See the CLI header. Credentials arrive on stdin and stay in RAM. Normal acceptance requires fresh independent same-tenant registry/ledger facts plus a separately sourced immutable rejection event. Baseline mode always fails and cannot establish acceptance."
+    "acceptance": "node scripts/accept-persona-strategy-hosted-readonly.mjs --mode trading-pulse --out-dir <private-dir> < <private-input.json>",
+    "legacy_baseline": "node scripts/accept-persona-strategy-hosted-readonly.mjs --mode trading-pulse --out-dir <private-dir> --record-baseline < <private-input.json>",
+    "input_contract": "See the page helper header for viewer-only stdin credentials, fresh independent current owner witness and separate immutable historical event. The original four-profile mode remains the default, with its existing input and thresholds. Baseline always exits 1 and cannot establish acceptance."
   },
   "local_verification": [
     {
@@ -31,9 +43,31 @@
       "failed": 0,
       "includes": "Real Chromium 1255 DOM: 390px clipping counterexample and repair, diagnostics hidden/expanded, actual Tab/Enter activation, on-screen return and Ctrl+K mobile command-palette entry; exclusion of open SSE and unrelated JSON bodies, scoped JSON capture and unfinished-body timeout; synthetic current zero/unknown/negative values, source scope and coverage, cross-tenant/wrong-event/wrong-object rejection, empty/hash/foreign/unfiltered/hidden links, write policy, redaction and evidence budget. No synthetic fixture is sent to hosted BFF."
     },
-    { "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs", "exit_code": 0 },
-    { "command": "node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs", "exit_code": 0 },
-    { "command": "git diff --check", "exit_code": 0 }
+    {
+      "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+      "exit_code": 0,
+      "passed": 3,
+      "skipped": 38,
+      "includes": "Actual Node CLI subprocess dispatch/exit2 negative controls (no circular top-level-await deadlock), option/input validation, and all three real Chromium synthetic viewer sessions through the shared runner. Each context passes same tenant/viewer-only verification and read-only request guard, browser navigation and evidence cap. All fixture traffic intercepted; not hosted proof."
+    },
+    {
+      "command": "timeout 180s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1",
+      "exit_code": 0,
+      "passed": 40,
+      "scope": "Initial shared-runner version: original 38 cases plus two new mode tests; followed by static import fix and actual-process regression. Final full-suite rerun collecting terminal output."
+    }
   ],
   "independent_owner_context": {
     "private_path": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/.orchestrator/assistant-dev-packets/sources/trading-pulse-operator-readability-20261122/owner-witness-20261122.json",
@@ -76,9 +110,30 @@
     },
     "browser_identity": "Three isolated contexts used normal GUI login and verified the expected tenant plus viewer role, excluding admin/operator. No credentials or raw identities are in this manifest.",
     "runs": [
-      { "locale": "zh-TW", "width": 1440, "entry": "sidebar", "table_width": 1088, "row_entries": 4, "entries_outside_viewport": 0 },
-      { "locale": "zh-TW", "width": 390, "entry": "command_palette", "table_width": 1040, "row_entries": 4, "entries_outside_viewport": 4 },
-      { "locale": "en-US", "width": 1440, "entry": "sidebar", "table_width": 1088, "row_entries": 4, "entries_outside_viewport": 0 }
+      {
+        "locale": "zh-TW",
+        "width": 1440,
+        "entry": "sidebar",
+        "table_width": 1088,
+        "row_entries": 4,
+        "entries_outside_viewport": 0
+      },
+      {
+        "locale": "zh-TW",
+        "width": 390,
+        "entry": "command_palette",
+        "table_width": 1040,
+        "row_entries": 4,
+        "entries_outside_viewport": 4
+      },
+      {
+        "locale": "en-US",
+        "width": 1440,
+        "entry": "sidebar",
+        "table_width": 1088,
+        "row_entries": 4,
+        "entries_outside_viewport": 0
+      }
     ],
     "observed_page_failures": [
       "Source runtime IDs and engineering diagnostics are visible by default in all three runs.",
@@ -96,9 +151,21 @@
       "bytes": 196259,
       "max_bytes": 5242880,
       "files": [
-        { "file": "summary.json", "bytes": 11649, "sha256": "c50248c876ff2699ab8a589f55eb495bff1b8890387a1205e7e48ba80d302c77" },
-        { "file": "desktop.png", "bytes": 125425, "sha256": "b99706eb24a013ce5c89468abe478512d69d5a8c5dbf315abe02339dca5576de" },
-        { "file": "narrow.png", "bytes": 59185, "sha256": "8eac4048995d8f1748134d0c72cb953dcbe15907ace588b6bea1ce4bffada951" }
+        {
+          "file": "summary.json",
+          "bytes": 11649,
+          "sha256": "c50248c876ff2699ab8a589f55eb495bff1b8890387a1205e7e48ba80d302c77"
+        },
+        {
+          "file": "desktop.png",
+          "bytes": 125425,
+          "sha256": "b99706eb24a013ce5c89468abe478512d69d5a8c5dbf315abe02339dca5576de"
+        },
+        {
+          "file": "narrow.png",
+          "bytes": 59185,
+          "sha256": "8eac4048995d8f1748134d0c72cb953dcbe15907ace588b6bea1ce4bffada951"
+        }
       ],
       "privacy": "Top session header and side navigation masked; source IDs masked. Inspected screenshots and retained no raw browser state, credentials, traces or API bodies.",
       "routine_daily_growth_bytes": 0
@@ -134,5 +201,13 @@
     "source_merged": false,
     "dev_deployed": false,
     "hosted_accepted": false
+  },
+  "shared_runner_verification": {
+    "status": "pending_coordinator_real_viewer_execution",
+    "mode": "trading-pulse",
+    "entry": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+    "scope": "Confirm existing runner mode executes using the existing real dev viewer. Retained old exact stable baseline is unchanged; E does the repaired-pair full proof.",
+    "terminal_exit_code": null,
+    "implementation": "Existing CLI owns mode dispatch, stdin/exit handling, Playwright loader and all browser/session orchestration; page-specific module exports assertions and helpers only. Existing original four-role mode is unchanged by default. Static helper loading avoids actual-process top-level-await circular import."
   }
 }
