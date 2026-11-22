@@ -1,0 +1,75 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADING-PULSE-BROWSER-PROBE-20261122",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADING-PULSE-BROWSER-PROBE-20261122",
+  "problem_register": { "root_cause_class": "RC6", "work_package": "WP6.5" },
+  "delivery_scope": "Independent caller-run read-only browser probe, offline positive/negative controls, and measured legacy baseline. Successful repaired-page source comparison and journey roundtrip belong to TRADING-PULSE-HOSTED-ACCEPTANCE-20261122 (E).",
+  "artifacts": {
+    "cli": {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
+      "sha256": "00390d3c5c0ed2ea8a46de43ee0168fcd6999c336edfd241fa5ad317aba3ddc6"
+    },
+    "tests": {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "sha256": "effe7605c21897e1bc028257eca9d4a2edb34444f713305543735efe280a2de2"
+    }
+  },
+  "commands": {
+    "acceptance": "node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir <private-dir> < <private-input.json>",
+    "legacy_baseline": "node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir <private-dir> --record-baseline < <private-input.json>",
+    "input_contract": "See the CLI header. Credentials arrive on stdin and stay in RAM. Normal acceptance requires fresh independent same-tenant registry/ledger facts plus a separately sourced immutable rejection event. Baseline mode always fails and cannot establish acceptance."
+  },
+  "local_verification": [
+    {
+      "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed": 36,
+      "failed": 0,
+      "includes": "Real Chromium 1255 DOM: 390px clipping counterexample and repair, diagnostics hidden/expanded, actual Tab/Enter activation and on-screen return; synthetic current zero/unknown/negative values, source scope and coverage, cross-tenant/wrong-event/wrong-object rejection, empty/hash/foreign/unfiltered/hidden links, write policy, redaction and evidence budget. No synthetic fixture is sent to hosted BFF."
+    },
+    { "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs", "exit_code": 0 },
+    { "command": "node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs", "exit_code": 0 },
+    { "command": "git diff --check", "exit_code": 0 }
+  ],
+  "independent_owner_context": {
+    "private_path": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/.orchestrator/assistant-dev-packets/sources/trading-pulse-operator-readability-20261122/owner-witness-20261122.json",
+    "sha256": "8eccfe73f04e04c049797ce7151a222e495443b3e65cef167bb01b89884369f8",
+    "captured_at": "2026-11-22T13:15:36.892690+00:00",
+    "verified_by": "Human/Ops coordinator; read independently from registry, runtime bindings, telemetry and scoped historical journey",
+    "observations": "Four active bindings: one marked test plus three business Personas. The 2317 case has zero ledger fills, unknown PnL, and current measured quantity 0/452; its separate immutable paper journey matches the telemetry event. Two other business Personas have a ledger fill and negative PnL. Currency and comparable period must be established from authoritative fresh reads before any aggregate acceptance.",
+    "use": "Coordination provenance only; not a fabricated complete acceptance input, a copy of Trading Pulse, or a permanent numeric snapshot. E must refresh the current witness within the CLI's 15-minute window."
+  },
+  "legacy_baseline": {
+    "status": "authorized_gui_rerun_in_progress",
+    "private_parent": "/tmp/trading-pulse-rc6-baseline.sZZagX",
+    "excluded_attempt": {
+      "started_at": "2026-11-22T13:18:52.900Z",
+      "outcome": "Missing Chromium 1255 executable before any browser run; not measured UI failure evidence.",
+      "remediation": "timeout 180s npx playwright install chromium completed exit 0; Chromium 1255 and headless shell installed, and the real-browser offline test subsequently passed."
+    },
+    "hosted_accepted": false
+  },
+  "runtime_budget": {
+    "schedule": "On demand only; no recurring job, deployment dependency or pre-deploy gate added.",
+    "routine_daily_growth_bytes": 0,
+    "max_bundle_bytes": 5242880,
+    "bundle_limit": "One sanitized summary plus at most one desktop and one narrow screenshot, including summary bytes. Oversized images are removed and the result fails; an oversized summary is replaced by a failed digest record.",
+    "privacy": "Private directories 0700 and files 0600. No credentials, cookie storage state, raw API bodies, traces, HAR or browser profiles retained. Chromium contexts and browser close before the command returns."
+  },
+  "handoff_to_e": [
+    "After A/B/D and this source PR merge, use the normal Dev Root process to establish one exact FE/BFF pair and verify deployment.json plus actual /bff/version before and after the probe.",
+    "Use the existing same-tenant viewer GUI account. Supply fresh registry/ledger-derived operator and excluded rosters, comparable PnL scope/currency/coverage, and current fill quantity units. Keep the immutable rejection witness separate from changing current metrics.",
+    "Run normal acceptance, without --record-baseline, on zh-TW desktop and 390px plus en-US desktop. Actual Persona and scoped rejection navigation, returned object/tenant/environment/event/source reason and on-screen return must pass; URL or HTTP 200 alone is insufficient.",
+    "Record the probe's terminal exit status, summary digest, measured bytes and at most two screenshots. Missing source/history or a failed run remains not accepted. Report repaired-pair results to RC6 and MGMT-GATE-FULL-PASS-HOSTED-ACCEPTANCE-20261114."
+  ],
+  "publication": {
+    "pr": "https://github.com/ajoe734/execute-plans/pull/1063",
+    "source_merged": false,
+    "dev_deployed": false,
+    "hosted_accepted": false
+  }
+}
