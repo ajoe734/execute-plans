@@ -133,7 +133,7 @@ const emptyRanks = (wire) => ({ items: [
   ["execution-quality", "fill_rate", "desc"], ["sharpe-leaders", "sharpe_ratio", "desc"],
 ].map(([block_id, metric, sort_order]) => ({ block_id, metric, sort_order, items: [], eligible_item_count: 0,
   missing_metric_count: wire.runtime_rows.length, missing_metric_runtime_ids: wire.runtime_rows.map((r) => r.runtime_id) })),
-summary: wire.summary });
+summary: { ...wire.summary, limit: 20 } });
 
 test("partial PnL scope preserves both row amounts and rejects invented UI/wire subtotals", () => {
   const i = partialScope(); validateInput(i);
@@ -459,17 +459,6 @@ const managementServiceFixtures = [
                   "end_exclusive_at": "2026-11-22T12:00:00Z"
                 }
               },
-              "sharpe_ratio_status": null,
-              "sharpe_ratio_reason": "insufficient_samples",
-              "staleness": null,
-              "metric_reasons": {
-                "drawdown": "not_observed",
-                "sharpe_ratio": "insufficient_samples",
-                "pnl_comparison": "comparison_scope_unverified"
-              },
-              "latest_report_at": "2026-11-22T12:00:00Z",
-              "last_fill_at": null,
-              "snapshot_at": "2026-11-22T12:00:00Z",
               "source_status": "available",
               "fill_rate_basis": "filled_quantity_over_submitted_quantity",
               "metric_units": {
@@ -552,18 +541,6 @@ const managementServiceFixtures = [
                   "end_exclusive_at": "2026-11-22T12:00:00Z"
                 }
               },
-              "sharpe_ratio_status": null,
-              "sharpe_ratio_reason": "insufficient_samples",
-              "staleness": null,
-              "metric_reasons": {
-                "pnl": "no_fills",
-                "drawdown": "no_fills",
-                "sharpe_ratio": "insufficient_samples",
-                "pnl_comparison": "comparison_scope_unverified"
-              },
-              "latest_report_at": "2026-11-22T12:00:00Z",
-              "last_fill_at": null,
-              "snapshot_at": "2026-11-22T12:00:00Z",
               "source_status": "available",
               "fill_rate_basis": "filled_quantity_over_submitted_quantity",
               "metric_units": {
@@ -747,20 +724,7 @@ const managementServiceFixtures = [
               }
             }
           },
-          "pnl_groups": [],
-          "runtime_count": 2,
-          "ranking_block_count": 4,
-          "ranked_item_count": 2,
-          "eligible_item_count": 2,
-          "missing_metric_item_count": 6,
-          "criteria": [
-            "pnl",
-            "drawdown",
-            "fill_rate",
-            "sharpe_ratio"
-          ],
-          "limit": 20,
-          "top_runtime_id": null
+          "limit": 20
         }
       },
       "page_info": {
@@ -936,16 +900,6 @@ const managementServiceFixtures = [
                   "end_exclusive_at": "2026-11-22T12:00:00Z"
                 }
               },
-              "sharpe_ratio_status": null,
-              "sharpe_ratio_reason": "insufficient_samples",
-              "staleness": null,
-              "metric_reasons": {
-                "drawdown": "not_observed",
-                "sharpe_ratio": "insufficient_samples"
-              },
-              "latest_report_at": "2026-11-22T12:00:00Z",
-              "last_fill_at": null,
-              "snapshot_at": "2026-11-22T12:00:00Z",
               "source_status": "available",
               "fill_rate_basis": "filled_quantity_over_submitted_quantity",
               "metric_units": {
@@ -1028,17 +982,6 @@ const managementServiceFixtures = [
                   "end_exclusive_at": "2026-11-22T12:00:00Z"
                 }
               },
-              "sharpe_ratio_status": null,
-              "sharpe_ratio_reason": "insufficient_samples",
-              "staleness": null,
-              "metric_reasons": {
-                "pnl": "no_fills",
-                "drawdown": "no_fills",
-                "sharpe_ratio": "insufficient_samples"
-              },
-              "latest_report_at": "2026-11-22T12:00:00Z",
-              "last_fill_at": null,
-              "snapshot_at": "2026-11-22T12:00:00Z",
               "source_status": "available",
               "fill_rate_basis": "filled_quantity_over_submitted_quantity",
               "metric_units": {
@@ -1245,34 +1188,7 @@ const managementServiceFixtures = [
               }
             }
           },
-          "pnl_groups": [
-            {
-              "stage": "paper",
-              "currency": "TWD",
-              "period_start_at": "2026-11-01T00:00:00Z",
-              "period_end_at": "2026-11-22T12:00:00Z",
-              "as_of": "2026-11-22T12:00:00Z",
-              "pnl_definition": "net_ledger_pnl",
-              "value": -168.085,
-              "covered_runtime_count": 1,
-              "covered_persona_count": 1,
-              "eligible_persona_count": 2,
-              "eligible_runtime_count": 2
-            }
-          ],
-          "runtime_count": 2,
-          "ranking_block_count": 4,
-          "ranked_item_count": 3,
-          "eligible_item_count": 3,
-          "missing_metric_item_count": 5,
-          "criteria": [
-            "pnl",
-            "drawdown",
-            "fill_rate",
-            "sharpe_ratio"
-          ],
-          "limit": 20,
-          "top_runtime_id": "r-p1"
+          "limit": 20
         }
       },
       "page_info": {
@@ -1368,6 +1284,7 @@ for (const [name, mutate, code] of [
   ["missing comparison period", (f) => { delete f.ranking.data.items[0].items[0].comparison_scope.period; }, "rankings_unverified_scope"],
   ["wrong denominator", (f) => { f.ranking.data.summary.operator_scope.runtime_count++; }, "ranking_denominator_mismatch"],
   ["invented group", (f) => { f.overview.data.summary.pnl_groups[0].value = 0; }, "group[0]:wire_scope_sum"],
+  ["erased ranked evidence", (f) => { f.ranking.data.items[2].items = []; }, "rankings_coverage"],
   ["missing coverage", (f) => { delete f.ranking.data.items[2].missing_metric_count; }, "rankings_coverage"],
 ]) test(`actual wire rejects ${name}`, () => {
   const f = serviceFixture(); mutate(f);
@@ -1382,4 +1299,28 @@ test("actual wire distinguishes measured zero from null and absent PnL", () => {
     r.telemetry_summary.metrics.pnl = value;
     assert.ok(assessWire(f.sources, f.overview, f.ranking).includes("row[0]:ledger_values"));
   }
+});
+
+
+test("missing wire scope is not an explicitly unknown scope", () => {
+  for (const key of ["pnl_currency", "pnl_period_start_at"]) {
+    const f = serviceFixture(false); delete f.overview.data.runtime_rows[0].performance_context[key];
+    assert.ok(assessWire(f.sources, f.overview, f.ranking).includes("row[0]:pnl_scope"));
+  }
+});
+
+test("actual ranking permits separate scopes to restart at one", () => {
+  const f = serviceFixture(), row = f.overview.data.runtime_rows[0];
+  row.deployment_stage = "canary";
+  for (const block of f.ranking.data.items) for (const item of block.items) if (item.runtime_id === row.runtime_id) {
+    item.comparison_scope.stage = "canary"; item.rank = 1;
+  }
+  assert.deepEqual(assessWire(f.sources, f.overview, f.ranking), []);
+});
+
+test("actual ranking rejects reversed values within a scope", () => {
+  const f = serviceFixture(), block = f.ranking.data.items[2];
+  const item = block.items[1]; item.fill_rate = item.ranking_metric_value = 0.5;
+  f.overview.data.runtime_rows.find((r) => r.runtime_id === item.runtime_id).telemetry_summary.metrics.fill_rate = 0.5;
+  assert.ok(assessWire(f.sources, f.overview, f.ranking).includes("rankings_invalid_order"));
 });

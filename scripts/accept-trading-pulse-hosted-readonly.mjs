@@ -41,6 +41,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { sha256 } from "./accept-persona-strategy-hosted-readonly.mjs";
 
 export const FE = "https://app.dev.mvl-cap.tw";
@@ -199,7 +200,9 @@ export function assessWire(sources, overview, rankings) {
     if (r?.persona_id !== s.persona_id || r?.persona_name !== s.persona_name ||
       (r?.runtime_binding_id ?? r?.binding_id) !== s.binding_id) failures.push(`row[${i}]:identity_binding`);
     if (c?.ledger_fill_count !== s.ledger_fill_count || r?.telemetry_summary?.metrics?.pnl !== s.pnl) failures.push(`row[${i}]:ledger_values`);
-    if ((c?.pnl_currency ?? null) !== s.pnl_currency ||
+    if (!c || !Object.hasOwn(c, "pnl_currency") ||
+      !["pnl_period", "pnl_period_label", "pnl_period_start_at"].some((k) => Object.hasOwn(c, k)) ||
+      (c.pnl_currency ?? null) !== s.pnl_currency ||
       (c?.pnl_period ?? c?.pnl_period_label ?? c?.pnl_period_start_at ?? null) !== s.pnl_period)
       failures.push(`row[${i}]:pnl_scope`);
   }
@@ -225,7 +228,7 @@ export function assessWire(sources, overview, rankings) {
     if (!criterion || block.metric !== criterion[0] || block.sort_order !== criterion[1] || !Array.isArray(block.items)) {
       failures.push("rankings_invalid_block"); continue;
     }
-    const seen = new Set(), scopes = new Map();
+    const seen = new Set(), scopes = [];
     for (const item of block.items) {
       const source = sources.rows.find((r) => r.persona_id === item?.persona_id && r.runtime_id === item?.runtime_id);
       const row = rows.find((r) => r.runtime_id === item?.runtime_id), c = row?.performance_context;
@@ -237,20 +240,27 @@ export function assessWire(sources, overview, rankings) {
         item?.[block.metric] !== value || (block.metric === "pnl" && value !== source?.pnl))
         failures.push("rankings_name_or_value");
       const scope = item?.comparison_scope;
-      const period = block.metric === "fill_rate" ? c?.fill_rate_details?.window : c?.metric_periods?.[block.metric];
+      const window = c?.fill_rate_details?.window;
+      const period = block.metric === "fill_rate" && window?.start_at && window?.end_exclusive_at
+        ? window : c?.metric_periods?.[block.metric];
       if (item?.ranking_eligible !== true || item?.ranking_metric !== block.metric || item?.ranking_block_id !== block.block_id ||
-        !scope || scope.stage !== row?.deployment_stage || !string(scope.unit) || !period || !string(period.start_at) ||
-        !eq(scope.period, period) || (block.metric === "pnl" &&
+        !scope || scope.stage !== row?.deployment_stage || !string(scope.unit) || scope.unit !== c?.metric_units?.[block.metric] ||
+        ["stale", "unavailable"].includes(c?.source_status) || !period ||
+        !(string(period.start_at) || (string(period.as_of) && string(period.window))) ||
+        !isDeepStrictEqual(scope.period, period) || (block.metric === "pnl" &&
           (!string(source?.pnl_currency) || !string(source?.pnl_period) || scope.unit !== source.pnl_currency ||
-            period.start_at !== source.pnl_period || scope.definition !== c?.pnl_definition))) failures.push("rankings_unverified_scope");
+            period.start_at !== source.pnl_period || !string(c?.pnl_at) || !string(c?.pnl_definition) || scope.definition !== c.pnl_definition)) ||
+        (block.metric === "fill_rate" && (scope.basis !== c?.fill_rate_basis || scope.quantity_unit !== c?.fill_rate_details?.unit))) failures.push("rankings_unverified_scope");
       // Ranks restart in each comparable scope; never compare different money
       // currencies, stages or observation windows as a single league table.
-      const key = JSON.stringify(scope), previous = scopes.get(key);
+      const previous = scopes.find((entry) => isDeepStrictEqual(entry.scope, scope));
       if (item?.rank !== (previous?.rank ?? 0) + 1 || (previous &&
         (block.sort_order === "desc" ? value > previous.value : value < previous.value))) failures.push("rankings_invalid_order");
-      scopes.set(key, { rank: item?.rank, value });
+      if (previous) Object.assign(previous, { rank: item?.rank, value });
+      else scopes.push({ scope, rank: item?.rank, value });
     }
-    if (!Number.isInteger(block.eligible_item_count) || block.eligible_item_count < block.items.length ||
+    if (!Number.isInteger(block.eligible_item_count) || !Number.isInteger(ranks?.summary?.limit) || ranks.summary.limit < 1 ||
+      block.items.length !== Math.min(block.eligible_item_count, ranks.summary.limit) ||
       !Number.isInteger(block.missing_metric_count) || !Array.isArray(block.missing_metric_runtime_ids) ||
       block.missing_metric_count !== block.missing_metric_runtime_ids.length ||
       new Set(block.missing_metric_runtime_ids).size !== block.missing_metric_count ||

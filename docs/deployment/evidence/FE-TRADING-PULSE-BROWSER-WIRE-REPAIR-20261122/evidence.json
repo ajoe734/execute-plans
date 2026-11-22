@@ -1,0 +1,108 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADING-PULSE-BROWSER-WIRE-REPAIR-20261122",
+  "owner": "Codex2",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADING-PULSE-BROWSER-WIRE-REPAIR-20261122",
+  "delivery_scope": "Repair the existing hosted read-only Trading Pulse assessor against the ManagementService DTO. No product, BFF, gate, schedule, write or deployment changes.",
+  "artifacts": [
+    {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
+      "sha256": "f99c02fb5a8eec94417ce8e6d10c79682d4ae6ad574c9e0b48d2d2ae59383931",
+      "changed": true
+    },
+    {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "sha256": "10f63e86cd82c702091c9979db05083e79fb29e90d4afb942db9052f616097c8",
+      "changed": true
+    },
+    {
+      "path": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+      "sha256": "e043a00554e1f9e39322982a4d4d5b1f9fe4a2029304ca18b9472f8826ba2fd8",
+      "changed": false
+    },
+    {
+      "path": "src/test/persona-strategy-hosted-readonly.test.ts",
+      "sha256": "b6e4510fc7456d7f393c2f4c39d968d90435187c734036b22fd939120d730467",
+      "changed": false
+    }
+  ],
+  "fixture_provenance": {
+    "source": "task-scoped management-service-wire-fixtures.json",
+    "sha256": "e36a57cbd8f53a6e169bbcbf5b446406ad718b10ca428fc455ebc67641c89370",
+    "producer": "pantheon d6f959222 ManagementService + existing _OperatorStore",
+    "data_kind": "synthetic service/store output; no credentials or operational data",
+    "retained_projection": "Verbatim checked fields embedded in the existing helper test; unrelated response fields omitted."
+  },
+  "before_after": {
+    "baseline_execute_plans_commit": "b5d91e038a2490a616d5d5edf0f1817996fe45be",
+    "method": "Import baseline assessWire from git show via a data URL, replacing only its shared helper import with the local file URL; run original task-packet DTOs through baseline and repaired assessWire.",
+    "results": [
+      {
+        "comparable": false,
+        "before": [
+          "row[0]:ledger_values",
+          "row[1]:ledger_values",
+          "rankings_missing"
+        ],
+        "after": []
+      },
+      {
+        "comparable": true,
+        "before": [
+          "row[0]:ledger_values",
+          "row[1]:ledger_values",
+          "rankings_missing"
+        ],
+        "after": []
+      }
+    ]
+  },
+  "behavior": [
+    "Use runtime_rows[].telemetry_summary.metrics.pnl, data.items[] blocks and ranking_metric_value without null-coalesced substitute values.",
+    "Preserve ledger zero, PnL zero, explicit null and missing-field distinctions; verify measured amounts and independently witnessed PnL scope.",
+    "Use existing period_start_at group semantics. Require real block shape, operator identity, scope, metric, rank ordering and limited coverage; permit rank restarts for distinct comparison scopes.",
+    "Unverified-currency losses remain per-row measurements and do not authorize PnL ranking or subtotals."
+  ],
+  "local_verification": [
+    {
+      "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed": 68,
+      "failed": 0,
+      "log_sha256": "2850268e94902e1392876e2ab5bf3f2224fe1f94fcf8826defb5a770699dd32f",
+      "includes": "Two actual ManagementService DTO positives plus corrupt amounts, absent evidence, zero/null, scope, rank/order, duplicate/operator, group and coverage negatives; existing Chromium DOM, keyboard, mobile and evidence-budget controls."
+    },
+    {
+      "command": "npm test -- src/test/persona-strategy-hosted-readonly.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx",
+      "exit_code": 0,
+      "passed": 52,
+      "failed": 0,
+      "duration_seconds": 149.09,
+      "log_sha256": "40c406e224c66f1d1af0bd0b1b5808fcbe24e43502735471d62ab86d834e510d",
+      "includes": "Full original shared runner regression and operator page; actual intercepted Chromium sessions in zh-TW 1440/390 and en-US 1440, positive and blocked-write controls. Terminal output collected."
+    },
+    {
+      "command": "timeout 90s npm run typecheck",
+      "exit_code": 0,
+      "log_sha256": "e38c26b5e7b0982ac7fdacb4832749746b5c3c678e6de661d1a003afe6ce9d6d"
+    },
+    {
+      "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs && node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs && git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "hosted_acceptance": {
+    "claimed": false,
+    "owner_task": "TRADING-PULSE-HOSTED-ACCEPTANCE-20261122",
+    "handoff": "After independent exact-head approval and supervisor merge into execute-plans/dev, E uses the existing shared CLI with a fresh same-tenant owner witness and separate immutable rejection event. Preserve the original CLI, three viewports/locales, detail/journey roundtrips, masking and <=5 MiB cap. No new task, API, permanent data or gate."
+  },
+  "review_and_integration": {
+    "required_reviewer": "Antigravity (different model family)",
+    "status": "pending independent exact-head review",
+    "publication_order": "Let the original PR-context Publish canonical review status job reach a terminal result before dispatching a same-head review workflow. Do not cancel it or arm auto-merge; supervisor integration runner owns the merge.",
+    "dev_deployment_updated": false
+  }
+}
