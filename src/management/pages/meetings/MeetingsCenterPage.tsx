@@ -32,6 +32,8 @@ import {
   type MeetingSummaryItem,
 } from "@/lib/bff-v1/meetings";
 
+import { isFailedMeeting, meetingLastError, meetingTopicText } from "./meetingDisplay";
+
 const CENTER = CANONICAL_CENTERS.meetings;
 
 const MEETING_TYPES = [
@@ -42,31 +44,6 @@ const MEETING_TYPES = [
   { id: "MT-5", label: "MT-5 Regime Interpretation (盤勢研判會議)" },
   { id: "MT-6", label: "MT-6 Quarterly Review (季度檢討會議)" },
 ] as const;
-
-const FAILED_EXECUTION_STATES = new Set(["dead_letter", "execution_failed"]);
-
-export function meetingExecutionStatus(meeting: Pick<MeetingSummaryItem, "execution_state">): string {
-  const state = meeting.execution_state;
-  const raw = state && typeof state === "object" ? state.status : state;
-  return String(raw ?? "").trim().toLowerCase();
-}
-
-export function meetingLastError(
-  meeting: Pick<MeetingSummaryItem, "execution_state" | "last_error">,
-): string {
-  const state = meeting.execution_state;
-  const nested = state && typeof state === "object" ? state.last_error : null;
-  return String(nested ?? meeting.last_error ?? "").trim();
-}
-
-export function isFailedMeeting(
-  meeting: Pick<MeetingSummaryItem, "execution_state" | "effective_status">,
-): boolean {
-  return (
-    FAILED_EXECUTION_STATES.has(meetingExecutionStatus(meeting)) ||
-    FAILED_EXECUTION_STATES.has(String(meeting.effective_status ?? "").trim().toLowerCase())
-  );
-}
 
 const CLOSED_STATUSES = new Set(["closed", "completed"]);
 const TERMINAL_NON_OPEN = new Set(["closed", "completed", "refused", "cancelled", "canceled"]);
@@ -187,29 +164,7 @@ function MeetingRowCard({
     },
     t,
   );
-  const topicObj =
-    meeting.topic_summary && typeof meeting.topic_summary === "object" ? meeting.topic_summary : null;
-  let topicText = "";
-  if (topicObj) {
-    const kind = String(topicObj.kind ?? "").trim();
-    const personaName =
-      topicObj.subject_persona_display_name ||
-      meeting.subject_persona_display_name ||
-      meeting.persona_display_name ||
-      topicObj.subject_persona_id ||
-      "";
-    if (kind) {
-      topicText = t(`meetingsCenter.topicSummary.${kind}`, {
-        persona: personaName,
-        period: topicObj.period ?? "",
-        count: topicObj.lesson_count ?? 0,
-        defaultValue: kind.replace(/_/g, " "),
-      });
-    }
-  } else {
-    const topicRaw = String(meeting.topic_summary ?? meeting.topic ?? "").trim();
-    topicText = topicRaw ? t(`meetingsCenter.topicSummary.${topicRaw}`, { defaultValue: topicRaw }) : "";
-  }
+  const topicText = meetingTopicText(meeting, t);
   const titleParts = [typeLabel, chair.primaryText !== "—" ? chair.primaryText : ""].filter(Boolean);
   const lastErrorRaw = meetingLastError(meeting);
   const lastErrorText = lastErrorRaw ? reasonCodeDisplay(lastErrorRaw, t).text : "";

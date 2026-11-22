@@ -1,0 +1,37 @@
+{
+  "schema_version": "task_evidence.v1",
+  "task_id": "FE-MEETING-RECORD-READABILITY-20261122",
+  "register_class": "RC6",
+  "work_package": "WP6.1 through WP6.5 management meetings readability",
+  "hosted_acceptance_task": "MEETING-HOSTED-ACCEPTANCE-20261115",
+  "reported_meeting": "mtg-0f7fa4993625ca47",
+  "source_verified": true,
+  "hosted_verified": false,
+  "validation": [
+    {
+      "command": "vitest run src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/meetings.test.tsx src/management/pages/oversight/HumanGateDetail.test.tsx",
+      "passed": 42
+    },
+    {
+      "command": "npm run typecheck && npm run typecheck:agora",
+      "status": "passed"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed",
+      "errors": 0
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "build_mode": "live, strict fallback, real writes disabled"
+    },
+    {
+      "check": "Local Chromium preview with intercepted read-only fixture data",
+      "status": "passed",
+      "viewports_and_roles": ["1440px operator", "390px viewer"],
+      "observed": ["Meetings Center history opens the record", "localized topic and outcome", "ordered rounds", "role-gated speaker identity reveal", "keyboard citation opens the referenced case-file item", "no horizontal document overflow"]
+    }
+  ],
+  "hosted_acceptance": "On the served pair, use existing authenticated Management browser QA to open the reported meeting from History. Verify the title and recorded outcome, both rounds with their real statements, a citation and its source state, and speaker identity visibility for operator and viewer at desktop and narrow widths. Record the served frontend and BFF commits and the release verdict."
+}
