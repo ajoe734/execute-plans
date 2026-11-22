@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { chromium } from "@playwright/test";
 import { classifyRequest, makeRedactor } from "./accept-persona-strategy-hosted-readonly.mjs";
-import { assessJourney, assessOverview, assessPersona, assessRow, assessWire, enterPulseViaScreen, hasNumber,
+import { assessJourney, assessJourneyReads, journeyHeadingPattern, assessOverview, assessPersona, assessRow, assessWire, enterPulseViaScreen, hasNumber,
   keyboardActivate, MAX_BYTES, readObservedJson, returnViaScreen, safeTarget, snapshotPage, validateInput, writeEvidence,
 } from "./accept-trading-pulse-hosted-readonly.mjs";
 
@@ -277,6 +277,90 @@ test("history rejects removed/wrong source event, reason, amounts, broker submis
     (j) => { j.outcome.submitted_to_broker = true; },
   ]) { const j = journey(); change(j); assert.ok(assessJourney(history, j, journeyText, "zh-TW").length > 0); }
   assert.ok(assessJourney(history, journey(), "HTTP 200", "zh-TW").length > 0);
+});
+
+for (const separator of ["｜", "|"]) test(`Journey accepts existing short/full visible h1 (${separator}) with canonical bilingual reason`, () => {
+  const h = { ...history, persona_name: `離線甲${separator}1234 Paper learning R2` };
+  for (const [locale, side, reason, unit] of [["zh-TW", "買", "現金不足", "股"], ["en-US", "Buy", "Not enough cash", "shares"]]) {
+    const text = `Paper ${reason} 109.25 100 7`;
+    for (const name of ["離線甲", h.persona_name]) {
+      const heading = `${name} ${side} 1234 7 ${unit}`;
+      assert.ok(journeyHeadingPattern(h).test(heading));
+      assert.deepEqual(assessJourney(h, journey(), text, locale, heading), []);
+    }
+    for (const heading of ["離線甲乙 Buy 1234 7 shares", "乙離線甲 Buy 1234 7 shares", "離線甲|wrong Buy 1234 7 shares", "wrong 1234", "離線甲 Buy 91234 7 shares"]) {
+      assert.ok(assessJourney(h, journey(), text + h.persona_name, locale, heading).includes("journey_visible_object_scope"));
+    }
+    for (const bad of [text.replace(reason, "other reason"), text.replace("109.25", "109.24"), text.replace("100", "99"), text.replace("7", "8")])
+      assert.ok(assessJourney(h, journey(), bad, locale, "離線甲 Buy 1234").includes("journey_visible_source_reason"));
+    const j = journey(); j.persona_id = "wrong";
+    assert.ok(assessJourney(h, j, text, locale, "離線甲 Buy 1234").includes("journey_persona_id"));
+  }
+});
+
+test("heading name metacharacters are literal and partial names never match", () => {
+  const h = { ...history, persona_name: "Persona (A)+｜1234" };
+  assert.ok(journeyHeadingPattern(h).test("Persona (A)+ Buy 1234"));
+  assert.ok(!journeyHeadingPattern(h).test("Persona A Buy 1234"));
+});
+
+test("short title cannot weaken immutable history identity, event time, reason or amounts", () => {
+  const h = { ...history, persona_name: "離線甲｜1234 Paper learning R2" };
+  const text = "Paper 現金不足 109.25 100 7", heading = "離線甲 買 1234 7 股";
+  for (const change of [
+    (j) => { j.journey_id = "wrong"; }, (j) => { j.persona_id = "wrong"; },
+    (j) => { j.tenant_id = "other"; }, (j) => { j.environment = "live"; },
+    (j) => { j.timeline[0].source_event_id = "wrong"; j.outcome.source_event_id = "wrong"; },
+    (j) => { j.timeline[0].occurred_at = "2021-01-01"; },
+    (j) => { j.outcome.reason_code = "insufficient_position"; },
+    (j) => { j.outcome.submitted_to_broker = true; },
+    ...["required", "available", "requested_quantity"].map((key) => (j) => { j.outcome.reason_detail[key] += 1; }),
+  ]) {
+    const j = journey(); change(j);
+    assert.ok(assessJourney(h, j, text, "zh-TW", heading).length > 0);
+  }
+});
+
+test("detail AND timeline require exact path, HTTP 200 and unambiguous tenant/environment", () => {
+  const capture = (suffix) => ({ path: `/bff/management/trade-journeys/${history.journey_id}${suffix}`,
+    query: `?tenant_id=${history.tenant_id}&environment=paper`, status: 200 });
+  assert.deepEqual(assessJourneyReads(history, capture(""), capture("/timeline")), []);
+  for (const index of [0, 1]) for (const mutate of [
+    (c) => { c.path = c.path.replace(history.journey_id, "wrong"); },
+    (c) => { c.path += "/evidence"; }, (c) => { c.status = 201; }, (c) => { c.status = 404; },
+    (c) => { delete c.status; }, (c) => { c.query = "?tenant_id=other&environment=paper"; },
+    (c) => { c.query = `?tenant_id=${history.tenant_id}&environment=live`; },
+    (c) => { c.query = ""; }, (c) => { c.query += "&environment=live"; },
+    (c) => { c.query += "&tenant_id=other"; },
+  ]) {
+    const pair = [capture(""), capture("/timeline")]; mutate(pair[index]);
+    assert.ok(assessJourneyReads(history, ...pair).length > 0);
+  }
+  assert.ok(assessJourneyReads(history, capture(""), undefined).length > 0);
+});
+
+test("real Chromium selects visible short/full Journey h1 and rejects a wrong h1 despite correct body", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const h = { ...history, persona_name: "離線甲｜1234 Paper learning R2" };
+    for (const [locale, heading, reason] of [
+      ["zh-TW", "離線甲 買 1234 7 股", "現金不足"],
+      ["en-US", `${h.persona_name} Buy 1234 7 shares`, "Not enough cash"],
+    ]) {
+      await page.setContent(`<main><h1>${heading}</h1><p>Paper ${reason} 109.25 100 7</p></main>`);
+      const title = page.getByRole("heading", { level: 1, name: journeyHeadingPattern(h) });
+      assert.ok(await title.isVisible());
+      assert.deepEqual(assessJourney(h, journey(), await page.locator("main").innerText(), locale, await title.innerText()), []);
+      await page.locator("h1").evaluate((e) => { e.textContent = "離線甲乙 Buy 1234"; });
+      await page.locator("main").evaluate((e, name) => e.insertAdjacentHTML("beforeend", `<p>${name}</p>`), h.persona_name);
+      assert.equal(await title.count(), 0);
+      assert.ok(assessJourney(h, journey(), await page.locator("main").innerText(), locale,
+        await page.locator("h1").innerText()).includes("journey_visible_object_scope"));
+      await page.locator("h1").evaluate((e, heading) => { e.textContent = heading; e.style.display = "none"; }, heading);
+      assert.equal(await title.count(), 0);
+    }
+  } finally { await browser.close(); }
 });
 
 test("navigation rejects empty/hash/foreign/javascript/public links", () => {

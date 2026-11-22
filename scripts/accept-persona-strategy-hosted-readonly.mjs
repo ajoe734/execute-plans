@@ -926,7 +926,7 @@ export async function run(input, deps = {}) {
 export async function runTradingPulse(input, outDir, { baseline = false, chromium: providedChromium, fetchImpl = globalThis.fetch } = {}) {
   const { FE, BFF, PULSE, digest, validateInput: validatePulseInput, browserRead, readObservedJson,
     enterPulseViaScreen, snapshotPage, assessOverview, assessWire, keyboardActivate,
-    assessPersona, assessJourney, returnViaScreen, safeTarget, writeEvidence } =
+    assessPersona, assessJourney, assessJourneyReads, journeyHeadingPattern, returnViaScreen, safeTarget, writeEvidence } =
     pulseHelpers;
   const TIMEOUT = 20_000;
   const string = (v) => typeof v === "string" && v.trim().length > 0;
@@ -982,7 +982,7 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
         if (u.origin !== BFF || !u.pathname.startsWith("/bff/")) return;
         run.reads.push({ path: u.pathname, method: res.request().method(), status: res.status() });
         if (authenticated && res.status() >= 400) run.failures.push(`authenticated_http_${res.status()}: ${u.pathname}`);
-        const task = readObservedJson(res).then((capture) => { if (capture) observed.push(capture); })
+        const task = readObservedJson(res).then((capture) => { if (capture) observed.push({ ...capture, status: res.status() }); })
           .catch((e) => run.failures.push(`response_body: ${redact(e.message)}`)).finally(() => pending.delete(task));
         pending.add(task);
       });
@@ -1069,6 +1069,14 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
         await check("historical_rejection_roundtrip", async () => {
           const h = input.history; assert.ok(h, "missing_historical_event_witness");
           if (!new URL(page.url()).pathname.startsWith(PULSE)) await returnViaScreen(page, PULSE);
+          const observedStart = observed.length;
+          const journeyPath = `/bff/management/trade-journeys/${h.journey_id}`;
+          const reads = ["", "/timeline"].map((suffix) => page.waitForResponse((res) => {
+            const u = new URL(res.url());
+            return u.origin === BFF && u.pathname === journeyPath + suffix && res.request().method() === "GET";
+          }, { timeout: TIMEOUT }));
+          // Attach rejection handling immediately while the operator follows UI links.
+          const responses = Promise.all(reads); responses.catch(() => {});
           const hrefs = page.locator("a"); let entry;
           for (let i = 0; i < await hrefs.count(); i++) {
             const link = hrefs.nth(i), u = safeTarget(await link.getAttribute("href"));
@@ -1076,21 +1084,24 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
               (u?.pathname === "/management/trade-journeys" && u.searchParams.get("persona_id") === h.persona_id)) { entry = link; break; }
           }
           assert.ok(entry, "missing source-grounded rejected-journey or scoped Persona journey entry");
+          assert.ok((await entry.innerText()).trim() || (await entry.getAttribute("aria-label"))?.trim(), "journey entry must be named");
           await entry.click();
           if (new URL(page.url()).pathname === "/management/trade-journeys") {
             const search = page.getByRole("textbox", { name: /搜尋|search/i }).first();
             await search.fill(h.event_id);
             const target = page.locator(`a[href*="${h.journey_id}"]`).first(); await target.waitFor(); await target.click();
           }
-          await page.getByRole("heading", { name: new RegExp(h.persona_name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).waitFor();
+          const heading = page.getByRole("heading", { level: 1, name: journeyHeadingPattern(h) });
+          await heading.waitFor({ state: "visible", timeout: TIMEOUT });
+          assert.equal(new URL(page.url()).pathname, `/management/trade-journeys/${h.journey_id}`);
+          for (const res of await responses) assert.equal(res.status(), 200, "exact journey detail/timeline HTTP 200");
           await Promise.all([...pending]);
-          const capture = observed.findLast((o) => o.path === `/bff/management/trade-journeys/${h.journey_id}`);
-          assert.ok(capture, "no actual scoped journey detail read");
-          const query = new URLSearchParams(capture.query);
-          assert.equal(query.get("tenant_id"), h.tenant_id); assert.equal(query.get("environment"), h.environment);
-          const timeline = observed.findLast((o) => o.path === `/bff/management/trade-journeys/${h.journey_id}/timeline`);
+          const fresh = observed.slice(observedStart);
+          const capture = fresh.findLast((o) => o.path === journeyPath);
+          const timeline = fresh.findLast((o) => o.path === journeyPath + "/timeline");
+          assert.deepEqual(assessJourneyReads(h, capture, timeline), []);
           const detail = { ...unwrap(capture.body), timeline: unwrap(timeline?.body)?.items ?? unwrap(timeline?.body)?.events ?? [] };
-          assert.deepEqual(assessJourney(h, detail, await page.locator("main").innerText(), locale), []);
+          assert.deepEqual(assessJourney(h, detail, await page.locator("main").innerText(), locale, await heading.innerText()), []);
           await returnViaScreen(page, PULSE);
           await page.getByRole("heading", { name: snapshot.heading, exact: true }).waitFor();
         });
