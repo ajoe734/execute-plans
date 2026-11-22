@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "@/i18n";
@@ -697,11 +697,11 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
 
     renderDetail("/management/meetings/mtg-001");
 
-    expect(await screen.findByTestId("meeting-detail-header")).toHaveTextContent("mtg-001");
+    expect(await screen.findByTestId("meeting-detail-header")).not.toHaveTextContent("mtg-001");
     expect(screen.getByTestId("meeting-detail-header")).toHaveTextContent(
       "Performance attribution review for trader-alice",
     );
-    expect(screen.getByTestId("servant-flag-servant-alice")).toHaveTextContent("servant");
+    expect(screen.getByTestId("servant-flag-servant-alice")).toHaveTextContent("Private assistant");
 
     // MT-4 attribution record above rounds
     expect(screen.getByTestId("meeting-detail-attribution")).toHaveTextContent("attr-001");
@@ -727,7 +727,12 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
     );
 
     // Round 1 & Round 2 with anonymised labels + operator-only reveal
-    expect(screen.getByTestId("meeting-round-1")).toHaveTextContent("participant:chair:momentum");
+    const round1 = screen.getByTestId("meeting-round-1");
+    expect(round1).toHaveTextContent("Initial positions");
+    expect(round1).toHaveTextContent("Chair");
+    expect(round1).not.toHaveTextContent(/kept position|changed position/i);
+    expect(screen.queryByTestId("meeting-label-reveal")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("meeting-label-reveal-toggle"));
     expect(screen.getByTestId("meeting-round-2")).toHaveTextContent(
       "support_with_regime_control",
     );
@@ -735,12 +740,12 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
       "participant:chair:momentum → persona-alpha",
     );
     expect(screen.getByTestId("round-2-revealed-participant:chair:momentum")).toHaveTextContent(
-      "operator reveal: persona-alpha",
+      "persona-alpha",
     );
 
     // Synthesis & dissent
-    expect(screen.getByTestId("meeting-detail-synthesis")).toHaveTextContent("PROPOSALS_ISSUED");
-    expect(screen.getByTestId("meeting-synthesis-tally")).toHaveTextContent("support=0.88");
+    expect(screen.getByTestId("meeting-detail-synthesis")).toHaveTextContent("Proposals issued");
+    expect(screen.getByTestId("meeting-synthesis-tally")).toHaveTextContent("Support score 0.88");
     expect(screen.getByTestId("meeting-dissent-memo")).toHaveTextContent("memo-dissent-001");
 
     // Proposals with live downstream link
@@ -758,9 +763,9 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
     );
 
     // Usage
-    expect(screen.getByTestId("meeting-detail-usage")).toHaveTextContent("participants: 3");
-    expect(screen.getByTestId("meeting-detail-usage")).toHaveTextContent("rounds: 2");
-    expect(screen.getByTestId("meeting-detail-usage")).toHaveTextContent("calls: 10");
+    expect(screen.getByTestId("meeting-detail-usage")).toHaveTextContent("3 participants");
+    expect(screen.getByTestId("meeting-detail-usage")).toHaveTextContent("2 recorded rounds");
+    expect(screen.getByTestId("meeting-detail-usage")).toHaveTextContent("10 calls");
 
     // Never shows private memory text anywhere
     const pageText = document.body.textContent ?? "";
@@ -769,6 +774,79 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
     expect(pageText).not.toContain("NEVER_SHOW_PRIVATE_INTERPRETATION_003");
     expect(pageText).not.toContain("NEVER_SHOW_PRIVATE_ROUND_004");
     expect(pageText).not.toContain("NEVER_SHOW_WRITEBACK_PRIVATE_TEXT_005");
+  });
+
+  it("reads a legacy no-proposal meeting in order and opens the matching citation without inferring evidence or assent", async () => {
+    await i18n.changeLanguage("zh-TW");
+    const topic = "Pool evolution review for persona-unresolved (2026-W47)";
+    const label = "role:risk_reviewer|style:risk_governance#2";
+    const position = {
+      role: "risk_reviewer",
+      label,
+      persona_display_name: "Hidden identity",
+      stance: "request_more_research",
+      changed: false,
+      citations: ["artifact-review"],
+    };
+    on("GET", "/bff/management/meetings/mtg-legacy", {
+      status: "ok",
+      data: {
+        meeting_id: "mtg-legacy",
+        meeting_type: "MT-1",
+        status: "closed",
+        outcome: "completed_no_proposal",
+        topic,
+        topic_summary: { kind: "pool_evolution_review", subject_persona_id: "persona-unresolved", period: "2026-W47" },
+        agenda: [topic],
+        rounds: [
+          { round: 2, positions: [{ ...position, accepted: ["baseline_case_facts", "Previous risk constraint"], disputed: ["Available sample size", "cf-private"] }] },
+          { round: 1, positions: [position] },
+        ],
+        anonymised_labels_revealed: false,
+        case_file_items: [
+          { item_id: "legacy-reference", source_id: "artifact-review", kind: "evidence_ref", excerpt: `Evidence artifact-review for ${topic}` },
+          { item_id: "cf-private", kind: "memory", relevance_scope: "persona_private", excerpt: "PRIVATE" },
+        ],
+        synthesis: {
+          summary: "The referenced review was unavailable to participants.",
+          tally: { by_stance: { request_more_research: 1 }, voting: false, binding: false },
+          dissent_memo_id: "ordinary-memo-reference",
+        },
+      },
+    });
+    renderDetail("/management/meetings/mtg-legacy");
+
+    const header = await screen.findByTestId("meeting-detail-header");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("策略池演進檢討（2026-W47）");
+    expect(header).toHaveTextContent("已結束，未提出提案");
+    expect(header).toHaveTextContent("紀錄僅附引用，未收錄來源內容");
+    expect(header).not.toHaveTextContent("ordinary-memo-reference");
+    expect(screen.getByTestId("meeting-synthesis-tally")).toHaveTextContent("建議補充研究 1");
+    expect(screen.queryByTestId("meeting-detail-agenda")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-label-reveal-toggle")).not.toBeInTheDocument();
+
+    const rounds = screen.getByTestId("meeting-detail-rounds");
+    expect(within(rounds).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "第 1 輪 · 各自提出初步立場",
+      "第 2 輪 · 回應前一輪意見",
+    ]);
+    expect(rounds).not.toHaveTextContent(/Hidden identity|risk_governance|baseline_case_facts|cf-private/);
+    expect(screen.getByTestId("meeting-round-1")).not.toHaveTextContent("維持立場");
+    const secondRound = screen.getByTestId("meeting-round-2");
+    expect(secondRound).toHaveTextContent("風險審查");
+    expect(secondRound).toHaveTextContent("維持立場");
+    expect(secondRound).toHaveTextContent("Previous risk constraint");
+    expect(secondRound).toHaveTextContent("Available sample size");
+
+    const source = screen.getByTestId("case-file-item-legacy-reference");
+    expect(source.closest("details")).not.toHaveAttribute("open");
+    const citation = within(secondRound).getByRole("link", { name: "卷宗第 1 項" });
+    expect(citation).toHaveAttribute("href", `#${source.id}`);
+    fireEvent.click(citation);
+    expect(source.closest("details")).toHaveAttribute("open");
+    expect(source).toHaveTextContent("紀錄僅附引用，未收錄來源內容");
+    expect(source).not.toHaveTextContent(topic);
+    await i18n.changeLanguage("en-US");
   });
 
   it("renders honest not-found on 404 for unknown meeting id and explicit unavailable when owner fails", async () => {
@@ -819,7 +897,7 @@ describe("MeetingDetailPage (AC2, AC6, AC7)", () => {
     const header = await screen.findByTestId("meeting-detail-header");
     expect(header.textContent).toMatch(/Refused|已拒絕召開/);
     expect(header.textContent).toMatch(/Insufficient eligible participants to convene meeting|合格參與人數不足，無法召開會議/);
-    expect(header.textContent).toContain("insufficient_participants");
+    expect(header).not.toHaveTextContent("insufficient_participants");
   });
 
   it("renders BFF persona and strategy display names, secondary raw IDs, and name_missing flags on MeetingsCenterPage and MeetingDetailPage without resolving names client-side (AC1/AC4)", async () => {
@@ -1216,7 +1294,7 @@ describe("MeetingsCenterPage failed meetings (FE-RISK-STRATEGY-RESEARCH-UI-20261
     renderCenter("/management/meetings?tab=upcoming");
     expect(await screen.findByTestId("meeting-row-mtg-real-1")).toBeInTheDocument();
     expect(screen.getByTestId("meeting-title-mtg-real-1")).toHaveTextContent("池子演進會議 · 青禾");
-    expect(screen.getByTestId("meeting-topic-mtg-real-1")).toHaveTextContent("池子演進檢討：青禾（2026-Q3，4 則教訓）");
+    expect(screen.getByTestId("meeting-topic-mtg-real-1")).toHaveTextContent("策略池演進檢討（青禾 · 2026-Q3 · 4 則教訓）");
     expect(screen.getByTestId("meetings-authority-badge")).not.toHaveTextContent("execution_authority");
     expect(screen.queryByTestId("meeting-row-mtg-dead-1")).not.toBeInTheDocument();
     expect(screen.getByTestId("meetings-failed-text")).toHaveTextContent("3");
@@ -1384,13 +1462,13 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
     expect(screen.getByTestId("meeting-review-cause-explanation")).toHaveTextContent(
       "此筆舊版會議紀錄未保存細部機器原因代碼（cause: unknown）",
     );
-    expect(screen.getByTestId("meeting-review-transcript-summary")).toHaveTextContent(
-      "已記錄 2 輪討論（共 4 則發言立場）、1 筆共享事實卷宗、0 筆提案",
-    );
-    expect(screen.getByTestId("meeting-review-transcript-summary")).toHaveTextContent(
+    expect(screen.getByTestId("meeting-detail-header")).toHaveTextContent("已記錄 2 輪");
+    expect(within(reviewCard).getByRole("link", { name: "討論過程" })).toHaveAttribute("href", "#meeting-discussion");
+    expect(screen.getByTestId("meeting-detail-rounds")).toHaveTextContent(
       "Need more chip-flow evidence before changing pool weights.",
     );
-    expect(screen.getByTestId("meeting-review-evidence-list")).toHaveTextContent(
+    expect(reviewCard).not.toHaveTextContent("Need more chip-flow evidence before changing pool weights.");
+    expect(screen.getByTestId("meeting-detail-case-file")).toHaveTextContent(
       "facts:pool:persona-2448c7053e33ea48da47:v1",
     );
     expect(screen.getByTestId("meeting-review-consequence")).toHaveTextContent(
@@ -1542,7 +1620,7 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
     );
     expect(screen.getByTestId("meeting-review-recorded-note")).toHaveTextContent(noteText);
     expect(screen.queryByTestId("meeting-review-submit")).not.toBeInTheDocument();
-    expect(screen.getByTestId("meeting-detail-synthesis")).toHaveTextContent("REVIEW");
+    expect(screen.getByTestId("meeting-detail-synthesis")).toHaveTextContent("Reviewed · Closed with No Proposal");
     expect(screen.getByTestId("meeting-detail-proposals")).toHaveTextContent(
       "No proposals issued in this meeting.",
     );
@@ -1590,7 +1668,9 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
 
     expect(await screen.findByTestId("meeting-detail-review-disposition")).toBeInTheDocument();
     expect(screen.getByTestId("meeting-review-read-only")).toHaveTextContent(/Read-only view|唯讀檢視模式/);
-    expect(screen.getByTestId("meeting-review-evidence-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-detail-case-file")).toHaveTextContent("No shared case-file items are recorded.");
+    expect(screen.getByTestId("meeting-detail-rounds")).toHaveTextContent("No discussion rounds are recorded");
+    expect(screen.queryByTestId("meeting-label-reveal-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("meeting-review-form")).not.toBeInTheDocument();
     expect(screen.queryByTestId("meeting-review-submit")).not.toBeInTheDocument();
     expect(screen.queryByTestId("meeting-review-convene-followup-button")).not.toBeInTheDocument();
