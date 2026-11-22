@@ -51,8 +51,18 @@
     "command": "node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir /tmp/trading-pulse-rc6-baseline.sZZagX/pr1063-06126a238 --record-baseline (authorized coordinator GUI credentials on stdin)",
     "started_at": "2026-11-22T13:29:43.774Z",
     "finished_at": "2026-11-22T13:30:53.916Z",
-    "terminal_exit_code": null,
-    "terminal_receipt": "Awaiting coordinator terminal receipt; pass=false alone is not an observed exit status.",
+    "terminal_exit_code": 1,
+    "terminal_receipt": {
+      "private_path": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/.orchestrator/assistant-dev-packets/sources/trading-pulse-operator-readability-20261122/pre-fix-browser-masked/terminal-exit-receipt.json",
+      "sha256": "b6b17efe0136adf0ab56d76dd7ba51700583d983ffe7f173aabb6a1f7955d9a0",
+      "source_launch_call": "call_6c876f5723a94285b8bbc90b8f911168",
+      "source_terminal_poll_call": "call_b901bf19444345d1b16f53805f9dacf5",
+      "exec_session": 61336,
+      "terminal_poll_record_sha256": "cde2af55201559b0489e7dfcce78d8cfcb6dab70fef4f890fadebcb08079c498",
+      "observed_terminal_line": "Actual probe exit = 1",
+      "wrapper_exit_code": 0,
+      "interpretation": "Recovered original invocation receipt: the pipefail pipeline ending in the frozen browser CLI exited 1; its wrapper checked that value and exited 0. Receipt matches the script commit/hash, run timestamps, deployed FE/BFF pair and retained summary digest. No new hosted run was used and pass=false was not used to infer process status. This process provenance receipt is separate from the three-file browser evidence bundle."
+    },
     "pass": false,
     "pair_stable_before_after": true,
     "pair": {
