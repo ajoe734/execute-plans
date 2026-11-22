@@ -44,8 +44,55 @@
     "use": "Coordination provenance only; not a fabricated complete acceptance input, a copy of Trading Pulse, or a permanent numeric snapshot. E must refresh the current witness within the CLI's 15-minute window."
   },
   "legacy_baseline": {
-    "status": "authorized_gui_rerun_in_progress",
+    "status": "measured_failing_legacy_baseline",
     "private_parent": "/tmp/trading-pulse-rc6-baseline.sZZagX",
+    "script_commit": "06126a238739cba1ff0e291b3aba6abe4c05e222",
+    "script_sha256": "3b4c7e211d9af18c9b9434b92024fcf41a7bef034dc87d0dec3f5695ef712c68",
+    "command": "node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir /tmp/trading-pulse-rc6-baseline.sZZagX/pr1063-06126a238 --record-baseline (authorized coordinator GUI credentials on stdin)",
+    "started_at": "2026-11-22T13:29:43.774Z",
+    "finished_at": "2026-11-22T13:30:53.916Z",
+    "terminal_exit_code": null,
+    "terminal_receipt": "Awaiting coordinator terminal receipt; pass=false alone is not an observed exit status.",
+    "pass": false,
+    "pair_stable_before_after": true,
+    "pair": {
+      "fe": "bf4e79d774bb387a51e9030e5821b4f61bbbb806",
+      "bff": "bac80d756dec67b19c9af5183eae7a9869835015",
+      "pair_id": "0086f4a4077d4c201240a3627e87be0da2824bc9d543ce5e5d439f600e09e649",
+      "identity_checks": "Actual public deployment.json and /bff/version matched before and after; strict auth, no stub, live mode and strict fallback assertions passed.",
+      "hosted_write_flag": "true",
+      "probe_business_writes": "blocked by the existing request policy, independently of the deployed flag",
+      "blocked_write_attempts": 0
+    },
+    "browser_identity": "Three isolated contexts used normal GUI login and verified the expected tenant plus viewer role, excluding admin/operator. No credentials or raw identities are in this manifest.",
+    "runs": [
+      { "locale": "zh-TW", "width": 1440, "entry": "sidebar", "table_width": 1088, "row_entries": 4, "entries_outside_viewport": 0 },
+      { "locale": "zh-TW", "width": 390, "entry": "command_palette", "table_width": 1040, "row_entries": 4, "entries_outside_viewport": 4 },
+      { "locale": "en-US", "width": 1440, "entry": "sidebar", "table_width": 1088, "row_entries": 4, "entries_outside_viewport": 0 }
+    ],
+    "observed_page_failures": [
+      "Source runtime IDs and engineering diagnostics are visible by default in all three runs.",
+      "Diagnostics are not collapsed; the explicit expandable diagnostics control is missing (its 20-second locator timeout is a failed check, never a pass).",
+      "At 390px all four primary row entries are outside the viewport and require horizontal scrolling; all entry labels use source IDs."
+    ],
+    "separate_runtime_failure": "Authenticated /bff/search returned 503 during the narrow command-palette search. Static section navigation still reached Trading Pulse; the 503 remains a failed check for E and the existing search owner to resolve or record.",
+    "missing_evidence": [
+      "Baseline input intentionally omitted the full current owner witness and immutable history witness. It does not establish roster/count/PnL/fill-rate parity.",
+      "No successful Persona detail or historical rejection roundtrip is claimed. Both are explicit missing-proof failures; E must run normal acceptance with fresh authoritative inputs on the repaired pair."
+    ],
+    "retained_bundle": {
+      "private_dir": "/tmp/trading-pulse-rc6-baseline.sZZagX/pr1063-06126a238/trading-pulse-d3Yclx",
+      "durable_retention": "Coordinator retention pending: the existing private artifact directory is mounted read-only in this worker; the failed mkdir copied no files and the original three-file bundle remains intact.",
+      "bytes": 196259,
+      "max_bytes": 5242880,
+      "files": [
+        { "file": "summary.json", "bytes": 11649, "sha256": "c50248c876ff2699ab8a589f55eb495bff1b8890387a1205e7e48ba80d302c77" },
+        { "file": "desktop.png", "bytes": 125425, "sha256": "b99706eb24a013ce5c89468abe478512d69d5a8c5dbf315abe02339dca5576de" },
+        { "file": "narrow.png", "bytes": 59185, "sha256": "8eac4048995d8f1748134d0c72cb953dcbe15907ace588b6bea1ce4bffada951" }
+      ],
+      "privacy": "Top session header and side navigation masked; source IDs masked. Inspected screenshots and retained no raw browser state, credentials, traces or API bodies.",
+      "routine_daily_growth_bytes": 0
+    },
     "excluded_attempt": {
       "started_at": "2026-11-22T13:18:52.900Z",
       "outcome": "Missing Chromium 1255 executable before any browser run; not measured UI failure evidence.",
@@ -56,6 +103,7 @@
       "Narrow shell entry uses the existing Ctrl/Cmd+K command palette when the sidebar is hidden; no assumed mobile menu or direct URL substitution.",
       "Mask the entire top header as well as side navigation and private values: server display names can differ from the supplied GUI login username."
     ],
+    "superseded_attempts": "Initial missing-browser attempt, incomplete pre-SSE-fix attempt and pre-header-mask capture are excluded from the final retained bundle. Cleanup is pending final receipt.",
     "hosted_accepted": false
   },
   "runtime_budget": {
