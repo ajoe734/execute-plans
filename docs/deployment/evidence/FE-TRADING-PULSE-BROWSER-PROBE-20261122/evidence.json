@@ -241,6 +241,39 @@
     "Run normal acceptance, without --record-baseline, on zh-TW desktop and 390px plus en-US desktop. Actual Persona and scoped rejection navigation, returned object/tenant/environment/event/source reason and on-screen return must pass; URL or HTTP 200 alone is insufficient.",
     "Record the probe's terminal exit status, summary digest, measured bytes and at most two screenshots. Missing source/history or a failed run remains not accepted. Report repaired-pair results to RC6 and MGMT-GATE-FULL-PASS-HOSTED-ACCEPTANCE-20261114."
   ],
+  "ci_return_triage": {
+    "returned_head": "089c1ea6c41bb72ec6bfcd6da442075b70b24cc0",
+    "reported_check": "Publish canonical review status",
+    "original_attempt": {
+      "url": "https://github.com/ajoe734/execute-plans/actions/runs/45034684508/attempts/1",
+      "conclusion": "cancelled",
+      "completed_at": "2026-11-22T14:53:28Z",
+      "executed_steps": 0,
+      "interpretation": "Cancelled before any steps ran; this attempt supplies no source-test failure or passing validation. The cancellation cause is not established by the job metadata."
+    },
+    "same_head_publication": {
+      "url": "https://github.com/ajoe734/execute-plans/actions/runs/45035260956",
+      "conclusion": "success",
+      "completed_at": "2026-11-22T14:54:51Z",
+      "verified_target_head": "089c1ea6c41bb72ec6bfcd6da442075b70b24cc0",
+      "published_context": "Pantheon canonical review gate",
+      "published_state": "success",
+      "interpretation": "Workflow logs verify the authoritative product PR/head and publish its existing proof. This historical success grants no approval to the new evidence commit."
+    },
+    "resolution": "Record the CI return evidence in a new task-scoped head and resubmit for independent exact-head review. Source and workflow files remain byte-identical to the tested source; no source defect is established by the cancelled attempt. New-head checks and approval must be evaluated separately.",
+    "focused_verification": {
+      "exit_code": 0,
+      "checks": [
+        "node --check scripts/accept-persona-strategy-hosted-readonly.mjs",
+        "node --check scripts/accept-trading-pulse-hosted-readonly.mjs",
+        "node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+        "git diff --check",
+        "All four artifact SHA256 hashes still match this manifest",
+        "All retained baseline file sizes/SHA256 hashes and terminal receipt SHA256 still match; bundle remains 196259 bytes"
+      ],
+      "regression_scope": "Source files unchanged; collected 43/43 runner and 38/38 helper regressions plus successful bounded typecheck above remain the source verification. No additional hosted run or hosted acceptance is claimed."
+    }
+  },
   "publication": {
     "pr": "https://github.com/ajoe734/execute-plans/pull/1063",
     "source_merged": false,
