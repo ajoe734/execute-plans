@@ -325,6 +325,42 @@
     ],
     "first_iteration": "One new regression initially failed because the test loop reused a modified expected-group fixture. Fixed fixture reset; final complete helper suite passes. No production change was needed for that test failure.",
     "hosted_accepted": false,
-    "handoff": "Fresh exact-head review of PR #1063 required. Task E supplies fresh same-tenant witness and performs repaired-pair hosted acceptance; no extra stage, schedule, gate or deployment added."
+    "handoff": "Fresh exact-head review of PR #1063 required. Task E supplies fresh same-tenant witness and performs repaired-pair hosted acceptance; no extra stage, schedule, gate or deployment added.",
+    "after_dev_refresh": {
+      "base_sha": "bd2cb828191bd5054c3553b099d8ff203fe3815c",
+      "verified_tree_commit": "ce6a6528172549c3ea8b00635af4cd54aa81d277",
+      "merge": "No conflicts; preserve disjoint meeting-page and translation changes from dev. All four declared source hashes remain unchanged.",
+      "verification": [
+        {
+          "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+          "exit_code": 0,
+          "passed": 43,
+          "failed": 0,
+          "includes": "Real Chromium narrow clipping/Tab/Enter and subtotal positive/negative DOM controls in zh-TW/en-US; partial PnL, unknown versus zero, localized optional units, 0/452, independent wire scope and amount.",
+          "phase": "Rerun after dev refresh",
+          "duration_seconds": 1.75
+        },
+        {
+          "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+          "exit_code": 0,
+          "passed": 5,
+          "skipped": 38,
+          "includes": "Unchanged shared runner pair/auth, real CLI and intercepted Chromium viewer sessions across all three locale/viewports, with blocked business-write and foreign-origin controls.",
+          "phase": "Rerun after dev refresh",
+          "duration_seconds": 34.78
+        },
+        {
+          "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs; git diff --check; verify all four manifest source hashes; diff_budget.py --base origin/dev --head HEAD",
+          "exit_code": 0,
+          "diff_budget": {
+            "production": "+655/-30 net +625",
+            "test": "+488/-0 net +488",
+            "docs_evidence": "+330/-0 net +330 before this base-refresh receipt"
+          }
+        }
+      ],
+      "terminal_collection": "Both bounded foreground reruns completed with terminal exit 0; no pending handles.",
+      "review": "New exact-head handoff required after prior attempts rejected for base advance and concurrent canonical next-message update. No previous review approval transferred."
+    }
   }
 }
