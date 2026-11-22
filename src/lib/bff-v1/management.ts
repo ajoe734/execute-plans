@@ -4094,23 +4094,6 @@ function normalizeTradingPulsePerformanceContext(
   const rawStaleness = raw?.staleness ?? telemetrySummary?.staleness;
   const staleness = isObject(rawStaleness) ? { ...rawStaleness } : null;
 
-  const metricReasons: Record<string, string | null> = {
-    ...normalizeNullableStringRecord(raw?.metricReasons ?? raw?.metric_reasons),
-  };
-  if (fillRateDetails !== null && !isTradingPulseFillRateKnown(fillRateDetails) && !metricReasons.fill_rate) {
-    const den = fillRateDetails.denominator;
-    metricReasons.fill_rate =
-      fillRateDetails.reason
-      ?? (den !== null && den <= 0 ? "no_submitted_orders" : fillRateDetails.status ?? "source_unavailable");
-  }
-  if (
-    (sharpeRatioReason !== null || sharpeRatioStatus !== null)
-    && asNullableNumber(metricsRecord?.sharpe_ratio ?? metricsRecord?.sharpeRatio) === null
-    && !metricReasons.sharpe_ratio
-  ) {
-    metricReasons.sharpe_ratio = sharpeRatioReason ?? sharpeRatioStatus;
-  }
-
   const metricUnits = normalizeNullableStringRecord(raw?.metricUnits ?? raw?.metric_units);
   const metricPeriods = normalizeTradingPulseMetricPeriods(raw?.metricPeriods ?? raw?.metric_periods);
 
@@ -4154,12 +4137,66 @@ function normalizeTradingPulsePerformanceContext(
     || latestReportAt !== null
     || lastFillAt !== null
     || ledgerFillCount !== null
-    || (fillRateDetails !== null && isTradingPulseFillRateKnown(fillRateDetails))
+    || (
+      fillRateDetails !== null
+      && (isTradingPulseFillRateKnown(fillRateDetails) || fillRateDetails.reason === "no_submitted_orders")
+    )
     || (metricsRecord && Object.values(metricsRecord).some((v) => typeof v === "number" && Number.isFinite(v))),
   );
   const explicitSourceStatus = nullableString(raw?.sourceStatus ?? raw?.source_status);
   const sourceStatus: ManagementTradingPulseSourceStatus = explicitSourceStatus
     ?? (isStale ? "stale" : hasObservedSourceEvidence ? "available" : "unverified");
+
+  const metricReasons: Record<string, string | null> = {
+    ...normalizeNullableStringRecord(raw?.metricReasons ?? raw?.metric_reasons),
+  };
+  if (fillRateDetails !== null && !isTradingPulseFillRateKnown(fillRateDetails) && !metricReasons.fill_rate) {
+    const den = fillRateDetails.denominator;
+    const num = fillRateDetails.numerator;
+    const detailsStatus = fillRateDetails.status?.trim().toLowerCase() ?? null;
+    const normalizedSourceStatus = String(sourceStatus ?? "").trim().toLowerCase();
+    const isSourceVerifiedAvailable =
+      ["available", "ok", "live", "fresh", "verified"].includes(normalizedSourceStatus);
+    const isDetailsStatusVerified =
+      detailsStatus === "known"
+      || detailsStatus === "available"
+      || detailsStatus === "ok"
+      || detailsStatus === "verified";
+    if (normalizedSourceStatus === "unavailable" || detailsStatus === "unavailable") {
+      metricReasons.fill_rate =
+        fillRateDetails.reason === "telemetry_unavailable"
+          ? "telemetry_unavailable"
+          : "source_unavailable";
+    } else if (normalizedSourceStatus === "stale" || detailsStatus === "stale") {
+      metricReasons.fill_rate =
+        fillRateDetails.reason === "telemetry_stale"
+          ? "telemetry_stale"
+          : "stale";
+    } else if (fillRateDetails.reason !== null) {
+      metricReasons.fill_rate = fillRateDetails.reason;
+    } else if (
+      isSourceVerifiedAvailable
+      && isDetailsStatusVerified
+      && den !== null
+      && den === 0
+      && (num === null || num === 0)
+    ) {
+      metricReasons.fill_rate = "no_submitted_orders";
+    } else {
+      metricReasons.fill_rate =
+        fillRateDetails.status
+        ?? (normalizedSourceStatus === "unknown" || normalizedSourceStatus === "unverified"
+          ? "unknown"
+          : "source_unavailable");
+    }
+  }
+  if (
+    (sharpeRatioReason !== null || sharpeRatioStatus !== null)
+    && asNullableNumber(metricsRecord?.sharpe_ratio ?? metricsRecord?.sharpeRatio) === null
+    && !metricReasons.sharpe_ratio
+  ) {
+    metricReasons.sharpe_ratio = sharpeRatioReason ?? sharpeRatioStatus;
+  }
 
   return {
     ...(raw ?? {}),

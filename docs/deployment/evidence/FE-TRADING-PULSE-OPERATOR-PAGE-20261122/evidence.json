@@ -34,11 +34,11 @@
   "acceptance_verification": {
     "acceptance_1_layout_and_verifiable_metrics": {
       "passed": true,
-      "summary": "TradingPulsePage renders in strict top-to-bottom sequence: (1) Operational Personas summary (paper/canary/live breakdown and single paper-baseline summary), (2) Comparable P&L subtotals and Persona coverage (summary.pnlGroups with currency, period, as-of timestamp, and source-verified P&L definition), (3) Notable trading events, (4) Persona trading details table, (5) Concise performance rankings, and (6) Collapsed-by-default Data Diagnostics. Numbers use thousands separators, currency-appropriate 2-decimal precision, percentages, basis points, and localized timestamps via safeDateTime."
+      "summary": "TradingPulsePage renders in strict top-to-bottom sequence: (1) Operational Personas summary (paper/canary/live breakdown and single paper-baseline summary shown only when operatorScope is verified all-paper, every row has deploymentStage=paper, and baseline not_required is source-confirmed rather than inferred from missing data), (2) Comparable P&L subtotals and Persona coverage (summary.pnlGroups with currency, period, as-of timestamp, and source-verified P&L definition), (3) Notable trading events, (4) Persona trading details table, (5) Concise performance rankings, and (6) Collapsed-by-default Data Diagnostics. Numbers use thousands separators, currency-appropriate 2-decimal precision, percentages, basis points, and localized timestamps via safeDateTime."
     },
     "acceptance_2_chengchuan_2317_and_degraded_states": {
       "passed": true,
-      "summary": "Dynamically renders the 澄川 (2317) case as Paper (模擬交易), 0 fills (0 筆成交 / 尚未成交), 0% fill rate (該次意向 452 股、成交 0 股 / 0/452 SHARES), no fill P&L yet (尚無成交損益（帳本幣別 TWD） with zero digits in the P&L cell), insufficient cash pre-broker risk rejection (資金不足 / 送券商前風控拒單（未送出委託）), and a verified Trade Journey link. Distinguishes 0/0 no orders submitted, 0/452 source failure, stale telemetry, normal empty roster, all-probe exclusion via BFF operator_scope, partial scope, full source failure, rankings endpoint failure, and legacy unverified operator_scope without any frontend probe classifier or hardcoded exclusion list. Preserves unknown/unavailable fill-rate semantics in both Notable Trading Events selection/display and Persona table rows without falling back to unverified fill_rate_details counters or dividing them."
+      "summary": "Dynamically renders the 澄川 (2317) case as Paper (模擬交易), 0 fills (0 筆成交 / 尚未成交), 0% fill rate (該次意向 452 股、成交 0 股 / 0/452 SHARES), no fill P&L yet (尚無成交損益（帳本幣別 TWD） with zero digits in the P&L cell), insufficient cash pre-broker risk rejection (資金不足 / 送券商前風控拒單（未送出委託）), and a verified Trade Journey link. Distinguishes 0/0 no orders submitted, 0/452 and 0/0 source failure, stale telemetry, unknown fill-rate details, normal empty roster, all-probe exclusion via BFF operator_scope, partial scope, full source failure, rankings endpoint failure, and legacy unverified operator_scope without any frontend probe classifier or hardcoded exclusion list. Prioritizes unavailable, stale, and unknown source/detail truth over zero-denominator no-orders inference in both Notable Trading Events and Persona table rows."
     },
     "acceptance_3_diagnostics_rankings_i18n_and_navigation": {
       "passed": true,
@@ -50,7 +50,7 @@
       "command": "./node_modules/.bin/vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/components/detail/OwnerFacts.test.tsx",
       "exit_code": 0,
       "passed_files": 6,
-      "passed_tests": 140
+      "passed_tests": 142
     },
     {
       "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit && git diff --check",

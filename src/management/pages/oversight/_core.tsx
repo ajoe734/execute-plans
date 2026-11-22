@@ -2203,6 +2203,98 @@ export const TradingPulsePage = () => {
   );
 };
 
+const isVerifiedAllPaperBaselineNotRequired = (
+  model: ManagementTradingPulseModel,
+  rows: ManagementTradingPulseRuntimeRow[],
+): boolean => {
+  if (rows.length === 0) return false;
+  const scope = model.summary.operatorScope;
+  const scopeStatus = String(scope.status ?? "unverified").trim().toLowerCase();
+  if (scopeStatus !== "verified") return false;
+
+  const personaCount = pulseNumber(scope.personaCount);
+  const runtimeCount = pulseNumber(scope.runtimeCount ?? model.summary.runtimeCount);
+  if ((personaCount === null || personaCount <= 0) && (runtimeCount === null || runtimeCount <= 0)) {
+    return false;
+  }
+
+  if (!rows.every((r) => String(r.deploymentStage ?? "").trim().toLowerCase() === "paper")) {
+    return false;
+  }
+
+  const scopeStageEntries = Object.entries(scope.byStage ?? {});
+  const summaryStageEntries = Object.entries(model.summary.byStage ?? {});
+  if (scopeStageEntries.length === 0 && summaryStageEntries.length === 0) {
+    return false;
+  }
+
+  let confirmedPaperInScope = false;
+  for (const [stageKey, entry] of scopeStageEntries) {
+    const normalizedStage = stageKey.trim().toLowerCase();
+    const pc = pulseNumber(entry.personaCount);
+    const rc = pulseNumber(entry.runtimeCount);
+    if (normalizedStage === "paper") {
+      if ((pc !== null && pc > 0) || (rc !== null && rc > 0)) {
+        confirmedPaperInScope = true;
+      }
+      if (personaCount !== null && pc !== null && pc !== personaCount) return false;
+      if (runtimeCount !== null && rc !== null && rc !== runtimeCount) return false;
+    } else {
+      if (pc === null && rc === null) return false;
+      if ((pc !== null && pc > 0) || (rc !== null && rc > 0)) return false;
+    }
+  }
+
+  let confirmedPaperInSummary = false;
+  for (const [stageKey, count] of summaryStageEntries) {
+    const normalizedStage = stageKey.trim().toLowerCase();
+    const rc = pulseNumber(count);
+    if (normalizedStage === "paper") {
+      if (rc !== null && rc > 0) {
+        confirmedPaperInSummary = true;
+      }
+      if (runtimeCount !== null && rc !== null && rc !== runtimeCount) return false;
+    } else {
+      if (rc === null || rc > 0) return false;
+    }
+  }
+
+  if (!confirmedPaperInScope && !confirmedPaperInSummary) {
+    return false;
+  }
+
+  const baselineRequired = pulseNumber(
+    model.summary.baselineRequiredCount ?? model.summary.coverage?.baselineRequiredCount,
+  );
+  if (baselineRequired !== null && baselineRequired > 0) return false;
+  if ((pulseNumber(model.summary.baselineComparisonCount) ?? 0) > 0) return false;
+  if ((pulseNumber(model.summary.baselineWatchCount) ?? 0) > 0) return false;
+  if ((pulseNumber(model.summary.baselineBreachedCount) ?? 0) > 0) return false;
+  if ((model.summary.missingBaselineRuntimeIds?.length ?? 0) > 0) return false;
+
+  const hasConflictingRowBaseline = rows.some((r) => {
+    if (!r.baselineComparison) return false;
+    return String(r.baselineComparison.status ?? "").trim().toLowerCase() !== "not_required";
+  });
+  if (hasConflictingRowBaseline) return false;
+
+  const allRowsConfirmNotRequired = rows.every(
+    (r) =>
+      Boolean(r.baselineComparison)
+      && String(r.baselineComparison?.status ?? "").trim().toLowerCase() === "not_required",
+  );
+
+  const byBaselineEntries = Object.entries(model.summary.byBaselineStatus ?? {});
+  const byBaselineNotRequiredCount = pulseNumber(model.summary.byBaselineStatus?.not_required);
+  const summaryByBaselineConfirmsNotRequired =
+    byBaselineEntries.length > 0
+    && byBaselineNotRequiredCount !== null
+    && byBaselineNotRequiredCount >= rows.length
+    && byBaselineEntries.every(([k, v]) => k.trim().toLowerCase() === "not_required" || (pulseNumber(v) ?? 0) === 0);
+
+  return baselineRequired === 0 || allRowsConfirmNotRequired || summaryByBaselineConfirmsNotRequired;
+};
+
 const TradingPulseOperatorScopeSection = ({
   model,
   rows,
@@ -2260,10 +2352,7 @@ const TradingPulseOperatorScopeSection = ({
   const baselineRequired = pulseNumber(
     model.summary.baselineRequiredCount ?? model.summary.coverage?.baselineRequiredCount,
   );
-  const allPaperBaselineNotRequired =
-    rows.length > 0
-    && (baselineRequired === 0
-      || rows.every((r) => (r.baselineComparison?.status ?? "not_required") === "not_required"));
+  const allPaperBaselineNotRequired = isVerifiedAllPaperBaselineNotRequired(model, rows);
 
   const surfaces = Object.entries(model.meta.surfaces ?? {});
   const hasSurfaceIssue = surfaces.some(
@@ -2484,6 +2573,68 @@ const isPulseSourceAvailable = (sourceStatus: unknown): boolean => {
   return !s || ["available", "ok", "live", "fresh", "verified"].includes(s);
 };
 
+const isPulseSourceVerifiedAvailable = (sourceStatus: unknown): boolean => {
+  const s = String(sourceStatus ?? "").trim().toLowerCase();
+  return ["available", "ok", "live", "fresh", "verified"].includes(s);
+};
+
+const resolvePulseMissingFillRateKind = (
+  row: ManagementTradingPulseRuntimeRow,
+): "unavailable" | "stale" | "no_orders" | "unknown" => {
+  const perf = row.performanceContext;
+  const sourceStatus = String(perf?.sourceStatus ?? "").trim().toLowerCase();
+  const fillDetails = perf?.fillRateDetails;
+  const fillDetailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
+  const metricReason = String(perf?.metricReasons?.fill_rate ?? "").trim().toLowerCase();
+  const detailsReason = String(fillDetails?.reason ?? "").trim().toLowerCase();
+  const reasons = [metricReason, detailsReason].filter(Boolean);
+
+  if (
+    sourceStatus === "unavailable"
+    || fillDetailsStatus === "unavailable"
+    || reasons.includes("source_unavailable")
+    || reasons.includes("telemetry_unavailable")
+  ) {
+    return "unavailable";
+  }
+
+  if (
+    sourceStatus === "stale"
+    || fillDetailsStatus === "stale"
+    || reasons.includes("stale")
+    || reasons.includes("telemetry_stale")
+  ) {
+    return "stale";
+  }
+
+  if (
+    sourceStatus === "unknown"
+    || sourceStatus === "unverified"
+    || (fillDetailsStatus === "unknown" && !reasons.includes("no_submitted_orders"))
+    || reasons.includes("unknown")
+    || reasons.includes("unverified")
+  ) {
+    return "unknown";
+  }
+
+  const sourceVerified = isPulseSourceVerifiedAvailable(sourceStatus);
+  const detailsStatusVerified = ["known", "available", "ok", "verified"].includes(fillDetailsStatus);
+  const num = pulseNumber(fillDetails?.numerator);
+  const den = pulseNumber(fillDetails?.denominator);
+
+  if (
+    sourceVerified
+    && (
+      reasons.includes("no_submitted_orders")
+      || (detailsStatusVerified && reasons.length === 0 && den !== null && den === 0 && (num === null || num === 0))
+    )
+  ) {
+    return "no_orders";
+  }
+
+  return "unknown";
+};
+
 const isPulseFillRateDetailsVerified = (row: ManagementTradingPulseRuntimeRow): boolean => {
   const perf = row.performanceContext;
   if (!isPulseSourceAvailable(perf?.sourceStatus)) return false;
@@ -2556,11 +2707,9 @@ const TradingPulseNotableEventsSection = ({
           {notableRows.map((row, idx) => {
             const outcome = row.latestOutcome;
             const perf = row.performanceContext;
-            const sourceStatus = String(perf?.sourceStatus ?? "").trim().toLowerCase();
             const fillDetails = perf?.fillRateDetails;
-            const fillDetailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
-            const fillRateReason = String(perf?.metricReasons?.fill_rate ?? fillDetails?.reason ?? "").trim().toLowerCase();
             const verifiedFillRate = resolvePulseVerifiedFillRate(row);
+            const missingFillRateKind = resolvePulseMissingFillRateKind(row);
             const canUseFillDetails = isPulseFillRateDetailsVerified(row) && verifiedFillRate !== null;
             const displayName = resolvePulsePersonaDisplayName(row, t);
             const symbol = resolvePulseRowSymbol(row);
@@ -2653,20 +2802,15 @@ const TradingPulseNotableEventsSection = ({
                   ) : null}
 
                   {verifiedFillRate === null && (
-                    sourceStatus === "unavailable"
-                    || fillRateReason === "source_unavailable"
-                    || fillRateReason === "telemetry_unavailable"
-                    || fillDetailsStatus === "unknown"
-                    || fillDetailsStatus === "unavailable" ? (
+                    missingFillRateKind === "unavailable" ? (
                       <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
-                    ) : sourceStatus === "stale"
-                      || fillRateReason === "stale"
-                      || fillRateReason === "telemetry_stale"
-                      || fillDetailsStatus === "stale" ? (
+                    ) : missingFillRateKind === "stale" ? (
                       <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
-                    ) : fillRateReason === "no_submitted_orders" ? (
+                    ) : missingFillRateKind === "no_orders" ? (
                       <span>{t("mgmt.pulse.fillRateNoOrders")}</span>
-                    ) : null
+                    ) : (
+                      <span className="text-muted-foreground">{t("mgmt.pulse.fillRateUnknown")}</span>
+                    )
                   )}
 
                   {reqAmt !== null && availAmt !== null && (
@@ -2789,9 +2933,8 @@ const TradingPulsePersonaDetailsSection = ({
                 const sourceStatus = String(perf?.sourceStatus ?? "").toLowerCase();
                 const fillCount = resolvePulseRowFillCount(row);
                 const fillDetails = perf?.fillRateDetails;
-                const fillDetailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
-                const fillRateReason = perf?.metricReasons?.fill_rate ?? fillDetails?.reason;
                 const verifiedFillRate = resolvePulseVerifiedFillRate(row);
+                const missingFillRateKind = resolvePulseMissingFillRateKind(row);
                 const canUseFillDetails = isPulseFillRateDetailsVerified(row) && verifiedFillRate !== null;
                 const num = pulseNumber(fillDetails?.numerator);
                 const den = pulseNumber(fillDetails?.denominator);
@@ -2939,16 +3082,12 @@ const TradingPulsePersonaDetailsSection = ({
                             </div>
                           )}
                         </div>
-                      ) : fillRateReason === "no_submitted_orders" || (den !== null && den <= 0) ? (
-                        <span className="text-muted-foreground">{t("mgmt.pulse.fillRateNoOrders")}</span>
-                      ) : sourceStatus === "stale" || fillRateReason === "stale" || fillRateReason === "telemetry_stale" || fillDetailsStatus === "stale" ? (
-                        <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
-                      ) : sourceStatus === "unavailable"
-                        || fillRateReason === "source_unavailable"
-                        || fillRateReason === "telemetry_unavailable"
-                        || fillDetailsStatus === "unknown"
-                        || fillDetailsStatus === "unavailable" ? (
+                      ) : missingFillRateKind === "unavailable" ? (
                         <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
+                      ) : missingFillRateKind === "stale" ? (
+                        <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
+                      ) : missingFillRateKind === "no_orders" ? (
+                        <span className="text-muted-foreground">{t("mgmt.pulse.fillRateNoOrders")}</span>
                       ) : (
                         <span className="text-muted-foreground">{t("mgmt.pulse.fillRateUnknown")}</span>
                       )}

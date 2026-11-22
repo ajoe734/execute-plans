@@ -341,9 +341,12 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
 
     renderPage(<TradingPulsePage />);
 
-    // Partial scope & source issue reminder in summary
+    // Partial scope & source issue reminder in summary; mixed Canary/Paper scope must NOT claim all Personas are paper
     expect(screen.getByTestId("trading-pulse-scope-partial")).toBeInTheDocument();
     expect(screen.getByTestId("trading-pulse-source-issue-reminder")).toBeInTheDocument();
+    expect(
+      screen.queryByText("目前皆為模擬交易，無須進行實盤基準比較。"),
+    ).not.toBeInTheDocument();
     // Uncomparable P&L explanation when rows have P&L but pnl_groups is empty
     expect(
       screen.getByText(
@@ -852,5 +855,380 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(chengchuanCells[2]).toContain("0/452 SHARES");
     expect(chengchuanCells[3]).toBe("尚無成交損益（帳本幣別 TWD）");
     expect(chengchuanCells[3]).not.toMatch(/\d/);
+  });
+
+  it("prioritizes unavailable, stale, and unknown fill-rate truth over zero-denominator no-orders inference in zh-TW and en-US", async () => {
+    const zeroDenominatorPayload = {
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          operator_scope: {
+            status: "verified",
+            tenant_id: "tenant-dev",
+            persona_count: 4,
+            runtime_count: 4,
+            by_stage: {
+              paper: { persona_count: 4, runtime_count: 4 },
+            },
+          },
+          pnl_groups: [],
+          runtime_count: 4,
+        },
+        runtime_rows: [
+          {
+            // 1. Zero-denominator unavailable (source_status=unavailable, denominator=0)
+            runtime_id: "rt-zero-unavailable",
+            runtime_binding_id: "rb-zero-unavailable",
+            persona_name: "零分母來源故障 Persona",
+            underlying_symbol: "2330",
+            deployment_stage: "paper",
+            status: "degraded",
+            metrics: { pnl: null, fill_rate: null },
+            performance_context: {
+              ledger_fill_count: null,
+              pnl_currency: "TWD",
+              fill_rate_details: {
+                status: "unknown",
+                reason: "source_unavailable",
+                numerator: 0,
+                denominator: 0,
+                unit: "SHARES",
+              },
+              metric_reasons: {
+                fill_rate: "source_unavailable",
+              },
+              source_status: "unavailable",
+            },
+            latest_outcome: {
+              status: "available",
+              submitted_to_broker: false,
+              reason_code: "insufficient_cash",
+              occurred_at: "2026-11-22T10:00:00Z",
+            },
+          },
+          {
+            // 2. Zero-denominator stale (source_status=stale, denominator=0)
+            runtime_id: "rt-zero-stale",
+            runtime_binding_id: "rb-zero-stale",
+            persona_name: "零分母資料過期 Persona",
+            underlying_symbol: "2317",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { pnl: null, fill_rate: null },
+            performance_context: {
+              ledger_fill_count: null,
+              pnl_currency: "TWD",
+              fill_rate_details: {
+                status: "stale",
+                reason: null,
+                numerator: 0,
+                denominator: 0,
+                unit: "SHARES",
+              },
+              source_status: "stale",
+            },
+            latest_outcome: {
+              status: "available",
+              submitted_to_broker: false,
+              reason_code: "risk_limit_exceeded",
+              occurred_at: "2026-11-22T10:05:00Z",
+            },
+          },
+          {
+            // 3. Zero-denominator unknown (status=unknown, reason=null, denominator=0)
+            runtime_id: "rt-zero-unknown",
+            runtime_binding_id: "rb-zero-unknown",
+            persona_name: "零分母狀態未知 Persona",
+            underlying_symbol: "2454",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { pnl: null, fill_rate: null },
+            performance_context: {
+              ledger_fill_count: null,
+              pnl_currency: "TWD",
+              fill_rate_details: {
+                status: "unknown",
+                reason: null,
+                numerator: 0,
+                denominator: 0,
+                unit: "SHARES",
+              },
+              source_status: "available",
+            },
+            latest_outcome: {
+              status: "available",
+              submitted_to_broker: false,
+              reason_code: "insufficient_cash",
+              occurred_at: "2026-11-22T10:10:00Z",
+            },
+          },
+          {
+            // 4. Zero-denominator verified no-orders (status=known, reason=null, denominator=0, source_status=available)
+            runtime_id: "rt-zero-verified-no-orders",
+            runtime_binding_id: "rb-zero-verified-no-orders",
+            persona_name: "零分母已核實無委託 Persona",
+            underlying_symbol: "2881",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { pnl: 0, fill_rate: null },
+            performance_context: {
+              ledger_fill_count: 0,
+              pnl_currency: "TWD",
+              fill_rate_details: {
+                status: "known",
+                reason: null,
+                numerator: 0,
+                denominator: 0,
+                unit: "SHARES",
+              },
+              source_status: "available",
+            },
+          },
+        ],
+      },
+      meta: { snapshot_at: "2026-11-22T12:00:00Z", surfaces: {} },
+    };
+
+    await i18n.changeLanguage("zh-TW");
+    mockTradingPulseLive(zeroDenominatorPayload, { data: { items: [] } });
+    const zhView = renderPage(<TradingPulsePage />);
+
+    const zhRows = screen.getAllByRole("row").slice(1);
+    const zhUnavailableRow = zhRows.find((r) => r.textContent?.includes("零分母來源故障 Persona")) as HTMLElement;
+    const zhStaleRow = zhRows.find((r) => r.textContent?.includes("零分母資料過期 Persona")) as HTMLElement;
+    const zhUnknownRow = zhRows.find((r) => r.textContent?.includes("零分母狀態未知 Persona")) as HTMLElement;
+    const zhNoOrdersRow = zhRows.find((r) => r.textContent?.includes("零分母已核實無委託 Persona")) as HTMLElement;
+
+    expect(within(zhUnavailableRow).getByText("資料暫時無法取得（無法計算成交率）")).toBeInTheDocument();
+    expect(within(zhUnavailableRow).queryByText("尚未有委託（尚無可計算的成交率）")).not.toBeInTheDocument();
+
+    expect(within(zhStaleRow).getByText("上次資料已過期（無法確認當期成交率）")).toBeInTheDocument();
+    expect(within(zhStaleRow).queryByText("尚未有委託（尚無可計算的成交率）")).not.toBeInTheDocument();
+
+    expect(within(zhUnknownRow).getByText("尚無可計算的成交率")).toBeInTheDocument();
+    expect(within(zhUnknownRow).queryByText("尚未有委託（尚無可計算的成交率）")).not.toBeInTheDocument();
+
+    expect(within(zhNoOrdersRow).getByText("尚未有委託（尚無可計算的成交率）")).toBeInTheDocument();
+
+    const zhEvents = screen.getByTestId("trading-pulse-notable-events");
+    expect(within(zhEvents).getByText("資料暫時無法取得（無法計算成交率）")).toBeInTheDocument();
+    expect(within(zhEvents).getByText("上次資料已過期（無法確認當期成交率）")).toBeInTheDocument();
+    expect(within(zhEvents).getByText("尚無可計算的成交率")).toBeInTheDocument();
+    expect(within(zhEvents).queryByText("尚未有委託（尚無可計算的成交率）")).not.toBeInTheDocument();
+    zhView.unmount();
+
+    await i18n.changeLanguage("en-US");
+    mockTradingPulseLive(zeroDenominatorPayload, { data: { items: [] } });
+    renderPage(<TradingPulsePage />);
+
+    const enRows = screen.getAllByRole("row").slice(1);
+    const enUnavailableRow = enRows.find((r) => r.textContent?.includes("零分母來源故障 Persona")) as HTMLElement;
+    const enStaleRow = enRows.find((r) => r.textContent?.includes("零分母資料過期 Persona")) as HTMLElement;
+    const enUnknownRow = enRows.find((r) => r.textContent?.includes("零分母狀態未知 Persona")) as HTMLElement;
+    const enNoOrdersRow = enRows.find((r) => r.textContent?.includes("零分母已核實無委託 Persona")) as HTMLElement;
+
+    expect(
+      within(enUnavailableRow).getByText("Data temporarily unavailable (fill rate cannot be calculated)"),
+    ).toBeInTheDocument();
+    expect(
+      within(enUnavailableRow).queryByText("No orders submitted yet (fill rate not available)"),
+    ).not.toBeInTheDocument();
+
+    expect(
+      within(enStaleRow).getByText("Last data is stale (current fill rate unavailable)"),
+    ).toBeInTheDocument();
+    expect(
+      within(enStaleRow).queryByText("No orders submitted yet (fill rate not available)"),
+    ).not.toBeInTheDocument();
+
+    expect(within(enUnknownRow).getByText("Fill rate not available yet")).toBeInTheDocument();
+    expect(
+      within(enUnknownRow).queryByText("No orders submitted yet (fill rate not available)"),
+    ).not.toBeInTheDocument();
+
+    expect(
+      within(enNoOrdersRow).getByText("No orders submitted yet (fill rate not available)"),
+    ).toBeInTheDocument();
+
+    const enEvents = screen.getByTestId("trading-pulse-notable-events");
+    expect(
+      within(enEvents).getByText("Data temporarily unavailable (fill rate cannot be calculated)"),
+    ).toBeInTheDocument();
+    expect(
+      within(enEvents).getByText("Last data is stale (current fill rate unavailable)"),
+    ).toBeInTheDocument();
+    expect(within(enEvents).getByText("Fill rate not available yet")).toBeInTheDocument();
+    expect(
+      within(enEvents).queryByText("No orders submitted yet (fill rate not available)"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders scopePaperBaselineSummary only for source-verified all-paper scope with confirmed not_required baseline and suppresses it for mixed, live, unknown-stage, or missing-baseline cases", async () => {
+    const cases: Array<{ name: string; payload: unknown }> = [
+      {
+        name: "mixed paper and canary stages even with baseline_required_count=0",
+        payload: {
+          data: {
+            id: "management-trading-pulse",
+            summary: {
+              operator_scope: {
+                status: "verified",
+                tenant_id: "tenant-dev",
+                persona_count: 2,
+                runtime_count: 2,
+                by_stage: {
+                  paper: { persona_count: 1, runtime_count: 1 },
+                  canary: { persona_count: 1, runtime_count: 1 },
+                },
+              },
+              baseline_required_count: 0,
+              by_baseline_status: { not_required: 2 },
+              by_stage: { paper: 1, canary: 1 },
+              runtime_count: 2,
+            },
+            runtime_rows: [
+              {
+                runtime_id: "rt-paper-1",
+                persona_name: "Paper Persona",
+                deployment_stage: "paper",
+                status: "active",
+                baseline_comparison: { status: "not_required" },
+              },
+              {
+                runtime_id: "rt-canary-1",
+                persona_name: "Canary Persona",
+                deployment_stage: "canary",
+                status: "active",
+                baseline_comparison: { status: "not_required" },
+              },
+            ],
+          },
+          meta: { snapshot_at: "2026-11-22T12:00:00Z", surfaces: {} },
+        },
+      },
+      {
+        name: "live stage with baseline_required_count=0",
+        payload: {
+          data: {
+            id: "management-trading-pulse",
+            summary: {
+              operator_scope: {
+                status: "verified",
+                tenant_id: "tenant-dev",
+                persona_count: 1,
+                runtime_count: 1,
+                by_stage: {
+                  live: { persona_count: 1, runtime_count: 1 },
+                },
+              },
+              baseline_required_count: 0,
+              by_baseline_status: { not_required: 1 },
+              by_stage: { live: 1 },
+              runtime_count: 1,
+            },
+            runtime_rows: [
+              {
+                runtime_id: "rt-live-1",
+                persona_name: "Live Persona",
+                deployment_stage: "live",
+                status: "active",
+                baseline_comparison: { status: "not_required" },
+              },
+            ],
+          },
+          meta: { snapshot_at: "2026-11-22T12:00:00Z", surfaces: {} },
+        },
+      },
+      {
+        name: "unknown deployment stage on row or stage breakdown mismatch",
+        payload: {
+          data: {
+            id: "management-trading-pulse",
+            summary: {
+              operator_scope: {
+                status: "verified",
+                tenant_id: "tenant-dev",
+                persona_count: 2,
+                runtime_count: 2,
+                by_stage: {
+                  paper: { persona_count: 1, runtime_count: 1 },
+                  unknown: { persona_count: 1, runtime_count: 1 },
+                },
+              },
+              baseline_required_count: 0,
+              by_baseline_status: { not_required: 2 },
+              runtime_count: 2,
+            },
+            runtime_rows: [
+              {
+                runtime_id: "rt-paper-2",
+                persona_name: "Paper Persona 2",
+                deployment_stage: "paper",
+                status: "active",
+                baseline_comparison: { status: "not_required" },
+              },
+              {
+                runtime_id: "rt-unknown-stage",
+                persona_name: "Unknown Stage Persona",
+                deployment_stage: "unknown",
+                status: "active",
+                baseline_comparison: { status: "not_required" },
+              },
+            ],
+          },
+          meta: { snapshot_at: "2026-11-22T12:00:00Z", surfaces: {} },
+        },
+      },
+      {
+        name: "all-paper rows with missing baseline data (no baseline_required_count and no row baseline_comparison)",
+        payload: {
+          data: {
+            id: "management-trading-pulse",
+            summary: {
+              operator_scope: {
+                status: "verified",
+                tenant_id: "tenant-dev",
+                persona_count: 1,
+                runtime_count: 1,
+                by_stage: {
+                  paper: { persona_count: 1, runtime_count: 1 },
+                },
+              },
+              by_stage: { paper: 1 },
+              runtime_count: 1,
+            },
+            runtime_rows: [
+              {
+                runtime_id: "rt-paper-no-baseline",
+                persona_name: "Paper No Baseline Data",
+                deployment_stage: "paper",
+                status: "active",
+              },
+            ],
+          },
+          meta: { snapshot_at: "2026-11-22T12:00:00Z", surfaces: {} },
+        },
+      },
+    ];
+
+    for (const testCase of cases) {
+      await i18n.changeLanguage("zh-TW");
+      mockTradingPulseLive(testCase.payload, { data: { items: [] } });
+      const zhView = renderPage(<TradingPulsePage />);
+      expect(
+        screen.queryByText("目前皆為模擬交易，無須進行實盤基準比較。"),
+        `zh-TW should not show all-paper baseline summary for: ${testCase.name}`,
+      ).not.toBeInTheDocument();
+      zhView.unmount();
+
+      await i18n.changeLanguage("en-US");
+      mockTradingPulseLive(testCase.payload, { data: { items: [] } });
+      const enView = renderPage(<TradingPulsePage />);
+      expect(
+        screen.queryByText("All current Personas are in paper trading; live baseline comparison is not required."),
+        `en-US should not show all-paper baseline summary for: ${testCase.name}`,
+      ).not.toBeInTheDocument();
+      enView.unmount();
+    }
   });
 });

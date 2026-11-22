@@ -1478,6 +1478,57 @@ describe("mgmt façade (PM-Live)", () => {
               },
             },
           },
+          {
+            runtime_id: "rt-zero-denom-unknown-no-reason",
+            runtime_binding_id: "rb-zero-denom-unknown-no-reason",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 0,
+                reason: null,
+                unit: "SHARES",
+              },
+              source_status: "available",
+            },
+          },
+          {
+            runtime_id: "rt-zero-denom-source-unavailable",
+            runtime_binding_id: "rb-zero-denom-source-unavailable",
+            deployment_stage: "paper",
+            status: "degraded",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 0,
+                reason: null,
+                unit: "SHARES",
+              },
+              source_status: "unavailable",
+            },
+          },
+          {
+            runtime_id: "rt-zero-denom-stale",
+            runtime_binding_id: "rb-zero-denom-stale",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "stale",
+                numerator: 0,
+                denominator: 0,
+                reason: null,
+                unit: "SHARES",
+              },
+              source_status: "stale",
+            },
+          },
         ],
       },
     });
@@ -1485,6 +1536,9 @@ describe("mgmt façade (PM-Live)", () => {
     const unknownPos = out?.runtimeRows.find((r) => r.runtimeId === "rt-unknown-pos-denom");
     const knownZero = out?.runtimeRows.find((r) => r.runtimeId === "rt-known-zero-pos-denom");
     const zeroOverZero = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-over-zero");
+    const zeroDenomUnknown = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-denom-unknown-no-reason");
+    const zeroDenomUnavailable = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-denom-source-unavailable");
+    const zeroDenomStale = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-denom-stale");
 
     expect(unknownPos?.metrics.fill_rate).toBeNull();
     expect(unknownPos?.performanceContext?.fillRateDetails).toMatchObject({
@@ -1506,6 +1560,13 @@ describe("mgmt façade (PM-Live)", () => {
 
     expect(zeroOverZero?.metrics.fill_rate).toBeNull();
     expect(zeroOverZero?.performanceContext?.metricReasons.fill_rate).toBe("no_submitted_orders");
+
+    expect(zeroDenomUnknown?.metrics.fill_rate).toBeNull();
+    expect(zeroDenomUnknown?.performanceContext?.metricReasons.fill_rate).toBe("unknown");
+    expect(zeroDenomUnavailable?.metrics.fill_rate).toBeNull();
+    expect(zeroDenomUnavailable?.performanceContext?.metricReasons.fill_rate).toBe("source_unavailable");
+    expect(zeroDenomStale?.metrics.fill_rate).toBeNull();
+    expect(zeroDenomStale?.performanceContext?.metricReasons.fill_rate).toBe("stale");
 
     const rankings = adaptTradingPulseRankings({
       data: {
