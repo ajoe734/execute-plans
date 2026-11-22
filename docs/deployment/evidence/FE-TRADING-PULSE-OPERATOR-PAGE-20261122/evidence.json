@@ -38,11 +38,11 @@
     },
     "acceptance_2_chengchuan_2317_and_degraded_states": {
       "passed": true,
-      "summary": "Dynamically renders the 澄川 (2317) case as Paper (模擬交易), 0 fills (0 筆成交 / 尚未成交), 0% fill rate (該次意向 452 股、成交 0 股 / 0/452 SHARES), no fill P&L yet (尚無成交損益（帳本幣別 TWD） with zero digits in the P&L cell), insufficient cash pre-broker risk rejection (資金不足 / 送券商前風控拒單（未送出委託）), and a verified Trade Journey link. Distinguishes 0/0 no orders submitted, 0/452 source failure, stale telemetry, normal empty roster, all-probe exclusion via BFF operator_scope, partial scope, full source failure, rankings endpoint failure, and legacy unverified operator_scope without any frontend probe classifier or hardcoded exclusion list."
+      "summary": "Dynamically renders the 澄川 (2317) case as Paper (模擬交易), 0 fills (0 筆成交 / 尚未成交), 0% fill rate (該次意向 452 股、成交 0 股 / 0/452 SHARES), no fill P&L yet (尚無成交損益（帳本幣別 TWD） with zero digits in the P&L cell), insufficient cash pre-broker risk rejection (資金不足 / 送券商前風控拒單（未送出委託）), and a verified Trade Journey link. Distinguishes 0/0 no orders submitted, 0/452 source failure, stale telemetry, normal empty roster, all-probe exclusion via BFF operator_scope, partial scope, full source failure, rankings endpoint failure, and legacy unverified operator_scope without any frontend probe classifier or hardcoded exclusion list. Preserves unknown/unavailable fill-rate semantics in both Notable Trading Events selection/display and Persona table rows without falling back to unverified fill_rate_details counters or dividing them."
     },
     "acceptance_3_diagnostics_rankings_i18n_and_navigation": {
       "passed": true,
-      "summary": "Removes the 7 raw surface status cards, LIVE BFF badge, Row health, Checks, technical IDs (rt-*, rb-*, persona-*), repeated per-row baseline badges, empty leaderboards, unused legacy pulse translation keys, and runtime-module test fixtures. Converges wire alias normalization in management.ts, relocates the two recorded wire fixtures to src/lib/bff-v1/__tests__/fixtures/trading-pulse.ts, and uses the single shared tradeJourneyHref helper for exact journey and persona-filtered journey navigation with tenant/environment/return_to preservation. Expandable Data Diagnostics preserves surface sources, effective timestamps, and runtime/binding locators. Rankings are locale-consistent in zh-TW and en-US with verified names, symbols, units, comparison scopes, and real reasons for unranked Personas; negative P&L is explicitly labeled as loss and never described as profit."
+      "summary": "Removes the 7 raw surface status cards, LIVE BFF badge, Row health, Checks, technical IDs (rt-*, rb-*, persona-*), repeated per-row baseline badges, empty leaderboards, unused legacy pulse translation keys, and runtime-module test fixtures. Converges wire alias normalization in management.ts, relocates the two recorded wire fixtures to src/lib/bff-v1/__tests__/fixtures/trading-pulse.ts, and uses the single shared tradeJourneyHref helper for exact journey and persona-filtered journey navigation with tenant/environment/return_to preservation. Expandable Data Diagnostics preserves surface sources, effective timestamps, and runtime/binding locators. Rankings are locale-consistent in zh-TW and en-US with verified names, symbols, units, comparison scopes, and source-backed reasons for unranked Personas (using unknown/no-recorded-reason for omitted blocks without recorded reasons and generic insufficient-sample copy for insufficient_samples/insufficient_data without inferring 10-day sample thresholds); negative P&L is explicitly labeled as loss and never described as profit."
     }
   },
   "verification_commands": [
@@ -50,7 +50,7 @@
       "command": "./node_modules/.bin/vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/components/detail/OwnerFacts.test.tsx",
       "exit_code": 0,
       "passed_files": 6,
-      "passed_tests": 139
+      "passed_tests": 140
     },
     {
       "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit && git diff --check",

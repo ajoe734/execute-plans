@@ -368,9 +368,157 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     ).toBeInTheDocument();
     expect(within(sourceDownRow).queryByText(/0%/)).not.toBeInTheDocument();
 
+    // Notable events section must also preserve unavailable semantics and NOT select or divide unverified 0/452 counters
+    const eventsSection = screen.getByTestId("trading-pulse-notable-events");
+    expect(within(eventsSection).queryByText(/來源故障 Persona/)).not.toBeInTheDocument();
+    expect(within(eventsSection).queryByText(/452/)).not.toBeInTheDocument();
+    expect(within(eventsSection).queryByText(/0%/)).not.toBeInTheDocument();
+    expect(within(eventsSection).getByText("目前無風控拒單或異常交易事件。")).toBeInTheDocument();
+
     const staleRow = rows.find((r) => r.textContent?.includes("資料過期 Persona")) as HTMLElement;
     expect(within(staleRow).getAllByText(/上次資料已過期/).length).toBeGreaterThanOrEqual(1);
     expect(within(staleRow).getByText("上次資料已過期，損益未知")).toBeInTheDocument();
+  });
+
+  it("preserves unknown/unavailable fill-rate semantics in notable event display and does not infer 10-day sample thresholds for empty ranking blocks or generic insufficient_samples reasons", async () => {
+    await i18n.changeLanguage("zh-TW");
+    mockTradingPulseLive(
+      {
+        data: {
+          id: "management-trading-pulse",
+          summary: {
+            operator_scope: {
+              status: "verified",
+              tenant_id: "tenant-dev",
+              persona_count: 1,
+              runtime_count: 1,
+              by_stage: {
+                paper: { persona_count: 1, runtime_count: 1 },
+              },
+            },
+            pnl_groups: [],
+            runtime_count: 1,
+          },
+          runtime_rows: [
+            {
+              runtime_id: "rt-reject-source-down",
+              runtime_binding_id: "rb-reject-source-down",
+              persona_name: "拒單且統計故障 Persona",
+              underlying_symbol: "2317",
+              deployment_stage: "paper",
+              status: "degraded",
+              metrics: {
+                pnl: null,
+                fill_rate: null,
+              },
+              performance_context: {
+                ledger_fill_count: null,
+                pnl_currency: "TWD",
+                fill_rate_details: {
+                  status: "unknown",
+                  reason: "source_unavailable",
+                  numerator: 0,
+                  denominator: 452,
+                  unit: "SHARES",
+                },
+                metric_reasons: {
+                  fill_rate: "source_unavailable",
+                },
+                source_status: "unavailable",
+              },
+              latest_outcome: {
+                status: "available",
+                submitted_to_broker: false,
+                reason_code: "insufficient_cash",
+                occurred_at: "2026-11-22T10:00:00Z",
+              },
+            },
+          ],
+        },
+        meta: {
+          snapshot_at: "2026-11-22T12:00:00Z",
+          surfaces: {},
+        },
+      },
+      {
+        data: {
+          items: [
+            {
+              block_id: "pnl-leaders",
+              metric: "pnl",
+              items: [],
+              missing_metric_count: 0,
+            },
+            {
+              block_id: "drawdown-control",
+              metric: "drawdown",
+              items: [],
+              missing_metric_count: 1,
+              metric_reasons: {
+                "rt-reject-source-down": "insufficient_samples",
+              },
+            },
+            {
+              block_id: "sharpe-leaders",
+              metric: "sharpe_ratio",
+              items: [],
+              missing_metric_count: 1,
+            },
+          ],
+        },
+      },
+    );
+
+    const zhView = renderPage(<TradingPulsePage />);
+    const eventsSection = screen.getByTestId("trading-pulse-notable-events");
+    expect(within(eventsSection).getByText("拒單且統計故障 Persona")).toBeInTheDocument();
+    expect(within(eventsSection).getByText("資金不足")).toBeInTheDocument();
+    expect(
+      within(eventsSection).getByText("資料暫時無法取得（無法計算成交率）"),
+    ).toBeInTheDocument();
+    expect(within(eventsSection).queryByText(/452/)).not.toBeInTheDocument();
+    expect(within(eventsSection).queryByText(/0%/)).not.toBeInTheDocument();
+
+    const omittedSection = screen.getByTestId("trading-pulse-rankings-omitted");
+    expect(
+      within(omittedSection).getByText(
+        "損益表現排行（0 位未達可比較條件）：尚無可比較觀測值（未記錄原因）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(omittedSection).getByText(
+        "回撤控制排行（1 位未達可比較條件）：拒單且統計故障 Persona（樣本資料不足）",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(omittedSection).getByText(
+        "夏普比率排行（1 位未達可比較條件）：尚無可比較觀測值（未記錄原因）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(omittedSection).queryByText(/10 個交易日/)).not.toBeInTheDocument();
+    zhView.unmount();
+
+    await i18n.changeLanguage("en-US");
+    renderPage(<TradingPulsePage />);
+    const enEvents = screen.getByTestId("trading-pulse-notable-events");
+    expect(
+      within(enEvents).getByText("Data temporarily unavailable (fill rate cannot be calculated)"),
+    ).toBeInTheDocument();
+    expect(within(enEvents).queryByText(/452/)).not.toBeInTheDocument();
+    expect(within(enEvents).queryByText(/0%/)).not.toBeInTheDocument();
+
+    const enOmitted = screen.getByTestId("trading-pulse-rankings-omitted");
+    expect(
+      within(enOmitted).getByText(
+        "P&L Performance (0 not yet eligible): No comparable observation (no reason recorded)",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(enOmitted).getByText(
+        "Drawdown Control (1 not yet eligible): 拒單且統計故障 Persona（Insufficient sample data）",
+      ),
+    ).toBeInTheDocument();
+    expect(within(enOmitted).queryByText(/10 daily returns/i)).not.toBeInTheDocument();
   });
 
   it("handles normal empty roster, all-probe roster exclusion, legacy unverified scope, full source failure, and rankings failure independently", async () => {

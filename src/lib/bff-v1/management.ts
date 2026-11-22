@@ -5329,7 +5329,9 @@ function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow |
     (Object.prototype.hasOwnProperty.call(rawMetrics, "fill_rate") && rawMetrics.fill_rate === null)
     || (Object.prototype.hasOwnProperty.call(rawMetrics, "fillRate") && rawMetrics.fillRate === null);
   const fillRateUnavailable =
-    !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
+    performanceContext.sourceStatus === "unavailable"
+    || performanceContext.sourceStatus === "stale"
+    || !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
     || Boolean(performanceContext.metricReasons.fill_rate);
   if (fillRateUnavailable) {
     metrics.fill_rate = null;

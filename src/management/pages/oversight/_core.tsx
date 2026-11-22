@@ -2052,8 +2052,11 @@ const formatPulseQuantityUnit = (
 const formatPulseMetricReason = (reason: unknown, t: PulseTranslate): string => {
   const r = String(reason ?? "").trim().toLowerCase();
   if (r === "no_fills") return t("mgmt.pulse.reasonNoFills");
-  if (["min_10_daily_returns_required", "insufficient_samples", "insufficient_data"].includes(r)) {
+  if (r === "min_10_daily_returns_required") {
     return t("mgmt.pulse.reasonMin10DailyReturns");
+  }
+  if (["insufficient_samples", "insufficient_data"].includes(r)) {
+    return t("mgmt.pulse.reasonInsufficientSamples");
   }
   if (["zero_return_variance", "zero_variance"].includes(r)) {
     return t("mgmt.pulse.reasonZeroVariance");
@@ -2476,15 +2479,47 @@ const TradingPulsePnlGroupsSection = ({
   );
 };
 
+const isPulseSourceAvailable = (sourceStatus: unknown): boolean => {
+  const s = String(sourceStatus ?? "").trim().toLowerCase();
+  return !s || ["available", "ok", "live", "fresh", "verified"].includes(s);
+};
+
+const isPulseFillRateDetailsVerified = (row: ManagementTradingPulseRuntimeRow): boolean => {
+  const perf = row.performanceContext;
+  if (!isPulseSourceAvailable(perf?.sourceStatus)) return false;
+  if (perf?.metricReasons?.fill_rate) return false;
+  const details = perf?.fillRateDetails;
+  if (!details) return false;
+  if (details.reason) return false;
+  const detailsStatus = String(details.status ?? "").trim().toLowerCase();
+  if (detailsStatus && !["known", "available", "ok", "verified"].includes(detailsStatus)) {
+    return false;
+  }
+  const num = pulseNumber(details.numerator);
+  const den = pulseNumber(details.denominator);
+  return num !== null && den !== null && den > 0 && num >= 0;
+};
+
+const resolvePulseVerifiedFillRate = (row: ManagementTradingPulseRuntimeRow): number | null => {
+  const perf = row.performanceContext;
+  if (!isPulseSourceAvailable(perf?.sourceStatus)) return null;
+  if (perf?.metricReasons?.fill_rate) return null;
+  const details = perf?.fillRateDetails;
+  if (details && !isPulseFillRateDetailsVerified(row)) return null;
+  return pulseNumber(row.metrics?.fill_rate);
+};
+
 const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
   const outcome = row.latestOutcome;
-  const fillDetails = row.performanceContext?.fillRateDetails;
-  const num = pulseNumber(fillDetails?.numerator);
-  const den = pulseNumber(fillDetails?.denominator);
   if (outcome && outcome.status === "available") return true;
   if (outcome?.submittedToBroker === false) return true;
   if (outcome?.reasonCode) return true;
-  if (num === 0 && den !== null && den > 0) return true;
+  if (isPulseFillRateDetailsVerified(row) && resolvePulseVerifiedFillRate(row) !== null) {
+    const fillDetails = row.performanceContext?.fillRateDetails;
+    const num = pulseNumber(fillDetails?.numerator);
+    const den = pulseNumber(fillDetails?.denominator);
+    if (num === 0 && den !== null && den > 0) return true;
+  }
   return false;
 };
 
@@ -2521,13 +2556,22 @@ const TradingPulseNotableEventsSection = ({
           {notableRows.map((row, idx) => {
             const outcome = row.latestOutcome;
             const perf = row.performanceContext;
+            const sourceStatus = String(perf?.sourceStatus ?? "").trim().toLowerCase();
             const fillDetails = perf?.fillRateDetails;
+            const fillDetailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
+            const fillRateReason = String(perf?.metricReasons?.fill_rate ?? fillDetails?.reason ?? "").trim().toLowerCase();
+            const verifiedFillRate = resolvePulseVerifiedFillRate(row);
+            const canUseFillDetails = isPulseFillRateDetailsVerified(row) && verifiedFillRate !== null;
             const displayName = resolvePulsePersonaDisplayName(row, t);
             const symbol = resolvePulseRowSymbol(row);
             const submitted = outcome?.submittedToBroker;
             const reasonText = formatPulseOutcomeReason(outcome?.reasonCode, t);
-            const reqQty = pulseNumber(outcome?.requestedQuantity ?? fillDetails?.denominator);
-            const fillQty = pulseNumber(outcome?.filledQuantity ?? fillDetails?.numerator);
+            const reqQty = pulseNumber(
+              outcome?.requestedQuantity ?? (canUseFillDetails ? fillDetails?.denominator : null),
+            );
+            const fillQty = pulseNumber(
+              outcome?.filledQuantity ?? (canUseFillDetails ? fillDetails?.numerator : null),
+            );
             const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
             const reqAmt = pulseNumber(outcome?.required);
             const availAmt = pulseNumber(outcome?.available);
@@ -2590,13 +2634,13 @@ const TradingPulseNotableEventsSection = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
-                  {reqQty !== null && reqQty > 0 && fillQty !== null ? (
+                  {reqQty !== null && reqQty > 0 && fillQty !== null && verifiedFillRate !== null ? (
                     <span className="text-foreground">
                       {t("mgmt.pulse.eventOrderFillQtyFmt", {
                         requested: formatPulseInt(reqQty),
                         filled: formatPulseInt(fillQty),
                         unit: unitInfo.localized,
-                        rate: formatPulsePercentFromFraction(fillQty / reqQty) ?? "0%",
+                        rate: formatPulsePercentFromFraction(verifiedFillRate) ?? "0%",
                       })}
                     </span>
                   ) : reqQty !== null ? (
@@ -2607,6 +2651,23 @@ const TradingPulseNotableEventsSection = ({
                       })}
                     </span>
                   ) : null}
+
+                  {verifiedFillRate === null && (
+                    sourceStatus === "unavailable"
+                    || fillRateReason === "source_unavailable"
+                    || fillRateReason === "telemetry_unavailable"
+                    || fillDetailsStatus === "unknown"
+                    || fillDetailsStatus === "unavailable" ? (
+                      <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
+                    ) : sourceStatus === "stale"
+                      || fillRateReason === "stale"
+                      || fillRateReason === "telemetry_stale"
+                      || fillDetailsStatus === "stale" ? (
+                      <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
+                    ) : fillRateReason === "no_submitted_orders" ? (
+                      <span>{t("mgmt.pulse.fillRateNoOrders")}</span>
+                    ) : null
+                  )}
 
                   {reqAmt !== null && availAmt !== null && (
                     <span>
@@ -2728,8 +2789,10 @@ const TradingPulsePersonaDetailsSection = ({
                 const sourceStatus = String(perf?.sourceStatus ?? "").toLowerCase();
                 const fillCount = resolvePulseRowFillCount(row);
                 const fillDetails = perf?.fillRateDetails;
+                const fillDetailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
                 const fillRateReason = perf?.metricReasons?.fill_rate ?? fillDetails?.reason;
-                const rawFillRate = pulseNumber(row.metrics?.fill_rate);
+                const verifiedFillRate = resolvePulseVerifiedFillRate(row);
+                const canUseFillDetails = isPulseFillRateDetailsVerified(row) && verifiedFillRate !== null;
                 const num = pulseNumber(fillDetails?.numerator);
                 const den = pulseNumber(fillDetails?.denominator);
                 const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
@@ -2858,19 +2921,19 @@ const TradingPulsePersonaDetailsSection = ({
                     </td>
 
                     <td className="py-3 pr-3 align-top">
-                      {rawFillRate !== null && sourceStatus !== "unavailable" ? (
+                      {verifiedFillRate !== null ? (
                         <div className="space-y-0.5">
                           <div className="font-medium text-foreground">
-                            {num !== null && den !== null && den > 0
+                            {canUseFillDetails && num !== null && den !== null && den > 0
                               ? t("mgmt.pulse.fillRateKnownWithBasisFmt", {
-                                  rate: formatPulsePercentFromFraction(rawFillRate) ?? "0%",
+                                  rate: formatPulsePercentFromFraction(verifiedFillRate) ?? "0%",
                                   requested: formatPulseInt(den),
                                   filled: formatPulseInt(num),
                                   unit: unitInfo.localized,
                                 })
-                              : (formatPulsePercentFromFraction(rawFillRate) ?? "0%")}
+                              : (formatPulsePercentFromFraction(verifiedFillRate) ?? "0%")}
                           </div>
-                          {num !== null && den !== null && den > 0 && unitInfo.raw && unitInfo.raw !== unitInfo.localized && (
+                          {canUseFillDetails && num !== null && den !== null && den > 0 && unitInfo.raw && unitInfo.raw !== unitInfo.localized && (
                             <div className="text-[11px] text-muted-foreground">
                               {formatPulseInt(num)}/{formatPulseInt(den)} {unitInfo.raw}
                             </div>
@@ -2878,12 +2941,13 @@ const TradingPulsePersonaDetailsSection = ({
                         </div>
                       ) : fillRateReason === "no_submitted_orders" || (den !== null && den <= 0) ? (
                         <span className="text-muted-foreground">{t("mgmt.pulse.fillRateNoOrders")}</span>
-                      ) : sourceStatus === "stale" || fillRateReason === "stale" || fillRateReason === "telemetry_stale" ? (
+                      ) : sourceStatus === "stale" || fillRateReason === "stale" || fillRateReason === "telemetry_stale" || fillDetailsStatus === "stale" ? (
                         <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
                       ) : sourceStatus === "unavailable"
                         || fillRateReason === "source_unavailable"
                         || fillRateReason === "telemetry_unavailable"
-                        || fillDetails?.status === "unknown" ? (
+                        || fillDetailsStatus === "unknown"
+                        || fillDetailsStatus === "unavailable" ? (
                         <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
                       ) : (
                         <span className="text-muted-foreground">{t("mgmt.pulse.fillRateUnknown")}</span>
@@ -3104,7 +3168,7 @@ const summarizeBlockMissingReasons = (
   t: PulseTranslate,
 ): string | null => {
   const reasonsMap = block.metricReasons ?? {};
-  const entries = Object.entries(reasonsMap);
+  const entries = Object.entries(reasonsMap).filter(([, reason]) => Boolean(reason));
   const missingCount = pulseNumber(block.missingMetricCount) ?? entries.length;
   if (missingCount <= 0 && entries.length === 0) return null;
 
@@ -3125,8 +3189,7 @@ const summarizeBlockMissingReasons = (
       .join("、");
   }
 
-  const isSharpe = String(block.kind ?? block.blockId ?? "").toLowerCase() === "sharpe-leaders";
-  return isSharpe ? t("mgmt.pulse.reasonMin10DailyReturns") : t("mgmt.pulse.reasonUnknown");
+  return t("mgmt.pulse.reasonUnknown");
 };
 
 const TradingPulseRankingsSection = ({
@@ -3337,7 +3400,7 @@ const TradingPulseRankingsSection = ({
               const blockTitle = formatRankingBlockTitle(b, t);
               const missingCount = pulseNumber(b.missingMetricCount) ?? runtimeRows.length;
               const details =
-                summarizeBlockMissingReasons(b, runtimeRows, t) ?? t("mgmt.pulse.reasonMin10DailyReturns");
+                summarizeBlockMissingReasons(b, runtimeRows, t) ?? t("mgmt.pulse.reasonUnknown");
               return (
                 <li key={`omitted-${b.kind}`}>
                   {t("mgmt.pulse.rankingOmittedBlockLineFmt", {
