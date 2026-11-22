@@ -265,10 +265,43 @@ const healthTone = (status: string): CanonicalDataSourceRecord["tone"] => {
   return "muted";
 };
 
+const MISSING_SOURCE_TOKENS = new Set([
+  "nan",
+  "null",
+  "none",
+  "undefined",
+  "n/a",
+  "na",
+  "nil",
+  "unknown",
+  "unknown-source",
+  "unknown_source",
+]);
+
+const asMeaningfulSourceString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    const next = asString(value);
+    if (next && !MISSING_SOURCE_TOKENS.has(next.toLowerCase())) {
+      return next;
+    }
+  }
+  return undefined;
+};
+
 export const adaptDataSource = (record: UnknownRecord, index: number): CanonicalDataSourceRecord => {
-  const status = asString(record.health, record.status, record.state) ?? "unknown";
-  const providerKey = asString(record.providerKey, record.provider_key, record.connector_id, record.id, record.provider) ?? `data-source-${index + 1}`;
-  const provider = asString(record.provider, record.name, record.display_name, record.connector_id, providerKey) ?? providerKey;
+  const status = asMeaningfulSourceString(record.health, record.status, record.state) ?? "unknown";
+  const providerKey =
+    asMeaningfulSourceString(
+      record.providerKey,
+      record.provider_key,
+      record.connector_id,
+      record.id,
+      record.provider,
+      record.name,
+      record.display_name,
+    ) ?? `data-source-${index + 1}`;
+  const provider =
+    asMeaningfulSourceString(record.provider, record.name, record.display_name) ?? "unknown";
   const consumerIds = stringList(record.consumerPersonaIds, record.consumer_persona_ids, record.persona_ids, record.personas);
   return {
     providerKey,
@@ -277,8 +310,8 @@ export const adaptDataSource = (record: UnknownRecord, index: number): Canonical
     sourceClasses: stringList(record.sourceClasses, record.source_classes, record.sourceClass, record.source_class, record.kind),
     status,
     tone: healthTone(status),
-    lastReadbackAt: asString(record.lastReadbackAt, record.last_readback_at, record.lastHeartbeatAt, record.last_heartbeat_at),
-    credentialState: asString(record.credentialState, record.credential_state, record.credentials, record.credential) ?? "unknown",
+    lastReadbackAt: asMeaningfulSourceString(record.lastReadbackAt, record.last_readback_at, record.lastHeartbeatAt, record.last_heartbeat_at),
+    credentialState: asMeaningfulSourceString(record.credentialState, record.credential_state, record.credentials, record.credential) ?? "unknown",
     liveIngestionEnabled: asBoolean(record.liveIngestionEnabled ?? record.live_ingestion_enabled, false),
     readOnly: asBoolean(record.readOnly ?? record.read_only, true),
     orderSideEffectsAllowed: asBoolean(record.orderSideEffectsAllowed ?? record.order_side_effects_allowed, false),
@@ -319,35 +352,35 @@ export const adaptDataSourceV2OrLegacy = (
     const des = (record.desired ?? {}) as Record<string, unknown>;
     const obs = (record.observed ?? {}) as Record<string, unknown>;
 
-    const sourceInstanceId = asString(
+    const sourceInstanceId = asMeaningfulSourceString(
       record.source_instance_id,
       record.data_source_id,
       inst.data_source_id,
       record.id,
     ) ?? `source-${index + 1}`;
-    const connectorId = asString(
+    const connectorId = asMeaningfulSourceString(
       record.connector_id,
       inst.connector_id,
       def.definition_id,
       record.provider,
     ) ?? `connector-${index + 1}`;
-    const provider = asString(record.provider, inst.provider, def.provider) ?? "unknown";
-    const sourceClass = asString(record.source_class, record.sourceClass, inst.source_class) ?? "market";
+    const provider = asMeaningfulSourceString(record.provider, inst.provider, def.provider) ?? "unknown";
+    const sourceClass = asMeaningfulSourceString(record.source_class, record.sourceClass, inst.source_class) ?? "market";
 
-    const definitionState = asString(def.definition_state) ?? "unknown";
-    const adapterToken = asString(def.adapter_token) ?? "unknown";
-    const definitionId = asString(def.definition_id) ?? connectorId;
+    const definitionState = asMeaningfulSourceString(def.definition_state) ?? "unknown";
+    const adapterToken = asMeaningfulSourceString(def.adapter_token) ?? "unknown";
+    const definitionId = asMeaningfulSourceString(def.definition_id) ?? connectorId;
 
-    const lifecycleState = asString(inst.lifecycle_state) ?? "unknown";
+    const lifecycleState = asMeaningfulSourceString(inst.lifecycle_state) ?? "unknown";
     const instanceRevision = typeof inst.revision === "number" && inst.revision >= 1 ? inst.revision : undefined;
 
-    const desiredLifecycle = asString(des.desired_lifecycle) ?? "unknown";
+    const desiredLifecycle = asMeaningfulSourceString(des.desired_lifecycle) ?? "unknown";
     const desiredRevision = typeof des.revision === "number" && des.revision >= 1 ? des.revision : undefined;
 
-    const effectiveLifecycle = asString(obs.effective_lifecycle) ?? "unknown";
-    const healthState = asString(obs.health_state) ?? "unknown";
-    const reconciliationStatus = asString(obs.reconciliation_status) ?? "unknown";
-    const credentialState = asString(obs.credential_state) ?? "unknown";
+    const effectiveLifecycle = asMeaningfulSourceString(obs.effective_lifecycle) ?? "unknown";
+    const healthState = asMeaningfulSourceString(obs.health_state) ?? "unknown";
+    const reconciliationStatus = asMeaningfulSourceString(obs.reconciliation_status) ?? "unknown";
+    const credentialState = asMeaningfulSourceString(obs.credential_state) ?? "unknown";
     const observedRevision = typeof obs.observed_revision === "number" && obs.observed_revision >= 1 ? obs.observed_revision : undefined;
     const desiredObservedRevision = typeof obs.desired_revision === "number" && obs.desired_revision >= 1 ? obs.desired_revision : undefined;
 
@@ -355,7 +388,7 @@ export const adaptDataSourceV2OrLegacy = (
       ...(isRecord(record.definition) ? record.definition : {}),
       definition_id: definitionId,
       adapter_token: adapterToken,
-      provider: asString(def.provider, provider) ?? "unknown",
+      provider: asMeaningfulSourceString(def.provider, provider) ?? "unknown",
       definition_state: definitionState,
     };
 

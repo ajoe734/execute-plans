@@ -1,0 +1,55 @@
+{
+  "schema_version": "pantheon.fe-risk-strategy-research-ui.v1",
+  "task_id": "FE-RISK-STRATEGY-RESEARCH-UI-20261120",
+  "owner": "Claude2",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-RISK-STRATEGY-RESEARCH-UI-20261120",
+  "status": "ready_for_review",
+  "scope": {
+    "delivered": [
+      "RiskCenter strategies slice: listNonDraft now sends hide_retired_personas=true and include_test_personas=false by default, drops is_synthetic_or_stub rows client-side, shows the hidden count (meta hidden_retired_persona_count + hidden_test_persona_strategy_count, else local count) and a toggle that re-queries with hidden rows included",
+      "DiscoverySections renders only present sections and nothing at all for an all-null record (StrategyDetail and ResearchDetail no longer show 23 dashes); individual panels unchanged",
+      "StrategyDetail overview: bound persona display names from persona_display_names with id secondary, trading-rules summary card (RuleDescription) with a link to the spec tab, stub banner naming stub_reason in plain words when is_synthetic_or_stub is true",
+      "MeetingsCenterPage: localized authority badge (also on MeetingDetailPage), card title = localized meeting type + chair display name with topic_summary below and mtg id secondary, execution_state dead_letter/execution_failed shows 執行失敗（未開成） plus localized last_error instead of Round 0, dead_letter_count banner with include_failed toggle",
+      "ResearchList: is_non_real rows hidden by default with meta.hidden_non_real_count and include_non_real toggle, name_is_fallback_id rows titled by localized task_type + display_summary with task_id secondary, missing adapter/dispatch_mode render 未記錄執行器 instead of unknown / unknown",
+      "ResearchDetail: no nan anywhere; empty values render 未綁定 or 未回報; discovery cards hidden when absent",
+      "zh-TW and en-US keys added symmetrically"
+    ],
+    "not_changed": ["BFF contract", "src/lib/enumLabels.ts", "StrategiesList/persona list pages"]
+  },
+  "verification": {
+    "typecheck": "npx tsc -p tsconfig.app.json --noEmit: 0 errors",
+    "tests": "npx vitest run (src/i18n src/lib/v5/management src/management src/lib/bff-v1): 1645 tests, all passing after fixing include_failed to be sent only when true; i18nParity.test.ts passes",
+    "new_or_updated_tests": [
+      "src/management/pages/RiskCenter.test.tsx",
+      "src/management/pages/StrategyDetail.test.tsx",
+      "src/management/pages/ResearchList.test.tsx",
+      "src/management/pages/ResearchDetail.test.tsx",
+      "src/management/pages/meetings/meetings.test.tsx",
+      "src/management/components/discovery/DiscoveryPanels.test.tsx",
+      "src/management/pages/StrategyDetail.discovery.test.tsx",
+      "src/management/pages/ResearchDetail.discovery.test.tsx",
+      "src/management/pages/Lists.test.tsx",
+      "src/lib/bff-v1/__tests__/domainReads.allPages.test.ts"
+    ],
+    "intentional_test_changes": "Two dash-wall assertions (DiscoveryPanels all-absent, StrategyDetail/ResearchDetail discovery-absent) were inverted to assert no cards render, as required by acceptance 2; populated-card tests are unchanged and pass."
+  },
+  "screenshots": [
+    "riskcenter-strategies.png",
+    "strategydetail-overview-real.png",
+    "strategydetail-overview-stub.png",
+    "meetingscenter.png",
+    "researchlist.png"
+  ],
+  "caveats": [
+    "Fixtures follow the BFF contract shape named in the task brief (persona_display_names, is_synthetic_or_stub, stub_reason, hidden_non_real_count, is_non_real, name_is_fallback_id, display_summary, execution_state, last_error, dead_letter_count, topic_summary). No recorded 2026-11-20 hosted JSON capture was present in this repository, so the fixtures are hand-cut to those field names, not copied byte-for-byte from hosted responses; real ids (strategy-persona-298e138c136c9840b0e4, strat-tw-official) are reused from existing fixtures.",
+    "Exact BFF query/meta names for hiding stubs are not documented in this repo: the strategies slice reuses the existing include_test_personas / hide_retired_personas / hidden_test_persona_strategy_count contract, research uses include_non_real, meetings use include_failed. If the BFF names differ, only strategies.ts, lists.ts (listResearchTasksEnvelope) and meetings.ts need renaming.",
+    "display_summary is accepted either as an object {symbol,dataset_ref,subject_ref} or a plain string; topic_summary is looked up as an i18n key and falls back to the raw text.",
+    "Screenshots were rendered from jsdom DOM of the real components with CSS compiled by the installed tailwindcss 3.4 (the project pins v4, which is not installed in this environment), so spacing/colors may differ slightly from the production build.",
+    "Contract alignment (pantheon PR #7664/#7676, 2026-11-20): meetings execution_state is an object {status, attempt_count, max_attempts, last_error, updated_at} and topic_summary an object {kind, subject_persona_id, period, lesson_count}, effective_status 'execution_failed' is honoured; strategies sum meta.hidden_unbound_stub_strategy_count into the hidden test/stub count and localize raw_market_seed_without_rules / simulation_fixture / test_persona_probe; research falls back to meta.surfaces.research_tasks.hidden_non_real_count. Meetings fixtures and unit tests were updated to these shapes; meetingscenter.png was NOT re-rendered after this change (only the topic line text differs).",
+    "Full npm run test: 3274 passed, 23 failed; all 23 failures (src/test/public-build-auth-contract.test.ts x22, src/test/build-tailwind-sources.test.ts x1) are Vite-build tests that fail identically with these changes stashed, so they are pre-existing in this environment.",
+    "The brief names StrategyDetail.test.tsx, which did not exist; it was created (existing StrategyDetail.*.test.tsx files are untouched apart from the discovery-absent case)."
+  ]
+}

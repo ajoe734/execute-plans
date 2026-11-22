@@ -29,7 +29,9 @@ import type { ManagementDataSourceV2DTO } from "@/lib/bff-v1/managementDataSourc
 import type { SystemDataSourceRecord } from "@/lib/v5/management/systemDataSources";
 import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
 import {
+  MISSING_DATA_SOURCE_FIELD_LABEL,
   canaryTone,
+  cleanSourceToken,
   credentialTone,
   fmtToken,
   formatAgeSeconds,
@@ -41,7 +43,11 @@ import {
   joinOrDash,
   lifecycleTone,
   reconciliationTone,
+  resolveLegacyProviderKey,
+  resolveLegacyProviderKeyLabel,
+  resolveLegacyProviderLabel,
   toneClass,
+  translateDataSourceSurfaceStatus,
 } from "./dataSourceModels";
 import {
   DATA_SOURCE_ACTIONS,
@@ -49,21 +55,73 @@ import {
   type DataSourceActionKey,
 } from "./dataSourceActions";
 
+export type LegacyDataSourceRowRecord = Omit<
+  SystemDataSourceRecord,
+  "reasons" | "credentialState"
+> & {
+  reasons?: string[];
+  credentialState?: string;
+};
+
 export interface DataSourceInstancesTableProps {
-  records: Array<ManagementDataSourceV2DTO | SystemDataSourceRecord>;
+  records: Array<ManagementDataSourceV2DTO | LegacyDataSourceRowRecord>;
   onSelectSource: (sourceId: string, item: ManagementDataSourceV2DTO | null) => void;
   onExecuteAction: (actionKey: DataSourceActionKey, source: ManagementDataSourceV2DTO) => void;
+  surfaceStatus?: string;
+  surfaceSource?: string;
+  surfaceReason?: string;
+  isLegacyProjection?: boolean;
 }
 
 export function DataSourceInstancesTable({
   records,
   onSelectSource,
   onExecuteAction,
+  surfaceStatus,
+  surfaceSource,
+  surfaceReason,
+  isLegacyProjection,
 }: DataSourceInstancesTableProps) {
   const { t } = useTranslation();
+  const normalizedStatus = (cleanSourceToken(surfaceStatus) ?? "").toLowerCase();
+  const legacyMode =
+    Boolean(isLegacyProjection) ||
+    (cleanSourceToken(surfaceSource) ?? "").toLowerCase() === "legacy_projection";
+  const showSurfaceBar =
+    normalizedStatus === "unavailable" ||
+    normalizedStatus === "degraded" ||
+    legacyMode;
+  const effectiveStatus =
+    normalizedStatus || (legacyMode ? "degraded" : "ok");
+  const statusToneKey =
+    effectiveStatus === "unavailable"
+      ? "bad"
+      : effectiveStatus === "degraded"
+        ? "warn"
+        : "ok";
 
   return (
     <Card className="overflow-hidden border">
+      {showSurfaceBar && (
+        <div
+          className="px-3 py-2 border-b border-border bg-status-warning/5 flex flex-wrap items-center gap-2 text-xs"
+          data-testid="instances-table-surface-status"
+        >
+          <Badge variant="outline" className={toneClass[statusToneKey]}>
+            {translateDataSourceSurfaceStatus(effectiveStatus, t)}
+          </Badge>
+          {legacyMode && (
+            <Badge variant="outline" className="font-mono text-[10px]">
+              {t("mgmt.dataSources.legacyProjectionBadge")}
+            </Badge>
+          )}
+          {surfaceReason && (
+            <span className="text-muted-foreground">
+              {t("mgmt.dataSources.surfaceReasonFmt", { reason: surfaceReason })}
+            </span>
+          )}
+        </div>
+      )}
       <ManagementTableScroll minScrollWidth={1380}>
         <table className="w-full min-w-[1380px] text-xs" aria-label={t("mgmt.dataSources.title")}>
           <thead className="border-b border-border bg-muted/40 text-left uppercase tracking-wider text-muted-foreground">
@@ -80,25 +138,60 @@ export function DataSourceInstancesTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {records.map((item, index) => {
-              if (isV2(item)) {
+            {records.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={9}
+                  className="px-4 py-6 text-center text-xs text-muted-foreground"
+                  data-testid="instances-table-empty-row"
+                >
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <span className="font-medium text-foreground">
+                      {effectiveStatus === "ok"
+                        ? t("mgmt.dataSources.emptyTitle")
+                        : translateDataSourceSurfaceStatus(effectiveStatus, t)}
+                    </span>
+                    {legacyMode && (
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {t("mgmt.dataSources.legacyProjectionSource")}
+                      </Badge>
+                    )}
+                    {surfaceReason && (
+                      <span>
+                        {t("mgmt.dataSources.surfaceReasonFmt", { reason: surfaceReason })}
+                      </span>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              records.map((item, index) => {
+                if (isV2(item)) {
+                  const keyId =
+                    cleanSourceToken(item.source_instance_id) ||
+                    cleanSourceToken(item.connector_id) ||
+                    `v2-${index}`;
+                  return (
+                    <V2DataSourceRow
+                      key={keyId}
+                      dto={item}
+                      isLegacyProjection={legacyMode}
+                      onSelect={() => onSelectSource(keyId, item)}
+                      onAction={(action) => onExecuteAction(action, item)}
+                    />
+                  );
+                }
+                const legacyItem = item as SystemDataSourceRecord;
+                const legacyKey = resolveLegacyProviderKey(legacyItem) || `legacy-${index}`;
                 return (
-                  <V2DataSourceRow
-                    key={item.source_instance_id || item.connector_id || `v2-${index}`}
-                    dto={item}
-                    onSelect={() => onSelectSource(item.source_instance_id || item.connector_id, item)}
-                    onAction={(action) => onExecuteAction(action, item)}
+                  <LegacyDataSourceRow
+                    key={legacyKey}
+                    record={legacyItem}
+                    onSelect={() => onSelectSource(legacyKey, null)}
                   />
                 );
-              }
-              return (
-                <LegacyDataSourceRow
-                  key={(item as SystemDataSourceRecord).providerKey || `legacy-${index}`}
-                  record={item as SystemDataSourceRecord}
-                  onSelect={() => onSelectSource((item as SystemDataSourceRecord).providerKey, null)}
-                />
-              );
-            })}
+              })
+            )}
           </tbody>
         </table>
       </ManagementTableScroll>
@@ -108,18 +201,43 @@ export function DataSourceInstancesTable({
 
 function V2DataSourceRow({
   dto,
+  isLegacyProjection,
   onSelect,
   onAction,
 }: {
   dto: ManagementDataSourceV2DTO;
+  isLegacyProjection?: boolean;
   onSelect: () => void;
   onAction: (actionKey: DataSourceActionKey) => void;
 }) {
   const { t } = useTranslation();
-  const sourceId = dto.source_instance_id || dto.connector_id;
+  const sourceId =
+    cleanSourceToken(dto.source_instance_id) ||
+    cleanSourceToken(dto.connector_id) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
+  const providerLabel =
+    cleanSourceToken(dto.provider) ||
+    cleanSourceToken(dto.instance?.provider) ||
+    cleanSourceToken(dto.definition?.provider) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
   const divergence = hasDivergence(dto);
   const allowedActions = dto.allowed_actions || dto.allowedActions;
-  const isEnabled = dto.desired?.desired_lifecycle === "enabled";
+  const desiredLifecycle =
+    cleanSourceToken(dto.desired?.desired_lifecycle) ||
+    cleanSourceToken(dto.instance?.lifecycle_state) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
+  const healthState =
+    cleanSourceToken(dto.observed?.health_state) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
+  const reconciliationStatus =
+    cleanSourceToken(dto.observed?.reconciliation_status) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
+  const credentialState =
+    cleanSourceToken(dto.observed?.credential_state) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
+  const definitionState =
+    cleanSourceToken(dto.definition?.definition_state) ||
+    MISSING_DATA_SOURCE_FIELD_LABEL;
 
   const writesLive = realWritesEnabled();
 
@@ -129,7 +247,7 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[210px]">
         <div className="flex items-center gap-1.5">
           <span className="font-semibold text-foreground cursor-pointer hover:underline" onClick={onSelect}>
-            {dto.provider || dto.definition?.provider || sourceId}
+            {providerLabel}
           </span>
           {divergence && (
             <span title={t("mgmt.dataSources.detail.divergenceTitle")}>
@@ -139,14 +257,17 @@ function V2DataSourceRow({
         </div>
         <div className="font-mono text-[11px] text-muted-foreground mt-0.5">{sourceId}</div>
         <div className="flex flex-wrap gap-1 mt-1.5">
-          {(dto.instance?.markets ?? dto.definition?.markets ?? []).map((m) => (
-            <Badge key={m} variant="outline" className="text-[10px] px-1 py-0 font-mono">
-              {m}
-            </Badge>
-          ))}
-          {dto.source_class && (
+          {(dto.instance?.markets ?? dto.definition?.markets ?? [])
+            .map((m) => cleanSourceToken(m))
+            .filter((m): m is string => Boolean(m))
+            .map((m) => (
+              <Badge key={m} variant="outline" className="text-[10px] px-1 py-0 font-mono">
+                {m}
+              </Badge>
+            ))}
+          {cleanSourceToken(dto.source_class) && (
             <Badge key={dto.source_class} variant="outline" className="text-[10px] px-1 py-0">
-              {fmtToken(dto.source_class)}
+              {fmtToken(dto.source_class, MISSING_DATA_SOURCE_FIELD_LABEL)}
             </Badge>
           )}
         </div>
@@ -154,24 +275,29 @@ function V2DataSourceRow({
 
       {/* 2. Support / Deployment */}
       <td className="px-3 py-3 min-w-[170px]">
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <Badge
             variant="outline"
             className={
-              dto.definition?.definition_state === "supported"
+              definitionState === "supported"
                 ? "bg-status-success/10 text-status-success border-status-success/30 text-[10px]"
                 : "text-[10px]"
             }
           >
-            {fmtToken(dto.definition?.definition_state || "unknown")}
+            {fmtToken(definitionState, MISSING_DATA_SOURCE_FIELD_LABEL)}
           </Badge>
+          {isLegacyProjection && (
+            <Badge variant="outline" className="text-[10px] font-mono">
+              {t("mgmt.dataSources.legacyProjectionSource")}
+            </Badge>
+          )}
         </div>
         <div className="font-mono text-[10px] text-muted-foreground mt-1 truncate max-w-[150px]">
-          {dto.definition?.definition_id || "—"}
+          {cleanSourceToken(dto.definition?.definition_id) || "—"}
         </div>
-        {dto.definition?.deployment_sha && (
+        {cleanSourceToken(dto.definition?.deployment_sha) && (
           <div className="font-mono text-[10px] text-muted-foreground truncate max-w-[150px]">
-            sha: {dto.definition.deployment_sha.slice(0, 8)}
+            sha: {dto.definition.deployment_sha!.slice(0, 8)}
           </div>
         )}
       </td>
@@ -179,8 +305,8 @@ function V2DataSourceRow({
       {/* 3. Desired Lifecycle */}
       <td className="px-3 py-3 min-w-[150px]">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className={lifecycleTone(dto.desired?.desired_lifecycle)}>
-            {fmtToken(dto.desired?.desired_lifecycle || dto.instance?.lifecycle_state || "unknown")}
+          <Badge variant="outline" className={lifecycleTone(desiredLifecycle)}>
+            {fmtToken(desiredLifecycle, MISSING_DATA_SOURCE_FIELD_LABEL)}
           </Badge>
           <Badge variant="outline" className="font-mono text-[10px]">
             {dto.desired?.revision !== undefined && dto.desired.revision >= 1 ? `r${dto.desired.revision}` : (dto.instance?.revision !== undefined && dto.instance.revision >= 1 ? `r${dto.instance.revision}` : "r—")}
@@ -191,11 +317,11 @@ function V2DataSourceRow({
       {/* 4. Observed Health / Freshness */}
       <td className="px-3 py-3 min-w-[200px]">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className={healthStateTone(dto.observed?.health_state)}>
-            {fmtToken(dto.observed?.health_state || "unknown")}
+          <Badge variant="outline" className={healthStateTone(healthState)}>
+            {fmtToken(healthState, MISSING_DATA_SOURCE_FIELD_LABEL)}
           </Badge>
-          <Badge variant="outline" className={reconciliationTone(dto.observed?.reconciliation_status)}>
-            {fmtToken(dto.observed?.reconciliation_status || "unknown")}
+          <Badge variant="outline" className={reconciliationTone(reconciliationStatus)}>
+            {fmtToken(reconciliationStatus, MISSING_DATA_SOURCE_FIELD_LABEL)}
           </Badge>
         </div>
         <div className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
@@ -211,8 +337,8 @@ function V2DataSourceRow({
       {/* 5. Credential / License */}
       <td className="px-3 py-3 min-w-[160px]">
         <div className="flex items-center gap-1">
-          <Badge variant="outline" className={credentialTone(dto.observed?.credential_state)}>
-            {fmtToken(dto.observed?.credential_state || "unknown")}
+          <Badge variant="outline" className={credentialTone(credentialState)}>
+            {fmtToken(credentialState, MISSING_DATA_SOURCE_FIELD_LABEL)}
           </Badge>
         </div>
         <div className="text-[11px] font-mono text-muted-foreground mt-1 truncate max-w-[150px]">
@@ -366,48 +492,57 @@ function LegacyDataSourceRow({
   record,
   onSelect,
 }: {
-  record: SystemDataSourceRecord;
+  record: LegacyDataSourceRowRecord;
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const sideEffectsOn = record.orderSideEffectsAllowed || record.capitalSideEffectsAllowed;
+  const providerLabel = resolveLegacyProviderLabel(record);
+  const providerKeyLabel = resolveLegacyProviderKeyLabel(record);
+  const statusLabelText = fmtToken(record.status, MISSING_DATA_SOURCE_FIELD_LABEL);
+  const credentialLabelText = fmtToken(record.credentialState, MISSING_DATA_SOURCE_FIELD_LABEL);
 
   return (
     <tr className="hover:bg-muted/30 transition-colors align-top">
       <td className="px-3 py-3 min-w-[210px]">
         <div className="font-semibold text-foreground cursor-pointer hover:underline" onClick={onSelect}>
-          {record.provider}
+          {providerLabel}
         </div>
-        <div className="font-mono text-[11px] text-muted-foreground mt-0.5">{record.providerKey}</div>
+        <div className="font-mono text-[11px] text-muted-foreground mt-0.5">{providerKeyLabel}</div>
         <div className="flex flex-wrap gap-1 mt-1.5">
-          {record.markets.map((m) => (
-            <Badge key={m} variant="outline" className="text-[10px] px-1 py-0 font-mono">
-              {m}
-            </Badge>
-          ))}
-          {record.sourceClasses.map((sc) => (
-            <Badge key={sc} variant="outline" className="text-[10px] px-1 py-0">
-              {fmtToken(sc)}
-            </Badge>
-          ))}
+          {record.markets
+            .map((m) => cleanSourceToken(m))
+            .filter((m): m is string => Boolean(m))
+            .map((m) => (
+              <Badge key={m} variant="outline" className="text-[10px] px-1 py-0 font-mono">
+                {m}
+              </Badge>
+            ))}
+          {record.sourceClasses
+            .map((sc) => cleanSourceToken(sc))
+            .filter((sc): sc is string => Boolean(sc))
+            .map((sc) => (
+              <Badge key={sc} variant="outline" className="text-[10px] px-1 py-0">
+                {fmtToken(sc, MISSING_DATA_SOURCE_FIELD_LABEL)}
+              </Badge>
+            ))}
         </div>
       </td>
 
       <td className="px-3 py-3 min-w-[170px]">
-        <Badge variant="outline" className="text-[10px]">
-          legacy_projection
+        <Badge variant="outline" className="text-[10px] font-mono">
+          {t("mgmt.dataSources.legacyProjectionSource")}
         </Badge>
       </td>
 
       <td className="px-3 py-3 min-w-[150px]">
         <Badge variant="outline" className={record.tone === "ok" ? toneClass.ok : toneClass.muted}>
-          {fmtToken(record.status)}
+          {statusLabelText}
         </Badge>
       </td>
 
       <td className="px-3 py-3 min-w-[200px]">
         <Badge variant="outline" className={toneClass[record.tone]}>
-          {fmtToken(record.status)}
+          {statusLabelText}
         </Badge>
         <div className="text-[11px] text-muted-foreground mt-1">
           {record.lastReadbackAt ? formatTime(record.lastReadbackAt) : t("mgmt.dataSources.noReadback")}
@@ -416,7 +551,7 @@ function LegacyDataSourceRow({
 
       <td className="px-3 py-3 min-w-[160px]">
         <Badge variant="outline" className={credentialTone(record.credentialState)}>
-          {fmtToken(record.credentialState)}
+          {credentialLabelText}
         </Badge>
       </td>
 

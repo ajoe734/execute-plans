@@ -260,7 +260,7 @@ describe("PersonaDetail", () => {
         ),
       );
 
-      expect(await screen.findByText("research_only")).toBeInTheDocument();
+      expect(await screen.findByText(/^(僅供研究|Research Only)$/i)).toBeInTheDocument();
       expect(screen.queryByText(/^(draft|草稿)$/i)).not.toBeInTheDocument();
       expect(screen.getByText(/0\/5 · persona-dev-lifecycle-39057282435/)).toBeInTheDocument();
       expect(screen.getByText("未升級")).toBeInTheDocument();
@@ -296,7 +296,7 @@ describe("PersonaDetail", () => {
         );
 
         expect(await screen.findByText("草稿")).toBeInTheDocument();
-        expect(screen.queryByText("research_only")).not.toBeInTheDocument();
+        expect(screen.queryByText(/^(research_only|僅供研究|Research Only)$/i)).not.toBeInTheDocument();
       },
     );
   });

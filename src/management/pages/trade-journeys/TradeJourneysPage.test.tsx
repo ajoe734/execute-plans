@@ -52,6 +52,8 @@ const scenarios = [
 ] as const;
 const rows = scenarios.map(([journey_id, status, current_stage, flags]) => ({ journey_id, status, current_stage, flags: Object.fromEntries(flags.map(flag => [flag, true])), environment: "paper" as const, severity: "warning", symbol: "2330", updated_at: new Date().toISOString() }));
 
+// Row links are titled by persona/side/symbol now, so find them by their journey-id href.
+const rowLinkFor = (id: string) => screen.getAllByRole("link").find(a => a.getAttribute("href")?.includes(`/${encodeURIComponent(id)}?`)) as HTMLElement;
 function Location() { return <output data-testid="location">{useLocation().search}</output>; }
 function renderList(entry = "/management/trade-journeys?tenant_id=t1") { return render(<MemoryRouter initialEntries={[entry]}><Routes><Route path="/management/trade-journeys" element={<><TradeJourneysPage/><Location/></>}/></Routes></MemoryRouter>); }
 
@@ -186,7 +188,7 @@ describe("Trade Journeys workbench", () => {
     renderList("/management/trade-journeys?tenant_id=t1&environment=paper&persona_id=persona-a&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona%20persona-a");
     const backLink = await screen.findByRole("link", { name: /Back to Persona persona-a/ });
     expect(backLink).toHaveAttribute("href", "/management/personas/persona-a");
-    const rowLink = screen.getByRole("link", { name: "happy-1" });
+    const rowLink = rowLinkFor("happy-1");
     expect(rowLink).toHaveAttribute(
       "href",
       "/management/trade-journeys/happy-1?tenant_id=t1&environment=paper&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+persona-a",
@@ -199,7 +201,7 @@ describe("Trade Journeys workbench", () => {
     vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue({ data: { items: [] }, page_info: { total: 0, page_size: 100 }, meta });
     vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta });
     render(<MemoryRouter initialEntries={["/management/trade-journeys/recon-1"]}><Routes><Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage/>}/></Routes></MemoryRouter>);
-    expect(await screen.findByRole("status")).toHaveTextContent("degraded data");
+    expect(await screen.findByRole("status")).toHaveTextContent("Data read is degraded");
     expect(screen.getByRole("status")).toHaveTextContent("ledger unavailable");
     expect(screen.getByText(/Missing Ledger booking/)).toBeInTheDocument();
     expect(screen.getByLabelText("Journey stages")).toBeInTheDocument();
@@ -345,7 +347,8 @@ describe("Trade Journeys workbench", () => {
       </MemoryRouter>,
     );
 
-    const rowLink = await screen.findByRole("link", { name: knownJourneyId });
+    await waitFor(() => expect(rowLinkFor(knownJourneyId)).toBeInTheDocument());
+    const rowLink = rowLinkFor(knownJourneyId);
     expect(api.listTradeJourneys).toHaveBeenCalledWith(
       expect.objectContaining({ tenant_id: "tenant-dev", environment: "paper" }),
       expect.anything(),
@@ -434,7 +437,8 @@ describe("Trade Journeys workbench", () => {
       </MemoryRouter>,
     );
 
-    const rowLink = await screen.findByRole("link", { name: "happy-1" });
+    await waitFor(() => expect(rowLinkFor("happy-1")).toBeInTheDocument());
+    const rowLink = rowLinkFor("happy-1");
     expect(api.listTradeJourneys).toHaveBeenCalledWith(
       expect.objectContaining({ tenant_id: "tenant-explicit", environment: "canary", persona_id: "persona-a" }),
       expect.anything(),

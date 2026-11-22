@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   assertNoRawSecrets,
+  extractDataSourceEnvelopeItems,
   isValidSecretRefId,
   managementDataSourceReads,
   managementDataSourceWrites,
+  normalizeDataSourceReasonCode,
   normalizeManagementDataSourceDetail,
+  resolveDataSourceSurfaceState,
 } from "./managementDataSources";
 
 describe("managementDataSources client", () => {
@@ -651,10 +654,47 @@ describe("managementDataSources client", () => {
       const projected = v2ToLegacyRecord(partialV2Dto);
       expect(projected.providerKey).toBe("conn-partial");
       expect(projected.provider).toBe("PartialProvider");
-      expect(projected.status).toBe("unknown");
+      expect(projected.status).toBe("未回報");
       expect(projected.tone).toBe("muted");
       expect(projected.credentialState).toBe("unknown");
       expect(projected.liveIngestionEnabled).toBe(false);
+    });
+
+    it("preserves explicit provider provenance in adaptDataSource without copying connector_id into missing provider", async () => {
+      const { adaptDataSource } = await import("./managementConsoleReads");
+      const {
+        resolveLegacyProviderKeyLabel,
+        resolveLegacyProviderLabel,
+      } = await import(
+        "@/management/pages/oversight/dataSources/dataSourceModels"
+      );
+
+      const connectorOnly = adaptDataSource(
+        { connector_id: "twse", status: "enabled" },
+        0,
+      );
+      expect(connectorOnly.providerKey).toBe("twse");
+      expect(connectorOnly.provider).toBe("unknown");
+      expect(resolveLegacyProviderKeyLabel(connectorOnly)).toBe("twse");
+      expect(resolveLegacyProviderLabel(connectorOnly)).toBe("未回報");
+
+      const matchingProviderAndConnector = adaptDataSource(
+        { connector_id: "twse", provider: "twse", status: "enabled" },
+        0,
+      );
+      expect(matchingProviderAndConnector.providerKey).toBe("twse");
+      expect(matchingProviderAndConnector.provider).toBe("twse");
+      expect(resolveLegacyProviderKeyLabel(matchingProviderAndConnector)).toBe("twse");
+      expect(resolveLegacyProviderLabel(matchingProviderAndConnector)).toBe("twse");
+
+      const providerOnly = adaptDataSource(
+        { provider: "TWSE", status: "enabled" },
+        0,
+      );
+      expect(providerOnly.providerKey).toBe("TWSE");
+      expect(providerOnly.provider).toBe("TWSE");
+      expect(resolveLegacyProviderKeyLabel(providerOnly)).toBe("TWSE");
+      expect(resolveLegacyProviderLabel(providerOnly)).toBe("TWSE");
     });
   });
 
@@ -768,6 +808,126 @@ describe("managementDataSources client", () => {
       expect(normalized.observed.observed_revision).toBeUndefined();
       expect(normalized.instance.data_source_id).toBe("ds-partial-norev");
       expect(normalized.source_instance_id).toBe("ds-partial-norev");
+    });
+
+    it("strips nan strings instead of treating them as authoritative values", () => {
+      const normalized = normalizeManagementDataSourceDetail(
+        {
+          data: {
+            source_instance_id: "nan",
+            provider: "nan",
+            instance: {
+              lifecycle_state: "nan",
+            },
+            desired: {
+              desired_lifecycle: "nan",
+            },
+            observed: {
+              effective_lifecycle: "nan",
+              health_state: "nan",
+            },
+          },
+        },
+        "ds-fallback-id",
+      );
+      expect(normalized.source_instance_id).toBe("ds-fallback-id");
+      expect(normalized.provider).not.toBe("nan");
+      expect(normalized.instance.lifecycle_state).not.toBe("nan");
+      expect(normalized.desired.desired_lifecycle).not.toBe("nan");
+      expect(normalized.observed.effective_lifecycle).not.toBe("nan");
+      expect(normalized.observed.health_state).not.toBe("nan");
+    });
+  });
+
+  describe("resolveDataSourceSurfaceState and normalizeDataSourceReasonCode", () => {
+    it("resolves unavailable state and read_timeout reason from hosted BFF data-sources payload", () => {
+      const payload = {
+        data: {
+          id: "management-data-sources",
+          items: [],
+          summary: {
+            total_items: 0,
+            returned_items: 0,
+            status: "unavailable",
+            source: "unavailable",
+          },
+          status: "unavailable",
+          source: "unavailable",
+        },
+        meta: {
+          status: "unavailable",
+          source: "unavailable",
+          surfaces: {
+            data_sources: {
+              status: "unavailable",
+              source: "unavailable",
+              reason: "read_timeout",
+              message: "Source-ingest registry is unavailable or unconfigured.",
+            },
+          },
+          degradation: {
+            reason: "read_timeout",
+          },
+        },
+      };
+
+      const resolved = resolveDataSourceSurfaceState(payload);
+      expect(resolved.status).toBe("unavailable");
+      expect(resolved.isUnavailable).toBe(true);
+      expect(resolved.isDegraded).toBe(false);
+      expect(resolved.isAuthoritativeEmpty).toBe(false);
+      expect(resolved.reasonCode).toBe("read_timeout");
+      expect(extractDataSourceEnvelopeItems(payload)).toEqual([]);
+    });
+
+    it("resolves degraded legacy_projection state and normalizes empty V2 store fallback sentence", () => {
+      const payload = {
+        items: [{ providerKey: "tw-twse-tpex-official-market", provider: "TWSE" }],
+        meta: {
+          status: "degraded",
+          source: "legacy_projection",
+          reason:
+            "v2 source management store is empty (zero instances); serving source-ingest connector registry as degraded legacy_projection.",
+          surfaces: {
+            data_sources: {
+              status: "degraded",
+              source: "legacy_projection",
+              reason:
+                "v2 source management store is empty (zero instances); serving source-ingest connector registry as degraded legacy_projection.",
+            },
+          },
+        },
+      };
+
+      const resolved = resolveDataSourceSurfaceState(payload);
+      expect(resolved.status).toBe("degraded");
+      expect(resolved.isDegraded).toBe(true);
+      expect(resolved.isLegacyProjection).toBe(true);
+      expect(resolved.isUnavailable).toBe(false);
+      expect(resolved.isAuthoritativeEmpty).toBe(false);
+      expect(resolved.source).toBe("legacy_projection");
+      expect(resolved.reasonCode).toBe("empty_v2_store_legacy_projection");
+      expect(
+        normalizeDataSourceReasonCode(
+          "v2 source management store is empty (zero instances); serving source-ingest connector registry as degraded legacy_projection.",
+        ),
+      ).toBe("empty_v2_store_legacy_projection");
+    });
+
+    it("resolves authoritative empty state only when BFF returns a successful empty items array", () => {
+      const payload = {
+        items: [],
+        meta: {
+          status: "ok",
+          source: "service_client",
+        },
+      };
+
+      const resolved = resolveDataSourceSurfaceState(payload);
+      expect(resolved.status).toBe("ok");
+      expect(resolved.isAuthoritativeEmpty).toBe(true);
+      expect(resolved.isUnavailable).toBe(false);
+      expect(resolved.isDegraded).toBe(false);
     });
   });
 });

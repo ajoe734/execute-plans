@@ -14,6 +14,7 @@ import {
   type PostmortemRecord,
   type PostmortemResponseMeta,
 } from "@/lib/bff-v1/postmortemClient";
+import { postmortemStatusLabel } from "@/lib/enumLabels";
 import { safeDateTime } from "@/lib/utils";
 import { DataTable } from "@/platform/components/DataTable";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -37,20 +38,7 @@ function listSurface(meta: PostmortemResponseMeta | undefined) {
 }
 
 function statusLabel(t: ReturnType<typeof useT>, rawStatus: string): string {
-  const normalized = rawStatus.trim().toLowerCase();
-  if (normalized === "draft") {
-    return t("postmortem.status.draft", { defaultValue: "Draft" });
-  }
-  if (normalized === "review") {
-    return t("postmortem.status.review", { defaultValue: "In Review" });
-  }
-  if (normalized === "approved") {
-    return t("postmortem.status.approved", { defaultValue: "Approved" });
-  }
-  if (normalized === "published") {
-    return t("postmortem.status.published", { defaultValue: "Published" });
-  }
-  return rawStatus;
+  return postmortemStatusLabel(rawStatus, t);
 }
 
 export const PostmortemLibraryPage = () => {
