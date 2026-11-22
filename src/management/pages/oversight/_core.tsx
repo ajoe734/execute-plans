@@ -2037,16 +2037,35 @@ const formatPulsePnlDefinition = (def: unknown, t: PulseTranslate): string => {
   return t("mgmt.pulse.pnlDefUnverified");
 };
 
+const isVerifiedTwEquitySymbol = (symbol: unknown): boolean => {
+  if (typeof symbol !== "string") return false;
+  const trimmed = symbol.trim();
+  return Boolean(trimmed) && !isPulseTechnicalId(trimmed) && /^[A-Za-z0-9]+\.(?:TWSE|TPEX)$/i.test(trimmed);
+};
+
 const formatPulseQuantityUnit = (
   unit: unknown,
   t: PulseTranslate,
-): { localized: string; raw: string | null } => {
+  symbol?: unknown,
+): { localized: string; isKnownUnit: boolean } => {
   const raw = typeof unit === "string" && unit.trim() && !isPulseTechnicalId(unit) ? unit.trim() : null;
   const norm = (raw ?? "").toLowerCase();
-  if (!raw || ["shares", "share", "absolute_order_quantity", "股"].includes(norm)) {
-    return { localized: t("mgmt.pulse.unitShares"), raw };
+  if (["shares", "share", "股"].includes(norm)) {
+    return { localized: t("mgmt.pulse.unitShares"), isKnownUnit: true };
   }
-  return { localized: raw, raw };
+  if (["lots", "lot", "張"].includes(norm)) {
+    return { localized: t("mgmt.pulse.unitLots"), isKnownUnit: true };
+  }
+  if (["contracts", "contract", "口"].includes(norm)) {
+    return { localized: t("mgmt.pulse.unitContracts"), isKnownUnit: true };
+  }
+  if (
+    (!norm || ["absolute_order_quantity", "order_quantity", "quantity"].includes(norm))
+    && isVerifiedTwEquitySymbol(symbol)
+  ) {
+    return { localized: t("mgmt.pulse.unitShares"), isKnownUnit: true };
+  }
+  return { localized: t("mgmt.pulse.unitNeutral"), isKnownUnit: false };
 };
 
 const formatPulseMetricReason = (reason: unknown, t: PulseTranslate): string => {
@@ -2355,15 +2374,96 @@ const TradingPulseOperatorScopeSection = ({
   const allPaperBaselineNotRequired = isVerifiedAllPaperBaselineNotRequired(model, rows);
 
   const surfaces = Object.entries(model.meta.surfaces ?? {});
-  const hasSurfaceIssue = surfaces.some(
-    ([, s]) => !["ok", "live", "fresh", "available"].includes(String(s.status ?? "").toLowerCase()),
-  );
+  const isHealthySurface = (status: unknown): boolean =>
+    ["ok", "live", "fresh", "available", "verified", "not_required"].includes(
+      String(status ?? "").trim().toLowerCase(),
+    );
+  const extractRowDegradedChecks = (row: ManagementTradingPulseRuntimeRow): string[] => {
+    const rawRow = row as Record<string, unknown>;
+    const rowHealth =
+      row.rowHealth && typeof row.rowHealth === "object"
+        ? (row.rowHealth as Record<string, unknown>)
+        : row.row_health && typeof row.row_health === "object"
+          ? (row.row_health as Record<string, unknown>)
+          : null;
+    const candidates = [
+      rowHealth?.degradedChecks,
+      rowHealth?.degraded_checks,
+      rawRow.rowHealthDegradedChecks,
+      rawRow.row_health_degraded_checks,
+      rawRow.degradedChecks,
+      rawRow.degraded_checks,
+    ];
+    const out: string[] = [];
+    for (const list of candidates) {
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          if (typeof item === "string" && item.trim()) {
+            out.push(item.trim().toLowerCase());
+          }
+        }
+      }
+    }
+    return Array.from(new Set(out));
+  };
+  const extractRowHealthStatus = (row: ManagementTradingPulseRuntimeRow): string => {
+    const rawRow = row as Record<string, unknown>;
+    const rowHealth =
+      row.rowHealth && typeof row.rowHealth === "object"
+        ? (row.rowHealth as Record<string, unknown>)
+        : row.row_health && typeof row.row_health === "object"
+          ? (row.row_health as Record<string, unknown>)
+          : null;
+    return String(rowHealth?.status ?? rawRow.rowHealthStatus ?? rawRow.row_health_status ?? "")
+      .trim()
+      .toLowerCase();
+  };
+  const hasSurfaceIssue = surfaces.some(([, s]) => !isHealthySurface(s.status));
   const hasRowSourceIssue = rows.some((r) => {
-    const st = String(r.performanceContext?.sourceStatus ?? "").toLowerCase();
+    const st = String(r.performanceContext?.sourceStatus ?? "").trim().toLowerCase();
     return st === "unavailable" || st === "stale";
   });
+  const hasRowHealthIssue = rows.some((r) => {
+    const rhStatus = extractRowHealthStatus(r);
+    const checks = extractRowDegradedChecks(r);
+    return checks.length > 0 || (Boolean(rhStatus) && !isHealthySurface(rhStatus));
+  });
   const showSourceIssueReminder =
-    hasSurfaceIssue || hasRowSourceIssue || scopeStatus === "partial" || scopeStatus === "unavailable";
+    hasSurfaceIssue || hasRowSourceIssue || hasRowHealthIssue || scopeStatus === "partial" || scopeStatus === "unavailable";
+  const isOnlyPaperMonitoringIssue = (() => {
+    if (!showSourceIssueReminder || scopeStatus !== "verified" || hasRowSourceIssue) return false;
+    if (rows.length === 0 || !rows.every((r) => isPulseSourceVerifiedAvailable(r.performanceContext?.sourceStatus))) {
+      return false;
+    }
+    if ((model.summary.missingTelemetryRuntimeIds?.length ?? 0) > 0) return false;
+    if ((model.summary.missingBaselineRuntimeIds?.length ?? 0) > 0) return false;
+    const surfaceMap = model.meta.surfaces ?? {};
+    const monitoringSurface = surfaceMap.paper_runtime_monitoring;
+    if (!monitoringSurface || isHealthySurface(monitoringSurface.status)) return false;
+    const hasVerifiedTradingSurface = ["runtime_roster", "telemetry_summary"].some((key) =>
+      isHealthySurface(surfaceMap[key]?.status),
+    );
+    if (!hasVerifiedTradingSurface) return false;
+    const allowedNonOkSurfaces = new Set([
+      "paper_runtime_monitoring",
+      "runtime_row_health",
+      "management_trading_pulse",
+      "management_trading_pulse_rankings",
+    ]);
+    for (const [key, surface] of surfaces) {
+      if (!isHealthySurface(surface?.status) && !allowedNonOkSurfaces.has(key)) {
+        return false;
+      }
+    }
+    return rows.every((row) => {
+      const checks = extractRowDegradedChecks(row);
+      const rhStatus = extractRowHealthStatus(row);
+      if (Boolean(rhStatus) && !isHealthySurface(rhStatus) && checks.length === 0) {
+        return false;
+      }
+      return checks.every((check) => check === "paper_runtime_monitoring");
+    });
+  })();
 
   return (
     <Card className="p-4 space-y-3" data-testid="trading-pulse-operator-scope">
@@ -2440,7 +2540,9 @@ const TradingPulseOperatorScopeSection = ({
 
       {showSourceIssueReminder && (
         <p className="text-xs text-status-warning" data-testid="trading-pulse-source-issue-reminder">
-          {t("mgmt.pulse.sourceIssueSummaryAlert")}
+          {isOnlyPaperMonitoringIssue
+            ? t("mgmt.pulse.paperMonitoringOnlySummaryAlert")
+            : t("mgmt.pulse.sourceIssueSummaryAlert")}
         </p>
       )}
     </Card>
@@ -2660,16 +2762,63 @@ const resolvePulseVerifiedFillRate = (row: ManagementTradingPulseRuntimeRow): nu
   return pulseNumber(row.metrics?.fill_rate);
 };
 
+const hasActionablePulseOutcomeReason = (reasonCode: unknown): boolean => {
+  if (typeof reasonCode !== "string") return false;
+  const normalized = reasonCode.trim().toLowerCase();
+  return Boolean(normalized) && normalized !== "reason_not_recorded";
+};
+
+const isVerifiedNormalFullFillRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
+  const outcome = row.latestOutcome;
+  if (outcome?.submittedToBroker === false) return false;
+  if (hasActionablePulseOutcomeReason(outcome?.reasonCode)) return false;
+  const reqAmt = pulseNumber(outcome?.required);
+  const availAmt = pulseNumber(outcome?.available);
+  if (reqAmt !== null && availAmt !== null && reqAmt > availAmt) return false;
+  if (!isPulseSourceVerifiedAvailable(row.performanceContext?.sourceStatus)) return false;
+  if (!isPulseFillRateDetailsVerified(row)) return false;
+  const fillDetails = row.performanceContext?.fillRateDetails;
+  const detailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
+  if (!["known", "available", "ok", "verified"].includes(detailsStatus)) return false;
+  const verifiedRate = resolvePulseVerifiedFillRate(row);
+  if (verifiedRate === null || Math.abs(verifiedRate - 1) > 1e-9) return false;
+  const num = pulseNumber(fillDetails?.numerator);
+  const den = pulseNumber(fillDetails?.denominator);
+  if (num === null || den === null || den <= 0 || num !== den) return false;
+  const outcomeReqQty = pulseNumber(outcome?.requestedQuantity);
+  const outcomeFillQty = pulseNumber(outcome?.filledQuantity);
+  if (outcomeReqQty !== null && (outcomeReqQty <= 0 || outcomeReqQty !== den)) return false;
+  if (outcomeFillQty !== null && (outcomeFillQty <= 0 || outcomeFillQty !== num)) return false;
+  if (outcomeReqQty !== null && outcomeFillQty !== null && outcomeFillQty !== outcomeReqQty) {
+    return false;
+  }
+  const fillCount = resolvePulseRowFillCount(row);
+  return fillCount !== null && fillCount > 0;
+};
+
 const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
+  if (isVerifiedNormalFullFillRow(row)) return false;
   const outcome = row.latestOutcome;
   if (outcome && outcome.status === "available") return true;
   if (outcome?.submittedToBroker === false) return true;
   if (outcome?.reasonCode) return true;
+  const reqAmt = pulseNumber(outcome?.required);
+  const availAmt = pulseNumber(outcome?.available);
+  if (reqAmt !== null && availAmt !== null && reqAmt > availAmt) return true;
+  const outcomeReqQty = pulseNumber(outcome?.requestedQuantity);
+  const outcomeFillQty = pulseNumber(outcome?.filledQuantity);
+  if (
+    outcomeReqQty !== null
+    && outcomeReqQty > 0
+    && ((outcomeFillQty !== null && outcomeFillQty !== outcomeReqQty) || resolvePulseRowFillCount(row) === 0)
+  ) {
+    return true;
+  }
   if (isPulseFillRateDetailsVerified(row) && resolvePulseVerifiedFillRate(row) !== null) {
     const fillDetails = row.performanceContext?.fillRateDetails;
     const num = pulseNumber(fillDetails?.numerator);
     const den = pulseNumber(fillDetails?.denominator);
-    if (num === 0 && den !== null && den > 0) return true;
+    if (num !== null && den !== null && den > 0 && num !== den) return true;
   }
   return false;
 };
@@ -2721,7 +2870,7 @@ const TradingPulseNotableEventsSection = ({
             const fillQty = pulseNumber(
               outcome?.filledQuantity ?? (canUseFillDetails ? fillDetails?.numerator : null),
             );
-            const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
+            const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t, symbol);
             const reqAmt = pulseNumber(outcome?.required);
             const availAmt = pulseNumber(outcome?.available);
             const currency = outcome?.currency ?? perf?.pnlCurrency;
@@ -2776,7 +2925,7 @@ const TradingPulseNotableEventsSection = ({
                         {t("mgmt.pulse.eventSubmittedToBroker")}
                       </Badge>
                     )}
-                    <Badge variant="outline" className={statusTone(submitted === false ? "watch" : "ok")}>
+                    <Badge variant="outline" className={statusTone("watch")}>
                       {reasonText}
                     </Badge>
                   </div>
@@ -2942,7 +3091,7 @@ const TradingPulsePersonaDetailsSection = ({
                 const canUseFillDetails = isPulseFillRateDetailsVerified(row) && verifiedFillRate !== null;
                 const num = pulseNumber(fillDetails?.numerator);
                 const den = pulseNumber(fillDetails?.denominator);
-                const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
+                const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t, symbol);
 
                 const pnlVal = pulseNumber(row.metrics?.pnl);
                 const pnlCurrency = perf?.pnlCurrency ?? null;
@@ -3081,11 +3230,6 @@ const TradingPulsePersonaDetailsSection = ({
                                 })
                               : (formatPulsePercentFromFraction(verifiedFillRate) ?? "0%")}
                           </div>
-                          {canUseFillDetails && num !== null && den !== null && den > 0 && unitInfo.raw && unitInfo.raw !== unitInfo.localized && (
-                            <div className="text-[11px] text-muted-foreground">
-                              {formatPulseInt(num)}/{formatPulseInt(den)} {unitInfo.raw}
-                            </div>
-                          )}
                         </div>
                       ) : missingFillRateKind === "unavailable" ? (
                         <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
@@ -3146,7 +3290,9 @@ const TradingPulsePersonaDetailsSection = ({
                     </td>
 
                     <td className="py-3 align-top space-y-1 text-muted-foreground">
-                      {outcome && (outcome.status === "available" || outcomeReasonCode || outcomeSubmitted !== null) ? (
+                      {!isVerifiedNormalFullFillRow(row)
+                      && outcome
+                      && (outcome.status === "available" || outcomeReasonCode || outcomeSubmitted !== null) ? (
                         <div className="space-y-0.5 text-foreground">
                           <div className="flex flex-wrap items-center gap-1">
                             {outcomeSubmitted === false && (

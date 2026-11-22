@@ -139,8 +139,11 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       within(pnlSection).getByText("其餘 1 位尚無成交損益或未達可比較條件"),
     ).toBeInTheDocument();
 
-    // 4. Notable trading event: 澄川 2317 pre-broker risk rejection (452 requested, 0 filled, insufficient cash)
+    // 4. Notable trading event: only 澄川 2317 pre-broker risk rejection (452 requested, 0 filled, insufficient cash);
+    // verified normal 1/1 fills (青禾 2330, 衡岳 0050) without actionable reasons stay in Persona details only.
     expect(within(eventsSection).getByText("澄川｜2317 台股 Paper")).toBeInTheDocument();
+    expect(within(eventsSection).queryByText("青禾｜2330 台股 Paper 學習 R3")).not.toBeInTheDocument();
+    expect(within(eventsSection).queryByText("衡岳｜0050 台股 ETF Paper")).not.toBeInTheDocument();
     expect(within(eventsSection).getByText("送券商前風控拒單（未送出委託）")).toBeInTheDocument();
     expect(within(eventsSection).getByText("資金不足")).toBeInTheDocument();
     expect(
@@ -162,8 +165,12 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(within(qingheRow).getByText("1 筆成交")).toBeInTheDocument();
     expect(within(qingheRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
     expect(within(qingheRow).getByText(/TWD -168\.09（虧損）/)).toBeInTheDocument();
+    expect(within(qingheRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
     expect(within(qingheRow).getByText("平均滑價 0 bps")).toBeInTheDocument();
     expect(within(qingheRow).getByText("最大回撤 1.2%")).toBeInTheDocument();
+    expect(
+      within(qingheRow).getByRole("link", { name: "查看交易旅程" }).getAttribute("href"),
+    ).toContain("tj_29473e86-63ff-5384-bda1-23eef61cebb2");
 
     const chengchuanRow = bodyRows.find((r) => r.textContent?.includes("澄川｜2317 台股 Paper")) as HTMLElement;
     expect(within(chengchuanRow).getByText("標的 2317")).toBeInTheDocument();
@@ -194,10 +201,11 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       within(omittedNote).getByText(/衡岳｜0050 台股 ETF Paper（報酬變異為 0（不適用夏普比率））/),
     ).toBeInTheDocument();
 
-    // 7. No raw technical IDs, LIVE BFF, Row health, Checks, or mixed-locale English headers in zh-TW default view
+    // 7. No raw technical IDs, LIVE BFF, Row health, Checks, raw unit codes, or mixed-locale English headers in zh-TW default view
     const defaultPageTextZh = zhView.container.textContent ?? "";
     expect(defaultPageTextZh).not.toMatch(/rt-ad81501b|rt-0050paper|rt-3252fa75|rb-3823397e125e4579ba5f4174067087ed/);
     expect(defaultPageTextZh).not.toMatch(/LIVE BFF|Row health|Checks|Runtime Status|Execution Quality|Fill Rate/);
+    expect(defaultPageTextZh).not.toMatch(/absolute_order_quantity|1\/1 SHARES|0\/452 SHARES/);
     zhView.unmount();
 
     // 8. Verify en-US locale consistency
@@ -216,7 +224,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     ).toBeInTheDocument();
     const defaultPageTextEn = enView.container.textContent ?? "";
     expect(defaultPageTextEn).not.toMatch(/成交率|資料診斷|模擬交易|尚未成交/);
-    expect(defaultPageTextEn).not.toMatch(/LIVE BFF|Row health|Checks/);
+    expect(defaultPageTextEn).not.toMatch(/LIVE BFF|Row health|Checks|absolute_order_quantity|1\/1 SHARES|0\/452 SHARES/);
   });
 
   it("keeps Data Diagnostics collapsed by default and reveals sources, effective timestamps, and runtime IDs when expanded", () => {
@@ -956,11 +964,11 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       }
     }
 
-    // 澄川 (row 3) null P&L cell has zero digits while Fill Rate cell has 0%, 452, 0, 股, and SHARES
+    // 澄川 (row 3) null P&L cell has zero digits while Fill Rate cell renders once in human language without duplicate raw unit code
     const chengchuanCells = Array.from(bodyRows[2].querySelectorAll("td")).map((td) => td.textContent ?? "");
     expect(chengchuanCells[1]).toContain("0 筆成交");
-    expect(chengchuanCells[2]).toContain("0%（該次意向 452 股、成交 0 股）");
-    expect(chengchuanCells[2]).toContain("0/452 SHARES");
+    expect(chengchuanCells[2]).toBe("0%（該次意向 452 股、成交 0 股）");
+    expect(chengchuanCells[2]).not.toMatch(/SHARES|absolute_order_quantity/);
     expect(chengchuanCells[3]).toBe("尚無成交損益（帳本幣別 TWD）");
     expect(chengchuanCells[3]).not.toMatch(/\d/);
   });
@@ -1338,5 +1346,295 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       ).not.toBeInTheDocument();
       enView.unmount();
     }
+  });
+
+  it("handles real hosted 1/1 absolute_order_quantity wire shape with two normal full-fill Personas and one pre-broker rejection without raw machine units or routine green alert cards in zh-TW and en-US", async () => {
+    const hostedRealShapeOverview = {
+      ...TRADING_PULSE_HOSTED_WIRE_SAMPLE,
+      data: {
+        ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data,
+        summary: {
+          ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.summary,
+          pnl_groups: [],
+          row_health_degraded_count: 3,
+          row_health_status_counts: { degraded: 3 },
+          monitoring_coverage_count: 0,
+          missing_monitoring_runtime_ids: ["rt-ad81501b", "rt-0050paper", "rt-3252fa75"],
+        },
+        runtime_rows: [
+          {
+            ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[0],
+            underlying_symbol: "2330.TWSE",
+            performance_context: {
+              ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[0].performance_context,
+              pnl_currency: null,
+              pnl_definition: null,
+              fill_rate_details: {
+                ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[0].performance_context.fill_rate_details,
+                unit: "absolute_order_quantity",
+                numerator: 1,
+                denominator: 1,
+              },
+            },
+            latest_outcome: {
+              status: "available",
+              occurred_at: "2026-11-19T15:50:03Z",
+              reason_code: null,
+              submitted_to_broker: null,
+              requested_quantity: 1,
+              required: null,
+              available: null,
+              currency: null,
+              journey_id: "tj_29473e86-63ff-5384-bda1-23eef61cebb2",
+              source_event_id: "b7744687-f4e3-507d-8ae5-526b7c18003a",
+              focus_stage: "reconciliation",
+            },
+            row_health: {
+              status: "degraded",
+              degraded_checks: ["paper_runtime_monitoring"],
+            },
+          },
+          {
+            ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[1],
+            underlying_symbol: "0050.TWSE",
+            performance_context: {
+              ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[1].performance_context,
+              pnl_currency: null,
+              pnl_definition: null,
+              fill_rate_details: {
+                ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[1].performance_context.fill_rate_details,
+                unit: "absolute_order_quantity",
+                numerator: 1,
+                denominator: 1,
+              },
+            },
+            latest_outcome: {
+              status: "available",
+              occurred_at: "2026-11-19T15:50:03Z",
+              reason_code: "reason_not_recorded",
+              submitted_to_broker: true,
+              requested_quantity: 1,
+              required: null,
+              available: null,
+              currency: null,
+              journey_id: "tj_0050-normal-fill",
+              source_event_id: "evt-0050-normal-fill",
+              focus_stage: "reconciliation",
+            },
+            links: {
+              persona: "/management/personas/persona-hengyue-0050",
+              strategy: "/management/strategies/strategy-persona-0050",
+              journey: "/management/trade-journeys/tj_0050-normal-fill?tenant_id=tenant-dev&environment=paper",
+            },
+            row_health: {
+              status: "degraded",
+              degraded_checks: ["paper_runtime_monitoring"],
+            },
+          },
+          {
+            ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[2],
+            underlying_symbol: "2317.TWSE",
+            performance_context: {
+              ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[2].performance_context,
+              pnl_currency: null,
+              fill_rate_details: {
+                ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[2].performance_context.fill_rate_details,
+                unit: "absolute_order_quantity",
+                numerator: 0,
+                denominator: 452,
+              },
+            },
+            row_health: {
+              status: "degraded",
+              degraded_checks: ["paper_runtime_monitoring"],
+            },
+          },
+        ],
+      },
+      meta: {
+        snapshot_at: "2026-11-22T22:24:35Z",
+        surfaces: {
+          management_trading_pulse: {
+            status: "degraded",
+            source: "bff_composed",
+            message: "Trading pulse aggregate is available, but runtime, telemetry, monitoring, row health, or baseline coverage is degraded.",
+          },
+          runtime_roster: { status: "ok", source: "service_store" },
+          telemetry_summary: { status: "ok", source: "service_store" },
+          paper_runtime_monitoring: {
+            status: "degraded",
+            source: "service_store",
+            message: "Paper runtime monitoring session missing for one or more paper runtimes.",
+          },
+          paper_live_drift: { status: "ok", source: "service_store" },
+          baseline_comparison: { status: "ok", source: "bff_composed" },
+          runtime_row_health: {
+            status: "degraded",
+            source: "bff_composed",
+            message: "Trading pulse row health is degraded for 3 runtime(s).",
+          },
+        },
+      },
+    };
+
+    await i18n.changeLanguage("zh-TW");
+    mockTradingPulseLive(hostedRealShapeOverview, TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE);
+    const zhView = renderPage(<TradingPulsePage />);
+
+    // 1. Summary reminder specifically identifies paper runtime monitoring when trading sources are verified available
+    const zhReminder = screen.getByTestId("trading-pulse-source-issue-reminder");
+    expect(zhReminder).toHaveTextContent(
+      "僅模擬執行監控工作階段未完整建立；下方顯示目前已讀取的交易明細（詳見底部資料診斷）。",
+    );
+
+    // 2. Notable events section contains ONLY 澄川 2317 pre-broker rejection; 青禾 and 衡岳 are not promoted
+    const zhEvents = screen.getByTestId("trading-pulse-notable-events");
+    const zhEventItems = within(zhEvents).getAllByRole("listitem");
+    expect(zhEventItems).toHaveLength(1);
+    expect(within(zhEvents).getByText("澄川｜2317 台股 Paper")).toBeInTheDocument();
+    expect(within(zhEvents).getByText("標的 2317.TWSE")).toBeInTheDocument();
+    expect(within(zhEvents).getByText("送券商前風控拒單（未送出委託）")).toBeInTheDocument();
+    expect(within(zhEvents).getByText("資金不足")).toBeInTheDocument();
+    expect(
+      within(zhEvents).getByText("該次意向 452 股、成交 0 股（成交率 0%）"),
+    ).toBeInTheDocument();
+    expect(within(zhEvents).queryByText(/青禾/)).not.toBeInTheDocument();
+    expect(within(zhEvents).queryByText(/衡岳/)).not.toBeInTheDocument();
+    expect(within(zhEvents).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
+
+    // 3. Persona details table keeps all 3 Personas, their fill rates once in human language, and their journey links
+    const zhPersonaSection = screen.getByTestId("trading-pulse-persona-details");
+    const zhRows = within(zhPersonaSection).getAllByRole("row").slice(1);
+    expect(zhRows).toHaveLength(3);
+
+    const zhQingheRow = zhRows.find((r) => r.textContent?.includes("青禾｜2330 台股 Paper 學習 R3")) as HTMLElement;
+    const zhHengyueRow = zhRows.find((r) => r.textContent?.includes("衡岳｜0050 台股 ETF Paper")) as HTMLElement;
+    const zhChengchuanRow = zhRows.find((r) => r.textContent?.includes("澄川｜2317 台股 Paper")) as HTMLElement;
+
+    expect(within(zhQingheRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
+    expect(within(zhQingheRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
+    expect(within(zhQingheRow).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
+    expect(
+      within(zhQingheRow).getByRole("link", { name: "查看交易旅程" }).getAttribute("href"),
+    ).toContain("tj_29473e86-63ff-5384-bda1-23eef61cebb2");
+
+    expect(within(zhHengyueRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
+    expect(within(zhHengyueRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
+    expect(within(zhHengyueRow).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
+    expect(
+      within(zhHengyueRow).getByRole("link", { name: "查看交易旅程" }).getAttribute("href"),
+    ).toContain("tj_0050-normal-fill");
+
+    expect(within(zhChengchuanRow).getByText("0%（該次意向 452 股、成交 0 股）")).toBeInTheDocument();
+    expect(within(zhChengchuanRow).getByText("資金不足")).toBeInTheDocument();
+
+    // 4. Never leaks raw absolute_order_quantity
+    const zhFullText = zhView.container.textContent ?? "";
+    expect(zhFullText).not.toContain("absolute_order_quantity");
+    zhView.unmount();
+
+    // 5. Verify en-US rendering of the same hosted shape
+    await i18n.changeLanguage("en-US");
+    mockTradingPulseLive(hostedRealShapeOverview, TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE);
+    const enView = renderPage(<TradingPulsePage />);
+
+    expect(screen.getByTestId("trading-pulse-source-issue-reminder")).toHaveTextContent(
+      "Only paper runtime monitoring sessions are incomplete; currently available trading details are shown below (see Data Diagnostics).",
+    );
+
+    const enEvents = screen.getByTestId("trading-pulse-notable-events");
+    expect(within(enEvents).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(enEvents).getByText("澄川｜2317 台股 Paper")).toBeInTheDocument();
+    expect(
+      within(enEvents).getByText("Requested 452 shares, filled 0 shares (0% fill rate)"),
+    ).toBeInTheDocument();
+    expect(within(enEvents).queryByText(/青禾|衡岳/)).not.toBeInTheDocument();
+    expect(within(enEvents).queryByText(/Reason not recorded|Standard execution record/)).not.toBeInTheDocument();
+
+    const enPersonaSection = screen.getByTestId("trading-pulse-persona-details");
+    expect(
+      within(enPersonaSection).getAllByText("100% (Requested 1 shares, filled 1 shares)"),
+    ).toHaveLength(2);
+    expect(
+      within(enPersonaSection).getByText("0% (Requested 452 shares, filled 0 shares)"),
+    ).toBeInTheDocument();
+    expect(
+      within(enPersonaSection).getAllByText("No risk rejection or exception events"),
+    ).toHaveLength(2);
+
+    const enFullText = enView.container.textContent ?? "";
+    expect(enFullText).not.toContain("absolute_order_quantity");
+    enView.unmount();
+  });
+
+  it("preserves neutral units when symbol does not establish TWSE/TPEX shares, keeps overfills and unverified available outcomes visible, and requires verified trading sources plus normalized row health for monitoring-only notice", async () => {
+    const copyOverview = () => JSON.parse(JSON.stringify(TRADING_PULSE_HOSTED_WIRE_SAMPLE));
+
+    // 1. Verified TWSE/TPEX symbols use shares/股 for absolute_order_quantity, while truly unknown symbol/unit uses neutral 單位/units
+    await i18n.changeLanguage("zh-TW");
+    const rawUnits = copyOverview();
+    rawUnits.data.runtime_rows[0].underlying_symbol = "6488.TPEX";
+    rawUnits.data.runtime_rows[0].performance_context.fill_rate_details.unit = "absolute_order_quantity";
+    rawUnits.data.runtime_rows[2].underlying_symbol = "BTC-USD";
+    rawUnits.data.runtime_rows[2].performance_context.fill_rate_details.unit = "absolute_order_quantity";
+    mockTradingPulseLive(rawUnits);
+    const unitsZh = renderPage(<TradingPulsePage />);
+    expect(
+      within(screen.getByTestId("trading-pulse-persona-details")).getAllByText("100%（該次意向 1 股、成交 1 股）"),
+    ).toHaveLength(2);
+    expect(
+      within(screen.getByTestId("trading-pulse-persona-details")).getByText("0%（該次意向 452 單位、成交 0 單位）"),
+    ).toBeInTheDocument();
+    unitsZh.unmount();
+
+    // 2. Overfill (rate=2, numerator=2/denominator=1, filled_quantity=2) remains visible in notable events
+    const rawOverfill = copyOverview();
+    rawOverfill.data.runtime_rows[0].telemetry_summary.metrics.fill_rate = 2;
+    rawOverfill.data.runtime_rows[0].performance_context.fill_rate_details.numerator = 2;
+    rawOverfill.data.runtime_rows[0].latest_outcome.filled_quantity = 2;
+    mockTradingPulseLive(rawOverfill);
+    const overfillView = renderPage(<TradingPulsePage />);
+    expect(
+      within(screen.getByTestId("trading-pulse-notable-events")).getByText(rawOverfill.data.runtime_rows[0].persona_name),
+    ).toBeInTheDocument();
+    overfillView.unmount();
+
+    // 3. Available outcome with unknown fill evidence remains visible in notable events
+    const rawUnknownFill = copyOverview();
+    rawUnknownFill.data.runtime_rows[0].performance_context.fill_rate_details.status = "unknown";
+    mockTradingPulseLive(rawUnknownFill);
+    const unknownFillView = renderPage(<TradingPulsePage />);
+    expect(
+      within(screen.getByTestId("trading-pulse-notable-events")).getByText(rawUnknownFill.data.runtime_rows[0].persona_name),
+    ).toBeInTheDocument();
+    unknownFillView.unmount();
+
+    // 4. Does not claim monitoring-only notice when trading source evidence is absent or row source_status is unknown
+    const rawNoSourceEvidence = copyOverview();
+    rawNoSourceEvidence.meta.surfaces = {
+      paper_runtime_monitoring: { status: "degraded", source: "service_store" },
+    };
+    for (const row of rawNoSourceEvidence.data.runtime_rows) {
+      row.performance_context.source_status = "unknown";
+      row.row_health = { status: "degraded", degraded_checks: ["paper_runtime_monitoring"] };
+    }
+    mockTradingPulseLive(rawNoSourceEvidence);
+    const noSourceView = renderPage(<TradingPulsePage />);
+    expect(screen.getByTestId("trading-pulse-source-issue-reminder")).toHaveTextContent(
+      i18n.t("mgmt.pulse.sourceIssueSummaryAlert"),
+    );
+    noSourceView.unmount();
+
+    // 5. Honors normalized top-level rowHealthDegradedChecks containing non-monitoring degradation
+    const rawNormRowHealth = copyOverview();
+    rawNormRowHealth.meta.surfaces.paper_runtime_monitoring = { status: "degraded", source: "service_store" };
+    delete rawNormRowHealth.data.runtime_rows[0].row_health;
+    rawNormRowHealth.data.runtime_rows[0].rowHealthDegradedChecks = ["telemetry_summary"];
+    mockTradingPulseLive(rawNormRowHealth);
+    const normRowHealthView = renderPage(<TradingPulsePage />);
+    expect(screen.getByTestId("trading-pulse-source-issue-reminder")).toHaveTextContent(
+      i18n.t("mgmt.pulse.sourceIssueSummaryAlert"),
+    );
+    normRowHealthView.unmount();
   });
 });
