@@ -286,12 +286,14 @@ export function assessPersona(source, tenant, body, text) {
 
 const escapePattern = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Journey titles use the name before the first full/half-width pipe. Match a
-// whole name at the start of the visible h1, never a substring elsewhere in main.
+// Journey titles put the full/short Persona name directly before the optional
+// localized side and symbol. Whitespace alone cannot delimit the Persona name.
 export function journeyHeadingPattern(history) {
   const full = history.persona_name.trim();
   const short = full.split(/[｜|]/)[0].trim() || full;
-  return new RegExp(`^(?:${[...new Set([full, short])].map(escapePattern).join("|")})(?=\\s|$)`);
+  const names = [...new Set([full, short])].map(escapePattern).join("|");
+  const symbols = [...new Set([history.symbol, history.symbol.split(".")[0]])].map(escapePattern).join("|");
+  return new RegExp(`^(?:${names})\\s+(?:(?:買|賣|Buy|Sell)\\s+)?(?:${symbols})(?=\\s|$)`);
 }
 
 export function assessJourneyReads(history, detail, timeline) {
@@ -324,8 +326,7 @@ export function assessJourney(history, detail, text, locale, heading = text) {
   for (const k of ["required", "available", "requested_quantity"])
     if (amounts?.[k] !== history[k]) failures.push(`historical_${k}`);
   const symbol = new RegExp(`(?:^|\\s)${escapePattern(history.symbol)}(?=\\s|$)`);
-  const titleSymbol = new RegExp(`(?:^|\\s)${escapePattern(history.symbol.split(".")[0])}(?=\\s|$)`);
-  if (!journeyHeadingPattern(history).test(heading) || !(symbol.test(heading) || titleSymbol.test(heading)) ||
+  if (!journeyHeadingPattern(history).test(heading) ||
     !(symbol.test(text) || symbol.test(heading)) || !stageText(text, history.environment)) failures.push("journey_visible_object_scope");
   // The immutable witness may use older business wording; the existing Journey
   // page translates this same wire reason_code with these canonical labels.

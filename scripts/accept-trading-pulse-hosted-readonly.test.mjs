@@ -304,6 +304,28 @@ test("heading name metacharacters are literal and partial names never match", ()
   assert.ok(!journeyHeadingPattern(h).test("Persona A Buy 1234"));
 });
 
+for (const [locale, name, symbol, side, reason, unit] of [
+  ["zh-TW", "澄川", "2317.TWSE", "買", "現金不足", "股"],
+  ["en-US", "離線甲", "1234", "Buy", "Not enough cash", "shares"],
+]) test(`Journey rejects whitespace-extended Persona names (${locale})`, () => {
+  const h = { ...history, persona_name: `${name}｜${symbol} Paper learning R2`, symbol };
+  const text = `${h.persona_name} ${symbol} Paper ${reason} 109.25 100 7`;
+  for (const allowedName of [name, h.persona_name]) {
+    for (const titleSymbol of [symbol, symbol.split(".")[0]]) {
+      for (const direction of ["", "買 ", "賣 ", "Buy ", "Sell "]) {
+        const heading = `${allowedName} ${direction}${titleSymbol} 7 ${unit}`;
+        assert.ok(journeyHeadingPattern(h).test(heading), heading);
+        assert.deepEqual(assessJourney(h, journey(), text, locale, heading), []);
+      }
+    }
+    for (const suffix of [`助理 ${side}`, "助理", `${side} 助理`]) {
+      const heading = `${allowedName} ${suffix} ${symbol.split(".")[0]} 7 ${unit}`;
+      assert.equal(journeyHeadingPattern(h).test(heading), false, heading);
+      assert.ok(assessJourney(h, journey(), text, locale, heading).includes("journey_visible_object_scope"), heading);
+    }
+  }
+});
+
 test("Journey shortSymbol title keeps the full source instrument visible in main", () => {
   const h = { ...history, symbol: "1234.TWSE", persona_name: "離線甲｜1234 Paper" };
   const heading = "離線甲 買 1234 7 股";
@@ -360,11 +382,13 @@ test("real Chromium selects visible short/full Journey h1 and rejects a wrong h1
       const title = page.getByRole("heading", { level: 1, name: journeyHeadingPattern(h) });
       assert.ok(await title.isVisible());
       assert.deepEqual(assessJourney(h, journey(), await page.locator("main").innerText(), locale, await title.innerText()), []);
-      await page.locator("h1").evaluate((e) => { e.textContent = "離線甲乙 Buy 1234"; });
       await page.locator("main").evaluate((e, name) => e.insertAdjacentHTML("beforeend", `<p>${name}</p>`), h.persona_name);
-      assert.equal(await title.count(), 0);
-      assert.ok(assessJourney(h, journey(), await page.locator("main").innerText(), locale,
-        await page.locator("h1").innerText()).includes("journey_visible_object_scope"));
+      for (const wrong of ["離線甲乙 Buy 1234", "離線甲 助理 買 1234 7 股", "離線甲 助理 Buy 1234 7 shares"]) {
+        await page.locator("h1").evaluate((e, wrong) => { e.textContent = wrong; }, wrong);
+        assert.equal(await title.count(), 0);
+        assert.ok(assessJourney(h, journey(), await page.locator("main").innerText(), locale,
+          await page.locator("h1").innerText()).includes("journey_visible_object_scope"));
+      }
       await page.locator("h1").evaluate((e, heading) => { e.textContent = heading; e.style.display = "none"; }, heading);
       assert.equal(await title.count(), 0);
     }
