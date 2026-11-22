@@ -124,13 +124,20 @@ const partialView = (s) => ({ ...snapshot(), summaryText: "營運 Persona 2 人"
     fields: [{ label: "成交筆數", value: "1" }, { label: "損益", value: r.pnl.toFixed(2) }, row().fields[2]],
     links: [{ href: `/management/personas/${r.persona_id}`, visible: true, inViewportX: true }] })), subtotals: [] });
 const partialWire = (s) => ({ runtime_rows: s.rows.map((r) => ({ runtime_id: r.runtime_id,
-  runtime_binding_id: r.binding_id, persona_id: r.persona_id, persona_name: r.persona_name, metrics: { pnl: r.pnl },
+  runtime_binding_id: r.binding_id, persona_id: r.persona_id, persona_name: r.persona_name, telemetry_summary: { metrics: { pnl: r.pnl } },
   performance_context: { ledger_fill_count: r.ledger_fill_count, pnl_currency: r.pnl_currency, pnl_period_start_at: r.pnl_period } })),
   summary: { operator_scope: { status: "verified", persona_count: 2, runtime_count: 2 }, pnl_groups: [] } });
 
+const emptyRanks = (wire) => ({ items: [
+  ["pnl-leaders", "pnl", "desc"], ["drawdown-control", "drawdown", "asc"],
+  ["execution-quality", "fill_rate", "desc"], ["sharpe-leaders", "sharpe_ratio", "desc"],
+].map(([block_id, metric, sort_order]) => ({ block_id, metric, sort_order, items: [], eligible_item_count: 0,
+  missing_metric_count: wire.runtime_rows.length, missing_metric_runtime_ids: wire.runtime_rows.map((r) => r.runtime_id) })),
+summary: { ...wire.summary, limit: 20 } });
+
 test("partial PnL scope preserves both row amounts and rejects invented UI/wire subtotals", () => {
   const i = partialScope(); validateInput(i);
-  const view = partialView(i.sources), wire = partialWire(i.sources), ranks = { ranking_blocks: [] };
+  const view = partialView(i.sources), wire = partialWire(i.sources), ranks = emptyRanks(wire);
   assert.deepEqual(assessOverview(i.sources, view, "zh-TW"), []);
   assert.deepEqual(assessWire(i.sources, wire, ranks), []);
   for (const value of [-177.82, 0]) {
@@ -155,17 +162,17 @@ test("known currencies with differing periods do not authorize a combined subtot
     period: r.pnl_period, value: r.pnl, covered_persona_count: 1, eligible_persona_count: 1 }));
   validateInput(i);
   const wire = partialWire(i.sources); wire.summary.pnl_groups = i.sources.pnl_groups;
-  assert.deepEqual(assessWire(i.sources, wire, { ranking_blocks: [] }), []);
+  assert.deepEqual(assessWire(i.sources, wire, emptyRanks(wire)), []);
 });
 
 test("wire scope and amount are checked independently, including unknown versus zero", () => {
-  const i = partialScope(), wire = partialWire(i.sources), ranks = { ranking_blocks: [] };
+  const i = partialScope(), wire = partialWire(i.sources), ranks = emptyRanks(wire);
   wire.runtime_rows[0].performance_context.pnl_currency = "TWD";
   assert.ok(assessWire(i.sources, wire, ranks).includes("row[0]:pnl_scope"));
   wire.runtime_rows[0].performance_context.pnl_currency = null;
-  wire.runtime_rows[0].metrics.pnl = null;
+  wire.runtime_rows[0].telemetry_summary.metrics.pnl = null;
   assert.ok(assessWire(i.sources, wire, ranks).includes("row[0]:ledger_values"));
-  i.sources.rows[0].pnl = null; wire.runtime_rows[0].metrics.pnl = 0;
+  i.sources.rows[0].pnl = null; wire.runtime_rows[0].telemetry_summary.metrics.pnl = 0;
   assert.ok(assessWire(i.sources, wire, ranks).includes("row[0]:ledger_values"));
 });
 
@@ -205,12 +212,12 @@ test("group scope, value and covered denominator must be rendered together", () 
 
 test("raw wire roster, ledger values and rankings checked independently of UI", () => {
   const overview = { data: { runtime_rows: [{ runtime_id: source.runtime_id, runtime_binding_id: source.binding_id,
-    persona_id: source.persona_id, persona_name: source.persona_name, metrics: { pnl: null },
+    persona_id: source.persona_id, persona_name: source.persona_name, telemetry_summary: { metrics: { pnl: null } },
     performance_context: { ledger_fill_count: 0, pnl_currency: "TWD", pnl_period: "session" } }],
     summary: { operator_scope: { status: "verified", persona_count: 1, runtime_count: 1 }, pnl_groups: [] } } };
-  const ranks = { data: { ranking_blocks: [{ metric: "pnl", items: [] }], summary: overview.data.summary } };
+  const ranks = emptyRanks(overview.data);
   assert.deepEqual(assessWire(sources, overview, ranks), []);
-  ranks.data.ranking_blocks[0].items.push({ persona_id: "persona-probe", persona_name: "部署測試", value: 0 });
+  ranks.items[0].items.push({ persona_id: "persona-probe", persona_name: "部署測試", value: 0 });
   assert.ok(assessWire(sources, overview, ranks).includes("rankings_wrong_operator"));
   overview.data.runtime_rows[0].performance_context.ledger_fill_count = null;
   assert.ok(assessWire(sources, overview, ranks).includes("row[0]:ledger_values"));
@@ -361,4 +368,959 @@ test("real Chromium DOM: narrow clipping, diagnostics, actual Tab/Enter, on-scre
     assert.equal(new URL(page.url()).pathname, "/management/trading-pulse");
     assert.equal(await page.getByRole("dialog").count(), 0);
   } finally { await browser.close(); }
+});
+
+// Projected verbatim from ManagementService + the existing _OperatorStore at
+// pantheon d6f959222 (task packet). Removed only unrelated response fields.
+// Original fixture SHA-256: e36a57cbd8f53a6e169bbcbf5b446406ad718b10ca428fc455ebc67641c89370
+const managementServiceFixtures = [
+  {
+    "comparable": false,
+    "sources": {
+      "rows": [
+        {
+          "runtime_id": "r-p1",
+          "binding_id": "b-p1",
+          "persona_id": "p1",
+          "persona_name": "青禾",
+          "ledger_fill_count": 1,
+          "pnl": -168.085,
+          "pnl_currency": null,
+          "pnl_period": "2026-11-01T00:00:00Z"
+        },
+        {
+          "runtime_id": "r-p2",
+          "binding_id": "b-p2",
+          "persona_id": "p2",
+          "persona_name": "澄川",
+          "ledger_fill_count": 0,
+          "pnl": null,
+          "pnl_currency": null,
+          "pnl_period": "2026-11-01T00:00:00Z"
+        }
+      ],
+      "pnl_groups": []
+    },
+    "overview": {
+      "data": {
+        "summary": {
+          "operator_scope": {
+            "status": "verified",
+            "tenant_id": "tenant-test",
+            "persona_count": 2,
+            "runtime_count": 2,
+            "verified_runtime_count": 2,
+            "reason": null,
+            "by_stage": {
+              "paper": {
+                "persona_count": 2,
+                "runtime_count": 2
+              }
+            }
+          },
+          "pnl_groups": []
+        },
+        "runtime_rows": [
+          {
+            "runtime_id": "r-p1",
+            "runtime_binding_id": "b-p1",
+            "persona_id": "p1",
+            "deployment_stage": "paper",
+            "telemetry_summary": {
+              "window": "1h",
+              "collected_at": "2026-11-22T12:00:00Z",
+              "metrics": {
+                "pnl": -168.085,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "avg_slippage_bps": 0,
+                "total_trades": 1
+              },
+              "binding_id": "b-p1",
+              "deployment_stage": "paper",
+              "last_event_at": "2026-11-22T12:00:00Z"
+            },
+            "persona_name": "青禾",
+            "performance_context": {
+              "ledger_fill_count": 1,
+              "pnl_currency": null,
+              "pnl_period_start_at": "2026-11-01T00:00:00Z",
+              "pnl_at": "2026-11-22T12:00:00Z",
+              "pnl_definition": "net_ledger_pnl",
+              "fill_rate_details": {
+                "status": "known",
+                "numerator": 0,
+                "denominator": 452,
+                "unit": "shares",
+                "basis": "filled_quantity_over_submitted_quantity",
+                "window": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "end_exclusive_at": "2026-11-22T12:00:00Z"
+                }
+              },
+              "source_status": "available",
+              "fill_rate_basis": "filled_quantity_over_submitted_quantity",
+              "metric_units": {
+                "pnl": null,
+                "fill_rate": "fraction",
+                "drawdown": "fraction",
+                "sharpe_ratio": "ratio",
+                "avg_slippage_bps": "bps",
+                "total_trades": "fills"
+              },
+              "metric_periods": {
+                "pnl": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "drawdown": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "sharpe_ratio": {
+                  "start_at": null,
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "fill_rate": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "avg_slippage_bps": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "total_trades": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                }
+              }
+            }
+          },
+          {
+            "runtime_id": "r-p2",
+            "runtime_binding_id": "b-p2",
+            "persona_id": "p2",
+            "deployment_stage": "paper",
+            "telemetry_summary": {
+              "window": "1h",
+              "collected_at": "2026-11-22T12:00:00Z",
+              "metrics": {
+                "pnl": null,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "avg_slippage_bps": 0,
+                "total_trades": 0
+              },
+              "binding_id": "b-p2",
+              "deployment_stage": "paper",
+              "last_event_at": "2026-11-22T12:00:00Z"
+            },
+            "persona_name": "澄川",
+            "performance_context": {
+              "ledger_fill_count": 0,
+              "pnl_currency": null,
+              "pnl_period_start_at": "2026-11-01T00:00:00Z",
+              "pnl_at": "2026-11-22T12:00:00Z",
+              "pnl_definition": "net_ledger_pnl",
+              "fill_rate_details": {
+                "status": "known",
+                "numerator": 0,
+                "denominator": 452,
+                "unit": "shares",
+                "basis": "filled_quantity_over_submitted_quantity",
+                "window": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "end_exclusive_at": "2026-11-22T12:00:00Z"
+                }
+              },
+              "source_status": "available",
+              "fill_rate_basis": "filled_quantity_over_submitted_quantity",
+              "metric_units": {
+                "pnl": null,
+                "fill_rate": "fraction",
+                "drawdown": "fraction",
+                "sharpe_ratio": "ratio",
+                "avg_slippage_bps": "bps",
+                "total_trades": "fills"
+              },
+              "metric_periods": {
+                "pnl": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "drawdown": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "sharpe_ratio": {
+                  "start_at": null,
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "fill_rate": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "avg_slippage_bps": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "total_trades": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ranking": {
+      "data": {
+        "id": "management-trading-pulse-rankings",
+        "items": [
+          {
+            "block_id": "pnl-leaders",
+            "label": "P&L Leaders",
+            "metric": "pnl",
+            "sort_order": "desc",
+            "items": [],
+            "eligible_item_count": 0,
+            "missing_metric_count": 2,
+            "missing_metric_runtime_ids": [
+              "r-p1",
+              "r-p2"
+            ],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {
+              "r-p1": "comparison_scope_unverified",
+              "r-p2": "no_fills"
+            }
+          },
+          {
+            "block_id": "drawdown-control",
+            "label": "Drawdown Control",
+            "metric": "drawdown",
+            "sort_order": "asc",
+            "items": [],
+            "eligible_item_count": 0,
+            "missing_metric_count": 2,
+            "missing_metric_runtime_ids": [
+              "r-p1",
+              "r-p2"
+            ],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {
+              "r-p1": "not_observed",
+              "r-p2": "no_fills"
+            }
+          },
+          {
+            "block_id": "execution-quality",
+            "label": "Execution Quality",
+            "metric": "fill_rate",
+            "sort_order": "desc",
+            "items": [
+              {
+                "persona_id": "p2",
+                "persona_name": "澄川",
+                "runtime_id": "r-p2",
+                "pnl": null,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "rank": 1,
+                "ranking_eligible": true,
+                "comparison_scope": {
+                  "stage": "paper",
+                  "period": {
+                    "start_at": "2026-11-01T00:00:00Z",
+                    "end_exclusive_at": "2026-11-22T12:00:00Z"
+                  },
+                  "unit": "fraction",
+                  "basis": "filled_quantity_over_submitted_quantity",
+                  "quantity_unit": "shares"
+                },
+                "ranking_block_id": "execution-quality",
+                "ranking_metric": "fill_rate",
+                "ranking_metric_value": 0.0
+              },
+              {
+                "persona_id": "p1",
+                "persona_name": "青禾",
+                "runtime_id": "r-p1",
+                "pnl": -168.085,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "rank": 2,
+                "ranking_eligible": true,
+                "comparison_scope": {
+                  "stage": "paper",
+                  "period": {
+                    "start_at": "2026-11-01T00:00:00Z",
+                    "end_exclusive_at": "2026-11-22T12:00:00Z"
+                  },
+                  "unit": "fraction",
+                  "basis": "filled_quantity_over_submitted_quantity",
+                  "quantity_unit": "shares"
+                },
+                "ranking_block_id": "execution-quality",
+                "ranking_metric": "fill_rate",
+                "ranking_metric_value": 0.0
+              }
+            ],
+            "eligible_item_count": 2,
+            "missing_metric_count": 0,
+            "missing_metric_runtime_ids": [],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {},
+            "secondary_metric": "avg_slippage_bps"
+          },
+          {
+            "block_id": "sharpe-leaders",
+            "label": "Sharpe Leaders",
+            "metric": "sharpe_ratio",
+            "sort_order": "desc",
+            "items": [],
+            "eligible_item_count": 0,
+            "missing_metric_count": 2,
+            "missing_metric_runtime_ids": [
+              "r-p1",
+              "r-p2"
+            ],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {
+              "r-p1": "insufficient_samples",
+              "r-p2": "insufficient_samples"
+            }
+          }
+        ],
+        "summary": {
+          "operator_scope": {
+            "status": "verified",
+            "tenant_id": "tenant-test",
+            "persona_count": 2,
+            "runtime_count": 2,
+            "verified_runtime_count": 2,
+            "reason": null,
+            "by_stage": {
+              "paper": {
+                "persona_count": 2,
+                "runtime_count": 2
+              }
+            }
+          },
+          "limit": 20
+        }
+      },
+      "page_info": {
+        "next_page_token": null,
+        "total": 4,
+        "page_size": 4
+      },
+      "meta": {
+        "snapshot_at": "2026-11-22T12:00:00Z",
+        "version": "v1",
+        "surfaces": {
+          "management_trading_pulse": {
+            "status": "degraded",
+            "source": "bff_composed",
+            "message": "Trading pulse aggregate is available, but runtime, telemetry, monitoring, row health, or baseline coverage is degraded.",
+            "snapshot_at": "2026-11-22T12:00:00Z"
+          },
+          "runtime_roster": {
+            "status": "ok",
+            "source": "service_store"
+          },
+          "telemetry_summary": {
+            "status": "ok",
+            "source": "service_store"
+          },
+          "paper_runtime_monitoring": {
+            "status": "degraded",
+            "source": "service_store",
+            "message": "Paper runtime monitoring session missing for one or more paper runtimes.",
+            "staleness": {
+              "served_from": "unverifiable",
+              "last_known_at": "2026-11-22T12:00:00Z"
+            }
+          },
+          "paper_live_drift": {
+            "status": "ok",
+            "source": "service_store",
+            "message": "No live runtimes require paper/live baseline comparison."
+          },
+          "baseline_comparison": {
+            "status": "ok",
+            "source": "bff_composed",
+            "snapshot_at": "2026-11-22T12:00:00Z"
+          },
+          "runtime_row_health": {
+            "status": "degraded",
+            "source": "bff_composed",
+            "snapshot_at": "2026-11-22T12:00:00Z",
+            "message": "Trading pulse row health is degraded for 2 runtime(s)."
+          },
+          "management_trading_pulse_rankings": {
+            "status": "degraded",
+            "source": "bff_composed",
+            "message": "Trading pulse rankings are degraded because runtime or telemetry coverage is degraded.",
+            "snapshot_at": "2026-11-22T12:00:00Z"
+          }
+        },
+        "composition_sources": [
+          "GET /bff/management/trading-pulse",
+          "GET /bff/runtimes",
+          "telemetry_summaries",
+          "paper_runtime_monitoring_sessions",
+          "paper_live_drift_reports"
+        ]
+      }
+    }
+  },
+  {
+    "comparable": true,
+    "sources": {
+      "rows": [
+        {
+          "runtime_id": "r-p1",
+          "binding_id": "b-p1",
+          "persona_id": "p1",
+          "persona_name": "青禾",
+          "ledger_fill_count": 1,
+          "pnl": -168.085,
+          "pnl_currency": "TWD",
+          "pnl_period": "2026-11-01T00:00:00Z"
+        },
+        {
+          "runtime_id": "r-p2",
+          "binding_id": "b-p2",
+          "persona_id": "p2",
+          "persona_name": "澄川",
+          "ledger_fill_count": 0,
+          "pnl": null,
+          "pnl_currency": "TWD",
+          "pnl_period": "2026-11-01T00:00:00Z"
+        }
+      ],
+      "pnl_groups": [
+        {
+          "stage": "paper",
+          "currency": "TWD",
+          "period": "2026-11-01T00:00:00Z",
+          "value": -168.085,
+          "covered_persona_count": 1,
+          "eligible_persona_count": 2
+        }
+      ]
+    },
+    "overview": {
+      "data": {
+        "summary": {
+          "operator_scope": {
+            "status": "verified",
+            "tenant_id": "tenant-test",
+            "persona_count": 2,
+            "runtime_count": 2,
+            "verified_runtime_count": 2,
+            "reason": null,
+            "by_stage": {
+              "paper": {
+                "persona_count": 2,
+                "runtime_count": 2
+              }
+            }
+          },
+          "pnl_groups": [
+            {
+              "stage": "paper",
+              "currency": "TWD",
+              "period_start_at": "2026-11-01T00:00:00Z",
+              "period_end_at": "2026-11-22T12:00:00Z",
+              "as_of": "2026-11-22T12:00:00Z",
+              "pnl_definition": "net_ledger_pnl",
+              "value": -168.085,
+              "covered_runtime_count": 1,
+              "covered_persona_count": 1,
+              "eligible_persona_count": 2,
+              "eligible_runtime_count": 2
+            }
+          ]
+        },
+        "runtime_rows": [
+          {
+            "runtime_id": "r-p1",
+            "runtime_binding_id": "b-p1",
+            "persona_id": "p1",
+            "deployment_stage": "paper",
+            "telemetry_summary": {
+              "window": "1h",
+              "collected_at": "2026-11-22T12:00:00Z",
+              "metrics": {
+                "pnl": -168.085,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "avg_slippage_bps": 0,
+                "total_trades": 1
+              },
+              "binding_id": "b-p1",
+              "deployment_stage": "paper",
+              "last_event_at": "2026-11-22T12:00:00Z"
+            },
+            "persona_name": "青禾",
+            "performance_context": {
+              "ledger_fill_count": 1,
+              "pnl_currency": "TWD",
+              "pnl_period_start_at": "2026-11-01T00:00:00Z",
+              "pnl_at": "2026-11-22T12:00:00Z",
+              "pnl_definition": "net_ledger_pnl",
+              "fill_rate_details": {
+                "status": "known",
+                "numerator": 0,
+                "denominator": 452,
+                "unit": "shares",
+                "basis": "filled_quantity_over_submitted_quantity",
+                "window": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "end_exclusive_at": "2026-11-22T12:00:00Z"
+                }
+              },
+              "source_status": "available",
+              "fill_rate_basis": "filled_quantity_over_submitted_quantity",
+              "metric_units": {
+                "pnl": "TWD",
+                "fill_rate": "fraction",
+                "drawdown": "fraction",
+                "sharpe_ratio": "ratio",
+                "avg_slippage_bps": "bps",
+                "total_trades": "fills"
+              },
+              "metric_periods": {
+                "pnl": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "drawdown": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "sharpe_ratio": {
+                  "start_at": null,
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "fill_rate": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "avg_slippage_bps": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "total_trades": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                }
+              }
+            }
+          },
+          {
+            "runtime_id": "r-p2",
+            "runtime_binding_id": "b-p2",
+            "persona_id": "p2",
+            "deployment_stage": "paper",
+            "telemetry_summary": {
+              "window": "1h",
+              "collected_at": "2026-11-22T12:00:00Z",
+              "metrics": {
+                "pnl": null,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "avg_slippage_bps": 0,
+                "total_trades": 0
+              },
+              "binding_id": "b-p2",
+              "deployment_stage": "paper",
+              "last_event_at": "2026-11-22T12:00:00Z"
+            },
+            "persona_name": "澄川",
+            "performance_context": {
+              "ledger_fill_count": 0,
+              "pnl_currency": "TWD",
+              "pnl_period_start_at": "2026-11-01T00:00:00Z",
+              "pnl_at": "2026-11-22T12:00:00Z",
+              "pnl_definition": "net_ledger_pnl",
+              "fill_rate_details": {
+                "status": "known",
+                "numerator": 0,
+                "denominator": 452,
+                "unit": "shares",
+                "basis": "filled_quantity_over_submitted_quantity",
+                "window": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "end_exclusive_at": "2026-11-22T12:00:00Z"
+                }
+              },
+              "source_status": "available",
+              "fill_rate_basis": "filled_quantity_over_submitted_quantity",
+              "metric_units": {
+                "pnl": "TWD",
+                "fill_rate": "fraction",
+                "drawdown": "fraction",
+                "sharpe_ratio": "ratio",
+                "avg_slippage_bps": "bps",
+                "total_trades": "fills"
+              },
+              "metric_periods": {
+                "pnl": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "drawdown": {
+                  "start_at": "2026-11-01T00:00:00Z",
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "sharpe_ratio": {
+                  "start_at": null,
+                  "as_of": "2026-11-22T12:00:00Z",
+                  "window": "1h"
+                },
+                "fill_rate": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "avg_slippage_bps": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                },
+                "total_trades": {
+                  "start_at": null,
+                  "as_of": null,
+                  "window": "1h"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ranking": {
+      "data": {
+        "id": "management-trading-pulse-rankings",
+        "items": [
+          {
+            "block_id": "pnl-leaders",
+            "label": "P&L Leaders",
+            "metric": "pnl",
+            "sort_order": "desc",
+            "items": [
+              {
+                "persona_id": "p1",
+                "persona_name": "青禾",
+                "runtime_id": "r-p1",
+                "pnl": -168.085,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "rank": 1,
+                "ranking_eligible": true,
+                "comparison_scope": {
+                  "stage": "paper",
+                  "period": {
+                    "start_at": "2026-11-01T00:00:00Z",
+                    "as_of": "2026-11-22T12:00:00Z",
+                    "window": "1h"
+                  },
+                  "unit": "TWD",
+                  "definition": "net_ledger_pnl"
+                },
+                "ranking_block_id": "pnl-leaders",
+                "ranking_metric": "pnl",
+                "ranking_metric_value": -168.085
+              }
+            ],
+            "eligible_item_count": 1,
+            "missing_metric_count": 1,
+            "missing_metric_runtime_ids": [
+              "r-p2"
+            ],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {
+              "r-p2": "no_fills"
+            }
+          },
+          {
+            "block_id": "drawdown-control",
+            "label": "Drawdown Control",
+            "metric": "drawdown",
+            "sort_order": "asc",
+            "items": [],
+            "eligible_item_count": 0,
+            "missing_metric_count": 2,
+            "missing_metric_runtime_ids": [
+              "r-p1",
+              "r-p2"
+            ],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {
+              "r-p1": "not_observed",
+              "r-p2": "no_fills"
+            }
+          },
+          {
+            "block_id": "execution-quality",
+            "label": "Execution Quality",
+            "metric": "fill_rate",
+            "sort_order": "desc",
+            "items": [
+              {
+                "persona_id": "p2",
+                "persona_name": "澄川",
+                "runtime_id": "r-p2",
+                "pnl": null,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "rank": 1,
+                "ranking_eligible": true,
+                "comparison_scope": {
+                  "stage": "paper",
+                  "period": {
+                    "start_at": "2026-11-01T00:00:00Z",
+                    "end_exclusive_at": "2026-11-22T12:00:00Z"
+                  },
+                  "unit": "fraction",
+                  "basis": "filled_quantity_over_submitted_quantity",
+                  "quantity_unit": "shares"
+                },
+                "ranking_block_id": "execution-quality",
+                "ranking_metric": "fill_rate",
+                "ranking_metric_value": 0.0
+              },
+              {
+                "persona_id": "p1",
+                "persona_name": "青禾",
+                "runtime_id": "r-p1",
+                "pnl": -168.085,
+                "drawdown": null,
+                "sharpe_ratio": null,
+                "fill_rate": 0.0,
+                "rank": 2,
+                "ranking_eligible": true,
+                "comparison_scope": {
+                  "stage": "paper",
+                  "period": {
+                    "start_at": "2026-11-01T00:00:00Z",
+                    "end_exclusive_at": "2026-11-22T12:00:00Z"
+                  },
+                  "unit": "fraction",
+                  "basis": "filled_quantity_over_submitted_quantity",
+                  "quantity_unit": "shares"
+                },
+                "ranking_block_id": "execution-quality",
+                "ranking_metric": "fill_rate",
+                "ranking_metric_value": 0.0
+              }
+            ],
+            "eligible_item_count": 2,
+            "missing_metric_count": 0,
+            "missing_metric_runtime_ids": [],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {},
+            "secondary_metric": "avg_slippage_bps"
+          },
+          {
+            "block_id": "sharpe-leaders",
+            "label": "Sharpe Leaders",
+            "metric": "sharpe_ratio",
+            "sort_order": "desc",
+            "items": [],
+            "eligible_item_count": 0,
+            "missing_metric_count": 2,
+            "missing_metric_runtime_ids": [
+              "r-p1",
+              "r-p2"
+            ],
+            "ranking_basis": "within_comparison_scope",
+            "metric_reasons": {
+              "r-p1": "insufficient_samples",
+              "r-p2": "insufficient_samples"
+            }
+          }
+        ],
+        "summary": {
+          "operator_scope": {
+            "status": "verified",
+            "tenant_id": "tenant-test",
+            "persona_count": 2,
+            "runtime_count": 2,
+            "verified_runtime_count": 2,
+            "reason": null,
+            "by_stage": {
+              "paper": {
+                "persona_count": 2,
+                "runtime_count": 2
+              }
+            }
+          },
+          "limit": 20
+        }
+      },
+      "page_info": {
+        "next_page_token": null,
+        "total": 4,
+        "page_size": 4
+      },
+      "meta": {
+        "snapshot_at": "2026-11-22T12:00:00Z",
+        "version": "v1",
+        "surfaces": {
+          "management_trading_pulse": {
+            "status": "degraded",
+            "source": "bff_composed",
+            "message": "Trading pulse aggregate is available, but runtime, telemetry, monitoring, row health, or baseline coverage is degraded.",
+            "snapshot_at": "2026-11-22T12:00:00Z"
+          },
+          "runtime_roster": {
+            "status": "ok",
+            "source": "service_store"
+          },
+          "telemetry_summary": {
+            "status": "ok",
+            "source": "service_store"
+          },
+          "paper_runtime_monitoring": {
+            "status": "degraded",
+            "source": "service_store",
+            "message": "Paper runtime monitoring session missing for one or more paper runtimes.",
+            "staleness": {
+              "served_from": "unverifiable",
+              "last_known_at": "2026-11-22T12:00:00Z"
+            }
+          },
+          "paper_live_drift": {
+            "status": "ok",
+            "source": "service_store",
+            "message": "No live runtimes require paper/live baseline comparison."
+          },
+          "baseline_comparison": {
+            "status": "ok",
+            "source": "bff_composed",
+            "snapshot_at": "2026-11-22T12:00:00Z"
+          },
+          "runtime_row_health": {
+            "status": "degraded",
+            "source": "bff_composed",
+            "snapshot_at": "2026-11-22T12:00:00Z",
+            "message": "Trading pulse row health is degraded for 2 runtime(s)."
+          },
+          "management_trading_pulse_rankings": {
+            "status": "degraded",
+            "source": "bff_composed",
+            "message": "Trading pulse rankings are degraded because runtime or telemetry coverage is degraded.",
+            "snapshot_at": "2026-11-22T12:00:00Z"
+          }
+        },
+        "composition_sources": [
+          "GET /bff/management/trading-pulse",
+          "GET /bff/runtimes",
+          "telemetry_summaries",
+          "paper_runtime_monitoring_sessions",
+          "paper_live_drift_reports"
+        ]
+      }
+    }
+  }
+];
+
+for (const fixture of managementServiceFixtures) {
+  test(`actual ManagementService wire accepts comparable=${fixture.comparable}`, () => {
+    assert.ok(fixture.ranking.data.items.some((b) => b.items.length > 0));
+    assert.deepEqual(assessWire(fixture.sources, fixture.overview, fixture.ranking), []);
+  });
+}
+
+const serviceFixture = (comparable = true) => structuredClone(managementServiceFixtures.find((f) => f.comparable === comparable));
+for (const [name, mutate, code] of [
+  ["wrong amount", (f) => { f.overview.data.runtime_rows[0].telemetry_summary.metrics.pnl = -1; }, "row[0]:ledger_values"],
+  ["missing amount", (f) => { delete f.overview.data.runtime_rows[0].telemetry_summary.metrics.pnl; }, "row[0]:ledger_values"],
+  ["null to zero", (f) => { f.overview.data.runtime_rows[1].telemetry_summary.metrics.pnl = 0; }, "row[1]:ledger_values"],
+  ["missing blocks", (f) => { delete f.ranking.data.items; }, "rankings_missing"],
+  ["empty blocks", (f) => { f.ranking.data.items = []; }, "rankings_missing"],
+  ["missing block items", (f) => { delete f.ranking.data.items[0].items; }, "rankings_invalid_block"],
+  ["rank value tamper", (f) => { f.ranking.data.items[0].items[0].ranking_metric_value = 0; }, "rankings_name_or_value"],
+  ["rank value missing", (f) => { delete f.ranking.data.items[0].items[0].ranking_metric_value; }, "rankings_name_or_value"],
+  ["rank value null with fallback", (f) => { f.ranking.data.items[2].items[0].ranking_metric_value = null; }, "rankings_name_or_value"],
+  ["wrong operator", (f) => { f.ranking.data.items[2].items[0].persona_id = "intruder"; }, "rankings_wrong_operator"],
+  ["duplicate runtime", (f) => { f.ranking.data.items[2].items[1] = structuredClone(f.ranking.data.items[2].items[0]); }, "rankings_wrong_operator"],
+  ["illegal rank", (f) => { f.ranking.data.items[2].items[0].rank = 2; }, "rankings_invalid_order"],
+  ["ineligible ranking", (f) => { f.ranking.data.items[0].items[0].ranking_eligible = false; }, "rankings_unverified_scope"],
+  ["unverified currency", (f) => { f.sources.rows[0].pnl_currency = null; }, "rankings_unverified_scope"],
+  ["missing comparison period", (f) => { delete f.ranking.data.items[0].items[0].comparison_scope.period; }, "rankings_unverified_scope"],
+  ["wrong denominator", (f) => { f.ranking.data.summary.operator_scope.runtime_count++; }, "ranking_denominator_mismatch"],
+  ["invented group", (f) => { f.overview.data.summary.pnl_groups[0].value = 0; }, "group[0]:wire_scope_sum"],
+  ["erased ranked evidence", (f) => { f.ranking.data.items[2].items = []; }, "rankings_coverage"],
+  ["missing coverage", (f) => { delete f.ranking.data.items[2].missing_metric_count; }, "rankings_coverage"],
+]) test(`actual wire rejects ${name}`, () => {
+  const f = serviceFixture(); mutate(f);
+  assert.ok(assessWire(f.sources, f.overview, f.ranking).includes(code));
+});
+
+test("actual wire distinguishes measured zero from null and absent PnL", () => {
+  const f = serviceFixture(false), r = f.overview.data.runtime_rows[0];
+  f.sources.rows[0].pnl = 0; r.telemetry_summary.metrics.pnl = 0;
+  assert.deepEqual(assessWire(f.sources, f.overview, f.ranking), []);
+  for (const value of [null, undefined]) {
+    r.telemetry_summary.metrics.pnl = value;
+    assert.ok(assessWire(f.sources, f.overview, f.ranking).includes("row[0]:ledger_values"));
+  }
+});
+
+
+test("missing wire scope is not an explicitly unknown scope", () => {
+  for (const key of ["pnl_currency", "pnl_period_start_at"]) {
+    const f = serviceFixture(false); delete f.overview.data.runtime_rows[0].performance_context[key];
+    assert.ok(assessWire(f.sources, f.overview, f.ranking).includes("row[0]:pnl_scope"));
+  }
+});
+
+test("actual ranking permits separate scopes to restart at one", () => {
+  const f = serviceFixture(), row = f.overview.data.runtime_rows[0];
+  row.deployment_stage = "canary";
+  for (const block of f.ranking.data.items) for (const item of block.items) if (item.runtime_id === row.runtime_id) {
+    item.comparison_scope.stage = "canary"; item.rank = 1;
+  }
+  assert.deepEqual(assessWire(f.sources, f.overview, f.ranking), []);
+});
+
+test("actual ranking rejects reversed values within a scope", () => {
+  const f = serviceFixture(), block = f.ranking.data.items[2];
+  const item = block.items[1]; item.fill_rate = item.ranking_metric_value = 0.5;
+  f.overview.data.runtime_rows.find((r) => r.runtime_id === item.runtime_id).telemetry_summary.metrics.fill_rate = 0.5;
+  assert.ok(assessWire(f.sources, f.overview, f.ranking).includes("rankings_invalid_order"));
 });
