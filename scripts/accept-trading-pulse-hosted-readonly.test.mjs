@@ -304,6 +304,14 @@ test("heading name metacharacters are literal and partial names never match", ()
   assert.ok(!journeyHeadingPattern(h).test("Persona A Buy 1234"));
 });
 
+test("Journey shortSymbol title keeps the full source instrument visible in main", () => {
+  const h = { ...history, symbol: "1234.TWSE", persona_name: "離線甲｜1234 Paper" };
+  const heading = "離線甲 買 1234 7 股";
+  assert.deepEqual(assessJourney(h, journey(), "1234.TWSE Paper 現金不足 109.25 100 7", "zh-TW", heading), []);
+  for (const symbol of ["1234.TPEX", "91234.TWSE", "1234"])
+    assert.ok(assessJourney(h, journey(), `${symbol} Paper 現金不足 109.25 100 7`, "zh-TW", heading).includes("journey_visible_object_scope"));
+});
+
 test("short title cannot weaken immutable history identity, event time, reason or amounts", () => {
   const h = { ...history, persona_name: "離線甲｜1234 Paper learning R2" };
   const text = "Paper 現金不足 109.25 100 7", heading = "離線甲 買 1234 7 股";

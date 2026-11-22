@@ -324,7 +324,9 @@ export function assessJourney(history, detail, text, locale, heading = text) {
   for (const k of ["required", "available", "requested_quantity"])
     if (amounts?.[k] !== history[k]) failures.push(`historical_${k}`);
   const symbol = new RegExp(`(?:^|\\s)${escapePattern(history.symbol)}(?=\\s|$)`);
-  if (!journeyHeadingPattern(history).test(heading) || !symbol.test(heading) || !stageText(text, history.environment)) failures.push("journey_visible_object_scope");
+  const titleSymbol = new RegExp(`(?:^|\\s)${escapePattern(history.symbol.split(".")[0])}(?=\\s|$)`);
+  if (!journeyHeadingPattern(history).test(heading) || !(symbol.test(heading) || titleSymbol.test(heading)) ||
+    !(symbol.test(text) || symbol.test(heading)) || !stageText(text, history.environment)) failures.push("journey_visible_object_scope");
   // The immutable witness may use older business wording; the existing Journey
   // page translates this same wire reason_code with these canonical labels.
   const renderedReason = history.reason_code === "insufficient_cash"
