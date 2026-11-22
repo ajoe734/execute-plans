@@ -362,5 +362,45 @@
       "terminal_collection": "Both bounded foreground reruns completed with terminal exit 0; no pending handles.",
       "review": "New exact-head handoff required after prior attempts rejected for base advance and concurrent canonical next-message update. No previous review approval transferred."
     }
+  },
+  "ci_return_revalidation": {
+    "reason": "Owned in-progress source return after integrator classified Publish canonical review status as ci-red.",
+    "previous_head": "4c100f7c8b84ee46015a8d857e1b1cfbcf05a1d2",
+    "base_sha": "bd2cb828191bd5054c3553b099d8ff203fe3815c",
+    "diagnosis": {
+      "run_url": "https://github.com/ajoe734/execute-plans/actions/runs/45039799618/attempts/1",
+      "terminal_conclusion": "cancelled",
+      "steps_executed": 0,
+      "annotation": "Canceling since a higher priority waiting request for pantheon-canonical-review-4c100f7c8b84ee46015a8d857e1b1cfbcf05a1d2 exists",
+      "source_failure_observed": false,
+      "interpretation": "The GitHub concurrency cancellation occurred before checkout or verifier execution. There is no failing source assertion or verifier log to repair; preserve the independently reviewed source and record revalidation in this existing manifest.",
+      "retry": "gh run rerun 45039799618 returned exit 0; attempt 2 remains queued at this receipt. Queue admission is not a passed check. The new evidence head requires its own CI and independent exact-head approval."
+    },
+    "verification": [
+      {
+        "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+        "exit_code": 0,
+        "passed": 43,
+        "failed": 0,
+        "duration_seconds": 1.67
+      },
+      {
+        "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+        "exit_code": 0,
+        "passed": 5,
+        "skipped": 38,
+        "duration_seconds": 34.73,
+        "includes": "Real Chromium viewer sessions across three locales/viewports with intercepted fixture traffic; both read-only positive and blocked business/foreign request controls. No hosted acceptance inferred."
+      },
+      {
+        "command": "node --check for all three scoped mjs files; git diff --check; python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge; verify all four manifest source SHA256 hashes and retained baseline/terminal receipt hashes",
+        "exit_code": 0,
+        "retained_bundle_bytes": 196259
+      }
+    ],
+    "terminal_collection": "Both bounded foreground test batches completed with terminal exit 0; no pending local process handles.",
+    "source_changed": false,
+    "hosted_accepted": false,
+    "delivery": "Evidence-only new head for fresh independent review. Auto-merge remains off; supervisor owns integration. Task E owns repaired-pair hosted acceptance."
   }
 }
