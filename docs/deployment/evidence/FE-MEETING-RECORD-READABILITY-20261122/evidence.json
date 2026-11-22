@@ -13,6 +13,10 @@
       "passed": 42
     },
     {
+      "command": "vitest run src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "passed": 17
+    },
+    {
       "command": "npm run typecheck && npm run typecheck:agora",
       "status": "passed"
     },
