@@ -22,12 +22,12 @@
     },
     "page_helpers": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
-      "sha256": "e343f195eab6aa7bdf554aefaa217e00f87fc120718554441e82ddecd68d4ae0",
+      "sha256": "d4ddc514c5c32d9e0226fa9285e7601e237dd251c315b6985ba61a4e17110195",
       "role": "Page assertions/helpers only; no executable CLI or browser orchestration remains."
     },
     "helper_tests": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
-      "sha256": "c9207344b46396b61640181566cf63b946db14178f2ca808b37a52e3f522c296"
+      "sha256": "da2c3934d8f885a3d1a94952e64a508903b33421d3b18dbb00cabf235b896cf9"
     }
   },
   "commands": {
@@ -292,5 +292,39 @@
     "pending": "Coordinator will execute the real dev viewer mode after root 45029250554 resolves the public manifest versus serving BFF mismatch. That receipt is follow-up execution evidence, not a source-review prerequisite under the 2026-11-22T14:40:05Z canonical instruction. No new-mode hosted result is claimed; Task E owns repaired-pair full acceptance.",
     "coordination": "Same PR 1063. Original measured failing baseline, terminal receipt, retained 196259-byte bundle and deterministic browser mode proof preserved. No second old-page rerun required for source handoff.",
     "review_admission": "Source-only handoff to Antigravity after focused regressions; review approval, merge, dev deployment and hosted acceptance are not claimed."
+  },
+  "source_scope_correction": {
+    "trigger": "Canonical 2026-11-22T15:33:58Z return: independently observed finite negative row PnL with absent currency and differing valuation starts was rejected before browser login by the old pnl scope assertion.",
+    "owned_layer": "Existing page assertion helpers/tests only; shared runner, original receipts, UI, deployment and trading data unchanged.",
+    "behavior": [
+      "Require explicit string/null currency and period independently of numeric/null PnL. Compare every numeric row amount with business rounding and known currency label; unknown amount remains distinct from measured zero.",
+      "Only verified same-stage/currency/period measured rows justify groups. Reject unsupported or extra wire groups and visible subtotal blocks, including invented zero; semantic DOM checks use headings and accessible groups without product test IDs.",
+      "Optional quantity unit labels are literal witness text or locale-keyed text. Assert the selected locale label only when supplied; do not infer a currency or quantity unit. Preserve measured 0/452 and verify both numerator and denominator.",
+      "Two independently measured negative rows with different valuation starts and null currencies pass with no subtotal; combining them or replacing an amount with unknown/zero/positive fails. Known currency with differing periods can be reported as separate scoped groups."
+    ],
+    "verification": [
+      {
+        "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+        "exit_code": 0,
+        "passed": 43,
+        "failed": 0,
+        "includes": "Real Chromium narrow clipping/Tab/Enter and subtotal positive/negative DOM controls in zh-TW/en-US; partial PnL, unknown versus zero, localized optional units, 0/452, independent wire scope and amount."
+      },
+      {
+        "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+        "exit_code": 0,
+        "passed": 5,
+        "skipped": 38,
+        "includes": "Unchanged shared runner pair/auth, real CLI and intercepted Chromium viewer sessions across all three locale/viewports, with blocked business-write and foreign-origin controls."
+      },
+      {
+        "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs; node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs; git diff --check; verify retained baseline hashes and receipt",
+        "exit_code": 0,
+        "retained_bundle_bytes": 196259
+      }
+    ],
+    "first_iteration": "One new regression initially failed because the test loop reused a modified expected-group fixture. Fixed fixture reset; final complete helper suite passes. No production change was needed for that test failure.",
+    "hosted_accepted": false,
+    "handoff": "Fresh exact-head review of PR #1063 required. Task E supplies fresh same-tenant witness and performs repaired-pair hosted acceptance; no extra stage, schedule, gate or deployment added."
   }
 }

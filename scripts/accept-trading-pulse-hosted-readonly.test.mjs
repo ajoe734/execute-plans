@@ -103,6 +103,12 @@ test("0/452 is measured with optional witnessed units in the selected locale", (
   }
   const i = input(); i.sources.rows[0].quantity_unit = { "en-US": 123 };
   assert.throws(() => validateInput(i));
+  const translated = { ...sources, rows: [{ ...source, requested_quantity: 452, quantity_unit: s.quantity_unit }] };
+  const view = snapshot(); view.heading = "Trading Pulse";
+  view.rows[0].fields[2].value = "0% · 0/452 shares";
+  assert.deepEqual(assessOverview(translated, view, "en-US"), []);
+  view.rows[0].fields[2].value = "0% · 0/452 股";
+  assert.ok(assessOverview(translated, view, "en-US").includes("row[0]:fill_rate_basis_unit"));
 });
 
 const partialScope = () => {
@@ -145,6 +151,11 @@ test("known currencies with differing periods do not authorize a combined subtot
   i.sources.pnl_groups = [{ stage: "paper", currency: "USD", period: "combined", value: -177.81914625001083,
     covered_persona_count: 2, eligible_persona_count: 2 }];
   assert.throws(() => validateInput(i));
+  i.sources.pnl_groups = i.sources.rows.map((r) => ({ stage: r.stage, currency: r.pnl_currency,
+    period: r.pnl_period, value: r.pnl, covered_persona_count: 1, eligible_persona_count: 1 }));
+  validateInput(i);
+  const wire = partialWire(i.sources); wire.summary.pnl_groups = i.sources.pnl_groups;
+  assert.deepEqual(assessWire(i.sources, wire, { ranking_blocks: [] }), []);
 });
 
 test("wire scope and amount are checked independently, including unknown versus zero", () => {
