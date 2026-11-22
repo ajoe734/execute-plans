@@ -1,0 +1,406 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADING-PULSE-BROWSER-PROBE-20261122",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADING-PULSE-BROWSER-PROBE-20261122",
+  "problem_register": {
+    "root_cause_class": "RC6",
+    "work_package": "WP6.5"
+  },
+  "delivery_scope": "Trading Pulse viewer mode of the existing hosted read-only runner, page assertions/helpers, offline controls and retained measured legacy baseline. E owns repaired-page full proof.",
+  "artifacts": {
+    "runner": {
+      "path": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+      "sha256": "e043a00554e1f9e39322982a4d4d5b1f9fe4a2029304ca18b9472f8826ba2fd8"
+    },
+    "runner_tests": {
+      "path": "src/test/persona-strategy-hosted-readonly.test.ts",
+      "sha256": "b6e4510fc7456d7f393c2f4c39d968d90435187c734036b22fd939120d730467"
+    },
+    "page_helpers": {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
+      "sha256": "d4ddc514c5c32d9e0226fa9285e7601e237dd251c315b6985ba61a4e17110195",
+      "role": "Page assertions/helpers only; no executable CLI or browser orchestration remains."
+    },
+    "helper_tests": {
+      "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "sha256": "da2c3934d8f885a3d1a94952e64a508903b33421d3b18dbb00cabf235b896cf9"
+    }
+  },
+  "commands": {
+    "acceptance": "node scripts/accept-persona-strategy-hosted-readonly.mjs --mode trading-pulse --out-dir <private-dir> < <private-input.json>",
+    "legacy_baseline": "node scripts/accept-persona-strategy-hosted-readonly.mjs --mode trading-pulse --out-dir <private-dir> --record-baseline < <private-input.json>",
+    "input_contract": "See the page helper header for viewer-only stdin credentials, fresh independent current owner witness and separate immutable historical event. The original four-profile mode remains the default, with its existing input and thresholds. Baseline always exits 1 and cannot establish acceptance."
+  },
+  "local_verification": [
+    {
+      "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed": 38,
+      "failed": 0,
+      "includes": "Real Chromium 1255 DOM: 390px clipping counterexample and repair, diagnostics hidden/expanded, actual Tab/Enter activation, on-screen return and Ctrl+K mobile command-palette entry; exclusion of open SSE and unrelated JSON bodies, scoped JSON capture and unfinished-body timeout; synthetic current zero/unknown/negative values, source scope and coverage, cross-tenant/wrong-event/wrong-object rejection, empty/hash/foreign/unfiltered/hidden links, write policy, redaction and evidence budget. No synthetic fixture is sent to hosted BFF."
+    },
+    {
+      "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+      "exit_code": 0,
+      "passed": 3,
+      "skipped": 38,
+      "includes": "Actual Node CLI subprocess dispatch/exit2 negative controls (no circular top-level-await deadlock), option/input validation, and all three real Chromium synthetic viewer sessions through the shared runner. Each context passes same tenant/viewer-only verification and read-only request guard, browser navigation and evidence cap. All fixture traffic intercepted; not hosted proof."
+    },
+    {
+      "command": "timeout 90s npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "Verify unchanged original legacy_baseline plus all declared source SHA256 hashes and retained three-file bundle",
+      "exit_code": 0,
+      "retained_bundle_bytes": 196259
+    },
+    {
+      "command": "timeout 200s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1",
+      "exit_code": 0,
+      "passed": 41,
+      "failed": 0,
+      "duration_seconds": 137.49,
+      "includes": "Final unchanged shared runner at f9aac3a043c48c161527cd8ab6a2d2db94a8851a: all original role/strategy/performance/parity/error/redaction/write controls, actual-process CLI dispatch and all three synthetic real Chromium viewer sessions. Terminal output collected; no hosted result inferred."
+    },
+    {
+      "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 220s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1",
+      "exit_code": 0,
+      "passed": 43,
+      "failed": 0,
+      "includes": "Shared guard/login/pair correction at e8f1e02e5. Original default regression fixtures retained; both modes reject FE/BFF and strict auth mismatches. Real Chromium Trading Pulse positive and blocked business/foreign request controls run all three locale/viewport contexts using intercepted synthetic traffic only. Terminal output collected; no hosted acceptance inferred."
+    },
+    {
+      "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed": 38,
+      "failed": 0,
+      "includes": "Page helper regression after shared guard/login/pair correction."
+    },
+    {
+      "command": "timeout 90s npm run typecheck",
+      "exit_code": 124,
+      "includes": "Reached the bounded deadline with no type diagnostics; not passed. Retried with a larger bounded deadline below."
+    },
+    {
+      "command": "timeout 180s npm run typecheck",
+      "exit_code": 0,
+      "includes": "After shared guard/login/pair correction."
+    },
+    {
+      "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs && git diff --check; verify retained baseline file sizes/SHA256 and terminal receipt SHA256",
+      "exit_code": 0,
+      "retained_bundle_bytes": 196259,
+      "includes": "All three baseline files and original terminal receipt unchanged."
+    }
+  ],
+  "independent_owner_context": {
+    "private_path": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/.orchestrator/assistant-dev-packets/sources/trading-pulse-operator-readability-20261122/owner-witness-20261122.json",
+    "sha256": "8eccfe73f04e04c049797ce7151a222e495443b3e65cef167bb01b89884369f8",
+    "captured_at": "2026-11-22T13:15:36.892690+00:00",
+    "verified_by": "Human/Ops coordinator; read independently from registry, runtime bindings, telemetry and scoped historical journey",
+    "observations": "Four active bindings: one marked test plus three business Personas. The 2317 case has zero ledger fills, unknown PnL, and current measured quantity 0/452; its separate immutable paper journey matches the telemetry event. Two other business Personas have a ledger fill and negative PnL. Currency and comparable period must be established from authoritative fresh reads before any aggregate acceptance.",
+    "use": "Coordination provenance only; not a fabricated complete acceptance input, a copy of Trading Pulse, or a permanent numeric snapshot. E must refresh the current witness within the CLI's 15-minute window."
+  },
+  "legacy_baseline": {
+    "status": "measured_failing_legacy_baseline",
+    "private_parent": "/tmp/trading-pulse-rc6-baseline.sZZagX",
+    "script_commit": "06126a238739cba1ff0e291b3aba6abe4c05e222",
+    "script_sha256": "3b4c7e211d9af18c9b9434b92024fcf41a7bef034dc87d0dec3f5695ef712c68",
+    "command": "node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir /tmp/trading-pulse-rc6-baseline.sZZagX/pr1063-06126a238 --record-baseline (authorized coordinator GUI credentials on stdin)",
+    "started_at": "2026-11-22T13:29:43.774Z",
+    "finished_at": "2026-11-22T13:30:53.916Z",
+    "terminal_exit_code": 1,
+    "terminal_receipt": {
+      "private_path": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/.orchestrator/assistant-dev-packets/sources/trading-pulse-operator-readability-20261122/pre-fix-browser-masked/terminal-exit-receipt.json",
+      "sha256": "b6b17efe0136adf0ab56d76dd7ba51700583d983ffe7f173aabb6a1f7955d9a0",
+      "source_launch_call": "call_6c876f5723a94285b8bbc90b8f911168",
+      "source_terminal_poll_call": "call_b901bf19444345d1b16f53805f9dacf5",
+      "exec_session": 61336,
+      "terminal_poll_record_sha256": "cde2af55201559b0489e7dfcce78d8cfcb6dab70fef4f890fadebcb08079c498",
+      "observed_terminal_line": "Actual probe exit = 1",
+      "wrapper_exit_code": 0,
+      "interpretation": "Recovered original invocation receipt: the pipefail pipeline ending in the frozen browser CLI exited 1; its wrapper checked that value and exited 0. Receipt matches the script commit/hash, run timestamps, deployed FE/BFF pair and retained summary digest. No new hosted run was used and pass=false was not used to infer process status. This process provenance receipt is separate from the three-file browser evidence bundle."
+    },
+    "pass": false,
+    "pair_stable_before_after": true,
+    "pair": {
+      "fe": "bf4e79d774bb387a51e9030e5821b4f61bbbb806",
+      "bff": "bac80d756dec67b19c9af5183eae7a9869835015",
+      "pair_id": "0086f4a4077d4c201240a3627e87be0da2824bc9d543ce5e5d439f600e09e649",
+      "identity_checks": "Actual public deployment.json and /bff/version matched before and after; strict auth, no stub, live mode and strict fallback assertions passed.",
+      "hosted_write_flag": "true",
+      "probe_business_writes": "blocked by the existing request policy, independently of the deployed flag",
+      "blocked_write_attempts": 0
+    },
+    "browser_identity": "Three isolated contexts used normal GUI login and verified the expected tenant plus viewer role, excluding admin/operator. No credentials or raw identities are in this manifest.",
+    "runs": [
+      {
+        "locale": "zh-TW",
+        "width": 1440,
+        "entry": "sidebar",
+        "table_width": 1088,
+        "row_entries": 4,
+        "entries_outside_viewport": 0
+      },
+      {
+        "locale": "zh-TW",
+        "width": 390,
+        "entry": "command_palette",
+        "table_width": 1040,
+        "row_entries": 4,
+        "entries_outside_viewport": 4
+      },
+      {
+        "locale": "en-US",
+        "width": 1440,
+        "entry": "sidebar",
+        "table_width": 1088,
+        "row_entries": 4,
+        "entries_outside_viewport": 0
+      }
+    ],
+    "observed_page_failures": [
+      "Source runtime IDs and engineering diagnostics are visible by default in all three runs.",
+      "Diagnostics are not collapsed; the explicit expandable diagnostics control is missing (its 20-second locator timeout is a failed check, never a pass).",
+      "At 390px all four primary row entries are outside the viewport and require horizontal scrolling; all entry labels use source IDs."
+    ],
+    "separate_runtime_failure": "Authenticated /bff/search returned 503 during the narrow command-palette search. Static section navigation still reached Trading Pulse; the 503 remains a failed check for E and the existing search owner to resolve or record.",
+    "missing_evidence": [
+      "Baseline input intentionally omitted the full current owner witness and immutable history witness. It does not establish roster/count/PnL/fill-rate parity.",
+      "No successful Persona detail or historical rejection roundtrip is claimed. Both are explicit missing-proof failures; E must run normal acceptance with fresh authoritative inputs on the repaired pair."
+    ],
+    "retained_bundle": {
+      "private_dir": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/.orchestrator/assistant-dev-packets/sources/trading-pulse-operator-readability-20261122/pre-fix-browser-masked",
+      "durable_retention": "Coordinator retained the exact three files in the task packet. All three SHA256 digests match the original run; this worker's attempted artifact mkdir was read-only and copied nothing.",
+      "bytes": 196259,
+      "max_bytes": 5242880,
+      "files": [
+        {
+          "file": "summary.json",
+          "bytes": 11649,
+          "sha256": "c50248c876ff2699ab8a589f55eb495bff1b8890387a1205e7e48ba80d302c77"
+        },
+        {
+          "file": "desktop.png",
+          "bytes": 125425,
+          "sha256": "b99706eb24a013ce5c89468abe478512d69d5a8c5dbf315abe02339dca5576de"
+        },
+        {
+          "file": "narrow.png",
+          "bytes": 59185,
+          "sha256": "8eac4048995d8f1748134d0c72cb953dcbe15907ace588b6bea1ce4bffada951"
+        }
+      ],
+      "privacy": "Top session header and side navigation masked; source IDs masked. Inspected screenshots and retained no raw browser state, credentials, traces or API bodies.",
+      "routine_daily_growth_bytes": 0
+    },
+    "excluded_attempt": {
+      "started_at": "2026-11-22T13:18:52.900Z",
+      "outcome": "Missing Chromium 1255 executable before any browser run; not measured UI failure evidence.",
+      "remediation": "timeout 180s npx playwright install chromium completed exit 0; Chromium 1255 and headless shell installed, and the real-browser offline test subsequently passed."
+    },
+    "harness_repairs": [
+      "Relevant finite JSON bodies only, with 20-second body deadlines; never await open shell SSE before context close. Direct browser reads also have a 20-second abort deadline.",
+      "Narrow shell entry uses the existing Ctrl/Cmd+K command palette when the sidebar is hidden; no assumed mobile menu or direct URL substitution.",
+      "Mask the entire top header as well as side navigation and private values: server display names can differ from the supplied GUI login username."
+    ],
+    "superseded_attempts": "Removed the initial missing-browser bundle, incomplete pre-SSE-fix bundle, pre-header-mask bundle and duplicate final temporary bundle after verifying all final files against durable retention. The retained runtime bundle has exactly one summary and two masked screenshots. Coordinator packet also contains its independent observation and an older summary outside this final bundle.",
+    "hosted_accepted": false
+  },
+  "runtime_budget": {
+    "schedule": "On demand only; no recurring job, deployment dependency or pre-deploy gate added.",
+    "routine_daily_growth_bytes": 0,
+    "max_bundle_bytes": 5242880,
+    "bundle_limit": "One sanitized summary plus at most one desktop and one narrow screenshot, including summary bytes. Oversized images are removed and the result fails; an oversized summary is replaced by a failed digest record.",
+    "privacy": "Private directories 0700 and files 0600. No credentials, cookie storage state, raw API bodies, traces, HAR or browser profiles retained. Chromium contexts and browser close before the command returns."
+  },
+  "handoff_to_e": [
+    "After A/B/D and this source PR merge, use the normal Dev Root process to establish one exact FE/BFF pair and verify deployment.json plus actual /bff/version before and after the probe.",
+    "Use the existing same-tenant viewer GUI account. Supply fresh registry/ledger-derived operator and excluded rosters, comparable PnL scope/currency/coverage, and current fill quantity units. Keep the immutable rejection witness separate from changing current metrics.",
+    "Run normal acceptance, without --record-baseline, on zh-TW desktop and 390px plus en-US desktop. Actual Persona and scoped rejection navigation, returned object/tenant/environment/event/source reason and on-screen return must pass; URL or HTTP 200 alone is insufficient.",
+    "Record the probe's terminal exit status, summary digest, measured bytes and at most two screenshots. Missing source/history or a failed run remains not accepted. Report repaired-pair results to RC6 and MGMT-GATE-FULL-PASS-HOSTED-ACCEPTANCE-20261114."
+  ],
+  "ci_return_triage": {
+    "returned_head": "089c1ea6c41bb72ec6bfcd6da442075b70b24cc0",
+    "reported_check": "Publish canonical review status",
+    "original_attempt": {
+      "url": "https://github.com/ajoe734/execute-plans/actions/runs/45034684508/attempts/1",
+      "conclusion": "cancelled",
+      "completed_at": "2026-11-22T14:53:28Z",
+      "executed_steps": 0,
+      "interpretation": "Cancelled before any steps ran; this attempt supplies no source-test failure or passing validation. The cancellation cause is not established by the job metadata."
+    },
+    "same_head_publication": {
+      "url": "https://github.com/ajoe734/execute-plans/actions/runs/45035260956",
+      "conclusion": "success",
+      "completed_at": "2026-11-22T14:54:51Z",
+      "verified_target_head": "089c1ea6c41bb72ec6bfcd6da442075b70b24cc0",
+      "published_context": "Pantheon canonical review gate",
+      "published_state": "success",
+      "interpretation": "Workflow logs verify the authoritative product PR/head and publish its existing proof. This historical success grants no approval to the new evidence commit."
+    },
+    "resolution": "Record the CI return evidence in a new task-scoped head and resubmit for independent exact-head review. Source and workflow files remain byte-identical to the tested source; no source defect is established by the cancelled attempt. New-head checks and approval must be evaluated separately.",
+    "focused_verification": {
+      "exit_code": 0,
+      "checks": [
+        "node --check scripts/accept-persona-strategy-hosted-readonly.mjs",
+        "node --check scripts/accept-trading-pulse-hosted-readonly.mjs",
+        "node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+        "git diff --check",
+        "All four artifact SHA256 hashes still match this manifest",
+        "All retained baseline file sizes/SHA256 hashes and terminal receipt SHA256 still match; bundle remains 196259 bytes"
+      ],
+      "regression_scope": "Source files unchanged; collected 43/43 runner and 38/38 helper regressions plus successful bounded typecheck above remain the source verification. No additional hosted run or hosted acceptance is claimed."
+    }
+  },
+  "publication": {
+    "pr": "https://github.com/ajoe734/execute-plans/pull/1063",
+    "source_merged": false,
+    "dev_deployed": false,
+    "hosted_accepted": false
+  },
+  "shared_runner_verification": {
+    "status": "source_ready_for_independent_review",
+    "mode": "trading-pulse",
+    "entry": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+    "scope": "Confirm existing runner mode executes using the existing real dev viewer. Retained old exact stable baseline is unchanged; E does the repaired-pair full proof.",
+    "terminal_exit_code": null,
+    "implementation": "Both modes use the same guardedLogin form wait/response steps, installReadOnlyGuard request policy installation, and assessPair FE/BFF identity plus strict auth checks. The original default keeps root/pair/deployment/MFA checks and thresholds; Trading Pulse keeps live/strict-fallback and foreign-origin checks. Existing CLI owns dispatch, stdin/exit handling, browser loading and session orchestration; page module remains helpers only.",
+    "ready_code_commit": "e8f1e02e56d6bcb9e2e6ea0d861cda431b9a24e3",
+    "runner_sha256": "e043a00554e1f9e39322982a4d4d5b1f9fe4a2029304ca18b9472f8826ba2fd8",
+    "pending": "Coordinator will execute the real dev viewer mode after root 45029250554 resolves the public manifest versus serving BFF mismatch. That receipt is follow-up execution evidence, not a source-review prerequisite under the 2026-11-22T14:40:05Z canonical instruction. No new-mode hosted result is claimed; Task E owns repaired-pair full acceptance.",
+    "coordination": "Same PR 1063. Original measured failing baseline, terminal receipt, retained 196259-byte bundle and deterministic browser mode proof preserved. No second old-page rerun required for source handoff.",
+    "review_admission": "Source-only handoff to Antigravity after focused regressions; review approval, merge, dev deployment and hosted acceptance are not claimed."
+  },
+  "source_scope_correction": {
+    "trigger": "Canonical 2026-11-22T15:33:58Z return: independently observed finite negative row PnL with absent currency and differing valuation starts was rejected before browser login by the old pnl scope assertion.",
+    "owned_layer": "Existing page assertion helpers/tests only; shared runner, original receipts, UI, deployment and trading data unchanged.",
+    "behavior": [
+      "Require explicit string/null currency and period independently of numeric/null PnL. Compare every numeric row amount with business rounding and known currency label; unknown amount remains distinct from measured zero.",
+      "Only verified same-stage/currency/period measured rows justify groups. Reject unsupported or extra wire groups and visible subtotal blocks, including invented zero; semantic DOM checks use headings and accessible groups without product test IDs.",
+      "Optional quantity unit labels are literal witness text or locale-keyed text. Assert the selected locale label only when supplied; do not infer a currency or quantity unit. Preserve measured 0/452 and verify both numerator and denominator.",
+      "Two independently measured negative rows with different valuation starts and null currencies pass with no subtotal; combining them or replacing an amount with unknown/zero/positive fails. Known currency with differing periods can be reported as separate scoped groups."
+    ],
+    "verification": [
+      {
+        "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+        "exit_code": 0,
+        "passed": 43,
+        "failed": 0,
+        "includes": "Real Chromium narrow clipping/Tab/Enter and subtotal positive/negative DOM controls in zh-TW/en-US; partial PnL, unknown versus zero, localized optional units, 0/452, independent wire scope and amount."
+      },
+      {
+        "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+        "exit_code": 0,
+        "passed": 5,
+        "skipped": 38,
+        "includes": "Unchanged shared runner pair/auth, real CLI and intercepted Chromium viewer sessions across all three locale/viewports, with blocked business-write and foreign-origin controls."
+      },
+      {
+        "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs; node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs; git diff --check; verify retained baseline hashes and receipt",
+        "exit_code": 0,
+        "retained_bundle_bytes": 196259
+      }
+    ],
+    "first_iteration": "One new regression initially failed because the test loop reused a modified expected-group fixture. Fixed fixture reset; final complete helper suite passes. No production change was needed for that test failure.",
+    "hosted_accepted": false,
+    "handoff": "Fresh exact-head review of PR #1063 required. Task E supplies fresh same-tenant witness and performs repaired-pair hosted acceptance; no extra stage, schedule, gate or deployment added.",
+    "after_dev_refresh": {
+      "base_sha": "bd2cb828191bd5054c3553b099d8ff203fe3815c",
+      "verified_tree_commit": "ce6a6528172549c3ea8b00635af4cd54aa81d277",
+      "merge": "No conflicts; preserve disjoint meeting-page and translation changes from dev. All four declared source hashes remain unchanged.",
+      "verification": [
+        {
+          "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+          "exit_code": 0,
+          "passed": 43,
+          "failed": 0,
+          "includes": "Real Chromium narrow clipping/Tab/Enter and subtotal positive/negative DOM controls in zh-TW/en-US; partial PnL, unknown versus zero, localized optional units, 0/452, independent wire scope and amount.",
+          "phase": "Rerun after dev refresh",
+          "duration_seconds": 1.75
+        },
+        {
+          "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+          "exit_code": 0,
+          "passed": 5,
+          "skipped": 38,
+          "includes": "Unchanged shared runner pair/auth, real CLI and intercepted Chromium viewer sessions across all three locale/viewports, with blocked business-write and foreign-origin controls.",
+          "phase": "Rerun after dev refresh",
+          "duration_seconds": 34.78
+        },
+        {
+          "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs; git diff --check; verify all four manifest source hashes; diff_budget.py --base origin/dev --head HEAD",
+          "exit_code": 0,
+          "diff_budget": {
+            "production": "+655/-30 net +625",
+            "test": "+488/-0 net +488",
+            "docs_evidence": "+330/-0 net +330 before this base-refresh receipt"
+          }
+        }
+      ],
+      "terminal_collection": "Both bounded foreground reruns completed with terminal exit 0; no pending handles.",
+      "review": "New exact-head handoff required after prior attempts rejected for base advance and concurrent canonical next-message update. No previous review approval transferred."
+    }
+  },
+  "ci_return_revalidation": {
+    "reason": "Owned in-progress source return after integrator classified Publish canonical review status as ci-red.",
+    "previous_head": "4c100f7c8b84ee46015a8d857e1b1cfbcf05a1d2",
+    "base_sha": "bd2cb828191bd5054c3553b099d8ff203fe3815c",
+    "diagnosis": {
+      "run_url": "https://github.com/ajoe734/execute-plans/actions/runs/45039799618/attempts/1",
+      "terminal_conclusion": "cancelled",
+      "steps_executed": 0,
+      "annotation": "Canceling since a higher priority waiting request for pantheon-canonical-review-4c100f7c8b84ee46015a8d857e1b1cfbcf05a1d2 exists",
+      "source_failure_observed": false,
+      "interpretation": "The GitHub concurrency cancellation occurred before checkout or verifier execution. There is no failing source assertion or verifier log to repair; preserve the independently reviewed source and record revalidation in this existing manifest.",
+      "retry": "gh run rerun 45039799618 returned exit 0; attempt 2 remains queued at this receipt. Queue admission is not a passed check. The new evidence head requires its own CI and independent exact-head approval."
+    },
+    "verification": [
+      {
+        "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+        "exit_code": 0,
+        "passed": 43,
+        "failed": 0,
+        "duration_seconds": 1.67
+      },
+      {
+        "command": "timeout 90s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1 -t 'Trading Pulse mode in the existing viewer runner' --reporter=verbose",
+        "exit_code": 0,
+        "passed": 5,
+        "skipped": 38,
+        "duration_seconds": 34.73,
+        "includes": "Real Chromium viewer sessions across three locales/viewports with intercepted fixture traffic; both read-only positive and blocked business/foreign request controls. No hosted acceptance inferred."
+      },
+      {
+        "command": "node --check for all three scoped mjs files; git diff --check; python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge; verify all four manifest source SHA256 hashes and retained baseline/terminal receipt hashes",
+        "exit_code": 0,
+        "retained_bundle_bytes": 196259
+      }
+    ],
+    "terminal_collection": "Both bounded foreground test batches completed with terminal exit 0; no pending local process handles.",
+    "source_changed": false,
+    "hosted_accepted": false,
+    "delivery": "Evidence-only new head for fresh independent review. Auto-merge remains off; supervisor owns integration. Task E owns repaired-pair hosted acceptance."
+  }
+}
