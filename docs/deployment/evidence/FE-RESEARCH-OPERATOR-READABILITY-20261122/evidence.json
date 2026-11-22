@@ -11,7 +11,7 @@
   },
   "owner_validation": {
     "validated_on": "2026-11-22",
-    "integration_base_sha": "bd2cb828191bd5054c3553b099d8ff203fe3815c",
+    "integration_base_sha": "42813d3eeac17f211926e42d89cb7abf5d183a6f",
     "implementation_commit": "63745a0cbd6b26be958d0e381f86bf59471d4314",
     "pr": "https://github.com/ajoe734/execute-plans/pull/1067",
     "prerequisite_status": "done; BFF PR #7747 approved head f736fe6d0a410505519465d178306ec077eaf1df merged into pantheon dev as d6f9592222341889b63cb9e775791cdafe88587c",
