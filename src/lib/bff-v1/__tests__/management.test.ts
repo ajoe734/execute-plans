@@ -1419,6 +1419,225 @@ describe("mgmt façade (PM-Live)", () => {
     ]);
   });
 
+  it("preserves null fill_rate for unknown positive denominator (0/452 source_unavailable) while distinguishing known 0/452 and 0/0", () => {
+    const out = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: { runtime_count: 3, by_status: { active: 3 } },
+        runtime_rows: [
+          {
+            runtime_id: "rt-unknown-pos-denom",
+            runtime_binding_id: "rb-unknown-pos-denom",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 452,
+                reason: "source_unavailable",
+                unit: "SHARES",
+              },
+              metric_reasons: {
+                fill_rate: "source_unavailable",
+              },
+            },
+          },
+          {
+            runtime_id: "rt-known-zero-pos-denom",
+            runtime_binding_id: "rb-known-zero-pos-denom",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: 0 },
+            performance_context: {
+              fill_rate_details: {
+                status: "known",
+                numerator: 0,
+                denominator: 452,
+                reason: null,
+                unit: "SHARES",
+              },
+            },
+          },
+          {
+            runtime_id: "rt-zero-over-zero",
+            runtime_binding_id: "rb-zero-over-zero",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: 0 },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 0,
+                reason: "no_submitted_orders",
+                unit: "SHARES",
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const unknownPos = out?.runtimeRows.find((r) => r.runtimeId === "rt-unknown-pos-denom");
+    const knownZero = out?.runtimeRows.find((r) => r.runtimeId === "rt-known-zero-pos-denom");
+    const zeroOverZero = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-over-zero");
+
+    expect(unknownPos?.metrics.fill_rate).toBeNull();
+    expect(unknownPos?.performanceContext?.fillRateDetails).toMatchObject({
+      status: "unknown",
+      numerator: 0,
+      denominator: 452,
+      reason: "source_unavailable",
+    });
+    expect(unknownPos?.performanceContext?.metricReasons.fill_rate).toBe("source_unavailable");
+
+    expect(knownZero?.metrics.fill_rate).toBe(0);
+    expect(knownZero?.performanceContext?.fillRateDetails).toMatchObject({
+      status: "known",
+      numerator: 0,
+      denominator: 452,
+      reason: null,
+    });
+    expect(knownZero?.performanceContext?.metricReasons.fill_rate).toBeUndefined();
+
+    expect(zeroOverZero?.metrics.fill_rate).toBeNull();
+    expect(zeroOverZero?.performanceContext?.metricReasons.fill_rate).toBe("no_submitted_orders");
+
+    const rankings = adaptTradingPulseRankings({
+      data: {
+        items: [
+          {
+            block_id: "execution-quality",
+            label: "Execution Quality",
+            metric: "fill_rate",
+            items: [
+              {
+                runtime_id: "rt-unknown-pos-denom",
+                fill_rate: 0,
+                performance_context: {
+                  fill_rate_details: {
+                    status: "unknown",
+                    numerator: 0,
+                    denominator: 452,
+                    reason: "source_unavailable",
+                  },
+                  metric_reasons: { fill_rate: "source_unavailable" },
+                },
+              },
+              {
+                runtime_id: "rt-known-zero-pos-denom",
+                fill_rate: 0,
+                performance_context: {
+                  fill_rate_details: {
+                    status: "known",
+                    numerator: 0,
+                    denominator: 452,
+                    reason: null,
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(rankings?.[0].rows.map((r) => r.runtimeId)).toEqual(["rt-known-zero-pos-denom"]);
+    expect(rankings?.[0].missingMetricRuntimeIds).toEqual(["rt-unknown-pos-denom"]);
+  });
+
+  it("rejects protocol-relative URLs, unsupported trade-journey focus keys, and generic unfiltered manage/primary hrefs while preserving supported entity and focus routes", () => {
+    const out = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: { runtime_count: 3, by_status: { active: 3 } },
+        runtime_rows: [
+          {
+            runtime_id: "rt-bad-links",
+            runtime_binding_id: "rb-bad-links",
+            deployment_stage: "paper",
+            status: "active",
+            latest_outcome: {
+              status: "available",
+              source_event_id: "e1",
+              journey_href: "/management/trade-journeys?source_event_id=e1",
+            },
+            links: {
+              manageHref: "/management/trade-journeys",
+              primaryObjectHref: "//example.test/path",
+              persona: "//example.test/management/personas/p-1",
+              strategy: "/management/strategies",
+              journey: "/management/trade-journeys?event_id=e1",
+              evidenceHref: "/management/trade-journeys?journey_id=j1",
+              recommendedActionHref: "/management/personas",
+              auditHref: "/management/audit",
+            },
+          },
+          {
+            runtime_id: "rt-supported-focus",
+            runtime_binding_id: "rb-supported-focus",
+            persona_id: "persona-valid-1",
+            strategy_id: "strategy-valid-1",
+            tenant_id: "tenant-dev",
+            deployment_stage: "paper",
+            status: "active",
+            latest_outcome: {
+              status: "available",
+              decision_id: "dec-42",
+            },
+            links: {
+              manageHref: "/management/trade-journeys",
+              primaryObjectHref: "/management/personas",
+              journey: "/management/trade-journeys?journey_id=tj-unsupported",
+            },
+          },
+          {
+            runtime_id: "rt-explicit-valid-focus",
+            runtime_binding_id: "rb-explicit-valid-focus",
+            deployment_stage: "paper",
+            status: "active",
+            links: {
+              manageHref: "/management/governance-decisions?tab=capital&capital_id=cp-1",
+              journey: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+            },
+          },
+        ],
+      },
+    });
+
+    const badRow = out?.runtimeRows.find((r) => r.runtimeId === "rt-bad-links");
+    expect(badRow?.links).toBeUndefined();
+    expect(badRow?.latestOutcome?.journeyHref).toBeNull();
+
+    const fallbackRow = out?.runtimeRows.find((r) => r.runtimeId === "rt-supported-focus");
+    expect(fallbackRow?.links).toEqual({
+      manageHref: "/management/personas/persona-valid-1",
+      primaryObjectHref: "/management/personas/persona-valid-1",
+      persona: "/management/personas/persona-valid-1",
+      personaHref: "/management/personas/persona-valid-1",
+      persona_href: "/management/personas/persona-valid-1",
+      strategy: "/management/strategies/strategy-valid-1",
+      strategyHref: "/management/strategies/strategy-valid-1",
+      strategy_href: "/management/strategies/strategy-valid-1",
+      journey: "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+      journeyHref: "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+      journey_href: "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+    });
+    expect(fallbackRow?.latestOutcome?.journeyHref).toBe(
+      "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+    );
+
+    const explicitValidRow = out?.runtimeRows.find((r) => r.runtimeId === "rt-explicit-valid-focus");
+    expect(explicitValidRow?.links).toEqual({
+      manageHref: "/management/governance-decisions?tab=capital&capital_id=cp-1",
+      primaryObjectHref: "/management/governance-decisions?tab=capital&capital_id=cp-1",
+      journey: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+      journeyHref: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+      journey_href: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+    });
+  });
+
   it("keeps Trading Pulse overview readable when rankings fail and never falls back to seed performance in live mode", async () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

@@ -827,16 +827,16 @@ export interface ManagementTradingPulseBaselineComparison {
 export interface ManagementTradingPulseRuntimeRow {
   personaId?: string | null;
   persona_id?: string | null;
-  personaName: string | null;
-  persona_name: string | null;
+  personaName?: string | null;
+  persona_name?: string | null;
   strategyId?: string;
   strategy_id?: string;
-  strategyName: string | null;
-  strategy_name: string | null;
-  underlyingSymbol: string | null;
-  underlying_symbol: string | null;
-  tenantId: string | null;
-  tenant_id: string | null;
+  strategyName?: string | null;
+  strategy_name?: string | null;
+  underlyingSymbol?: string | null;
+  underlying_symbol?: string | null;
+  tenantId?: string | null;
+  tenant_id?: string | null;
   runtimeId: string;
   runtime_id?: string;
   runtimeBindingId?: string;
@@ -853,10 +853,10 @@ export interface ManagementTradingPulseRuntimeRow {
   metrics: Record<string, unknown>;
   telemetrySummary?: Record<string, unknown>;
   telemetry_summary?: Record<string, unknown>;
-  performanceContext: ManagementTradingPulsePerformanceContext;
-  performance_context: ManagementTradingPulsePerformanceContext;
-  latestOutcome: ManagementTradingPulseLatestOutcome;
-  latest_outcome: ManagementTradingPulseLatestOutcome;
+  performanceContext?: ManagementTradingPulsePerformanceContext;
+  performance_context?: ManagementTradingPulsePerformanceContext;
+  latestOutcome?: ManagementTradingPulseLatestOutcome;
+  latest_outcome?: ManagementTradingPulseLatestOutcome;
   links?: ManagementTradingPulseLinks;
   baselineComparison?: ManagementTradingPulseBaselineComparison | null;
   baseline_comparison?: ManagementTradingPulseBaselineComparison | null;
@@ -3684,37 +3684,78 @@ const adaptPromotionReviewDecisionResult = (
 
 // ---------- PM-4 Trading Pulse ----------
 
+const TRADE_JOURNEY_LIST_FOCUS_KEYS = [
+  "persona_id",
+  "strategy_id",
+  "decision_id",
+  "order_id",
+  "broker_order_id",
+] as const;
+
 function sanitizeTradingPulseEntityHref(
   value: unknown,
   kind: "persona" | "strategy" | "journey" | "any" = "any",
 ): string | undefined {
-  const text = asString(value);
-  if (!text || text === "#" || text.startsWith("#") || !text.startsWith("/") || /^javascript:/i.test(text)) {
+  const text = asString(value).trim();
+  if (
+    !text
+    || text === "#"
+    || text.startsWith("#")
+    || !text.startsWith("/")
+    || text.startsWith("//")
+    || text.includes("\\")
+    || /^[a-z][a-z0-9+.-]*:/i.test(text)
+  ) {
     return undefined;
   }
-  const [pathname, rawSearch = ""] = text.split("?");
+  const [withoutHash] = text.split("#");
+  const [pathname, rawSearch = ""] = withoutHash.split("?");
   const cleanPath = pathname.replace(/\/+$/, "");
-  if (kind === "persona" && (cleanPath === "/management/personas" || cleanPath === "/personas")) {
+  if (!cleanPath.startsWith("/management/")) {
     return undefined;
   }
-  if (kind === "strategy" && (cleanPath === "/management/strategies" || cleanPath === "/strategies")) {
-    return undefined;
+  const params = new URLSearchParams(rawSearch);
+  const hasParam = (...keys: readonly string[]) =>
+    keys.some((key) => Boolean(params.get(key)?.trim()));
+
+  const isPersonaRoute =
+    /^\/management\/personas\/[^/]+(?:\/onboarding)?$/.test(cleanPath)
+    || (cleanPath === "/management/persona-fleet" && hasParam("persona", "persona_id"));
+  const isStrategyRoute = /^\/management\/strategies\/[^/]+$/.test(cleanPath);
+  const journeyDetailMatch = /^\/management\/trade-journeys\/([^/]+)$/.exec(cleanPath);
+  const isJourneyRoute =
+    (journeyDetailMatch !== null && journeyDetailMatch[1] !== "resolve" && journeyDetailMatch[1] !== "events")
+    || (cleanPath === "/management/trade-journeys" && hasParam(...TRADE_JOURNEY_LIST_FOCUS_KEYS));
+
+  if (kind === "persona") return isPersonaRoute ? text : undefined;
+  if (kind === "strategy") return isStrategyRoute ? text : undefined;
+  if (kind === "journey") return isJourneyRoute ? text : undefined;
+  if (isPersonaRoute || isStrategyRoute || isJourneyRoute) return text;
+
+  const isOtherSupportedEntityOrFocusRoute =
+    /^\/management\/(?:capital|capital-pools|human-inbox|governance|deployments|deployment|evidence|incidents|evolution|persona-intent|experiments|artifacts|meetings|rebalance|rebalances|tools)\/[^/]+$/.test(cleanPath)
+    || /^\/management\/(?:governance\/policies|ranking\/formulas|ranking-formulas)\/[^/]+$/.test(cleanPath)
+    || /^\/management\/readiness\/(?:broker-live|bff-ha|strict-publish|ep5)$/.test(cleanPath)
+    || (cleanPath === "/management/governance-decisions" && hasParam("capital_id", "pool", "item"))
+    || (cleanPath === "/management/governance" && hasParam("item"))
+    || (cleanPath === "/management/runtimes" && hasParam("runtime", "runtime_id", "persona", "persona_id"))
+    || (cleanPath === "/management/evolution-journal" && hasParam("item", "persona", "persona_id"))
+    || (cleanPath === "/management/postmortems" && hasParam("item"))
+    || (cleanPath === "/management/audit" && hasParam("item"))
+    || (/^\/management\/loops(?:\/[^/]+)?$/.test(cleanPath) && hasParam("run"));
+
+  return isOtherSupportedEntityOrFocusRoute ? text : undefined;
+}
+
+function firstSanitizedTradingPulseHref(
+  kind: "persona" | "strategy" | "journey" | "any",
+  ...candidates: unknown[]
+): string | undefined {
+  for (const candidate of candidates) {
+    const sanitized = sanitizeTradingPulseEntityHref(candidate, kind);
+    if (sanitized !== undefined) return sanitized;
   }
-  if (kind === "journey" && (cleanPath === "/management/trade-journeys" || cleanPath === "/trade-journeys")) {
-    const params = new URLSearchParams(rawSearch);
-    const hasSpecificFocus = [
-      "journey_id",
-      "decision_id",
-      "order_id",
-      "broker_order_id",
-      "event_id",
-      "source_event_id",
-    ].some((key) => Boolean(params.get(key)?.trim()));
-    if (!hasSpecificFocus) {
-      return undefined;
-    }
-  }
-  return text;
+  return undefined;
 }
 
 function buildTradingPulseJourneyHref(
@@ -3722,15 +3763,27 @@ function buildTradingPulseJourneyHref(
   opts: {
     tenantId?: string | null;
     deploymentStage?: string | null;
+    decisionId?: string | null;
+    orderId?: string | null;
+    brokerOrderId?: string | null;
   } = {},
 ): string | undefined {
   const cleanJourneyId = nullableString(journeyId);
-  if (!cleanJourneyId) return undefined;
   const params = new URLSearchParams();
   if (opts.tenantId) params.set("tenant_id", opts.tenantId);
   if (opts.deploymentStage) params.set("environment", opts.deploymentStage);
-  const qs = params.toString();
-  return `/management/trade-journeys/${encodeURIComponent(cleanJourneyId)}${qs ? `?${qs}` : ""}`;
+  if (cleanJourneyId) {
+    const qs = params.toString();
+    return `/management/trade-journeys/${encodeURIComponent(cleanJourneyId)}${qs ? `?${qs}` : ""}`;
+  }
+  const decisionId = nullableString(opts.decisionId);
+  const orderId = nullableString(opts.orderId);
+  const brokerOrderId = nullableString(opts.brokerOrderId);
+  if (!decisionId && !orderId && !brokerOrderId) return undefined;
+  if (decisionId) params.set("decision_id", decisionId);
+  if (orderId) params.set("order_id", orderId);
+  if (brokerOrderId) params.set("broker_order_id", brokerOrderId);
+  return `/management/trade-journeys?${params.toString()}`;
 }
 
 function normalizeTradingPulseLinks(
@@ -3739,6 +3792,9 @@ function normalizeTradingPulseLinks(
     personaId?: string | null;
     strategyId?: string | null;
     journeyId?: string | null;
+    decisionId?: string | null;
+    orderId?: string | null;
+    brokerOrderId?: string | null;
     tenantId?: string | null;
     deploymentStage?: string | null;
   },
@@ -3749,72 +3805,96 @@ function normalizeTradingPulseLinks(
     : undefined;
 
   const personaHref =
-    sanitizeTradingPulseEntityHref(
-      rawLinks?.persona ?? rawLinks?.personaHref ?? rawLinks?.persona_href,
+    firstSanitizedTradingPulseHref(
       "persona",
+      rawLinks?.persona,
+      rawLinks?.personaHref,
+      rawLinks?.persona_href,
     )
     ?? (context.personaId ? (resolveManagementHref("persona", context.personaId) ?? undefined) : undefined);
 
   const strategyHref =
-    sanitizeTradingPulseEntityHref(
-      rawLinks?.strategy ?? rawLinks?.strategyHref ?? rawLinks?.strategy_href,
+    firstSanitizedTradingPulseHref(
       "strategy",
+      rawLinks?.strategy,
+      rawLinks?.strategyHref,
+      rawLinks?.strategy_href,
     )
     ?? (context.strategyId ? (resolveManagementHref("strategy", context.strategyId) ?? undefined) : undefined);
 
   const journeyHref =
-    sanitizeTradingPulseEntityHref(
-      rawLinks?.journey
-      ?? rawLinks?.journeyHref
-      ?? rawLinks?.journey_href
-      ?? rawLinks?.tradeJourney
-      ?? rawLinks?.trade_journey
-      ?? rawOutcome?.journeyHref
-      ?? rawOutcome?.journey_href,
+    firstSanitizedTradingPulseHref(
       "journey",
+      rawLinks?.journey,
+      rawLinks?.journeyHref,
+      rawLinks?.journey_href,
+      rawLinks?.tradeJourney,
+      rawLinks?.trade_journey,
+      rawOutcome?.journeyHref,
+      rawOutcome?.journey_href,
     )
     ?? buildTradingPulseJourneyHref(context.journeyId ?? null, {
       tenantId: context.tenantId,
       deploymentStage: context.deploymentStage,
+      decisionId: context.decisionId,
+      orderId: context.orderId,
+      brokerOrderId: context.brokerOrderId,
     });
 
-  const explicitManageHref = sanitizeTradingPulseEntityHref(
-    rawLinks?.manageHref
-    ?? rawLinks?.manage_href
-    ?? rawLinks?.primaryObjectHref
-    ?? rawLinks?.primary_object_href,
+  const explicitManageHref = firstSanitizedTradingPulseHref(
     "any",
+    rawLinks?.manageHref,
+    rawLinks?.manage_href,
+    rawLinks?.primaryObjectHref,
+    rawLinks?.primary_object_href,
   );
   const manageHref = explicitManageHref ?? personaHref ?? strategyHref ?? journeyHref;
   if (!manageHref) return undefined;
 
   const primaryObjectHref =
-    sanitizeTradingPulseEntityHref(
-      rawLinks?.primaryObjectHref ?? rawLinks?.primary_object_href,
+    firstSanitizedTradingPulseHref(
       "any",
+      rawLinks?.primaryObjectHref,
+      rawLinks?.primary_object_href,
     ) ?? manageHref;
 
   const out: ManagementTradingPulseLinks = {
     manageHref,
     primaryObjectHref,
   };
-  const evidenceHref = sanitizeTradingPulseEntityHref(
-    rawLinks?.evidenceHref ?? rawLinks?.evidence_href,
+  const evidenceHref = firstSanitizedTradingPulseHref(
     "any",
+    rawLinks?.evidenceHref,
+    rawLinks?.evidence_href,
   );
   if (evidenceHref) out.evidenceHref = evidenceHref;
-  const recommendedActionHref = sanitizeTradingPulseEntityHref(
-    rawLinks?.recommendedActionHref ?? rawLinks?.recommended_action_href,
+  const recommendedActionHref = firstSanitizedTradingPulseHref(
     "any",
+    rawLinks?.recommendedActionHref,
+    rawLinks?.recommended_action_href,
   );
   if (recommendedActionHref) out.recommendedActionHref = recommendedActionHref;
-  const auditHref = sanitizeTradingPulseEntityHref(
-    rawLinks?.auditHref ?? rawLinks?.audit_href,
+  const auditHref = firstSanitizedTradingPulseHref(
     "any",
+    rawLinks?.auditHref,
+    rawLinks?.audit_href,
   );
   if (auditHref) out.auditHref = auditHref;
   if (Array.isArray(rawLinks?.relatedHrefs)) {
-    out.relatedHrefs = rawLinks.relatedHrefs as ManagementTradingPulseLinks["relatedHrefs"];
+    const relatedHrefs = rawLinks.relatedHrefs
+      .filter(isObject)
+      .map((item) => {
+        const href = sanitizeTradingPulseEntityHref(item.href, "any");
+        if (!href) return null;
+        return {
+          ...item,
+          label: asString(item.label, href),
+          href,
+          kind: asString(item.kind, "persona") as NonNullable<ManagementTradingPulseLinks["relatedHrefs"]>[number]["kind"],
+        };
+      })
+      .filter((item): item is NonNullable<ManagementTradingPulseLinks["relatedHrefs"]>[number] => item !== null);
+    if (relatedHrefs.length > 0) out.relatedHrefs = relatedHrefs;
   }
   if (personaHref) {
     out.persona = personaHref;
@@ -3897,6 +3977,20 @@ function normalizeTradingPulseFillRateDetails(
     window,
     ...(Array.isArray(value.sources) ? { sources: value.sources } : {}),
   };
+}
+
+function isTradingPulseFillRateKnown(
+  details: ManagementTradingPulseFillRateDetails | null,
+): boolean {
+  if (!details) return true;
+  if (details.reason !== null) return false;
+  const status = details.status?.trim().toLowerCase() ?? null;
+  if (status !== null && status !== "known" && status !== "available" && status !== "ok" && status !== "verified") {
+    return false;
+  }
+  const num = details.numerator;
+  const den = details.denominator;
+  return num !== null && den !== null && den > 0 && num >= 0;
 }
 
 function normalizeTradingPulseMetricPeriods(
@@ -4005,12 +4099,11 @@ function normalizeTradingPulsePerformanceContext(
   const metricReasons: Record<string, string | null> = {
     ...normalizeNullableStringRecord(raw?.metricReasons ?? raw?.metric_reasons),
   };
-  if (fillRateDetails !== null) {
-    const num = fillRateDetails.numerator;
+  if (fillRateDetails !== null && !isTradingPulseFillRateKnown(fillRateDetails) && !metricReasons.fill_rate) {
     const den = fillRateDetails.denominator;
-    if ((num === null || den === null || den <= 0) && !metricReasons.fill_rate) {
-      metricReasons.fill_rate = fillRateDetails.reason ?? "no_submitted_orders";
-    }
+    metricReasons.fill_rate =
+      fillRateDetails.reason
+      ?? (den !== null && den <= 0 ? "no_submitted_orders" : fillRateDetails.status ?? "source_unavailable");
   }
   if (
     (sharpeRatioReason !== null || sharpeRatioStatus !== null)
@@ -4058,9 +4151,17 @@ function normalizeTradingPulsePerformanceContext(
       )
     ),
   );
+  const hasObservedSourceEvidence = Boolean(
+    telemetrySummary
+    || latestReportAt !== null
+    || lastFillAt !== null
+    || ledgerFillCount !== null
+    || (fillRateDetails !== null && isTradingPulseFillRateKnown(fillRateDetails))
+    || (metricsRecord && Object.values(metricsRecord).some((v) => typeof v === "number" && Number.isFinite(v))),
+  );
   const explicitSourceStatus = nullableString(raw?.sourceStatus ?? raw?.source_status);
   const sourceStatus: ManagementTradingPulseSourceStatus = explicitSourceStatus
-    ?? (isStale ? "stale" : telemetrySummary ? "available" : raw ? "unavailable" : "unverified");
+    ?? (isStale ? "stale" : hasObservedSourceEvidence ? "available" : "unverified");
 
   return {
     ...(raw ?? {}),
@@ -4475,7 +4576,18 @@ export function adaptTradingPulseRankings(raw: unknown): TradingPulseRankingsLis
         || it.ranking_eligible === false
         || (
           performanceContext !== null
-          && (performanceContext.sourceStatus === "stale" || performanceContext.sourceStatus === "unavailable")
+          && (
+            performanceContext.sourceStatus === "stale"
+            || performanceContext.sourceStatus === "unavailable"
+            || Boolean(performanceContext.metricReasons[metric])
+            || (
+              (metric === "fill_rate" || metric === "execution")
+              && (
+                !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
+                || Boolean(performanceContext.metricReasons.fill_rate)
+              )
+            )
+          )
         )
       ) {
         if (runtimeId) skippedMissingIds.push(runtimeId);
@@ -4519,6 +4631,9 @@ export function adaptTradingPulseRankings(raw: unknown): TradingPulseRankingsLis
         personaId,
         strategyId,
         journeyId: latestOutcome?.journeyId ?? nullableString(it.journeyId ?? it.journey_id),
+        decisionId: latestOutcome?.decisionId ?? nullableString(it.decisionId ?? it.decision_id),
+        orderId: latestOutcome?.orderId ?? nullableString(it.orderId ?? it.order_id),
+        brokerOrderId: latestOutcome?.brokerOrderId ?? nullableString(it.brokerOrderId ?? it.broker_order_id),
         tenantId,
         deploymentStage: deploymentStage || null,
       });
@@ -5200,16 +5315,24 @@ function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow |
   if (performanceContext.ledgerFillCount !== null && performanceContext.ledgerFillCount >= 0) {
     metrics.total_trades = performanceContext.ledgerFillCount;
   }
-  if (performanceContext.fillRateDetails !== null) {
+  const hasExplicitNullFillRate =
+    (Object.prototype.hasOwnProperty.call(rawMetrics, "fill_rate") && rawMetrics.fill_rate === null)
+    || (Object.prototype.hasOwnProperty.call(rawMetrics, "fillRate") && rawMetrics.fillRate === null);
+  const fillRateUnavailable =
+    !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
+    || Boolean(performanceContext.metricReasons.fill_rate);
+  if (fillRateUnavailable) {
+    metrics.fill_rate = null;
+    if ("fillRate" in metrics) metrics.fillRate = null;
+  } else if (
+    !hasExplicitNullFillRate
+    && performanceContext.fillRateDetails !== null
+    && asNullableNumber(metrics.fill_rate ?? metrics.fillRate) === null
+  ) {
     const num = performanceContext.fillRateDetails.numerator;
     const den = performanceContext.fillRateDetails.denominator;
     if (num !== null && den !== null && den > 0) {
-      if (asNullableNumber(metrics.fill_rate ?? metrics.fillRate) === null) {
-        metrics.fill_rate = num / den;
-      }
-    } else if (den === 0 || num === null || den === null) {
-      metrics.fill_rate = null;
-      if ("fillRate" in metrics) metrics.fillRate = null;
+      metrics.fill_rate = num / den;
     }
   }
   const executedTradeCount = performanceContext.ledgerFillCount !== null && performanceContext.ledgerFillCount >= 0
@@ -5241,6 +5364,9 @@ function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow |
     personaId,
     strategyId: strategyId || null,
     journeyId: latestOutcome.journeyId,
+    decisionId: latestOutcome.decisionId,
+    orderId: latestOutcome.orderId,
+    brokerOrderId: latestOutcome.brokerOrderId,
     tenantId,
     deploymentStage: deploymentStage || null,
   });
@@ -5316,7 +5442,7 @@ function normalizeTradingPulseRankingEntry(
   const pnl = asNullableNumber(value.pnl);
   const drawdown = asNullableNumber(value.drawdown ?? value.maxDrawdown ?? value.max_drawdown);
   const sharpeRatio = asNullableNumber(value.sharpeRatio ?? value.sharpe_ratio ?? value.sharpe);
-  const fillRate = asNullableNumber(value.fillRate ?? value.fill_rate);
+  const rawFillRate = asNullableNumber(value.fillRate ?? value.fill_rate);
   const avgSlippageBps = asNullableNumber(
     value.avgSlippageBps ?? value.avg_slippage_bps ?? value.slippageBps ?? value.slippage_bps,
   );
@@ -5324,9 +5450,13 @@ function normalizeTradingPulseRankingEntry(
     pnl,
     drawdown,
     sharpe_ratio: sharpeRatio,
-    fill_rate: fillRate,
+    fill_rate: rawFillRate,
     avg_slippage_bps: avgSlippageBps,
   });
+  const fillRate =
+    (!isTradingPulseFillRateKnown(performanceContext.fillRateDetails) || Boolean(performanceContext.metricReasons.fill_rate))
+      ? null
+      : rawFillRate;
   const totalTrades = performanceContext.ledgerFillCount !== null && performanceContext.ledgerFillCount >= 0
     ? performanceContext.ledgerFillCount
     : asNullableNumber(value.totalTrades ?? value.total_trades);
@@ -5337,6 +5467,9 @@ function normalizeTradingPulseRankingEntry(
     personaId,
     strategyId,
     journeyId: latestOutcome.journeyId ?? nullableString(value.journeyId ?? value.journey_id),
+    decisionId: latestOutcome.decisionId ?? nullableString(value.decisionId ?? value.decision_id),
+    orderId: latestOutcome.orderId ?? nullableString(value.orderId ?? value.order_id),
+    brokerOrderId: latestOutcome.brokerOrderId ?? nullableString(value.brokerOrderId ?? value.broker_order_id),
     tenantId,
     deploymentStage: deploymentStage || null,
   });
