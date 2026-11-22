@@ -274,11 +274,39 @@ export async function snapshotPage(page, sources) {
 }
 
 async function browserRead(page, endpoint) {
-  return page.evaluate(async ({ endpoint, base }) => {
-    const response = await fetch(base + endpoint, { credentials: "include", cache: "no-store" });
+  return page.evaluate(async ({ endpoint, base, timeout }) => {
+    const response = await fetch(base + endpoint, { credentials: "include", cache: "no-store", signal: AbortSignal.timeout(timeout) });
     if (!response.ok) throw new Error(`read ${endpoint.split("?")[0]} HTTP ${response.status}`);
     return response.json();
-  }, { endpoint, base: BFF });
+  }, { endpoint, base: BFF, timeout: TIMEOUT });
+}
+
+// Shell SSE responses stay open until context close. Only relevant finite JSON
+// bodies are evidence; never await an event stream before closing the context.
+export async function readObservedJson(response, timeout = TIMEOUT) {
+  const u = new URL(response.url());
+  if (u.origin !== BFF || response.request().method() !== "GET" ||
+    !/application\/(?:[\w.+-]+\+)?json\b/i.test(response.headers()["content-type"] || "") ||
+    !/^\/bff\/(?:management\/trading-pulse(?:\/|$)|(?:management\/)?personas\/|management\/trade-journeys\/)/.test(u.pathname)) return null;
+  let timer;
+  try {
+    const body = await Promise.race([response.json(), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`JSON body timeout: ${u.pathname}`)), timeout);
+    })]);
+    return { path: u.pathname, query: u.search, body };
+  } finally { clearTimeout(timer); }
+}
+
+export async function enterPulseViaScreen(page, locale) {
+  const nav = page.locator(`a[href="${PULSE}"]:visible`).first();
+  if (await nav.isVisible()) { await nav.click(); return "sidebar"; }
+  // The maintained shell hides its sidebar below lg and provides Ctrl/Cmd+K.
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog");
+  const name = locale === "zh-TW" ? "交易脈動" : "Trading Pulse";
+  await dialog.getByRole("combobox").fill(name);
+  await dialog.getByRole("option", { name, exact: true }).click();
+  return "command_palette";
 }
 
 export async function keyboardActivate(page, locator) {
@@ -389,8 +417,8 @@ export async function runAcceptance(input, outDir, { baseline = false } = {}) {
         if (u.origin !== BFF || !u.pathname.startsWith("/bff/")) return;
         run.reads.push({ path: u.pathname, method: res.request().method(), status: res.status() });
         if (authenticated && res.status() >= 400) run.failures.push(`authenticated_http_${res.status()}: ${u.pathname}`);
-        if (res.request().method() !== "GET") return;
-        const task = res.json().then((body) => observed.push({ path: u.pathname, query: u.search, body })).catch(() => {}).finally(() => pending.delete(task));
+        const task = readObservedJson(res).then((capture) => { if (capture) observed.push(capture); })
+          .catch((e) => run.failures.push(`response_body: ${redact(e.message)}`)).finally(() => pending.delete(task));
         pending.add(task);
       });
       try {
@@ -406,13 +434,10 @@ export async function runAcceptance(input, outDir, { baseline = false } = {}) {
         assert.equal(me.tenant_id ?? me.tenant?.id ?? me.user?.tenant_id, input.expected.tenant_id, "same tenant");
         assert.ok(roles.includes("viewer") && !roles.some((r) => ["admin", "operator"].includes(r)), "viewer-only server identity");
         await page.getByRole("heading", { name: /Persona|人格/ }).first().waitFor();
-        const nav = page.locator(`a[href="${PULSE}"]:visible`).first();
-        if (!(await nav.isVisible())) {
-          const menu = page.getByRole("button", { name: /開啟.*選單|開啟.*導覽|選單|menu|navigation/i }).first();
-          await menu.click();
-        }
         const overviewResponse = page.waitForResponse((r) => new URL(r.url()).pathname === "/bff/management/trading-pulse" && r.request().method() === "GET");
-        await nav.click();
+        // Attach rejection handling immediately if UI navigation itself fails.
+        overviewResponse.catch(() => {});
+        run.entry = await enterPulseViaScreen(page, locale);
         assert.equal((await overviewResponse).status(), 200, "browser overview");
         await page.getByRole("heading", { name: locale === "zh-TW" ? "交易脈動" : "Trading Pulse", exact: true }).waitFor();
         await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'));

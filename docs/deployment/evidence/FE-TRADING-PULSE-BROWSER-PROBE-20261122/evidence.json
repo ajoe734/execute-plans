@@ -11,11 +11,11 @@
   "artifacts": {
     "cli": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
-      "sha256": "00390d3c5c0ed2ea8a46de43ee0168fcd6999c336edfd241fa5ad317aba3ddc6"
+      "sha256": "75c934fefca00d692fb160b784d618def6361fe4de378b3ab2997832ed9389a8"
     },
     "tests": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
-      "sha256": "effe7605c21897e1bc028257eca9d4a2edb34444f713305543735efe280a2de2"
+      "sha256": "c9207344b46396b61640181566cf63b946db14178f2ca808b37a52e3f522c296"
     }
   },
   "commands": {
@@ -27,9 +27,9 @@
     {
       "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
       "exit_code": 0,
-      "passed": 36,
+      "passed": 38,
       "failed": 0,
-      "includes": "Real Chromium 1255 DOM: 390px clipping counterexample and repair, diagnostics hidden/expanded, actual Tab/Enter activation and on-screen return; synthetic current zero/unknown/negative values, source scope and coverage, cross-tenant/wrong-event/wrong-object rejection, empty/hash/foreign/unfiltered/hidden links, write policy, redaction and evidence budget. No synthetic fixture is sent to hosted BFF."
+      "includes": "Real Chromium 1255 DOM: 390px clipping counterexample and repair, diagnostics hidden/expanded, actual Tab/Enter activation, on-screen return and Ctrl+K mobile command-palette entry; exclusion of open SSE and unrelated JSON bodies, scoped JSON capture and unfinished-body timeout; synthetic current zero/unknown/negative values, source scope and coverage, cross-tenant/wrong-event/wrong-object rejection, empty/hash/foreign/unfiltered/hidden links, write policy, redaction and evidence budget. No synthetic fixture is sent to hosted BFF."
     },
     { "command": "node --check scripts/accept-trading-pulse-hosted-readonly.mjs", "exit_code": 0 },
     { "command": "node --check scripts/accept-trading-pulse-hosted-readonly.test.mjs", "exit_code": 0 },
@@ -51,6 +51,10 @@
       "outcome": "Missing Chromium 1255 executable before any browser run; not measured UI failure evidence.",
       "remediation": "timeout 180s npx playwright install chromium completed exit 0; Chromium 1255 and headless shell installed, and the real-browser offline test subsequently passed."
     },
+    "harness_repairs": [
+      "Relevant finite JSON bodies only, with 20-second body deadlines; never await open shell SSE before context close. Direct browser reads also have a 20-second abort deadline.",
+      "Narrow shell entry uses the existing Ctrl/Cmd+K command palette when the sidebar is hidden; no assumed mobile menu or direct URL substitution."
+    ],
     "hosted_accepted": false
   },
   "runtime_budget": {

@@ -5,8 +5,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { chromium } from "@playwright/test";
 import { classifyRequest, makeRedactor } from "./accept-persona-strategy-hosted-readonly.mjs";
-import { assessJourney, assessOverview, assessPersona, assessRow, assessWire, hasNumber,
-  keyboardActivate, MAX_BYTES, returnViaScreen, safeTarget, snapshotPage, validateInput, writeEvidence,
+import { assessJourney, assessOverview, assessPersona, assessRow, assessWire, enterPulseViaScreen, hasNumber,
+  keyboardActivate, MAX_BYTES, readObservedJson, returnViaScreen, safeTarget, snapshotPage, validateInput, writeEvidence,
 } from "./accept-trading-pulse-hosted-readonly.mjs";
 
 // Deliberately synthetic names/IDs/numbers. These never become hosted data and
@@ -182,7 +182,24 @@ test("one summary/two screenshot evidence budget and credential redaction", () =
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("real Chromium DOM: narrow clipping, diagnostics, actual Tab/Enter and on-screen return", { timeout: 30_000 }, async () => {
+test("response capture excludes open SSE and unrelated shell JSON without reading their bodies", async () => {
+  const response = (url, type) => ({ url: () => url, request: () => ({ method: () => "GET" }),
+    headers: () => ({ "content-type": type }), json: () => { throw new Error("must not read an open or unrelated body"); } });
+  assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/events", "text/event-stream")), null);
+  assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/management/trading-pulse", "text/event-stream")), null);
+  assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/shell-summary", "application/json")), null);
+});
+
+test("relevant JSON capture is finite, retains query scope and times out an unfinished body", { timeout: 1000 }, async () => {
+  const response = { url: () => "https://api.dev.mvl-cap.tw/bff/management/trade-journeys/tj-offline?tenant_id=offline&environment=paper",
+    request: () => ({ method: () => "GET" }), headers: () => ({ "content-type": "application/json; charset=utf-8" }),
+    json: async () => ({ id: "synthetic" }) };
+  assert.deepEqual(await readObservedJson(response), { path: "/bff/management/trade-journeys/tj-offline",
+    query: "?tenant_id=offline&environment=paper", body: { id: "synthetic" } });
+  await assert.rejects(readObservedJson({ ...response, json: () => new Promise(() => {}) }, 15), /JSON body timeout/);
+});
+
+test("real Chromium DOM: narrow clipping, diagnostics, actual Tab/Enter, on-screen return and mobile palette", { timeout: 30_000 }, async () => {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 850 } });
@@ -211,5 +228,19 @@ test("real Chromium DOM: narrow clipping, diagnostics, actual Tab/Enter and on-s
     await page.locator("tbody tr").evaluate((tr) => tr.firstElementChild.append(tr.querySelector("a")));
     const repaired = await snapshotPage(page, sources);
     assert.ok(!assessRow(source, repaired.rows[0]).includes("primary_entry_without_horizontal_scroll"));
+    // Mobile shell has no menu button: use its real documented keyboard entry.
+    await page.setContent(`<main><p>Fleet</p></main><script>
+      document.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+          event.preventDefault();
+          document.body.insertAdjacentHTML('beforeend', '<div role="dialog"><input role="combobox"><button role="option">交易脈動</button></div>');
+          document.querySelector('[role="option"]').onclick = () => { history.pushState({}, '', '/management/trading-pulse'); document.querySelector('[role="dialog"]').remove(); };
+        }
+      });
+    </script>`);
+    await page.evaluate(() => history.replaceState({}, "", "/management/persona-fleet"));
+    assert.equal(await enterPulseViaScreen(page, "zh-TW"), "command_palette");
+    assert.equal(new URL(page.url()).pathname, "/management/trading-pulse");
+    assert.equal(await page.getByRole("dialog").count(), 0);
   } finally { await browser.close(); }
 });
