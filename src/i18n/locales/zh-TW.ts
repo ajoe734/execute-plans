@@ -4755,7 +4755,7 @@ export default {
       scopePaperBaselineSummary: "目前皆為模擬交易，無須進行實盤基準比較。",
       scopeBaselineSummaryFmt: "實盤基準比較：已涵蓋 {{covered}} / {{required}}（警示 {{watch}} · 超限 {{breached}}）",
       sourceIssueSummaryAlert: "部分資料來源暫時無法取得或上次資料已過期，請留意下方各 Persona 的狀態說明；詳細來源資訊可展開底部資料診斷檢視。",
-      paperMonitoringOnlySummaryAlert: "目前名冊、帳本與交易統計皆可正常讀取；僅模擬執行監控尚未建立完整工作階段，不影響下方成交與損益資料（詳見底部資料診斷）。",
+      paperMonitoringOnlySummaryAlert: "僅模擬執行監控工作階段未完整建立；下方顯示目前已讀取的交易明細（詳見底部資料診斷）。",
       stagePaper: "模擬交易",
       stageCanary: "金絲雀 (Canary)",
       stageLive: "實盤交易",

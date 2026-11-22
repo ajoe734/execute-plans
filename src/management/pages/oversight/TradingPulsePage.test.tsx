@@ -1481,10 +1481,10 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     mockTradingPulseLive(hostedRealShapeOverview, TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE);
     const zhView = renderPage(<TradingPulsePage />);
 
-    // 1. Summary reminder specifically identifies paper runtime monitoring when trading sources are healthy
+    // 1. Summary reminder specifically identifies paper runtime monitoring when trading sources are verified available
     const zhReminder = screen.getByTestId("trading-pulse-source-issue-reminder");
     expect(zhReminder).toHaveTextContent(
-      "目前名冊、帳本與交易統計皆可正常讀取；僅模擬執行監控尚未建立完整工作階段，不影響下方成交與損益資料（詳見底部資料診斷）。",
+      "僅模擬執行監控工作階段未完整建立；下方顯示目前已讀取的交易明細（詳見底部資料診斷）。",
     );
 
     // 2. Notable events section contains ONLY 澄川 2317 pre-broker rejection; 青禾 and 衡岳 are not promoted
@@ -1496,7 +1496,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(within(zhEvents).getByText("送券商前風控拒單（未送出委託）")).toBeInTheDocument();
     expect(within(zhEvents).getByText("資金不足")).toBeInTheDocument();
     expect(
-      within(zhEvents).getByText("該次意向 452 單位、成交 0 單位（成交率 0%）"),
+      within(zhEvents).getByText("該次意向 452 股、成交 0 股（成交率 0%）"),
     ).toBeInTheDocument();
     expect(within(zhEvents).queryByText(/青禾/)).not.toBeInTheDocument();
     expect(within(zhEvents).queryByText(/衡岳/)).not.toBeInTheDocument();
@@ -1511,27 +1511,26 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     const zhHengyueRow = zhRows.find((r) => r.textContent?.includes("衡岳｜0050 台股 ETF Paper")) as HTMLElement;
     const zhChengchuanRow = zhRows.find((r) => r.textContent?.includes("澄川｜2317 台股 Paper")) as HTMLElement;
 
-    expect(within(zhQingheRow).getByText("100%（該次意向 1 單位、成交 1 單位）")).toBeInTheDocument();
+    expect(within(zhQingheRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
     expect(within(zhQingheRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
     expect(within(zhQingheRow).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
     expect(
       within(zhQingheRow).getByRole("link", { name: "查看交易旅程" }).getAttribute("href"),
     ).toContain("tj_29473e86-63ff-5384-bda1-23eef61cebb2");
 
-    expect(within(zhHengyueRow).getByText("100%（該次意向 1 單位、成交 1 單位）")).toBeInTheDocument();
+    expect(within(zhHengyueRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
     expect(within(zhHengyueRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
     expect(within(zhHengyueRow).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
     expect(
       within(zhHengyueRow).getByRole("link", { name: "查看交易旅程" }).getAttribute("href"),
     ).toContain("tj_0050-normal-fill");
 
-    expect(within(zhChengchuanRow).getByText("0%（該次意向 452 單位、成交 0 單位）")).toBeInTheDocument();
+    expect(within(zhChengchuanRow).getByText("0%（該次意向 452 股、成交 0 股）")).toBeInTheDocument();
     expect(within(zhChengchuanRow).getByText("資金不足")).toBeInTheDocument();
 
-    // 4. Never leaks raw absolute_order_quantity or guesses "股" when unit is an internal machine code
+    // 4. Never leaks raw absolute_order_quantity
     const zhFullText = zhView.container.textContent ?? "";
     expect(zhFullText).not.toContain("absolute_order_quantity");
-    expect(zhFullText).not.toMatch(/該次意向 \d+ 股/);
     zhView.unmount();
 
     // 5. Verify en-US rendering of the same hosted shape
@@ -1540,24 +1539,24 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     const enView = renderPage(<TradingPulsePage />);
 
     expect(screen.getByTestId("trading-pulse-source-issue-reminder")).toHaveTextContent(
-      "Operational roster, ledger, and trading metrics are available; only paper runtime monitoring sessions are incomplete, which does not affect the fill and P&L data below (see Data Diagnostics for details).",
+      "Only paper runtime monitoring sessions are incomplete; currently available trading details are shown below (see Data Diagnostics).",
     );
 
     const enEvents = screen.getByTestId("trading-pulse-notable-events");
     expect(within(enEvents).getAllByRole("listitem")).toHaveLength(1);
     expect(within(enEvents).getByText("澄川｜2317 台股 Paper")).toBeInTheDocument();
     expect(
-      within(enEvents).getByText("Requested 452 units, filled 0 units (0% fill rate)"),
+      within(enEvents).getByText("Requested 452 shares, filled 0 shares (0% fill rate)"),
     ).toBeInTheDocument();
     expect(within(enEvents).queryByText(/青禾|衡岳/)).not.toBeInTheDocument();
     expect(within(enEvents).queryByText(/Reason not recorded|Standard execution record/)).not.toBeInTheDocument();
 
     const enPersonaSection = screen.getByTestId("trading-pulse-persona-details");
     expect(
-      within(enPersonaSection).getAllByText("100% (Requested 1 units, filled 1 units)"),
+      within(enPersonaSection).getAllByText("100% (Requested 1 shares, filled 1 shares)"),
     ).toHaveLength(2);
     expect(
-      within(enPersonaSection).getByText("0% (Requested 452 units, filled 0 units)"),
+      within(enPersonaSection).getByText("0% (Requested 452 shares, filled 0 shares)"),
     ).toBeInTheDocument();
     expect(
       within(enPersonaSection).getAllByText("No risk rejection or exception events"),
@@ -1565,7 +1564,77 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
 
     const enFullText = enView.container.textContent ?? "";
     expect(enFullText).not.toContain("absolute_order_quantity");
-    expect(enFullText).not.toMatch(/Requested \d+ shares/);
     enView.unmount();
+  });
+
+  it("preserves neutral units when symbol does not establish TWSE/TPEX shares, keeps overfills and unverified available outcomes visible, and requires verified trading sources plus normalized row health for monitoring-only notice", async () => {
+    const copyOverview = () => JSON.parse(JSON.stringify(TRADING_PULSE_HOSTED_WIRE_SAMPLE));
+
+    // 1. Verified TWSE/TPEX symbols use shares/股 for absolute_order_quantity, while truly unknown symbol/unit uses neutral 單位/units
+    await i18n.changeLanguage("zh-TW");
+    const rawUnits = copyOverview();
+    rawUnits.data.runtime_rows[0].underlying_symbol = "6488.TPEX";
+    rawUnits.data.runtime_rows[0].performance_context.fill_rate_details.unit = "absolute_order_quantity";
+    rawUnits.data.runtime_rows[2].underlying_symbol = "BTC-USD";
+    rawUnits.data.runtime_rows[2].performance_context.fill_rate_details.unit = "absolute_order_quantity";
+    mockTradingPulseLive(rawUnits);
+    const unitsZh = renderPage(<TradingPulsePage />);
+    expect(
+      within(screen.getByTestId("trading-pulse-persona-details")).getAllByText("100%（該次意向 1 股、成交 1 股）"),
+    ).toHaveLength(2);
+    expect(
+      within(screen.getByTestId("trading-pulse-persona-details")).getByText("0%（該次意向 452 單位、成交 0 單位）"),
+    ).toBeInTheDocument();
+    unitsZh.unmount();
+
+    // 2. Overfill (rate=2, numerator=2/denominator=1, filled_quantity=2) remains visible in notable events
+    const rawOverfill = copyOverview();
+    rawOverfill.data.runtime_rows[0].telemetry_summary.metrics.fill_rate = 2;
+    rawOverfill.data.runtime_rows[0].performance_context.fill_rate_details.numerator = 2;
+    rawOverfill.data.runtime_rows[0].latest_outcome.filled_quantity = 2;
+    mockTradingPulseLive(rawOverfill);
+    const overfillView = renderPage(<TradingPulsePage />);
+    expect(
+      within(screen.getByTestId("trading-pulse-notable-events")).getByText(rawOverfill.data.runtime_rows[0].persona_name),
+    ).toBeInTheDocument();
+    overfillView.unmount();
+
+    // 3. Available outcome with unknown fill evidence remains visible in notable events
+    const rawUnknownFill = copyOverview();
+    rawUnknownFill.data.runtime_rows[0].performance_context.fill_rate_details.status = "unknown";
+    mockTradingPulseLive(rawUnknownFill);
+    const unknownFillView = renderPage(<TradingPulsePage />);
+    expect(
+      within(screen.getByTestId("trading-pulse-notable-events")).getByText(rawUnknownFill.data.runtime_rows[0].persona_name),
+    ).toBeInTheDocument();
+    unknownFillView.unmount();
+
+    // 4. Does not claim monitoring-only notice when trading source evidence is absent or row source_status is unknown
+    const rawNoSourceEvidence = copyOverview();
+    rawNoSourceEvidence.meta.surfaces = {
+      paper_runtime_monitoring: { status: "degraded", source: "service_store" },
+    };
+    for (const row of rawNoSourceEvidence.data.runtime_rows) {
+      row.performance_context.source_status = "unknown";
+      row.row_health = { status: "degraded", degraded_checks: ["paper_runtime_monitoring"] };
+    }
+    mockTradingPulseLive(rawNoSourceEvidence);
+    const noSourceView = renderPage(<TradingPulsePage />);
+    expect(screen.getByTestId("trading-pulse-source-issue-reminder")).toHaveTextContent(
+      i18n.t("mgmt.pulse.sourceIssueSummaryAlert"),
+    );
+    noSourceView.unmount();
+
+    // 5. Honors normalized top-level rowHealthDegradedChecks containing non-monitoring degradation
+    const rawNormRowHealth = copyOverview();
+    rawNormRowHealth.meta.surfaces.paper_runtime_monitoring = { status: "degraded", source: "service_store" };
+    delete rawNormRowHealth.data.runtime_rows[0].row_health;
+    rawNormRowHealth.data.runtime_rows[0].rowHealthDegradedChecks = ["telemetry_summary"];
+    mockTradingPulseLive(rawNormRowHealth);
+    const normRowHealthView = renderPage(<TradingPulsePage />);
+    expect(screen.getByTestId("trading-pulse-source-issue-reminder")).toHaveTextContent(
+      i18n.t("mgmt.pulse.sourceIssueSummaryAlert"),
+    );
+    normRowHealthView.unmount();
   });
 });

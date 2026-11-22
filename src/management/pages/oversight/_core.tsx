@@ -2037,9 +2037,16 @@ const formatPulsePnlDefinition = (def: unknown, t: PulseTranslate): string => {
   return t("mgmt.pulse.pnlDefUnverified");
 };
 
+const isVerifiedTwEquitySymbol = (symbol: unknown): boolean => {
+  if (typeof symbol !== "string") return false;
+  const trimmed = symbol.trim();
+  return Boolean(trimmed) && !isPulseTechnicalId(trimmed) && /^[A-Za-z0-9]+\.(?:TWSE|TPEX)$/i.test(trimmed);
+};
+
 const formatPulseQuantityUnit = (
   unit: unknown,
   t: PulseTranslate,
+  symbol?: unknown,
 ): { localized: string; isKnownUnit: boolean } => {
   const raw = typeof unit === "string" && unit.trim() && !isPulseTechnicalId(unit) ? unit.trim() : null;
   const norm = (raw ?? "").toLowerCase();
@@ -2051,6 +2058,12 @@ const formatPulseQuantityUnit = (
   }
   if (["contracts", "contract", "口"].includes(norm)) {
     return { localized: t("mgmt.pulse.unitContracts"), isKnownUnit: true };
+  }
+  if (
+    (!norm || ["absolute_order_quantity", "order_quantity", "quantity"].includes(norm))
+    && isVerifiedTwEquitySymbol(symbol)
+  ) {
+    return { localized: t("mgmt.pulse.unitShares"), isKnownUnit: true };
   }
   return { localized: t("mgmt.pulse.unitNeutral"), isKnownUnit: false };
 };
@@ -2365,20 +2378,72 @@ const TradingPulseOperatorScopeSection = ({
     ["ok", "live", "fresh", "available", "verified", "not_required"].includes(
       String(status ?? "").trim().toLowerCase(),
     );
+  const extractRowDegradedChecks = (row: ManagementTradingPulseRuntimeRow): string[] => {
+    const rawRow = row as Record<string, unknown>;
+    const rowHealth =
+      row.rowHealth && typeof row.rowHealth === "object"
+        ? (row.rowHealth as Record<string, unknown>)
+        : row.row_health && typeof row.row_health === "object"
+          ? (row.row_health as Record<string, unknown>)
+          : null;
+    const candidates = [
+      rowHealth?.degradedChecks,
+      rowHealth?.degraded_checks,
+      rawRow.rowHealthDegradedChecks,
+      rawRow.row_health_degraded_checks,
+      rawRow.degradedChecks,
+      rawRow.degraded_checks,
+    ];
+    const out: string[] = [];
+    for (const list of candidates) {
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          if (typeof item === "string" && item.trim()) {
+            out.push(item.trim().toLowerCase());
+          }
+        }
+      }
+    }
+    return Array.from(new Set(out));
+  };
+  const extractRowHealthStatus = (row: ManagementTradingPulseRuntimeRow): string => {
+    const rawRow = row as Record<string, unknown>;
+    const rowHealth =
+      row.rowHealth && typeof row.rowHealth === "object"
+        ? (row.rowHealth as Record<string, unknown>)
+        : row.row_health && typeof row.row_health === "object"
+          ? (row.row_health as Record<string, unknown>)
+          : null;
+    return String(rowHealth?.status ?? rawRow.rowHealthStatus ?? rawRow.row_health_status ?? "")
+      .trim()
+      .toLowerCase();
+  };
   const hasSurfaceIssue = surfaces.some(([, s]) => !isHealthySurface(s.status));
   const hasRowSourceIssue = rows.some((r) => {
-    const st = String(r.performanceContext?.sourceStatus ?? "").toLowerCase();
+    const st = String(r.performanceContext?.sourceStatus ?? "").trim().toLowerCase();
     return st === "unavailable" || st === "stale";
   });
+  const hasRowHealthIssue = rows.some((r) => {
+    const rhStatus = extractRowHealthStatus(r);
+    const checks = extractRowDegradedChecks(r);
+    return checks.length > 0 || (Boolean(rhStatus) && !isHealthySurface(rhStatus));
+  });
   const showSourceIssueReminder =
-    hasSurfaceIssue || hasRowSourceIssue || scopeStatus === "partial" || scopeStatus === "unavailable";
+    hasSurfaceIssue || hasRowSourceIssue || hasRowHealthIssue || scopeStatus === "partial" || scopeStatus === "unavailable";
   const isOnlyPaperMonitoringIssue = (() => {
     if (!showSourceIssueReminder || scopeStatus !== "verified" || hasRowSourceIssue) return false;
+    if (rows.length === 0 || !rows.every((r) => isPulseSourceVerifiedAvailable(r.performanceContext?.sourceStatus))) {
+      return false;
+    }
     if ((model.summary.missingTelemetryRuntimeIds?.length ?? 0) > 0) return false;
     if ((model.summary.missingBaselineRuntimeIds?.length ?? 0) > 0) return false;
     const surfaceMap = model.meta.surfaces ?? {};
     const monitoringSurface = surfaceMap.paper_runtime_monitoring;
     if (!monitoringSurface || isHealthySurface(monitoringSurface.status)) return false;
+    const hasVerifiedTradingSurface = ["runtime_roster", "telemetry_summary"].some((key) =>
+      isHealthySurface(surfaceMap[key]?.status),
+    );
+    if (!hasVerifiedTradingSurface) return false;
     const allowedNonOkSurfaces = new Set([
       "paper_runtime_monitoring",
       "runtime_row_health",
@@ -2391,14 +2456,12 @@ const TradingPulseOperatorScopeSection = ({
       }
     }
     return rows.every((row) => {
-      const checks = Array.isArray(row.rowHealth?.degradedChecks)
-        ? row.rowHealth.degradedChecks
-        : Array.isArray(row.rowHealth?.degraded_checks)
-          ? row.rowHealth.degraded_checks
-          : [];
-      return checks.every(
-        (check) => String(check).trim().toLowerCase() === "paper_runtime_monitoring",
-      );
+      const checks = extractRowDegradedChecks(row);
+      const rhStatus = extractRowHealthStatus(row);
+      if (Boolean(rhStatus) && !isHealthySurface(rhStatus) && checks.length === 0) {
+        return false;
+      }
+      return checks.every((check) => check === "paper_runtime_monitoring");
     });
   })();
 
@@ -2712,27 +2775,33 @@ const isVerifiedNormalFullFillRow = (row: ManagementTradingPulseRuntimeRow): boo
   const reqAmt = pulseNumber(outcome?.required);
   const availAmt = pulseNumber(outcome?.available);
   if (reqAmt !== null && availAmt !== null && reqAmt > availAmt) return false;
+  if (!isPulseSourceVerifiedAvailable(row.performanceContext?.sourceStatus)) return false;
   if (!isPulseFillRateDetailsVerified(row)) return false;
-  const verifiedRate = resolvePulseVerifiedFillRate(row);
-  if (verifiedRate === null || verifiedRate < 1) return false;
   const fillDetails = row.performanceContext?.fillRateDetails;
+  const detailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
+  if (!["known", "available", "ok", "verified"].includes(detailsStatus)) return false;
+  const verifiedRate = resolvePulseVerifiedFillRate(row);
+  if (verifiedRate === null || Math.abs(verifiedRate - 1) > 1e-9) return false;
   const num = pulseNumber(fillDetails?.numerator);
   const den = pulseNumber(fillDetails?.denominator);
-  if (num === null || den === null || den <= 0 || num < den) return false;
+  if (num === null || den === null || den <= 0 || num !== den) return false;
   const outcomeReqQty = pulseNumber(outcome?.requestedQuantity);
   const outcomeFillQty = pulseNumber(outcome?.filledQuantity);
-  if (outcomeReqQty !== null && outcomeFillQty !== null && outcomeFillQty < outcomeReqQty) {
+  if (outcomeReqQty !== null && (outcomeReqQty <= 0 || outcomeReqQty !== den)) return false;
+  if (outcomeFillQty !== null && (outcomeFillQty <= 0 || outcomeFillQty !== num)) return false;
+  if (outcomeReqQty !== null && outcomeFillQty !== null && outcomeFillQty !== outcomeReqQty) {
     return false;
   }
   const fillCount = resolvePulseRowFillCount(row);
-  return fillCount === null || fillCount > 0;
+  return fillCount !== null && fillCount > 0;
 };
 
 const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
   if (isVerifiedNormalFullFillRow(row)) return false;
   const outcome = row.latestOutcome;
+  if (outcome && outcome.status === "available") return true;
   if (outcome?.submittedToBroker === false) return true;
-  if (hasActionablePulseOutcomeReason(outcome?.reasonCode)) return true;
+  if (outcome?.reasonCode) return true;
   const reqAmt = pulseNumber(outcome?.required);
   const availAmt = pulseNumber(outcome?.available);
   if (reqAmt !== null && availAmt !== null && reqAmt > availAmt) return true;
@@ -2741,7 +2810,7 @@ const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => 
   if (
     outcomeReqQty !== null
     && outcomeReqQty > 0
-    && ((outcomeFillQty !== null && outcomeFillQty < outcomeReqQty) || resolvePulseRowFillCount(row) === 0)
+    && ((outcomeFillQty !== null && outcomeFillQty !== outcomeReqQty) || resolvePulseRowFillCount(row) === 0)
   ) {
     return true;
   }
@@ -2749,7 +2818,7 @@ const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => 
     const fillDetails = row.performanceContext?.fillRateDetails;
     const num = pulseNumber(fillDetails?.numerator);
     const den = pulseNumber(fillDetails?.denominator);
-    if (num !== null && den !== null && den > 0 && num < den) return true;
+    if (num !== null && den !== null && den > 0 && num !== den) return true;
   }
   return false;
 };
@@ -2801,7 +2870,7 @@ const TradingPulseNotableEventsSection = ({
             const fillQty = pulseNumber(
               outcome?.filledQuantity ?? (canUseFillDetails ? fillDetails?.numerator : null),
             );
-            const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
+            const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t, symbol);
             const reqAmt = pulseNumber(outcome?.required);
             const availAmt = pulseNumber(outcome?.available);
             const currency = outcome?.currency ?? perf?.pnlCurrency;
@@ -3022,7 +3091,7 @@ const TradingPulsePersonaDetailsSection = ({
                 const canUseFillDetails = isPulseFillRateDetailsVerified(row) && verifiedFillRate !== null;
                 const num = pulseNumber(fillDetails?.numerator);
                 const den = pulseNumber(fillDetails?.denominator);
-                const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
+                const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t, symbol);
 
                 const pnlVal = pulseNumber(row.metrics?.pnl);
                 const pnlCurrency = perf?.pnlCurrency ?? null;

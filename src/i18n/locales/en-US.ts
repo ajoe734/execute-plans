@@ -4774,7 +4774,7 @@ export default {
       scopePaperBaselineSummary: "All current Personas are in paper trading; live baseline comparison is not required.",
       scopeBaselineSummaryFmt: "Live baseline comparison: {{covered}} / {{required}} covered (watch: {{watch}} · breached: {{breached}})",
       sourceIssueSummaryAlert: "Some data sources are temporarily unavailable or stale; check individual Persona status notes below, or expand Data Diagnostics at the bottom for source details.",
-      paperMonitoringOnlySummaryAlert: "Operational roster, ledger, and trading metrics are available; only paper runtime monitoring sessions are incomplete, which does not affect the fill and P&L data below (see Data Diagnostics for details).",
+      paperMonitoringOnlySummaryAlert: "Only paper runtime monitoring sessions are incomplete; currently available trading details are shown below (see Data Diagnostics).",
       stagePaper: "Paper",
       stageCanary: "Canary",
       stageLive: "Live",
