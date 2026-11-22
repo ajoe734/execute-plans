@@ -14,11 +14,11 @@
   "artifacts": {
     "runner": {
       "path": "scripts/accept-persona-strategy-hosted-readonly.mjs",
-      "sha256": "0338da866a173ccf0e9de2b6b6c839a112ed1ea26203d30bf2f376b6894095a0"
+      "sha256": "e043a00554e1f9e39322982a4d4d5b1f9fe4a2029304ca18b9472f8826ba2fd8"
     },
     "runner_tests": {
       "path": "src/test/persona-strategy-hosted-readonly.test.ts",
-      "sha256": "4c8c813a5df692a842424132dfd145383c214114bec7caf4c6b8909afae59b7a"
+      "sha256": "b6e4510fc7456d7f393c2f4c39d968d90435187c734036b22fd939120d730467"
     },
     "page_helpers": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
@@ -82,6 +82,36 @@
     {
       "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs",
       "exit_code": 0
+    },
+    {
+      "command": "timeout 220s npx vitest run src/test/persona-strategy-hosted-readonly.test.ts --maxWorkers=1",
+      "exit_code": 0,
+      "passed": 43,
+      "failed": 0,
+      "includes": "Shared guard/login/pair correction at e8f1e02e5. Original default regression fixtures retained; both modes reject FE/BFF and strict auth mismatches. Real Chromium Trading Pulse positive and blocked business/foreign request controls run all three locale/viewport contexts using intercepted synthetic traffic only. Terminal output collected; no hosted acceptance inferred."
+    },
+    {
+      "command": "timeout 60s node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed": 38,
+      "failed": 0,
+      "includes": "Page helper regression after shared guard/login/pair correction."
+    },
+    {
+      "command": "timeout 90s npm run typecheck",
+      "exit_code": 124,
+      "includes": "Reached the bounded deadline with no type diagnostics; not passed. Retried with a larger bounded deadline below."
+    },
+    {
+      "command": "timeout 180s npm run typecheck",
+      "exit_code": 0,
+      "includes": "After shared guard/login/pair correction."
+    },
+    {
+      "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs && git diff --check; verify retained baseline file sizes/SHA256 and terminal receipt SHA256",
+      "exit_code": 0,
+      "retained_bundle_bytes": 196259,
+      "includes": "All three baseline files and original terminal receipt unchanged."
     }
   ],
   "independent_owner_context": {
@@ -218,16 +248,16 @@
     "hosted_accepted": false
   },
   "shared_runner_verification": {
-    "status": "awaiting_coordinator_real_viewer_receipt",
+    "status": "source_ready_for_independent_review",
     "mode": "trading-pulse",
     "entry": "scripts/accept-persona-strategy-hosted-readonly.mjs",
     "scope": "Confirm existing runner mode executes using the existing real dev viewer. Retained old exact stable baseline is unchanged; E does the repaired-pair full proof.",
     "terminal_exit_code": null,
-    "implementation": "Existing CLI owns mode dispatch, stdin/exit handling, Playwright loader and all browser/session orchestration; page-specific module exports assertions and helpers only. Existing original four-role mode is unchanged by default. Static helper loading avoids actual-process top-level-await circular import.",
-    "ready_code_commit": "f9aac3a043c48c161527cd8ab6a2d2db94a8851a",
-    "runner_sha256": "0338da866a173ccf0e9de2b6b6c839a112ed1ea26203d30bf2f376b6894095a0",
-    "pending": "Coordinator real dev viewer terminal receipt and masked summary/digest; this worker has no provisioned viewer credentials. No real-viewer new-mode success is claimed. Normal independent handoff waits for that evidence.",
-    "coordination": "Governed progress requests published for corrected f9aac3a04; intermediate 0c39a2c48 is explicitly excluded because subprocess controls exposed circular top-level-await there. Corrected actual-process entry and all local controls pass.",
-    "review_admission": "Not handed off: latest canonical next requires real dev viewer confirmation through coordinator before normal independent review. Source is committed and pushed; no claim of hosted acceptance, dev merge or deployment."
+    "implementation": "Both modes use the same guardedLogin form wait/response steps, installReadOnlyGuard request policy installation, and assessPair FE/BFF identity plus strict auth checks. The original default keeps root/pair/deployment/MFA checks and thresholds; Trading Pulse keeps live/strict-fallback and foreign-origin checks. Existing CLI owns dispatch, stdin/exit handling, browser loading and session orchestration; page module remains helpers only.",
+    "ready_code_commit": "e8f1e02e56d6bcb9e2e6ea0d861cda431b9a24e3",
+    "runner_sha256": "e043a00554e1f9e39322982a4d4d5b1f9fe4a2029304ca18b9472f8826ba2fd8",
+    "pending": "Coordinator will execute the real dev viewer mode after root 45029250554 resolves the public manifest versus serving BFF mismatch. That receipt is follow-up execution evidence, not a source-review prerequisite under the 2026-11-22T14:40:05Z canonical instruction. No new-mode hosted result is claimed; Task E owns repaired-pair full acceptance.",
+    "coordination": "Same PR 1063. Original measured failing baseline, terminal receipt, retained 196259-byte bundle and deterministic browser mode proof preserved. No second old-page rerun required for source handoff.",
+    "review_admission": "Source-only handoff to Antigravity after focused regressions; review approval, merge, dev deployment and hosted acceptance are not claimed."
   }
 }
