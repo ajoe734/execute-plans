@@ -28,8 +28,6 @@ import {
   defaultPulseRankings,
   LIVE_RANKING_BLOCKS,
   LIVE_RANKING_BLOCK_LABELS,
-  TRADING_PULSE_HOSTED_WIRE_SAMPLE,
-  TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE,
   type LiveRankingBlockKind,
   type ManagementTradingPulseLinks,
   type TradingPulseComparisonScope,
@@ -37,11 +35,10 @@ import {
   type TradingPulseRankBlock,
   type TradingPulseRankRow,
 } from "@/lib/v5/management/tradingRankings";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 export {
   LIVE_RANKING_BLOCKS,
   LIVE_RANKING_BLOCK_LABELS,
-  TRADING_PULSE_HOSTED_WIRE_SAMPLE,
-  TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE,
   type LiveRankingBlockKind,
   type ManagementTradingPulseLinks,
   type TradingPulseComparisonScope,
@@ -585,6 +582,8 @@ export interface ManagementTradingPulseOperatorScope {
   runtime_count: number | null;
   verifiedRuntimeCount: number | null;
   verified_runtime_count: number | null;
+  excludedProbeCount?: number | null;
+  excluded_probe_count?: number | null;
   reason: string | null;
   byStage: Record<string, ManagementTradingPulseStageScopeCount>;
   by_stage: Record<string, ManagementTradingPulseStageScopeCount>;
@@ -598,6 +597,8 @@ export interface ManagementTradingPulsePnlGroup {
   period_start_at: string | null;
   periodEndAt: string | null;
   period_end_at: string | null;
+  periodLabel?: string | null;
+  period_label?: string | null;
   asOf: string | null;
   as_of: string | null;
   pnlDefinition: string | null;
@@ -3769,21 +3770,18 @@ function buildTradingPulseJourneyHref(
   } = {},
 ): string | undefined {
   const cleanJourneyId = nullableString(journeyId);
-  const params = new URLSearchParams();
-  if (opts.tenantId) params.set("tenant_id", opts.tenantId);
-  if (opts.deploymentStage) params.set("environment", opts.deploymentStage);
-  if (cleanJourneyId) {
-    const qs = params.toString();
-    return `/management/trade-journeys/${encodeURIComponent(cleanJourneyId)}${qs ? `?${qs}` : ""}`;
-  }
   const decisionId = nullableString(opts.decisionId);
   const orderId = nullableString(opts.orderId);
   const brokerOrderId = nullableString(opts.brokerOrderId);
-  if (!decisionId && !orderId && !brokerOrderId) return undefined;
-  if (decisionId) params.set("decision_id", decisionId);
-  if (orderId) params.set("order_id", orderId);
-  if (brokerOrderId) params.set("broker_order_id", brokerOrderId);
-  return `/management/trade-journeys?${params.toString()}`;
+  if (!cleanJourneyId && !decisionId && !orderId && !brokerOrderId) return undefined;
+  return tradeJourneyHref(undefined, {
+    journeyId: cleanJourneyId,
+    tenantId: opts.tenantId,
+    environment: opts.deploymentStage,
+    decisionId,
+    orderId,
+    brokerOrderId,
+  });
 }
 
 function normalizeTradingPulseLinks(
@@ -4096,23 +4094,6 @@ function normalizeTradingPulsePerformanceContext(
   const rawStaleness = raw?.staleness ?? telemetrySummary?.staleness;
   const staleness = isObject(rawStaleness) ? { ...rawStaleness } : null;
 
-  const metricReasons: Record<string, string | null> = {
-    ...normalizeNullableStringRecord(raw?.metricReasons ?? raw?.metric_reasons),
-  };
-  if (fillRateDetails !== null && !isTradingPulseFillRateKnown(fillRateDetails) && !metricReasons.fill_rate) {
-    const den = fillRateDetails.denominator;
-    metricReasons.fill_rate =
-      fillRateDetails.reason
-      ?? (den !== null && den <= 0 ? "no_submitted_orders" : fillRateDetails.status ?? "source_unavailable");
-  }
-  if (
-    (sharpeRatioReason !== null || sharpeRatioStatus !== null)
-    && asNullableNumber(metricsRecord?.sharpe_ratio ?? metricsRecord?.sharpeRatio) === null
-    && !metricReasons.sharpe_ratio
-  ) {
-    metricReasons.sharpe_ratio = sharpeRatioReason ?? sharpeRatioStatus;
-  }
-
   const metricUnits = normalizeNullableStringRecord(raw?.metricUnits ?? raw?.metric_units);
   const metricPeriods = normalizeTradingPulseMetricPeriods(raw?.metricPeriods ?? raw?.metric_periods);
 
@@ -4156,12 +4137,66 @@ function normalizeTradingPulsePerformanceContext(
     || latestReportAt !== null
     || lastFillAt !== null
     || ledgerFillCount !== null
-    || (fillRateDetails !== null && isTradingPulseFillRateKnown(fillRateDetails))
+    || (
+      fillRateDetails !== null
+      && (isTradingPulseFillRateKnown(fillRateDetails) || fillRateDetails.reason === "no_submitted_orders")
+    )
     || (metricsRecord && Object.values(metricsRecord).some((v) => typeof v === "number" && Number.isFinite(v))),
   );
   const explicitSourceStatus = nullableString(raw?.sourceStatus ?? raw?.source_status);
   const sourceStatus: ManagementTradingPulseSourceStatus = explicitSourceStatus
     ?? (isStale ? "stale" : hasObservedSourceEvidence ? "available" : "unverified");
+
+  const metricReasons: Record<string, string | null> = {
+    ...normalizeNullableStringRecord(raw?.metricReasons ?? raw?.metric_reasons),
+  };
+  if (fillRateDetails !== null && !isTradingPulseFillRateKnown(fillRateDetails) && !metricReasons.fill_rate) {
+    const den = fillRateDetails.denominator;
+    const num = fillRateDetails.numerator;
+    const detailsStatus = fillRateDetails.status?.trim().toLowerCase() ?? null;
+    const normalizedSourceStatus = String(sourceStatus ?? "").trim().toLowerCase();
+    const isSourceVerifiedAvailable =
+      ["available", "ok", "live", "fresh", "verified"].includes(normalizedSourceStatus);
+    const isDetailsStatusVerified =
+      detailsStatus === "known"
+      || detailsStatus === "available"
+      || detailsStatus === "ok"
+      || detailsStatus === "verified";
+    if (normalizedSourceStatus === "unavailable" || detailsStatus === "unavailable") {
+      metricReasons.fill_rate =
+        fillRateDetails.reason === "telemetry_unavailable"
+          ? "telemetry_unavailable"
+          : "source_unavailable";
+    } else if (normalizedSourceStatus === "stale" || detailsStatus === "stale") {
+      metricReasons.fill_rate =
+        fillRateDetails.reason === "telemetry_stale"
+          ? "telemetry_stale"
+          : "stale";
+    } else if (fillRateDetails.reason !== null) {
+      metricReasons.fill_rate = fillRateDetails.reason;
+    } else if (
+      isSourceVerifiedAvailable
+      && isDetailsStatusVerified
+      && den !== null
+      && den === 0
+      && (num === null || num === 0)
+    ) {
+      metricReasons.fill_rate = "no_submitted_orders";
+    } else {
+      metricReasons.fill_rate =
+        fillRateDetails.status
+        ?? (normalizedSourceStatus === "unknown" || normalizedSourceStatus === "unverified"
+          ? "unknown"
+          : "source_unavailable");
+    }
+  }
+  if (
+    (sharpeRatioReason !== null || sharpeRatioStatus !== null)
+    && asNullableNumber(metricsRecord?.sharpe_ratio ?? metricsRecord?.sharpeRatio) === null
+    && !metricReasons.sharpe_ratio
+  ) {
+    metricReasons.sharpe_ratio = sharpeRatioReason ?? sharpeRatioStatus;
+  }
 
   return {
     ...(raw ?? {}),
@@ -4327,6 +4362,9 @@ function normalizeTradingPulseOperatorScope(
   const verifiedRuntimeCount = asNullableNumber(
     raw.verifiedRuntimeCount ?? raw.verified_runtime_count,
   );
+  const excludedProbeCount = asNullableNumber(
+    raw.excludedProbeCount ?? raw.excluded_probe_count,
+  );
   const reason = nullableString(raw.reason);
   const rawByStage = isObject(raw.byStage ?? raw.by_stage)
     ? (raw.byStage ?? raw.by_stage) as Record<string, unknown>
@@ -4371,6 +4409,9 @@ function normalizeTradingPulseOperatorScope(
     runtime_count: runtimeCount,
     verifiedRuntimeCount,
     verified_runtime_count: verifiedRuntimeCount,
+    ...(excludedProbeCount !== null
+      ? { excludedProbeCount, excluded_probe_count: excludedProbeCount }
+      : {}),
     reason,
     byStage,
     by_stage: byStage,
@@ -4388,6 +4429,7 @@ function normalizeTradingPulsePnlGroups(
     const periodEndAt = nullableString(
       item.periodEndAt ?? item.period_end_at ?? item.asOf ?? item.as_of,
     );
+    const periodLabel = nullableString(item.periodLabel ?? item.period_label ?? item.period);
     const asOf = nullableString(
       item.asOf ?? item.as_of ?? item.periodEndAt ?? item.period_end_at,
     );
@@ -4415,6 +4457,7 @@ function normalizeTradingPulsePnlGroups(
       period_start_at: periodStartAt,
       periodEndAt,
       period_end_at: periodEndAt,
+      ...(periodLabel !== null ? { periodLabel, period_label: periodLabel } : {}),
       asOf,
       as_of: asOf,
       pnlDefinition,
@@ -4652,6 +4695,9 @@ export function adaptTradingPulseRankings(raw: unknown): TradingPulseRankingsLis
       const rank = asNullableNumber(it.rank) ?? (rows.length + 1);
       const rankingMetric = asString(it.rankingMetric ?? it.ranking_metric, metric);
       const rankingBlockId = asString(it.rankingBlockId ?? it.ranking_block_id, blockId);
+      const avgSlippageBps = asNullableNumber(
+        it.avgSlippageBps ?? it.avg_slippage_bps ?? it.slippageBps ?? it.slippage_bps,
+      );
 
       const row: TradingPulseRankRow = {
         ...it,
@@ -4670,6 +4716,7 @@ export function adaptTradingPulseRankings(raw: unknown): TradingPulseRankingsLis
         rankingBlockId,
         ranking_block_id: rankingBlockId,
         rank,
+        ...(avgSlippageBps !== null ? { avgSlippageBps, avg_slippage_bps: avgSlippageBps } : {}),
         personaId,
         persona_id: personaId,
         personaName,
@@ -5319,7 +5366,9 @@ function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow |
     (Object.prototype.hasOwnProperty.call(rawMetrics, "fill_rate") && rawMetrics.fill_rate === null)
     || (Object.prototype.hasOwnProperty.call(rawMetrics, "fillRate") && rawMetrics.fillRate === null);
   const fillRateUnavailable =
-    !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
+    performanceContext.sourceStatus === "unavailable"
+    || performanceContext.sourceStatus === "stale"
+    || !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
     || Boolean(performanceContext.metricReasons.fill_rate);
   if (fillRateUnavailable) {
     metrics.fill_rate = null;
