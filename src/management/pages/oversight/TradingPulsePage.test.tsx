@@ -12,7 +12,7 @@ import {
 import {
   TRADING_PULSE_HOSTED_WIRE_SAMPLE,
   TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE,
-} from "@/lib/v5/management/tradingRankings";
+} from "@/lib/bff-v1/__tests__/fixtures/trading-pulse";
 import { TradingPulsePage } from "./_core";
 
 const mocks = vi.hoisted(() => ({
@@ -406,7 +406,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(screen.getByText("目前無可排行的營運 Persona。")).toBeInTheDocument();
     emptyView.unmount();
 
-    // 2. All-probes roster (probe rows marked with persona_is_probe / persona_data_scope=test are excluded from lists, totals, and rankings)
+    // 2. All-probes roster (BFF excludes probe personas and reports excluded_probe_count / reason in operator_scope)
     mockTradingPulseLive(
       {
         data: {
@@ -424,40 +424,24 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
             pnl_groups: [],
             runtime_count: 0,
           },
-          runtime_rows: [
-            {
-              runtime_id: "rt-49c1c3d1",
-              persona_id: "persona-d64835a203ce276b8fbb",
-              persona_name: "Pantheon Dev Paper Release Probe",
-              persona_is_probe: true,
-              persona_data_scope: "test",
-              deployment_stage: "paper",
-              status: "active",
-              metrics: { pnl: 0 },
-            },
-          ],
+          runtime_rows: [],
         },
         meta: { snapshot_at: "2026-11-22T12:00:00Z", surfaces: {} },
       },
       {
         data: {
-          items: [
-            {
-              block_id: "pnl-leaders",
-              label: "P&L Leaders",
-              metric: "pnl",
-              items: [
-                {
-                  runtime_id: "rt-49c1c3d1",
-                  persona_id: "persona-d64835a203ce276b8fbb",
-                  persona_name: "Pantheon Dev Paper Release Probe",
-                  persona_is_probe: true,
-                  pnl: 0,
-                  ranking_unit: "TWD",
-                },
-              ],
+          summary: {
+            operator_scope: {
+              status: "verified",
+              tenant_id: "tenant-dev",
+              persona_count: 0,
+              runtime_count: 0,
+              excluded_probe_count: 1,
+              reason: "all_personas_excluded_as_probes",
+              by_stage: {},
             },
-          ],
+          },
+          items: [],
         },
       },
     );

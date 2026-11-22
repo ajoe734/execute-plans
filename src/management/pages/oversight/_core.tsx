@@ -54,12 +54,10 @@ import {
   type ManagementEvolutionJournalPageInfo,
   type ManagementEvolutionJournalSummary,
   type ManagementPersonaFleetRow,
-  type ManagementTradingPulseCard,
   type ManagementTradingPulseLatestOutcome,
   type ManagementTradingPulseModel,
   type ManagementTradingPulsePnlGroup,
   type ManagementTradingPulseRuntimeRow,
-  type ManagementTradingPulseSurface,
   type TradingPulseComparisonScope,
   type TradingPulseRankBlock,
   type TradingPulseRankRow,
@@ -1942,9 +1940,6 @@ const statusTone = (status: unknown): string => {
   return "bg-muted text-muted-foreground border-border";
 };
 
-const pulseRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 const pulseNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
   const n = Number(value);
@@ -1959,18 +1954,6 @@ const isPulseTechnicalId = (value: unknown): boolean => {
   const trimmed = value.trim();
   if (!trimmed) return false;
   return PULSE_TECHNICAL_ID_RE.test(trimmed);
-};
-
-const isExplicitPulseProbeRecord = (record: unknown): boolean => {
-  if (!record || typeof record !== "object" || Array.isArray(record)) return false;
-  const r = record as Record<string, unknown>;
-  if (r.persona_is_probe === true || r.personaIsProbe === true || r.is_probe === true || r.isProbe === true) {
-    return true;
-  }
-  const scope = String(
-    r.persona_data_scope ?? r.personaDataScope ?? r.data_scope ?? r.dataScope ?? "",
-  ).trim().toLowerCase();
-  return scope === "test" || scope === "probe";
 };
 
 const formatPulseInt = (value: unknown): string => {
@@ -2108,20 +2091,12 @@ const formatPulseOutcomeReason = (reasonCode: unknown, t: PulseTranslate): strin
 const resolvePulsePersonaDisplayName = (
   row: {
     personaName?: string | null;
-    persona_name?: string | null;
     strategyName?: string | null;
-    strategy_name?: string | null;
     subjectLabel?: string | null;
   },
   t: PulseTranslate,
 ): string => {
-  const candidates = [
-    row.personaName,
-    row.persona_name,
-    row.subjectLabel,
-    row.strategyName,
-    row.strategy_name,
-  ];
+  const candidates = [row.personaName, row.subjectLabel, row.strategyName];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim() && !isPulseTechnicalId(candidate)) {
       return candidate.trim();
@@ -2134,7 +2109,7 @@ const resolvePulseStrategyDisplayName = (
   row: ManagementTradingPulseRuntimeRow,
   personaDisplayName: string,
 ): string | null => {
-  const raw = row.strategyName ?? row.strategy_name;
+  const raw = row.strategyName;
   if (typeof raw !== "string" || !raw.trim() || isPulseTechnicalId(raw)) return null;
   const trimmed = raw.trim();
   return trimmed !== personaDisplayName ? trimmed : null;
@@ -2142,16 +2117,15 @@ const resolvePulseStrategyDisplayName = (
 
 const resolvePulseRowSymbol = (row: {
   underlyingSymbol?: string | null;
-  underlying_symbol?: string | null;
   latestOutcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
-  latest_outcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
 }): string | null => {
-  const sym = row.underlyingSymbol ?? row.underlying_symbol;
+  const sym = row.underlyingSymbol;
   if (typeof sym === "string" && sym.trim() && !isPulseTechnicalId(sym)) {
     return sym.trim();
   }
-  const outcome = pulseRecord(row.latestOutcome ?? row.latest_outcome);
-  const outcomeSym = outcome.symbol;
+  const outcomeSym = row.latestOutcome && typeof row.latestOutcome === "object"
+    ? (row.latestOutcome as { symbol?: unknown }).symbol
+    : null;
   if (typeof outcomeSym === "string" && outcomeSym.trim() && !isPulseTechnicalId(outcomeSym)) {
     return outcomeSym.trim();
   }
@@ -2159,146 +2133,15 @@ const resolvePulseRowSymbol = (row: {
 };
 
 const resolvePulseRowFillCount = (row: ManagementTradingPulseRuntimeRow): number | null => {
-  const perf = row.performanceContext ?? row.performance_context;
-  const sourceStatus = String(perf?.sourceStatus ?? perf?.source_status ?? "").toLowerCase();
-  const ledgerFills = pulseNumber(perf?.ledgerFillCount ?? perf?.ledger_fill_count);
+  const perf = row.performanceContext;
+  const sourceStatus = String(perf?.sourceStatus ?? "").toLowerCase();
+  const ledgerFills = pulseNumber(perf?.ledgerFillCount);
   if (ledgerFills !== null && ledgerFills >= 0) return ledgerFills;
   if (sourceStatus === "unavailable") return null;
-  const executed = pulseNumber(row.executedTradeCount ?? row.executed_trade_count);
+  const executed = pulseNumber(row.executedTradeCount);
   if (executed !== null && executed >= 0) return executed;
-  const total = pulseNumber(
-    row.totalTrades ?? row.total_trades ?? row.metrics?.total_trades ?? row.metrics?.totalTrades,
-  );
+  const total = pulseNumber(row.totalTrades);
   return total !== null && total >= 0 ? total : null;
-};
-
-const pulseReturnOrigin = (location: { pathname: string; search: string }): string =>
-  location.pathname.startsWith("/management/")
-    ? `${location.pathname}${location.search || ""}`
-    : "/management/trading-pulse";
-
-const isSafePulseInternalHref = (href: unknown): href is string => {
-  if (typeof href !== "string") return false;
-  const trimmed = href.trim();
-  if (!trimmed || trimmed === "#" || trimmed.startsWith("//") || !trimmed.startsWith("/management/")) {
-    return false;
-  }
-  return true;
-};
-
-const withPulseReturnTo = (
-  href: unknown,
-  location: { pathname: string; search: string },
-  returnLabel: string,
-): string | null => {
-  if (!isSafePulseInternalHref(href)) return null;
-  const trimmed = href.trim();
-  if (!trimmed.startsWith("/management/trade-journeys")) return trimmed;
-  const [pathname, query = ""] = trimmed.split("?");
-  if (pathname === "/management/trade-journeys" && !query) return null;
-  const params = new URLSearchParams(query);
-  if (!params.get("return_to")) {
-    params.set("return_to", pulseReturnOrigin(location));
-  }
-  if (returnLabel && !params.get("return_label")) {
-    params.set("return_label", returnLabel);
-  }
-  const qs = params.toString();
-  return qs ? `${pathname}?${qs}` : pathname;
-};
-
-const resolveRowPersonaHref = (row: {
-  personaId?: string | null;
-  persona_id?: string | null;
-  links?: {
-    persona?: string;
-    personaHref?: string;
-    persona_href?: string;
-    manageHref?: string;
-    primaryObjectHref?: string;
-  };
-}): string | null => {
-  const candidates = [
-    row.links?.persona,
-    row.links?.personaHref,
-    row.links?.persona_href,
-    row.links?.manageHref,
-    row.links?.primaryObjectHref,
-  ];
-  for (const c of candidates) {
-    if (isSafePulseInternalHref(c) && c.startsWith("/management/personas/")) {
-      return c.trim();
-    }
-  }
-  const pid = row.personaId ?? row.persona_id;
-  if (typeof pid === "string" && pid.trim() && row.links !== undefined) {
-    return `/management/personas/${encodeURIComponent(pid.trim())}`;
-  }
-  return null;
-};
-
-const resolveRowLatestJourneyHref = (
-  row: {
-    latestOutcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
-    latest_outcome?: ManagementTradingPulseLatestOutcome | Record<string, unknown> | null;
-    links?: {
-      journey?: string;
-      journeyHref?: string;
-      journey_href?: string;
-    };
-  },
-  location: { pathname: string; search: string },
-  returnLabel: string,
-): string | null => {
-  const outcome = pulseRecord(row.latestOutcome ?? row.latest_outcome);
-  const candidates = [
-    outcome.journeyHref,
-    outcome.journey_href,
-    row.links?.journey,
-    row.links?.journeyHref,
-    row.links?.journey_href,
-  ];
-  for (const c of candidates) {
-    const resolved = withPulseReturnTo(c, location, returnLabel);
-    if (resolved) return resolved;
-  }
-  return null;
-};
-
-const resolveRowPersonaJourneysHref = (
-  row: {
-    personaId?: string | null;
-    persona_id?: string | null;
-    tenantId?: string | null;
-    tenant_id?: string | null;
-    deploymentStage?: string | null;
-    deployment_stage?: string | null;
-    links?: unknown;
-  },
-  location: { pathname: string; search: string },
-  returnLabel: string,
-): string | null => {
-  const pid = row.personaId ?? row.persona_id;
-  if (typeof pid !== "string" || !pid.trim() || row.links === undefined) return null;
-  const incoming = new URLSearchParams(location.search);
-  const params = new URLSearchParams();
-  const tenantId = (row.tenantId ?? row.tenant_id ?? incoming.get("tenant_id") ?? "").trim();
-  const rawStage = String(row.deploymentStage ?? row.deployment_stage ?? incoming.get("environment") ?? "")
-    .trim()
-    .toLowerCase();
-  const env = rawStage.startsWith("paper")
-    ? "paper"
-    : rawStage.startsWith("canary")
-      ? "canary"
-      : rawStage.startsWith("live")
-        ? "live"
-        : "";
-  if (tenantId) params.set("tenant_id", tenantId);
-  if (env) params.set("environment", env);
-  params.set("persona_id", pid.trim());
-  params.set("return_to", pulseReturnOrigin(location));
-  if (returnLabel) params.set("return_label", returnLabel);
-  return `/management/trade-journeys?${params.toString()}`;
 };
 
 export const TradingPulsePage = () => {
@@ -2325,8 +2168,8 @@ export const TradingPulsePage = () => {
     );
   }
 
-  const operationalRows = model.runtimeRows.filter((row) => !isExplicitPulseProbeRecord(row));
-  const snapshotAt = model.summary.snapshotAt ?? model.summary.snapshot_at ?? model.meta.snapshotAt ?? model.meta.snapshot_at;
+  const rows = model.runtimeRows;
+  const snapshotAt = model.summary.snapshotAt ?? model.meta.snapshotAt;
 
   return (
     <section className="p-4 sm:p-6 space-y-4" aria-label={t("mgmt.pulse.title")}>
@@ -2342,17 +2185,17 @@ export const TradingPulsePage = () => {
         )}
       </header>
 
-      <TradingPulseOperatorScopeSection model={model} rows={operationalRows} />
+      <TradingPulseOperatorScopeSection model={model} rows={rows} />
 
-      <TradingPulsePnlGroupsSection model={model} rows={operationalRows} />
+      <TradingPulsePnlGroupsSection model={model} rows={rows} />
 
-      <TradingPulseNotableEventsSection rows={operationalRows} />
+      <TradingPulseNotableEventsSection rows={rows} />
 
-      <TradingPulsePersonaDetailsSection model={model} rows={operationalRows} />
+      <TradingPulsePersonaDetailsSection model={model} rows={rows} />
 
-      <TradingPulseRankingsSection runtimeRows={operationalRows} />
+      <TradingPulseRankingsSection runtimeRows={rows} />
 
-      <TradingPulseDiagnosticsSection model={model} rows={operationalRows} />
+      <TradingPulseDiagnosticsSection model={model} rows={rows} />
     </section>
   );
 };
@@ -2365,19 +2208,10 @@ const TradingPulseOperatorScopeSection = ({
   rows: ManagementTradingPulseRuntimeRow[];
 }) => {
   const { t } = useTranslation();
-  const scope = model.summary.operatorScope ?? model.summary.operator_scope;
-  const scopeStatus = String(scope?.status ?? "unverified").trim().toLowerCase();
-  const rawPersonaCount = pulseNumber(scope?.personaCount ?? scope?.persona_count);
-  const rawRuntimeCount = pulseNumber(scope?.runtimeCount ?? scope?.runtime_count ?? model.summary.runtimeCount);
-  const removedProbeCount = model.runtimeRows.length - rows.length;
-  const personaCount =
-    rawPersonaCount !== null && removedProbeCount > 0 && rows.length < rawPersonaCount
-      ? rows.length
-      : rawPersonaCount;
-  const runtimeCount =
-    rawRuntimeCount !== null && removedProbeCount > 0 && rows.length < rawRuntimeCount
-      ? rows.length
-      : rawRuntimeCount;
+  const scope = model.summary.operatorScope;
+  const scopeStatus = String(scope.status ?? "unverified").trim().toLowerCase();
+  const personaCount = pulseNumber(scope.personaCount);
+  const runtimeCount = pulseNumber(scope.runtimeCount ?? model.summary.runtimeCount);
 
   const badgeLabel =
     scopeStatus === "verified"
@@ -2388,11 +2222,10 @@ const TradingPulseOperatorScopeSection = ({
           ? t("mgmt.pulse.scopeUnavailableBadge")
           : t("mgmt.pulse.scopeUnverifiedBadge");
 
-  const byStageRecord = scope?.byStage ?? scope?.by_stage ?? {};
   const stageChips: string[] = [];
-  for (const [stageKey, entry] of Object.entries(byStageRecord)) {
-    const pc = pulseNumber(entry?.personaCount ?? entry?.persona_count);
-    const rc = pulseNumber(entry?.runtimeCount ?? entry?.runtime_count);
+  for (const [stageKey, entry] of Object.entries(scope.byStage)) {
+    const pc = pulseNumber(entry.personaCount);
+    const rc = pulseNumber(entry.runtimeCount);
     const stageLabel = formatPulseStage(stageKey, t);
     if (pc !== null) {
       stageChips.push(t("mgmt.pulse.scopeStagePersonaCountFmt", { stage: stageLabel, count: formatPulseInt(pc) }));
@@ -2401,7 +2234,7 @@ const TradingPulseOperatorScopeSection = ({
     }
   }
   if (stageChips.length === 0 && scopeStatus !== "unavailable") {
-    for (const [stageKey, count] of Object.entries(model.summary.byStage ?? {})) {
+    for (const [stageKey, count] of Object.entries(model.summary.byStage)) {
       const rc = pulseNumber(count);
       if (rc !== null) {
         stageChips.push(
@@ -2414,19 +2247,12 @@ const TradingPulseOperatorScopeSection = ({
     }
   }
 
-  const excludedProbeCount = pulseNumber(
-    (scope as Record<string, unknown> | undefined)?.excludedProbeCount
-      ?? (scope as Record<string, unknown> | undefined)?.excluded_probe_count
-      ?? (model.summary as Record<string, unknown>).excludedProbeCount
-      ?? (model.summary as Record<string, unknown>).excluded_probe_count,
-  );
-  const scopeReason = String(scope?.reason ?? "").trim().toLowerCase();
+  const excludedProbeCount = pulseNumber(scope.excludedProbeCount);
+  const scopeReason = String(scope.reason ?? "").trim().toLowerCase();
   const isAllProbesEmpty =
     rows.length === 0
-    && (personaCount === 0 || (personaCount === null && removedProbeCount > 0))
-    && ((excludedProbeCount !== null && excludedProbeCount > 0)
-      || removedProbeCount > 0
-      || /probe|test/.test(scopeReason));
+    && personaCount === 0
+    && ((excludedProbeCount !== null && excludedProbeCount > 0) || /probe|test/.test(scopeReason));
 
   const baselineRequired = pulseNumber(
     model.summary.baselineRequiredCount ?? model.summary.coverage?.baselineRequiredCount,
@@ -2434,16 +2260,14 @@ const TradingPulseOperatorScopeSection = ({
   const allPaperBaselineNotRequired =
     rows.length > 0
     && (baselineRequired === 0
-      || rows.every(
-        (r) => (r.baselineComparison?.status ?? r.baseline_comparison?.status ?? "not_required") === "not_required",
-      ));
+      || rows.every((r) => (r.baselineComparison?.status ?? "not_required") === "not_required"));
 
   const surfaces = Object.entries(model.meta.surfaces ?? {});
   const hasSurfaceIssue = surfaces.some(
     ([, s]) => !["ok", "live", "fresh", "available"].includes(String(s.status ?? "").toLowerCase()),
   );
   const hasRowSourceIssue = rows.some((r) => {
-    const st = String(r.performanceContext?.sourceStatus ?? r.performance_context?.source_status ?? "").toLowerCase();
+    const st = String(r.performanceContext?.sourceStatus ?? "").toLowerCase();
     return st === "unavailable" || st === "stale";
   });
   const showSourceIssueReminder =
@@ -2539,7 +2363,7 @@ const TradingPulsePnlGroupsSection = ({
   rows: ManagementTradingPulseRuntimeRow[];
 }) => {
   const { t } = useTranslation();
-  const groups: ManagementTradingPulsePnlGroup[] = model.summary.pnlGroups ?? model.summary.pnl_groups ?? [];
+  const groups: ManagementTradingPulsePnlGroup[] = model.summary.pnlGroups;
   const hasAnyRowPnl = rows.some((r) => pulseNumber(r.metrics?.pnl) !== null);
 
   return (
@@ -2557,22 +2381,16 @@ const TradingPulsePnlGroupsSection = ({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {groups.map((g, idx) => {
             const val = pulseNumber(g.value);
-            const covP = pulseNumber(g.coveredPersonaCount ?? g.covered_persona_count);
-            const eligP = pulseNumber(g.eligiblePersonaCount ?? g.eligible_persona_count);
-            const covR = pulseNumber(g.coveredRuntimeCount ?? g.covered_runtime_count);
-            const eligR = pulseNumber(g.eligibleRuntimeCount ?? g.eligible_runtime_count);
-            const startAt = g.periodStartAt ?? g.period_start_at;
-            const endAt = g.periodEndAt ?? g.period_end_at;
-            const asOf = g.asOf ?? g.as_of;
+            const covP = pulseNumber(g.coveredPersonaCount);
+            const eligP = pulseNumber(g.eligiblePersonaCount);
+            const covR = pulseNumber(g.coveredRuntimeCount);
+            const eligR = pulseNumber(g.eligibleRuntimeCount);
+            const startAt = g.periodStartAt;
+            const endAt = g.periodEndAt;
+            const asOf = g.asOf;
             const rawPeriodTokens = Array.from(
               new Set(
-                [
-                  (g as Record<string, unknown>).period,
-                  (g as Record<string, unknown>).period_label,
-                  (g as Record<string, unknown>).periodLabel,
-                  startAt,
-                  endAt,
-                ]
+                [g.periodLabel, startAt, endAt]
                   .filter((x): x is string => typeof x === "string" && Boolean(x.trim()) && !isPulseTechnicalId(x))
                   .map((x) => x.trim()),
               ),
@@ -2592,7 +2410,7 @@ const TradingPulsePnlGroupsSection = ({
                     </Badge>
                   </div>
                   <span className="text-muted-foreground">
-                    {formatPulsePnlDefinition(g.pnlDefinition ?? g.pnl_definition, t)}
+                    {formatPulsePnlDefinition(g.pnlDefinition, t)}
                   </span>
                 </div>
 
@@ -2659,22 +2477,21 @@ const TradingPulsePnlGroupsSection = ({
 };
 
 const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
-  const outcome = row.latestOutcome ?? row.latest_outcome;
-  const perf = row.performanceContext ?? row.performance_context;
-  const fillDetails = perf?.fillRateDetails ?? perf?.fill_rate_details;
+  const outcome = row.latestOutcome;
+  const fillDetails = row.performanceContext?.fillRateDetails;
   const num = pulseNumber(fillDetails?.numerator);
   const den = pulseNumber(fillDetails?.denominator);
   if (outcome && outcome.status === "available") return true;
-  if (outcome?.submittedToBroker === false || outcome?.submitted_to_broker === false) return true;
-  if (outcome?.reasonCode || outcome?.reason_code) return true;
+  if (outcome?.submittedToBroker === false) return true;
+  if (outcome?.reasonCode) return true;
   if (num === 0 && den !== null && den > 0) return true;
   return false;
 };
 
 const notableOutcomePriority = (row: ManagementTradingPulseRuntimeRow): number => {
-  const outcome = row.latestOutcome ?? row.latest_outcome;
-  if (outcome?.submittedToBroker === false || outcome?.submitted_to_broker === false) return 0;
-  const reason = String(outcome?.reasonCode ?? outcome?.reason_code ?? "").toLowerCase();
+  const outcome = row.latestOutcome;
+  if (outcome?.submittedToBroker === false) return 0;
+  const reason = String(outcome?.reasonCode ?? "").toLowerCase();
   if (reason && reason !== "reason_not_recorded") return 1;
   return 2;
 };
@@ -2702,27 +2519,41 @@ const TradingPulseNotableEventsSection = ({
       ) : (
         <ul className="space-y-2">
           {notableRows.map((row, idx) => {
-            const outcome = row.latestOutcome ?? row.latest_outcome;
-            const perf = row.performanceContext ?? row.performance_context;
-            const fillDetails = perf?.fillRateDetails ?? perf?.fill_rate_details;
+            const outcome = row.latestOutcome;
+            const perf = row.performanceContext;
+            const fillDetails = perf?.fillRateDetails;
             const displayName = resolvePulsePersonaDisplayName(row, t);
             const symbol = resolvePulseRowSymbol(row);
-            const submitted = outcome?.submittedToBroker ?? outcome?.submitted_to_broker;
-            const reasonText = formatPulseOutcomeReason(outcome?.reasonCode ?? outcome?.reason_code, t);
-            const reqQty = pulseNumber(
-              outcome?.requestedQuantity ?? outcome?.requested_quantity ?? fillDetails?.denominator,
-            );
-            const fillQty = pulseNumber(
-              outcome?.filledQuantity ?? outcome?.filled_quantity ?? fillDetails?.numerator,
-            );
+            const submitted = outcome?.submittedToBroker;
+            const reasonText = formatPulseOutcomeReason(outcome?.reasonCode, t);
+            const reqQty = pulseNumber(outcome?.requestedQuantity ?? fillDetails?.denominator);
+            const fillQty = pulseNumber(outcome?.filledQuantity ?? fillDetails?.numerator);
             const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
             const reqAmt = pulseNumber(outcome?.required);
             const availAmt = pulseNumber(outcome?.available);
-            const currency = outcome?.currency ?? perf?.pnlCurrency ?? perf?.pnl_currency;
-            const occurredAt = outcome?.occurredAt ?? outcome?.occurred_at;
-            const journeyHref =
-              resolveRowLatestJourneyHref(row, location, t("mgmt.pulse.title"))
-              ?? resolveRowPersonaJourneysHref(row, location, t("mgmt.pulse.title"));
+            const currency = outcome?.currency ?? perf?.pnlCurrency;
+            const occurredAt = outcome?.occurredAt;
+            const journeyHref = row.links?.journey
+              ? tradeJourneyHref(
+                  location,
+                  {
+                    href: row.links.journey,
+                    tenantId: row.tenantId,
+                    environment: row.deploymentStage,
+                  },
+                  t("mgmt.pulse.title"),
+                )
+              : row.personaId && row.links?.persona
+                ? tradeJourneyHref(
+                    location,
+                    {
+                      personaId: row.personaId,
+                      tenantId: row.tenantId,
+                      environment: row.deploymentStage,
+                    },
+                    t("mgmt.pulse.title"),
+                  )
+                : null;
 
             return (
               <li
@@ -2738,7 +2569,7 @@ const TradingPulseNotableEventsSection = ({
                       </Badge>
                     )}
                     <Badge variant="outline">
-                      {formatPulseStage(row.deploymentStage ?? row.deployment_stage, t)}
+                      {formatPulseStage(row.deploymentStage, t)}
                     </Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -2823,20 +2654,12 @@ const TradingPulsePersonaDetailsSection = ({
 }) => {
   const { t } = useTranslation();
   const location = useLocation();
-  const scope = model.summary.operatorScope ?? model.summary.operator_scope;
-  const scopeStatus = String(scope?.status ?? "unverified").trim().toLowerCase();
-  const excludedProbeCount = pulseNumber(
-    (scope as Record<string, unknown> | undefined)?.excludedProbeCount
-      ?? (scope as Record<string, unknown> | undefined)?.excluded_probe_count
-      ?? (model.summary as Record<string, unknown>).excludedProbeCount
-      ?? (model.summary as Record<string, unknown>).excluded_probe_count,
-  );
-  const removedProbeCount = model.runtimeRows.length - rows.length;
+  const scope = model.summary.operatorScope;
+  const scopeStatus = String(scope.status ?? "unverified").trim().toLowerCase();
+  const excludedProbeCount = pulseNumber(scope.excludedProbeCount);
   const isAllProbesEmpty =
     rows.length === 0
-    && ((excludedProbeCount !== null && excludedProbeCount > 0)
-      || removedProbeCount > 0
-      || /probe|test/i.test(String(scope?.reason ?? "")));
+    && ((excludedProbeCount !== null && excludedProbeCount > 0) || /probe|test/i.test(String(scope.reason ?? "")));
 
   return (
     <Card className="p-3 sm:p-4 space-y-3" data-testid="trading-pulse-persona-details">
@@ -2877,47 +2700,60 @@ const TradingPulsePersonaDetailsSection = ({
                 const displayName = resolvePulsePersonaDisplayName(row, t);
                 const strategyName = resolvePulseStrategyDisplayName(row, displayName);
                 const symbol = resolvePulseRowSymbol(row);
-                const personaHref = resolveRowPersonaHref(row);
-                const latestJourneyHref = resolveRowLatestJourneyHref(row, location, t("mgmt.pulse.title"));
-                const personaJourneysHref = resolveRowPersonaJourneysHref(row, location, t("mgmt.pulse.title"));
-                const perf = row.performanceContext ?? row.performance_context;
-                const sourceStatus = String(perf?.sourceStatus ?? perf?.source_status ?? "").toLowerCase();
+                const personaHref = row.links?.persona ?? null;
+                const latestJourneyHref = row.links?.journey
+                  ? tradeJourneyHref(
+                      location,
+                      {
+                        href: row.links.journey,
+                        tenantId: row.tenantId,
+                        environment: row.deploymentStage,
+                      },
+                      t("mgmt.pulse.title"),
+                    )
+                  : null;
+                const personaJourneysHref =
+                  row.personaId && row.links?.persona
+                    ? tradeJourneyHref(
+                        location,
+                        {
+                          personaId: row.personaId,
+                          tenantId: row.tenantId,
+                          environment: row.deploymentStage,
+                        },
+                        t("mgmt.pulse.title"),
+                      )
+                    : null;
+                const perf = row.performanceContext;
+                const sourceStatus = String(perf?.sourceStatus ?? "").toLowerCase();
                 const fillCount = resolvePulseRowFillCount(row);
-                const fillDetails = perf?.fillRateDetails ?? perf?.fill_rate_details;
-                const fillRateReason =
-                  perf?.metricReasons?.fill_rate
-                  ?? perf?.metric_reasons?.fill_rate
-                  ?? fillDetails?.reason;
-                const rawFillRate = pulseNumber(row.metrics?.fill_rate ?? row.metrics?.fillRate);
+                const fillDetails = perf?.fillRateDetails;
+                const fillRateReason = perf?.metricReasons?.fill_rate ?? fillDetails?.reason;
+                const rawFillRate = pulseNumber(row.metrics?.fill_rate);
                 const num = pulseNumber(fillDetails?.numerator);
                 const den = pulseNumber(fillDetails?.denominator);
                 const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t);
 
                 const pnlVal = pulseNumber(row.metrics?.pnl);
-                const pnlCurrency = perf?.pnlCurrency ?? perf?.pnl_currency ?? null;
-                const pnlDef = perf?.pnlDefinition ?? perf?.pnl_definition ?? null;
-                const pnlReason = perf?.metricReasons?.pnl ?? perf?.metric_reasons?.pnl ?? null;
-                const pnlStart = perf?.pnlPeriodStartAt ?? perf?.pnl_period_start_at;
-                const pnlAt = perf?.pnlAt ?? perf?.pnl_at;
+                const pnlCurrency = perf?.pnlCurrency ?? null;
+                const pnlDef = perf?.pnlDefinition ?? null;
+                const pnlReason = perf?.metricReasons?.pnl ?? null;
+                const pnlStart = perf?.pnlPeriodStartAt;
+                const pnlAt = perf?.pnlAt;
 
-                const outcome = row.latestOutcome ?? row.latest_outcome;
-                const outcomeSubmitted = outcome?.submittedToBroker ?? outcome?.submitted_to_broker;
-                const outcomeReasonCode = outcome?.reasonCode ?? outcome?.reason_code;
-                const outcomeOccurredAt = outcome?.occurredAt ?? outcome?.occurred_at;
-                const outcomeReqQty = pulseNumber(outcome?.requestedQuantity ?? outcome?.requested_quantity);
+                const outcome = row.latestOutcome;
+                const outcomeSubmitted = outcome?.submittedToBroker;
+                const outcomeReasonCode = outcome?.reasonCode;
+                const outcomeOccurredAt = outcome?.occurredAt;
+                const outcomeReqQty = pulseNumber(outcome?.requestedQuantity);
                 const outcomeRequired = pulseNumber(outcome?.required);
                 const outcomeAvailable = pulseNumber(outcome?.available);
                 const outcomeCurrency = outcome?.currency ?? pnlCurrency;
 
-                const slippageBps = formatPulseBps(
-                  row.metrics?.avg_slippage_bps ?? row.metrics?.avgSlippageBps ?? row.metrics?.slippage_bps,
-                );
-                const drawdownPct = formatPulsePercentFromFraction(
-                  row.metrics?.drawdown ?? row.metrics?.max_drawdown ?? row.metrics?.maxDrawdown,
-                );
-                const lastFillAt = perf?.lastFillAt ?? perf?.last_fill_at;
-                const latestReportAt =
-                  perf?.latestReportAt ?? perf?.latest_report_at ?? row.lastUpdatedAt ?? row.last_updated_at;
+                const slippageBps = formatPulseBps(row.metrics?.avg_slippage_bps);
+                const drawdownPct = formatPulsePercentFromFraction(row.metrics?.drawdown);
+                const lastFillAt = perf?.lastFillAt;
+                const latestReportAt = perf?.latestReportAt ?? row.lastUpdatedAt;
 
                 return (
                   <tr
@@ -2950,7 +2786,7 @@ const TradingPulsePersonaDetailsSection = ({
                           </Badge>
                         )}
                         <Badge variant="outline">
-                          {formatPulseStage(row.deploymentStage ?? row.deployment_stage, t)}
+                          {formatPulseStage(row.deploymentStage, t)}
                         </Badge>
                         <Badge variant="outline" className={statusTone(row.status)}>
                           {formatPulseExecutionStatus(row.status, t)}
@@ -3183,7 +3019,7 @@ const TradingPulsePersonaDetailsSection = ({
 };
 
 const formatRankingBlockTitle = (block: TradingPulseRankBlock, t: PulseTranslate): string => {
-  const kind = String(block.kind ?? block.blockId ?? block.block_id ?? "").toLowerCase();
+  const kind = String(block.kind ?? block.blockId ?? "").toLowerCase();
   const metric = String(block.metric ?? "").toLowerCase();
   if (kind === "pnl-leaders" || metric === "pnl") return t("mgmt.pulse.rankingTitlePnl");
   if (kind === "drawdown-control" || metric === "drawdown") return t("mgmt.pulse.rankingTitleDrawdown");
@@ -3198,9 +3034,9 @@ const formatRankingRowMetricValue = (
   t: PulseTranslate,
 ): string => {
   const kind = String(block.kind ?? block.blockId ?? "").toLowerCase();
-  const metric = String(block.metric ?? row.rankingMetric ?? row.ranking_metric ?? "").toLowerCase();
-  const unit = String(row.metricUnit ?? row.metric_unit ?? row.rankingUnit ?? row.ranking_unit ?? "").trim();
-  const val = pulseNumber(row.metricValue ?? row.rankingMetricValue ?? row.ranking_metric_value);
+  const metric = String(block.metric ?? row.rankingMetric ?? "").toLowerCase();
+  const unit = String(row.metricUnit ?? row.rankingUnit ?? "").trim();
+  const val = pulseNumber(row.metricValue ?? row.rankingMetricValue);
   if (val === null) return "—";
 
   if (kind === "pnl-leaders" || metric === "pnl" || ["TWD", "USD", "EUR", "JPY", "HKD"].includes(unit.toUpperCase())) {
@@ -3219,9 +3055,7 @@ const formatRankingRowMetricValue = (
     || unit.toLowerCase() === "fraction"
   ) {
     const pct = formatPulsePercentFromFraction(val) ?? `${val}%`;
-    const slippage = formatPulseBps(
-      (row as Record<string, unknown>).avg_slippage_bps ?? (row as Record<string, unknown>).avgSlippageBps,
-    );
+    const slippage = formatPulseBps(row.avgSlippageBps);
     if ((kind === "execution-quality" || metric === "fill_rate") && slippage !== null) {
       return `${pct} · ${t("mgmt.pulse.slippageBpsFmt", { bps: slippage })}`;
     }
@@ -3251,8 +3085,8 @@ const formatRankingComparisonScopeText = (
     parts.push(formatPulsePnlDefinition(scope.definition, t));
   }
   if (scope.period && typeof scope.period === "object") {
-    const start = scope.period.startAt ?? scope.period.start_at;
-    const end = scope.period.endAt ?? scope.period.end_at ?? scope.period.asOf ?? scope.period.as_of;
+    const start = scope.period.startAt;
+    const end = scope.period.endAt ?? scope.period.asOf;
     if (start && end) {
       parts.push(`${safeDateTime(start)} – ${safeDateTime(end)}`);
     } else if (start) {
@@ -3269,27 +3103,26 @@ const summarizeBlockMissingReasons = (
   runtimeRows: ManagementTradingPulseRuntimeRow[],
   t: PulseTranslate,
 ): string | null => {
-  const reasonsMap = block.metricReasons ?? block.metric_reasons ?? {};
+  const reasonsMap = block.metricReasons ?? {};
   const entries = Object.entries(reasonsMap);
-  const missingCount = pulseNumber(block.missingMetricCount ?? block.missing_metric_count) ?? entries.length;
+  const missingCount = pulseNumber(block.missingMetricCount) ?? entries.length;
   if (missingCount <= 0 && entries.length === 0) return null;
 
   const runtimeNameById = new Map<string, string>();
   for (const r of runtimeRows) {
-    const rid = r.runtimeId || r.runtime_id;
+    const rid = r.runtimeId;
     const name = resolvePulsePersonaDisplayName(r, t);
     if (rid) runtimeNameById.set(rid, name);
   }
 
   if (entries.length > 0) {
-    const details = entries
+    return entries
       .map(([rid, reason]) => {
         const personaLabel = runtimeNameById.get(rid);
         const reasonLabel = formatPulseMetricReason(reason, t);
         return personaLabel ? `${personaLabel}（${reasonLabel}）` : reasonLabel;
       })
       .join("、");
-    return details;
   }
 
   const isSharpe = String(block.kind ?? block.blockId ?? "").toLowerCase() === "sharpe-leaders";
@@ -3313,7 +3146,6 @@ const TradingPulseRankingsSection = ({
     const map = new Map<string, ManagementTradingPulseRuntimeRow>();
     for (const r of runtimeRows) {
       if (r.runtimeId) map.set(r.runtimeId, r);
-      if (r.runtime_id) map.set(r.runtime_id, r);
       if (r.runtimeBindingId) map.set(r.runtimeBindingId, r);
       if (r.personaId) map.set(r.personaId, r);
     }
@@ -3345,13 +3177,8 @@ const TradingPulseRankingsSection = ({
     );
   }
 
-  const sanitizedBlocks: TradingPulseRankBlock[] = data.map((block) => ({
-    ...block,
-    rows: (block.rows ?? []).filter((r) => !isExplicitPulseProbeRecord(r)),
-  }));
-
-  const populatedBlocks = sanitizedBlocks.filter((b) => (b.rows?.length ?? 0) > 0);
-  const omittedBlocks = sanitizedBlocks.filter((b) => (b.rows?.length ?? 0) === 0);
+  const populatedBlocks = data.filter((b) => (b.rows?.length ?? 0) > 0);
+  const omittedBlocks = data.filter((b) => (b.rows?.length ?? 0) === 0);
 
   return (
     <Card className="p-4 space-y-3" aria-label={t("mgmt.pulse.rankingsLabel")} data-testid="trading-pulse-rankings">
@@ -3380,11 +3207,8 @@ const TradingPulseRankingsSection = ({
                 const v = pulseNumber(r.metricValue ?? r.rankingMetricValue);
                 return v !== null && v < 0;
               });
-            const scopeText = formatRankingComparisonScopeText(
-              b.rows[0]?.comparisonScope ?? b.rows[0]?.comparison_scope,
-              t,
-            );
-            const missingCount = pulseNumber(b.missingMetricCount ?? b.missing_metric_count) ?? 0;
+            const scopeText = formatRankingComparisonScopeText(b.rows[0]?.comparisonScope, t);
+            const missingCount = pulseNumber(b.missingMetricCount) ?? 0;
             const missingDetails = summarizeBlockMissingReasons(b, runtimeRows, t);
 
             return (
@@ -3416,27 +3240,31 @@ const TradingPulseRankingsSection = ({
                   {b.rows.map((r, idx) => {
                     const matchedRuntime =
                       runtimeById.get(r.runtimeId ?? "")
-                      ?? runtimeById.get(r.runtime_id ?? "")
                       ?? runtimeById.get(r.subjectId ?? "")
                       ?? runtimeById.get(r.personaId ?? "");
                     const displayName = resolvePulsePersonaDisplayName(
                       {
-                        personaName: r.personaName ?? r.persona_name ?? matchedRuntime?.personaName,
-                        strategyName: r.strategyName ?? r.strategy_name ?? matchedRuntime?.strategyName,
+                        personaName: r.personaName ?? matchedRuntime?.personaName,
+                        strategyName: r.strategyName ?? matchedRuntime?.strategyName,
                         subjectLabel: r.subjectLabel,
                       },
                       t,
                     );
                     const symbol =
                       resolvePulseRowSymbol(r) ?? (matchedRuntime ? resolvePulseRowSymbol(matchedRuntime) : null);
-                    const personaHref =
-                      resolveRowPersonaHref(r)
-                      ?? (matchedRuntime ? resolveRowPersonaHref(matchedRuntime) : null);
-                    const journeyHref =
-                      resolveRowLatestJourneyHref(r, location, t("mgmt.pulse.title"))
-                      ?? (matchedRuntime
-                        ? resolveRowLatestJourneyHref(matchedRuntime, location, t("mgmt.pulse.title"))
-                        : null);
+                    const personaHref = r.links?.persona ?? matchedRuntime?.links?.persona ?? null;
+                    const rawJourneyHref = r.links?.journey ?? matchedRuntime?.links?.journey;
+                    const journeyHref = rawJourneyHref
+                      ? tradeJourneyHref(
+                          location,
+                          {
+                            href: rawJourneyHref,
+                            tenantId: r.tenantId ?? matchedRuntime?.tenantId,
+                            environment: r.deploymentStage || matchedRuntime?.deploymentStage,
+                          },
+                          t("mgmt.pulse.title"),
+                        )
+                      : null;
                     const rankNum = pulseNumber(r.rank) ?? idx + 1;
 
                     return (
@@ -3507,8 +3335,7 @@ const TradingPulseRankingsSection = ({
           <ul className="space-y-1 text-muted-foreground">
             {omittedBlocks.map((b) => {
               const blockTitle = formatRankingBlockTitle(b, t);
-              const missingCount =
-                pulseNumber(b.missingMetricCount ?? b.missing_metric_count) ?? runtimeRows.length;
+              const missingCount = pulseNumber(b.missingMetricCount) ?? runtimeRows.length;
               const details =
                 summarizeBlockMissingReasons(b, runtimeRows, t) ?? t("mgmt.pulse.reasonMin10DailyReturns");
               return (
@@ -3538,10 +3365,8 @@ const TradingPulseDiagnosticsSection = ({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const surfaces = Object.entries(model.meta.surfaces ?? {});
-  const snapshotAt =
-    model.meta.snapshotAt ?? model.meta.snapshot_at ?? model.summary.snapshotAt ?? model.summary.snapshot_at;
-  const fillRateAggregation =
-    model.summary.fillRateAggregation ?? model.summary.fill_rate_aggregation ?? null;
+  const snapshotAt = model.meta.snapshotAt ?? model.summary.snapshotAt;
+  const fillRateAggregation = model.summary.fillRateAggregation ?? null;
 
   return (
     <Card className="p-4 space-y-3" data-testid="trading-pulse-diagnostics">
@@ -3597,14 +3422,13 @@ const TradingPulseDiagnosticsSection = ({
             <ul className="space-y-1.5">
               {rows.map((row) => {
                 const displayName = resolvePulsePersonaDisplayName(row, t);
-                const perf = row.performanceContext ?? row.performance_context;
-                const rid = row.runtimeId || row.runtime_id || "—";
-                const rbid = row.runtimeBindingId || row.runtime_binding_id || "—";
-                const pid = row.personaId || row.persona_id || "—";
-                const sid = row.strategyId || row.strategy_id || "—";
-                const reportAt =
-                  perf?.latestReportAt ?? perf?.latest_report_at ?? row.lastUpdatedAt ?? row.last_updated_at;
-                const fillAt = perf?.lastFillAt ?? perf?.last_fill_at;
+                const perf = row.performanceContext;
+                const rid = row.runtimeId || "—";
+                const rbid = row.runtimeBindingId || "—";
+                const pid = row.personaId || "—";
+                const sid = row.strategyId || "—";
+                const reportAt = perf?.latestReportAt ?? row.lastUpdatedAt;
+                const fillAt = perf?.lastFillAt;
 
                 return (
                   <li

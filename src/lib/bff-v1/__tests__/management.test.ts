@@ -23,9 +23,11 @@ import {
   defaultTradingPulseModel,
   LIVE_RANKING_BLOCKS,
   mgmt,
+} from "@/lib/bff-v1/management";
+import {
   TRADING_PULSE_HOSTED_WIRE_SAMPLE,
   TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE,
-} from "@/lib/bff-v1/management";
+} from "./fixtures/trading-pulse";
 import { paths } from "@/lib/bff-v1/paths";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import {
