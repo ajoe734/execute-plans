@@ -226,12 +226,33 @@ test("raw wire roster, ledger values and rankings checked independently of UI", 
 test("Persona detail needs rendered name/symbol/mode and response tenant/object, URL alone insufficient", () => {
   const body = { data: { persona_id: source.persona_id, tenant_id: sources.tenant_id } };
   assert.deepEqual(assessPersona(source, sources.tenant_id, body, row().text), []);
-  // Real GET /bff/personas/<id> DTO shape uses id + camelCase tenantId, and witness symbol may carry an exchange suffix.
+  // Real GET /bff/personas/<id> DTO shape uses id + camelCase tenantId, and Taiwan witness symbols may carry .TWSE/.TPEX suffixes.
   const dtoBody = { data: { id: source.persona_id, tenantId: sources.tenant_id } };
   assert.deepEqual(assessPersona({ ...source, underlying_symbol: "1234.TWSE" }, sources.tenant_id, dtoBody, row().text), []);
+  assert.deepEqual(assessPersona({ ...source, underlying_symbol: "6488.TPEX" }, sources.tenant_id, dtoBody, "離線甲 6488 模擬"), []);
   assert.ok(assessPersona({ ...source, underlying_symbol: "5678.TWSE" }, sources.tenant_id, dtoBody, row().text).includes("detail_visible_object_and_stage"));
+  // Non-Taiwan dotted tickers such as BRK.B must retain exact symbol identity and never match plain BRK.
+  assert.deepEqual(
+    assessPersona({ ...source, persona_name: "Review Persona", underlying_symbol: "BRK.B" }, sources.tenant_id, dtoBody, "Review Persona BRK Paper"),
+    ["detail_visible_object_and_stage"],
+  );
+  assert.deepEqual(
+    assessPersona({ ...source, persona_name: "Review Persona", underlying_symbol: "BRK.B" }, sources.tenant_id, dtoBody, "Review Persona BRK.B Paper"),
+    [],
+  );
   assert.ok(assessPersona(source, sources.tenant_id, { data: { id: "wrong", tenantId: sources.tenant_id } }, row().text).includes("detail_persona_identity"));
+  assert.ok(assessPersona(source, sources.tenant_id, { data: { persona_id: source.persona_id, id: "wrong", tenantId: sources.tenant_id } }, row().text).includes("detail_persona_identity"));
   assert.ok(assessPersona(source, sources.tenant_id, { data: { id: source.persona_id, tenantId: "other" } }, row().text).includes("detail_tenant"));
+  // Conflicting snake_case and camelCase tenant aliases must fail closed and record detail_tenant.
+  assert.ok(
+    assessPersona(source, sources.tenant_id, { data: { id: source.persona_id, tenant_id: sources.tenant_id, tenantId: "other" } }, row().text).includes("detail_tenant"),
+  );
+  assert.ok(
+    assessPersona(source, sources.tenant_id, { data: { id: source.persona_id, tenant_id: "other", tenantId: sources.tenant_id } }, row().text).includes("detail_tenant"),
+  );
+  assert.ok(
+    assessPersona(source, sources.tenant_id, { data: { persona: { id: source.persona_id, tenantId: sources.tenant_id }, tenant_id: "other" } }, row().text).includes("detail_tenant"),
+  );
   body.data.persona_id = "wrong";
   assert.ok(assessPersona(source, sources.tenant_id, body, row().text).includes("detail_persona_identity"));
   body.data.persona_id = source.persona_id; body.data.tenant_id = "other";

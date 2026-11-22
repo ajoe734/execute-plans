@@ -275,10 +275,12 @@ export function assessWire(sources, overview, rankings) {
 export function assessPersona(source, tenant, body, text) {
   const record = unwrap(body), r = record?.persona ?? record;
   const failures = [];
-  if ((r?.persona_id ?? r?.id) !== source.persona_id) failures.push("detail_persona_identity");
-  if ((r?.tenant_id ?? r?.tenantId ?? record?.tenant_id ?? record?.tenantId) !== tenant) failures.push("detail_tenant");
-  const symbol = String(source.underlying_symbol || "").split(".")[0];
-  if (!text.includes(source.persona_name) || !(text.includes(source.underlying_symbol) || (string(symbol) && text.includes(symbol))) || !stageText(text, source.stage)) failures.push("detail_visible_object_and_stage");
+  const ids = [r?.persona_id, r?.id].filter((v) => v !== undefined);
+  if (!ids.length || ids.some((id) => id !== source.persona_id)) failures.push("detail_persona_identity");
+  const tenants = [r?.tenant_id, r?.tenantId, record?.tenant_id, record?.tenantId].filter((v) => v !== undefined);
+  if (!tenants.length || tenants.some((t) => t !== tenant)) failures.push("detail_tenant");
+  const symbol = String(source.underlying_symbol || "").replace(/\.(?:TWSE|TPEX)$/, "");
+  if (!text.includes(source.persona_name) || !string(symbol) || !(text.includes(source.underlying_symbol) || text.includes(symbol)) || !stageText(text, source.stage)) failures.push("detail_visible_object_and_stage");
   return failures;
 }
 
