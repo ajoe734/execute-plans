@@ -198,7 +198,7 @@ export function assessWire(sources, overview, rankings) {
     const r = rows.find((r) => r.runtime_id === s.runtime_id), c = r?.performance_context;
     if (r?.persona_id !== s.persona_id || r?.persona_name !== s.persona_name ||
       (r?.runtime_binding_id ?? r?.binding_id) !== s.binding_id) failures.push(`row[${i}]:identity_binding`);
-    if (c?.ledger_fill_count !== s.ledger_fill_count || r?.metrics?.pnl !== s.pnl) failures.push(`row[${i}]:ledger_values`);
+    if (c?.ledger_fill_count !== s.ledger_fill_count || r?.telemetry_summary?.metrics?.pnl !== s.pnl) failures.push(`row[${i}]:ledger_values`);
     if ((c?.pnl_currency ?? null) !== s.pnl_currency ||
       (c?.pnl_period ?? c?.pnl_period_label ?? c?.pnl_period_start_at ?? null) !== s.pnl_period)
       failures.push(`row[${i}]:pnl_scope`);
@@ -212,13 +212,53 @@ export function assessWire(sources, overview, rankings) {
       (x.period ?? x.period_label ?? x.period_start_at) === g.period);
     if (!actual || !["value", "covered_persona_count", "eligible_persona_count"].every((k) => actual[k] === g[k])) failures.push(`group[${i}]:wire_scope_sum`);
   }
-  const blocks = Array.isArray(ranks) ? ranks : ranks?.ranking_blocks ?? ranks?.rankings ?? ranks?.blocks;
-  if (!Array.isArray(blocks)) failures.push("rankings_missing");
-  for (const block of blocks || []) for (const item of block.items || []) {
-    if (!sources.rows.some((r) => r.persona_id === item.persona_id && (!item.runtime_id || r.runtime_id === item.runtime_id))) failures.push("rankings_wrong_operator");
-    if (!string(item.persona_name) || !finite(item.value ?? item.metric_value ?? item.metrics?.[block.metric])) failures.push("rankings_name_or_value");
+  // ManagementService returns blocks in data.items, and the sorted value is
+  // ranking_metric_value. Never fall through a null/missing value to another
+  // field: zero is measured, null and an absent measurement are distinct.
+  const blocks = ranks?.items;
+  const criteria = { "pnl-leaders": ["pnl", "desc"], "drawdown-control": ["drawdown", "asc"],
+    "execution-quality": ["fill_rate", "desc"], "sharpe-leaders": ["sharpe_ratio", "desc"] };
+  if (!Array.isArray(blocks) || !eq(blocks.map((b) => b?.block_id).sort(), Object.keys(criteria).sort()))
+    failures.push("rankings_missing");
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    const criterion = criteria[block?.block_id];
+    if (!criterion || block.metric !== criterion[0] || block.sort_order !== criterion[1] || !Array.isArray(block.items)) {
+      failures.push("rankings_invalid_block"); continue;
+    }
+    const seen = new Set(), scopes = new Map();
+    for (const item of block.items) {
+      const source = sources.rows.find((r) => r.persona_id === item?.persona_id && r.runtime_id === item?.runtime_id);
+      const row = rows.find((r) => r.runtime_id === item?.runtime_id), c = row?.performance_context;
+      if (!source || item.persona_name !== source.persona_name || seen.has(item.runtime_id)) failures.push("rankings_wrong_operator");
+      seen.add(item?.runtime_id);
+      const value = item?.ranking_metric_value;
+      const observed = row?.telemetry_summary?.metrics?.[block.metric];
+      if (!string(item?.persona_name) || !finite(value) || value !== observed ||
+        item?.[block.metric] !== value || (block.metric === "pnl" && value !== source?.pnl))
+        failures.push("rankings_name_or_value");
+      const scope = item?.comparison_scope;
+      const period = block.metric === "fill_rate" ? c?.fill_rate_details?.window : c?.metric_periods?.[block.metric];
+      if (item?.ranking_eligible !== true || item?.ranking_metric !== block.metric || item?.ranking_block_id !== block.block_id ||
+        !scope || scope.stage !== row?.deployment_stage || !string(scope.unit) || !period || !string(period.start_at) ||
+        !eq(scope.period, period) || (block.metric === "pnl" &&
+          (!string(source?.pnl_currency) || !string(source?.pnl_period) || scope.unit !== source.pnl_currency ||
+            period.start_at !== source.pnl_period || scope.definition !== c?.pnl_definition))) failures.push("rankings_unverified_scope");
+      // Ranks restart in each comparable scope; never compare different money
+      // currencies, stages or observation windows as a single league table.
+      const key = JSON.stringify(scope), previous = scopes.get(key);
+      if (item?.rank !== (previous?.rank ?? 0) + 1 || (previous &&
+        (block.sort_order === "desc" ? value > previous.value : value < previous.value))) failures.push("rankings_invalid_order");
+      scopes.set(key, { rank: item?.rank, value });
+    }
+    if (!Number.isInteger(block.eligible_item_count) || block.eligible_item_count < block.items.length ||
+      !Number.isInteger(block.missing_metric_count) || !Array.isArray(block.missing_metric_runtime_ids) ||
+      block.missing_metric_count !== block.missing_metric_runtime_ids.length ||
+      new Set(block.missing_metric_runtime_ids).size !== block.missing_metric_count ||
+      block.eligible_item_count + block.missing_metric_count !== rows.length ||
+      block.missing_metric_runtime_ids.some((id) => !rows.some((r) => r.runtime_id === id) || seen.has(id)))
+      failures.push("rankings_coverage");
   }
-  if (ranks?.summary?.operator_scope && !eq(ranks.summary.operator_scope, scope)) failures.push("ranking_denominator_mismatch");
+  if (!eq(ranks?.summary?.operator_scope, scope)) failures.push("ranking_denominator_mismatch");
   return failures;
 }
 
