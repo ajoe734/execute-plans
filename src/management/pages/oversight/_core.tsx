@@ -2859,6 +2859,10 @@ const TradingPulsePersonaDetailsSection = ({
 }) => {
   const { t } = useTranslation();
   const location = useLocation();
+  const pulseReturnState =
+    location.pathname === "/management/trading-pulse"
+      ? { returnTo: "/management/trading-pulse" }
+      : undefined;
   const scope = model.summary.operatorScope;
   const scopeStatus = String(scope.status ?? "unverified").trim().toLowerCase();
   const excludedProbeCount = pulseNumber(scope.excludedProbeCount);
@@ -2971,6 +2975,7 @@ const TradingPulsePersonaDetailsSection = ({
                         {personaHref ? (
                           <Link
                             to={personaHref}
+                            state={pulseReturnState}
                             className="inline-block max-w-full break-words font-semibold text-primary underline-offset-4 hover:underline"
                           >
                             {displayName}
@@ -3338,6 +3343,10 @@ const TradingPulseRankingsSection = ({
 }) => {
   const { t } = useTranslation();
   const location = useLocation();
+  const pulseReturnState =
+    location.pathname === "/management/trading-pulse"
+      ? { returnTo: "/management/trading-pulse" }
+      : undefined;
   const { data, loading, error = null } = useV5Live(
     (signal) => mgmt.tradingPulse.rankingsLiveOnly({ signal }),
     [],
@@ -3479,6 +3488,7 @@ const TradingPulseRankingsSection = ({
                           {personaHref ? (
                             <Link
                               to={personaHref}
+                              state={pulseReturnState}
                               className="font-medium text-primary underline-offset-4 hover:underline break-words"
                             >
                               {displayName}

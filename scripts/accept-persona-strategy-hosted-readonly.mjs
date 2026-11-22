@@ -1049,11 +1049,16 @@ export async function runTradingPulse(input, outDir, { baseline = false, chromiu
           const row = snapshot.rows.find((r) => r.text.includes(source.persona_name));
           const target = row?.links.find((l) => safeTarget(l.href)?.pathname.includes("/personas/"));
           assert.ok(target, "missing named Persona detail entry");
+          const personaPaths = [`/bff/personas/${encodeURIComponent(source.persona_id)}`, `/bff/management/personas/${encodeURIComponent(source.persona_id)}`];
+          const personaResponse = page.waitForResponse((r) => personaPaths.includes(new URL(r.url()).pathname) && r.request().method() === "GET");
+          personaResponse.catch(() => {});
           observed.length = 0;
           await keyboardActivate(page, page.locator(`a[href=${JSON.stringify(target.href)}]`).first());
+          await page.waitForURL((u) => u.pathname === safeTarget(target.href)?.pathname);
+          assert.equal((await personaResponse).status(), 200, "detail Persona entity GET");
           await page.getByText(source.persona_name, { exact: false }).first().waitFor();
           await Promise.all([...pending]);
-          const capture = observed.findLast((o) => o.path.includes(source.persona_id) && !o.path.includes("trade-journeys"));
+          const capture = observed.findLast((o) => personaPaths.includes(o.path));
           assert.ok(capture, "detail has actual Persona read");
           assert.deepEqual(assessPersona(source, input.expected.tenant_id, capture.body, await page.locator("main").innerText()), []);
           await returnViaScreen(page, PULSE);

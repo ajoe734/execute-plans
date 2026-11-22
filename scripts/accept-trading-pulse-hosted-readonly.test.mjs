@@ -226,6 +226,12 @@ test("raw wire roster, ledger values and rankings checked independently of UI", 
 test("Persona detail needs rendered name/symbol/mode and response tenant/object, URL alone insufficient", () => {
   const body = { data: { persona_id: source.persona_id, tenant_id: sources.tenant_id } };
   assert.deepEqual(assessPersona(source, sources.tenant_id, body, row().text), []);
+  // Real GET /bff/personas/<id> DTO shape uses id + camelCase tenantId, and witness symbol may carry an exchange suffix.
+  const dtoBody = { data: { id: source.persona_id, tenantId: sources.tenant_id } };
+  assert.deepEqual(assessPersona({ ...source, underlying_symbol: "1234.TWSE" }, sources.tenant_id, dtoBody, row().text), []);
+  assert.ok(assessPersona({ ...source, underlying_symbol: "5678.TWSE" }, sources.tenant_id, dtoBody, row().text).includes("detail_visible_object_and_stage"));
+  assert.ok(assessPersona(source, sources.tenant_id, { data: { id: "wrong", tenantId: sources.tenant_id } }, row().text).includes("detail_persona_identity"));
+  assert.ok(assessPersona(source, sources.tenant_id, { data: { id: source.persona_id, tenantId: "other" } }, row().text).includes("detail_tenant"));
   body.data.persona_id = "wrong";
   assert.ok(assessPersona(source, sources.tenant_id, body, row().text).includes("detail_persona_identity"));
   body.data.persona_id = source.persona_id; body.data.tenant_id = "other";
@@ -290,12 +296,19 @@ test("one summary/two screenshot evidence budget and credential redaction", () =
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("response capture excludes open SSE and unrelated shell JSON without reading their bodies", async () => {
+test("response capture excludes open SSE, unrelated shell JSON and Persona sub-resources without reading their bodies", async () => {
   const response = (url, type) => ({ url: () => url, request: () => ({ method: () => "GET" }),
     headers: () => ({ "content-type": type }), json: () => { throw new Error("must not read an open or unrelated body"); } });
   assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/events", "text/event-stream")), null);
   assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/management/trading-pulse", "text/event-stream")), null);
   assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/shell-summary", "application/json")), null);
+  assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/personas/persona-offline/route-policy", "application/json")), null);
+  assert.equal(await readObservedJson(response("https://api.dev.mvl-cap.tw/bff/personas/persona-offline/memory", "application/json")), null);
+  assert.deepEqual(await readObservedJson({ url: () => "https://api.dev.mvl-cap.tw/bff/personas/persona-offline",
+    request: () => ({ method: () => "GET" }), headers: () => ({ "content-type": "application/json" }),
+    json: async () => ({ data: { id: "persona-offline", tenantId: "offline-tenant" } }) }), {
+    path: "/bff/personas/persona-offline", query: "", body: { data: { id: "persona-offline", tenantId: "offline-tenant" } },
+  });
 });
 
 test("relevant JSON capture is finite, retains query scope and times out an unfinished body", { timeout: 1000 }, async () => {

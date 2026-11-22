@@ -119,7 +119,7 @@ export function hasNumber(text, value, decimals = 2) {
   const expected = Number(value.toFixed(decimals));
   return numbers.some((n) => Number(n) === expected || Math.abs(Number(n) - value) < 1e-7);
 }
-export function unknownText(text) { return /尚無|尚未|無法|未知|不足|不適用|unavailable|unknown|no (?:fills|trades|orders|pnl)|not (?:available|yet)|insufficient|—/i.test(text); }
+export function unknownText(text) { return /尚無|尚未|無法|未知|不足|不適用|unavailable|unknown|no (?:fill(?:s|\s+p&l)?|trades|orders|pnl|p&l)|not (?:available|yet)|insufficient|—/i.test(text); }
 
 const LABELS = {
   fills: /成交筆數|成交數|交易筆數|成交.*筆|trades|fill count|fills/i,
@@ -276,8 +276,9 @@ export function assessPersona(source, tenant, body, text) {
   const record = unwrap(body), r = record?.persona ?? record;
   const failures = [];
   if ((r?.persona_id ?? r?.id) !== source.persona_id) failures.push("detail_persona_identity");
-  if ((r?.tenant_id ?? record?.tenant_id) !== tenant) failures.push("detail_tenant");
-  if (!text.includes(source.persona_name) || !text.includes(source.underlying_symbol) || !stageText(text, source.stage)) failures.push("detail_visible_object_and_stage");
+  if ((r?.tenant_id ?? r?.tenantId ?? record?.tenant_id ?? record?.tenantId) !== tenant) failures.push("detail_tenant");
+  const symbol = String(source.underlying_symbol || "").split(".")[0];
+  if (!text.includes(source.persona_name) || !(text.includes(source.underlying_symbol) || (string(symbol) && text.includes(symbol))) || !stageText(text, source.stage)) failures.push("detail_visible_object_and_stage");
   return failures;
 }
 
@@ -372,7 +373,7 @@ export async function readObservedJson(response, timeout = TIMEOUT) {
   const u = new URL(response.url());
   if (u.origin !== BFF || response.request().method() !== "GET" ||
     !/application\/(?:[\w.+-]+\+)?json\b/i.test(response.headers()["content-type"] || "") ||
-    !/^\/bff\/(?:management\/trading-pulse(?:\/|$)|(?:management\/)?personas\/|management\/trade-journeys\/)/.test(u.pathname)) return null;
+    !/^\/bff\/(?:management\/trading-pulse(?:\/|$)|(?:management\/)?personas\/[^/]+$|management\/trade-journeys\/)/.test(u.pathname)) return null;
   let timer;
   try {
     const body = await Promise.race([response.json(), new Promise((_, reject) => {

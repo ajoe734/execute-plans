@@ -5,14 +5,17 @@ import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from "react
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { bffV1, type Persona } from "@/lib/bff-v1";
 import {
   adaptTradingPulseOverview,
   adaptTradingPulseRankings,
 } from "@/lib/bff-v1/management";
+import { getPersona, getPersonaManagement } from "@/lib/bff-v1/personas";
 import {
   TRADING_PULSE_HOSTED_WIRE_SAMPLE,
   TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE,
 } from "@/lib/bff-v1/__tests__/fixtures/trading-pulse";
+import { PersonaDetail } from "../PersonaDetail";
 import { TradingPulsePage } from "./_core";
 
 const mocks = vi.hoisted(() => ({
@@ -22,6 +25,27 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/management/pages/v5/useV5Live", () => ({
   useV5Live: mocks.useV5Live,
 }));
+
+vi.mock("@/lib/bff-v1", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bff-v1")>();
+  return {
+    ...actual,
+    bffV1: {
+      ...actual.bffV1,
+      strategies: { ...actual.bffV1.strategies, listForPersona: vi.fn().mockResolvedValue([]) },
+      audit: { ...actual.bffV1.audit, list: vi.fn().mockResolvedValue([]) },
+    },
+  };
+});
+
+vi.mock("@/lib/bff-v1/personas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bff-v1/personas")>();
+  return {
+    ...actual,
+    getPersona: vi.fn(),
+    getPersonaManagement: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 function renderPage(element: ReactElement, initialEntry = "/management/trading-pulse") {
   return render(
@@ -801,6 +825,90 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(screen.getByText("tenant=tenant-dev env=paper")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "返回 交易脈動" }));
     expect(screen.getByRole("heading", { name: "交易脈動" })).toBeInTheDocument();
+  });
+
+  it("renders a real PersonaDetail header return link from both the Persona Details table and Rankings without a sidebar (390px and desktop) in zh-TW and en-US while omitting it on direct open", async () => {
+    const qinghePersona: Persona = {
+      id: "persona-2448c7053e33ea48da47",
+      name: "青禾｜2330 台股 Paper 學習 R3",
+      owner: "operator",
+      updatedAt: "2026-11-22T12:00:00Z",
+      state: "approved",
+      lifecycleStatus: "paper_running",
+      risk: "low",
+      archetype: "quant",
+      routedStrategies: 1,
+      successRate: 0.56,
+    };
+    vi.mocked(getPersona).mockResolvedValue(qinghePersona);
+    vi.mocked(getPersonaManagement).mockResolvedValue(undefined);
+    vi.mocked(bffV1.strategies.listForPersona).mockResolvedValue([]);
+    vi.mocked(bffV1.audit.list).mockResolvedValue([]);
+
+    mockTradingPulseLive();
+
+    await i18n.changeLanguage("zh-TW");
+    const app = render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/trading-pulse"]}>
+          <Routes>
+            <Route path="/management/trading-pulse" element={<TradingPulsePage />} />
+            <Route path="/management/personas/:id" element={<PersonaDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    // 1. From Persona Details table -> real PersonaDetail -> header return link -> Trading Pulse (zh-TW)
+    const personaSection = screen.getByTestId("trading-pulse-persona-details");
+    const tablePersonaLink = within(personaSection).getByRole("link", {
+      name: "青禾｜2330 台股 Paper 學習 R3",
+    });
+    expect(tablePersonaLink).toHaveAttribute("href", "/management/personas/persona-2448c7053e33ea48da47");
+    fireEvent.click(tablePersonaLink);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "青禾｜2330 台股 Paper 學習 R3" }),
+    ).toBeInTheDocument();
+    expect(getPersona).toHaveBeenCalledWith("persona-2448c7053e33ea48da47");
+    const zhReturnFromTable = screen.getByRole("link", { name: "返回交易脈動" });
+    expect(zhReturnFromTable).toHaveAttribute("href", "/management/trading-pulse");
+    fireEvent.click(zhReturnFromTable);
+    expect(await screen.findByRole("heading", { level: 1, name: "交易脈動" })).toBeInTheDocument();
+
+    // 2. From Rankings section -> real PersonaDetail -> header return link -> Trading Pulse (en-US)
+    await i18n.changeLanguage("en-US");
+    const rankingsSection = screen.getByTestId("trading-pulse-rankings");
+    const rankingPersonaLinks = within(rankingsSection).getAllByRole("link", {
+      name: "青禾｜2330 台股 Paper 學習 R3",
+    });
+    expect(rankingPersonaLinks.length).toBeGreaterThanOrEqual(1);
+    expect(rankingPersonaLinks[0]).toHaveAttribute("href", "/management/personas/persona-2448c7053e33ea48da47");
+    fireEvent.click(rankingPersonaLinks[0]);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "青禾｜2330 台股 Paper 學習 R3" }),
+    ).toBeInTheDocument();
+    const enReturnFromRankings = screen.getByRole("link", { name: "Back to Trading Pulse" });
+    expect(enReturnFromRankings).toHaveAttribute("href", "/management/trading-pulse");
+    fireEvent.click(enReturnFromRankings);
+    expect(await screen.findByRole("heading", { level: 1, name: "Trading Pulse" })).toBeInTheDocument();
+    app.unmount();
+
+    // 3. Direct entry to PersonaDetail without Trading Pulse origin does not show the return link
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/personas/persona-2448c7053e33ea48da47"]}>
+          <Routes>
+            <Route path="/management/personas/:id" element={<PersonaDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "青禾｜2330 台股 Paper 學習 R3" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /返回交易脈動|Back to Trading Pulse/i })).not.toBeInTheDocument();
   });
 
   it("satisfies semantic DOM structure for narrow 390px viewports, keyboard navigation, and field-label extraction without source IDs in aria-label", async () => {

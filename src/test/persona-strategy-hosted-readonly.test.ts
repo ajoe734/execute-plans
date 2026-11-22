@@ -788,4 +788,273 @@ describe("Trading Pulse mode in the existing viewer runner", () => {
       await browser.close(); fs.rmSync(outDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("completes full Trading Pulse acceptance roundtrips at 1440px and 390px (hidden sidebar, real /bff/personas/<id> entity GET with trailing sub-resources, and contextual header return)", async () => {
+    const FE = "https://app.dev.mvl-cap.tw", BFF = "https://api.dev.mvl-cap.tw";
+    const fe = "a".repeat(40), bff = "b".repeat(40);
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "shared-pulse-acceptance-fixture-"));
+    const browser = await chromium.launch({ headless: true });
+    const credentials = { client_id: "offline-viewer", client_secret: "offline-viewer-secret" };
+    const manifest = { frontendSha: fe, bffCommit: bff, pairId: "offline-pair", deploymentState: "accepted",
+      buildMode: { VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict", VITE_BFF_REAL_WRITES: "false" } };
+    const version = { source_commit_sha: bff, config_posture: { auth_mode: "strict", auth_stub: false } };
+    const sources = {
+      tenant_id: "offline-tenant",
+      captured_at: new Date().toISOString(),
+      provenance: [{ source: "owner-registry-ledger.json", sha256: "c".repeat(64) }],
+      rows: [{
+        persona_id: "persona-offline",
+        persona_name: "離線甲",
+        runtime_id: "rt-offline",
+        binding_id: "rb-offline",
+        underlying_symbol: "1234",
+        stage: "paper",
+        ledger_fill_count: 0,
+        pnl: null,
+        pnl_currency: "TWD",
+        pnl_period: "2026-11-01T00:00:00Z",
+        filled_quantity: 0,
+        requested_quantity: 7,
+        quantity_unit: { "zh-TW": "股", "en-US": "shares" },
+      }],
+      excluded: [{ persona_id: "persona-probe", persona_name: "部署測試", runtime_id: "rt-probe" }],
+      pnl_groups: [],
+    };
+    const history = {
+      journey_id: "tj-offline",
+      event_id: "event-offline",
+      persona_id: "persona-offline",
+      persona_name: "離線甲",
+      tenant_id: "offline-tenant",
+      environment: "paper",
+      symbol: "1234",
+      reason_code: "insufficient_cash",
+      reason_text: { "zh-TW": "資金不足", "en-US": "Insufficient cash" },
+      required: 109.25,
+      available: 100,
+      requested_quantity: 7,
+      submitted_to_broker: false,
+      occurred_at: "2020-01-01T01:02:03Z",
+    };
+    const overviewPayload = {
+      data: {
+        summary: {
+          operator_scope: {
+            status: "verified",
+            tenant_id: "offline-tenant",
+            persona_count: 1,
+            runtime_count: 1,
+            by_stage: { paper: { persona_count: 1, runtime_count: 1 } },
+          },
+          pnl_groups: [],
+        },
+        runtime_rows: [{
+          runtime_id: "rt-offline",
+          runtime_binding_id: "rb-offline",
+          persona_id: "persona-offline",
+          persona_name: "離線甲",
+          deployment_stage: "paper",
+          telemetry_summary: {
+            window: "1h",
+            collected_at: "2026-11-22T12:00:00Z",
+            metrics: { pnl: null, drawdown: null, sharpe_ratio: null, fill_rate: 0, avg_slippage_bps: 0, total_trades: 0 },
+          },
+          performance_context: {
+            ledger_fill_count: 0,
+            pnl_currency: "TWD",
+            pnl_period_start_at: "2026-11-01T00:00:00Z",
+            pnl_at: "2026-11-22T12:00:00Z",
+            pnl_definition: "net_ledger_pnl",
+            source_status: "available",
+            fill_rate_basis: "filled_quantity_over_submitted_quantity",
+            fill_rate_details: {
+              status: "known",
+              numerator: 0,
+              denominator: 7,
+              unit: "shares",
+              basis: "filled_quantity_over_submitted_quantity",
+              window: { start_at: "2026-11-01T00:00:00Z", end_exclusive_at: "2026-11-22T12:00:00Z" },
+            },
+            metric_units: { pnl: "TWD", fill_rate: "fraction", drawdown: "fraction", sharpe_ratio: "ratio" },
+            metric_periods: {
+              pnl: { start_at: "2026-11-01T00:00:00Z", as_of: "2026-11-22T12:00:00Z", window: "1h" },
+              drawdown: { start_at: "2026-11-01T00:00:00Z", as_of: "2026-11-22T12:00:00Z", window: "1h" },
+              sharpe_ratio: { start_at: null, as_of: "2026-11-22T12:00:00Z", window: "1h" },
+              fill_rate: { start_at: null, as_of: null, window: "1h" },
+            },
+          },
+        }],
+      },
+    };
+    const rankingsPayload = {
+      data: {
+        summary: { operator_scope: overviewPayload.data.summary.operator_scope, limit: 20 },
+        items: [
+          { block_id: "pnl-leaders", metric: "pnl", sort_order: "desc", items: [], eligible_item_count: 0, missing_metric_count: 1, missing_metric_runtime_ids: ["rt-offline"] },
+          { block_id: "drawdown-control", metric: "drawdown", sort_order: "asc", items: [], eligible_item_count: 0, missing_metric_count: 1, missing_metric_runtime_ids: ["rt-offline"] },
+          {
+            block_id: "execution-quality",
+            metric: "fill_rate",
+            sort_order: "desc",
+            eligible_item_count: 1,
+            missing_metric_count: 0,
+            missing_metric_runtime_ids: [],
+            items: [{
+              persona_id: "persona-offline",
+              persona_name: "離線甲",
+              runtime_id: "rt-offline",
+              fill_rate: 0,
+              rank: 1,
+              ranking_eligible: true,
+              ranking_block_id: "execution-quality",
+              ranking_metric: "fill_rate",
+              ranking_metric_value: 0,
+              comparison_scope: {
+                stage: "paper",
+                period: { start_at: "2026-11-01T00:00:00Z", end_exclusive_at: "2026-11-22T12:00:00Z" },
+                unit: "fraction",
+                basis: "filled_quantity_over_submitted_quantity",
+                quantity_unit: "shares",
+              },
+            }],
+          },
+          { block_id: "sharpe-leaders", metric: "sharpe_ratio", sort_order: "desc", items: [], eligible_item_count: 0, missing_metric_count: 1, missing_metric_runtime_ids: ["rt-offline"] },
+        ],
+      },
+    };
+    const html = `<html><head><style>@media (max-width: 1023px) { nav { display: none; } }</style></head>
+      <body><header>Private session</header><nav><a href="/management/trading-pulse">交易脈動 Trading Pulse</a></nav>
+      <main><h1>Persona Fleet</h1><input id="dev-account"><input id="dev-password"><button>Sign in</button></main>
+      <script>
+        const api = '${BFF}';
+        const isEn = () => localStorage.getItem('pantheon.locale') === 'en-US';
+        async function renderPulse() {
+          history.pushState({}, '', '/management/trading-pulse');
+          await fetch(api + '/bff/management/trading-pulse');
+          document.querySelector('main').innerHTML = isEn()
+            ? '<section><h1>Trading Pulse</h1><p>Operational Personas: 1 · Paper: 1</p>' +
+              '<table><thead><tr><th>Persona</th><th>Fills</th><th>Fill Rate</th><th>P&amp;L</th></tr></thead>' +
+              '<tbody><tr><td><a id="persona-entry" href="/management/personas/persona-offline">離線甲</a> 1234 Paper <a id="journey-entry" href="/management/trade-journeys/tj-offline?tenant_id=offline-tenant&amp;environment=paper&amp;return_to=%2Fmanagement%2Ftrading-pulse">View Trade Journey</a></td>' +
+              '<td>0 fills</td><td>0% (Requested 7 shares, filled 0 shares)</td><td>No fill P&amp;L yet</td></tr></tbody></table>' +
+              '<details><summary>Data Diagnostics</summary><div>rt-offline rb-offline</div></details></section>'
+            : '<section><h1>交易脈動</h1><p>參與營運 Persona：1 人 · 模擬交易 1 人</p>' +
+              '<table><thead><tr><th>Persona</th><th>成交筆數</th><th>成交率</th><th>損益</th></tr></thead>' +
+              '<tbody><tr><td><a id="persona-entry" href="/management/personas/persona-offline">離線甲</a> 1234 模擬交易 <a id="journey-entry" href="/management/trade-journeys/tj-offline?tenant_id=offline-tenant&amp;environment=paper&amp;return_to=%2Fmanagement%2Ftrading-pulse">查看交易旅程</a></td>' +
+              '<td>0 筆成交</td><td>0%（該次意向 7 股、成交 0 股）</td><td>尚無成交損益</td></tr></tbody></table>' +
+              '<details><summary>資料診斷</summary><div>rt-offline rb-offline</div></details></section>';
+          bindPulseLinks();
+          await fetch(api + '/bff/management/trading-pulse/rankings');
+        }
+        function bindPulseLinks() {
+          document.getElementById('persona-entry').onclick = async (e) => {
+            e.preventDefault();
+            history.pushState({ returnTo: '/management/trading-pulse' }, '', '/management/personas/persona-offline');
+            document.querySelector('main').innerHTML = '<p>Loading</p>';
+            const res = await fetch(api + '/bff/personas/persona-offline');
+            await res.json();
+            // Concurrent sub-resource GETs that finish after the primary entity read.
+            await fetch(api + '/bff/personas/persona-offline/route-policy');
+            await fetch(api + '/bff/personas/persona-offline/memory');
+            const backLabel = isEn() ? 'Back to Trading Pulse' : '返回交易脈動';
+            const backHtml = history.state && history.state.returnTo === '/management/trading-pulse'
+              ? '<a id="pulse-return" href="/management/trading-pulse">' + backLabel + '</a>'
+              : '';
+            document.querySelector('main').innerHTML = '<section><h1>離線甲｜1234 Paper</h1>' + backHtml + '</section>';
+            const ret = document.getElementById('pulse-return');
+            if (ret) ret.onclick = (ev) => { ev.preventDefault(); renderPulse(); };
+          };
+          document.getElementById('journey-entry').onclick = async (e) => {
+            e.preventDefault();
+            history.pushState({}, '', '/management/trade-journeys/tj-offline?tenant_id=offline-tenant&environment=paper&return_to=%2Fmanagement%2Ftrading-pulse');
+            await fetch(api + '/bff/management/trade-journeys/tj-offline?tenant_id=offline-tenant&environment=paper');
+            await fetch(api + '/bff/management/trade-journeys/tj-offline/timeline?tenant_id=offline-tenant&environment=paper');
+            const reason = isEn() ? 'Insufficient cash' : '資金不足';
+            document.querySelector('main').innerHTML = '<section><h1>離線甲 1234</h1><p>Paper ' + reason + ' 109.25 100 7</p><a id="journey-return" href="/management/trading-pulse">Back</a></section>';
+            document.getElementById('journey-return').onclick = (ev) => { ev.preventDefault(); renderPulse(); };
+          };
+        }
+        document.querySelector('button').onclick = async () => {
+          await fetch(api + '/bff/auth/dev-login', { method: 'POST', body: JSON.stringify({ client_id: document.querySelector('#dev-account').value, client_secret: document.querySelector('#dev-password').value }) });
+        };
+        document.querySelector('nav a').onclick = (e) => { e.preventDefault(); renderPulse(); };
+        document.addEventListener('keydown', (event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+            event.preventDefault();
+            const label = isEn() ? 'Trading Pulse' : '交易脈動';
+            document.body.insertAdjacentHTML('beforeend', '<div role="dialog"><input role="combobox"><button role="option">' + label + '</button></div>');
+            document.querySelector('[role="option"]').onclick = () => { document.querySelector('[role="dialog"]').remove(); renderPulse(); };
+          }
+        });
+      </script></body></html>`;
+    const fixtureChromium = { launch: async () => ({
+      newContext: async (options: any) => {
+        const ctx = await browser.newContext(options), install = ctx.route.bind(ctx);
+        ctx.route = async (pattern: any, guard: any) => install(pattern, async (route: any) => guard({
+          request: () => route.request(), abort: (reason: string) => route.abort(reason),
+          continue: async () => {
+            const request = route.request(), url = new URL(request.url());
+            if (url.origin === FE) return route.fulfill({ contentType: "text/html; charset=utf-8", body: html });
+            let body: unknown = { data: {} };
+            if (url.pathname === "/bff/me") body = { data: { tenant_id: "offline-tenant", roles: ["viewer"] } };
+            else if (url.pathname === "/bff/management/trading-pulse") body = overviewPayload;
+            else if (url.pathname === "/bff/management/trading-pulse/rankings") body = rankingsPayload;
+            else if (url.pathname === "/bff/personas/persona-offline") body = { data: { id: "persona-offline", tenantId: "offline-tenant", name: "離線甲｜1234 Paper" } };
+            else if (url.pathname.startsWith("/bff/personas/persona-offline/")) body = { data: { items: [] } };
+            else if (url.pathname === "/bff/management/trade-journeys/tj-offline") {
+              body = {
+                data: {
+                  journey_id: "tj-offline",
+                  persona_id: "persona-offline",
+                  tenant_id: "offline-tenant",
+                  environment: "paper",
+                  outcome: {
+                    reason_code: "insufficient_cash",
+                    source_event_id: "event-offline",
+                    submitted_to_broker: false,
+                    reason_detail: { required: 109.25, available: 100, requested_quantity: 7 },
+                  },
+                },
+              };
+            } else if (url.pathname === "/bff/management/trade-journeys/tj-offline/timeline") {
+              body = { data: { items: [{ event_id: "derived", source_event_id: "event-offline", occurred_at: "2020-01-01T01:02:03Z" }] } };
+            }
+            return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+          },
+        }));
+        return ctx;
+      }, close: () => browser.close(),
+    }) };
+    try {
+      const result = await cli.run({
+        profile: credentials,
+        expected: { fe, bff, tenant_id: "offline-tenant" },
+        sources,
+        history,
+      }, {
+        mode: "trading-pulse",
+        baseline: false,
+        outDir,
+        chromium: fixtureChromium,
+        fetchImpl: async (url: string) => ({ status: 200, json: async () => url === FE + "/deployment.json" ? manifest : version }),
+      });
+      expect(result.out.failures).toEqual([]);
+      expect(result.out.pass).toBe(true);
+      expect(result.out.runs.map((r: any) => ({ locale: r.locale, width: r.width, entry: r.entry, failures: r.failures }))).toEqual([
+        { locale: "zh-TW", width: 1440, entry: "sidebar", failures: [] },
+        { locale: "zh-TW", width: 390, entry: "command_palette", failures: [] },
+        { locale: "en-US", width: 1440, entry: "sidebar", failures: [] },
+      ]);
+      for (const r of result.out.runs) {
+        expect(r.checks).toEqual(expect.arrayContaining([
+          "current_operator_content",
+          "current_wire_roster_and_rankings",
+          "diagnostics_expand_source_and_collapse",
+          "persona_detail_roundtrip_keyboard",
+          "historical_rejection_roundtrip",
+        ]));
+      }
+    } finally {
+      await browser.close(); fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
