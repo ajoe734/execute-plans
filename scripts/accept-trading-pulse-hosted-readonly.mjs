@@ -467,7 +467,7 @@ export async function runAcceptance(input, outDir, { baseline = false } = {}) {
         }
         if (locale === "zh-TW") await check("masked_screenshot", async () => {
           // Mask private user/tenant chrome and all source IDs wherever they occur.
-          const masks = [page.locator("nav,aside,[data-testid*=user],[data-testid*=tenant]")];
+          const masks = [page.locator("header").first(), page.locator("nav,aside,[data-testid*=user],[data-testid*=tenant]")];
           for (const secret of privateValues.filter(string)) masks.push(page.getByText(secret, { exact: false }));
           masks.push(page.getByText(/\brt-[a-z0-9]+|\brb-[a-z0-9]+|\bpersona-[a-z0-9]+/));
           const file = path.join(dir, width === 390 ? "narrow.png" : "desktop.png");

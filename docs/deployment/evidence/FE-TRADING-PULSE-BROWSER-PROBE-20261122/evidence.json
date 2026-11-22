@@ -11,7 +11,7 @@
   "artifacts": {
     "cli": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.mjs",
-      "sha256": "75c934fefca00d692fb160b784d618def6361fe4de378b3ab2997832ed9389a8"
+      "sha256": "3b4c7e211d9af18c9b9434b92024fcf41a7bef034dc87d0dec3f5695ef712c68"
     },
     "tests": {
       "path": "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
@@ -53,7 +53,8 @@
     },
     "harness_repairs": [
       "Relevant finite JSON bodies only, with 20-second body deadlines; never await open shell SSE before context close. Direct browser reads also have a 20-second abort deadline.",
-      "Narrow shell entry uses the existing Ctrl/Cmd+K command palette when the sidebar is hidden; no assumed mobile menu or direct URL substitution."
+      "Narrow shell entry uses the existing Ctrl/Cmd+K command palette when the sidebar is hidden; no assumed mobile menu or direct URL substitution.",
+      "Mask the entire top header as well as side navigation and private values: server display names can differ from the supplied GUI login username."
     ],
     "hosted_accepted": false
   },
