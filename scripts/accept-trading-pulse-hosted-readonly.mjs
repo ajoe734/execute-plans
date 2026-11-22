@@ -1,8 +1,7 @@
-#!/usr/bin/env node
 /**
- * Caller-run RC6 WP6.5 browser acceptance; never scheduled or a release gate.
+ * RC6 WP6.5 page assertions/helpers for the existing hosted read-only runner.
  *
- * node scripts/accept-trading-pulse-hosted-readonly.mjs --out-dir <private-dir> < input.json
+ * node scripts/accept-persona-strategy-hosted-readonly.mjs --mode trading-pulse --out-dir <private-dir> < input.json
  * node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs
  *
  * One JSON document on stdin (credentials stay in RAM):
@@ -38,8 +37,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
-import { classifyRequest, makeRedactor, sha256 } from "./accept-persona-strategy-hosted-readonly.mjs";
+import { sha256 } from "./accept-persona-strategy-hosted-readonly.mjs";
 
 export const FE = "https://app.dev.mvl-cap.tw";
 export const BFF = "https://api.dev.mvl-cap.tw";
@@ -273,7 +271,7 @@ export async function snapshotPage(page, sources) {
   }, { sources });
 }
 
-async function browserRead(page, endpoint) {
+export async function browserRead(page, endpoint) {
   return page.evaluate(async ({ endpoint, base, timeout }) => {
     const response = await fetch(base + endpoint, { credentials: "include", cache: "no-store", signal: AbortSignal.timeout(timeout) });
     if (!response.ok) throw new Error(`read ${endpoint.split("?")[0]} HTTP ${response.status}`);
@@ -355,206 +353,3 @@ export function writeEvidence(dir, report, redactor) {
   assert.equal(report.evidence.bytes, fs.statSync(file).size + imageBytes);
 }
 
-export async function runAcceptance(input, outDir, { baseline = false } = {}) {
-  validateInput(input, Date.now(), { baseline });
-  const sources = input.sources ?? { rows: [], excluded: [], pnl_groups: [], provenance: [], captured_at: null };
-  fs.mkdirSync(outDir, { recursive: true, mode: 0o700 });
-  const dir = fs.mkdtempSync(path.join(outDir, "trading-pulse-"));
-  const privateValues = [input.profile.client_id, input.profile.client_secret, input.expected.tenant_id,
-    ...sources.rows.flatMap((r) => [r.persona_id, r.runtime_id, r.binding_id, r.persona_name]),
-    ...sources.excluded.flatMap(Object.values),
-    ...[input.history?.persona_id, input.history?.persona_name, input.history?.journey_id, input.history?.event_id]];
-  const redact = makeRedactor(privateValues.filter(string));
-  const report = { schema: "trading-pulse-browser-readonly.v1", started_at: new Date().toISOString(),
-    expected: { fe: input.expected.fe, bff: input.expected.bff },
-    mode: baseline ? "baseline_failure_record_only" : "acceptance",
-    witness: { digest: digest(sources), captured_at: sources.captured_at, provenance: sources.provenance,
-      persona_count: new Set(sources.rows.map((r) => r.persona_id)).size, runtime_count: sources.rows.length },
-    history_witness_digest: input.history ? digest(input.history) : null,
-    failures: [], runs: [], blocked_writes: [], pass: false };
-  const { chromium } = await import("@playwright/test");
-  let browser;
-  const publicRead = async (url) => {
-    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
-    assert.equal(response.status, 200, "public identity read"); return response.json();
-  };
-  const pair = async () => {
-    const [m, v] = await Promise.all([publicRead(FE + "/deployment.json"), publicRead(BFF + "/bff/version")]);
-    assert.equal(m.frontendSha, input.expected.fe, "FE changed");
-    assert.equal(m.bffCommit, input.expected.bff, "paired BFF changed");
-    assert.equal(v.source_commit_sha, input.expected.bff, "actual BFF changed");
-    assert.equal(v.config_posture?.auth_mode, "strict", "strict auth");
-    assert.equal(v.config_posture?.auth_stub, false, "no stub");
-    assert.equal(m.buildMode?.VITE_BFF_MODE, "live", "live mode");
-    assert.equal(m.buildMode?.VITE_BFF_FALLBACK, "strict", "strict fallback");
-    return { fe: m.frontendSha, bff: v.source_commit_sha, pair: m.pairId, deployment_state: m.deploymentState,
-      hosted_write_flag: m.buildMode?.VITE_BFF_REAL_WRITES, probe_business_writes: "blocked" };
-  };
-  try {
-    report.pair_before = await pair();
-    browser = await chromium.launch({ headless: true });
-    for (const [locale, width] of [["zh-TW", 1440], ["zh-TW", 390], ["en-US", 1440]]) {
-      const run = { locale, width, checks: [], failures: [], reads: [] }; report.runs.push(run);
-      const context = await browser.newContext({ locale, viewport: { width, height: 1000 }, serviceWorkers: "block" });
-      const page = await context.newPage(); page.setDefaultTimeout(TIMEOUT);
-      const observed = [], pending = new Set(); let authenticated = false;
-      const check = async (name, work) => {
-        try { await work(); run.checks.push(name); } catch (e) { run.failures.push(`${name}: ${redact(e.message)}`); }
-      };
-      page.on("pageerror", (e) => run.failures.push(`render: ${redact(e.message)}`));
-      await context.addInitScript((l) => localStorage.setItem("pantheon.locale", l), locale);
-      await context.route("**/*", async (route) => {
-        const req = route.request(), u = new URL(req.url());
-        const allowedOrigin = [FE, BFF].includes(u.origin);
-        if (!allowedOrigin || classifyRequest(req.method(), u.pathname) === "block") {
-          report.blocked_writes.push({ method: req.method(), path: u.pathname, foreign_origin: !allowedOrigin });
-          return route.abort("blockedbyclient");
-        }
-        return route.continue();
-      });
-      page.on("response", (res) => {
-        const u = new URL(res.url());
-        if (u.origin !== BFF || !u.pathname.startsWith("/bff/")) return;
-        run.reads.push({ path: u.pathname, method: res.request().method(), status: res.status() });
-        if (authenticated && res.status() >= 400) run.failures.push(`authenticated_http_${res.status()}: ${u.pathname}`);
-        const task = readObservedJson(res).then((capture) => { if (capture) observed.push(capture); })
-          .catch((e) => run.failures.push(`response_body: ${redact(e.message)}`)).finally(() => pending.delete(task));
-        pending.add(task);
-      });
-      try {
-        await page.goto(FE + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-        await page.locator("#dev-account").fill(input.profile.client_id);
-        await page.locator("#dev-password").fill(input.profile.client_secret);
-        const login = page.waitForResponse((r) => r.url() === BFF + "/bff/auth/dev-login" && r.request().method() === "POST");
-        await page.getByRole("button", { name: "Sign in", exact: true }).click();
-        assert.equal((await login).status(), 200, "GUI login");
-        authenticated = true;
-        const me = unwrap(await browserRead(page, "/bff/me"));
-        const roles = me.roles ?? me.user?.roles ?? [];
-        assert.equal(me.tenant_id ?? me.tenant?.id ?? me.user?.tenant_id, input.expected.tenant_id, "same tenant");
-        assert.ok(roles.includes("viewer") && !roles.some((r) => ["admin", "operator"].includes(r)), "viewer-only server identity");
-        await page.getByRole("heading", { name: /Persona|人格/ }).first().waitFor();
-        const overviewResponse = page.waitForResponse((r) => new URL(r.url()).pathname === "/bff/management/trading-pulse" && r.request().method() === "GET");
-        // Attach rejection handling immediately if UI navigation itself fails.
-        overviewResponse.catch(() => {});
-        run.entry = await enterPulseViaScreen(page, locale);
-        assert.equal((await overviewResponse).status(), 200, "browser overview");
-        await page.getByRole("heading", { name: locale === "zh-TW" ? "交易脈動" : "Trading Pulse", exact: true }).waitFor();
-        await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'));
-        await page.waitForResponse((r) => new URL(r.url()).pathname.endsWith("/trading-pulse/rankings") && r.request().method() === "GET", { timeout: 5000 }).catch(() => {});
-        const snapshot = await snapshotPage(page, sources);
-        run.overview_digest = digest(snapshot); // no raw business/identity text retained
-        if (baseline) {
-          run.failures.push("baseline_only_current_owner_witness_not_supplied");
-          if (/\brt-[a-z0-9]+|\brb-[a-z0-9]+/.test(snapshot.text)) run.failures.push("source_ids_visible_by_default");
-          if (!snapshot.diagnosticsCollapsed) run.failures.push("diagnostics_not_collapsed");
-          if (/LIVE BFF|Row health|Checks|列健康|檢查項/.test(snapshot.text)) run.failures.push("engineering_diagnostics_visible_by_default");
-          run.layout = await page.locator("table").evaluateAll((tables) => tables.map((table) => ({
-            width: Math.round(table.getBoundingClientRect().width),
-            entries: [...table.querySelectorAll("tbody a")].map((a) => ({
-              viewport_x: a.getBoundingClientRect().left >= 0 && a.getBoundingClientRect().right <= innerWidth,
-              labelled_by_source_id: /persona-[a-z0-9]+/.test(a.getAttribute("aria-label") || ""),
-            })),
-          })));
-          if (run.layout.some((x) => x.entries.some((a) => !a.viewport_x))) run.failures.push("primary_entry_requires_horizontal_scroll");
-        } else {
-          await check("current_operator_content", async () => assert.deepEqual(assessOverview(sources, snapshot, locale), []));
-          await check("current_wire_roster_and_rankings", async () => {
-            const overview = await browserRead(page, "/bff/management/trading-pulse");
-            const rankings = await browserRead(page, "/bff/management/trading-pulse/rankings");
-            assert.deepEqual(assessWire(sources, overview, rankings), []);
-          });
-        }
-        if (locale === "zh-TW") await check("masked_screenshot", async () => {
-          // Mask private user/tenant chrome and all source IDs wherever they occur.
-          const masks = [page.locator("header").first(), page.locator("nav,aside,[data-testid*=user],[data-testid*=tenant]")];
-          for (const secret of privateValues.filter(string)) masks.push(page.getByText(secret, { exact: false }));
-          masks.push(page.getByText(/\brt-[a-z0-9]+|\brb-[a-z0-9]+|\bpersona-[a-z0-9]+/));
-          const file = path.join(dir, width === 390 ? "narrow.png" : "desktop.png");
-          await page.screenshot({ path: file, fullPage: false, mask: masks }); fs.chmodSync(file, 0o600);
-        });
-        await check("diagnostics_expand_source_and_collapse", async () => {
-          const trigger = page.locator("summary,button").filter({ hasText: /資料診斷|技術診斷|diagnostic/i }).first();
-          await keyboardActivate(page, trigger);
-          const text = await page.locator("body").innerText();
-          assert.ok(sources.rows.length > 0 && sources.rows.every((r) => text.includes(r.runtime_id)), "expanded diagnostics locate each runtime");
-          await trigger.click();
-          assert.ok(!(await page.locator("body").innerText()).includes(sources.rows[0].runtime_id), "collapse hides IDs");
-        });
-        await check("persona_detail_roundtrip_keyboard", async () => {
-          const source = sources.rows[0]; assert.ok(source, "missing_current_roster_witness");
-          const row = snapshot.rows.find((r) => r.text.includes(source.persona_name));
-          const target = row?.links.find((l) => safeTarget(l.href)?.pathname.includes("/personas/"));
-          assert.ok(target, "missing named Persona detail entry");
-          observed.length = 0;
-          await keyboardActivate(page, page.locator(`a[href=${JSON.stringify(target.href)}]`).first());
-          await page.getByText(source.persona_name, { exact: false }).first().waitFor();
-          await Promise.all([...pending]);
-          const capture = observed.findLast((o) => o.path.includes(source.persona_id) && !o.path.includes("trade-journeys"));
-          assert.ok(capture, "detail has actual Persona read");
-          assert.deepEqual(assessPersona(source, input.expected.tenant_id, capture.body, await page.locator("main").innerText()), []);
-          await returnViaScreen(page, PULSE);
-          await page.getByRole("heading", { name: snapshot.heading, exact: true }).waitFor();
-        });
-        // Keep history isolated from current metrics. Traverse only UI links;
-        // a public unfiltered journey list cannot satisfy this check.
-        await check("historical_rejection_roundtrip", async () => {
-          const h = input.history; assert.ok(h, "missing_historical_event_witness");
-          if (!new URL(page.url()).pathname.startsWith(PULSE)) await returnViaScreen(page, PULSE);
-          const hrefs = page.locator("a"); let entry;
-          for (let i = 0; i < await hrefs.count(); i++) {
-            const link = hrefs.nth(i), u = safeTarget(await link.getAttribute("href"));
-            if (u?.pathname === `/management/trade-journeys/${h.journey_id}` ||
-              (u?.pathname === "/management/trade-journeys" && u.searchParams.get("persona_id") === h.persona_id)) { entry = link; break; }
-          }
-          assert.ok(entry, "missing source-grounded rejected-journey or scoped Persona journey entry");
-          await entry.click();
-          if (new URL(page.url()).pathname === "/management/trade-journeys") {
-            const search = page.getByRole("textbox", { name: /搜尋|search/i }).first();
-            await search.fill(h.event_id);
-            const target = page.locator(`a[href*="${h.journey_id}"]`).first(); await target.waitFor(); await target.click();
-          }
-          await page.getByRole("heading", { name: new RegExp(h.persona_name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).waitFor();
-          await Promise.all([...pending]);
-          const capture = observed.findLast((o) => o.path === `/bff/management/trade-journeys/${h.journey_id}`);
-          assert.ok(capture, "no actual scoped journey detail read");
-          const query = new URLSearchParams(capture.query);
-          assert.equal(query.get("tenant_id"), h.tenant_id); assert.equal(query.get("environment"), h.environment);
-          const timeline = observed.findLast((o) => o.path === `/bff/management/trade-journeys/${h.journey_id}/timeline`);
-          const detail = { ...unwrap(capture.body), timeline: unwrap(timeline?.body)?.items ?? unwrap(timeline?.body)?.events ?? [] };
-          assert.deepEqual(assessJourney(h, detail, await page.locator("main").innerText(), locale), []);
-          await returnViaScreen(page, PULSE);
-          await page.getByRole("heading", { name: snapshot.heading, exact: true }).waitFor();
-        });
-        await Promise.all([...pending]);
-        assert.ok(run.reads.some((r) => r.path.endsWith("/trading-pulse/rankings") && r.status === 200), "actual rankings browser read missing");
-      } catch (e) { run.failures.push(redact(e.message)); }
-      finally { await context.close(); await Promise.all([...pending]); }
-    }
-    report.pair_after = await pair();
-    assert.ok(eq(report.pair_before, report.pair_after), "deployment pair changed during proof");
-  } catch (e) { report.failures.push(redact(e.message)); }
-  finally { await browser?.close(); }
-  report.finished_at = new Date().toISOString();
-  report.failures.push(...report.runs.flatMap((r) => r.failures.map((f) => `${r.locale}/${r.width}: ${f}`)));
-  if (report.blocked_writes.length) report.failures.push("blocked_non_read_or_foreign_requests");
-  if (report.runs.length !== 3) report.failures.push("missing_viewport_locale_runs");
-  report.pass = report.failures.length === 0;
-  writeEvidence(dir, report, redact);
-  return { dir, report };
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  let input;
-  try {
-    assert.ok([4, 5].includes(process.argv.length) && process.argv[2] === "--out-dir" &&
-      (process.argv.length === 4 || process.argv[4] === "--record-baseline"), "usage: --out-dir <private-dir> [--record-baseline], JSON stdin");
-    input = JSON.parse(fs.readFileSync(0, "utf8"));
-    const { dir, report } = await runAcceptance(input, path.resolve(process.argv[3]), { baseline: process.argv[4] === "--record-baseline" });
-    process.stdout.write(JSON.stringify({ pass: report.pass, summary: path.join(dir, "summary.json"), bytes: report.evidence.bytes, failures: report.failures }) + "\n");
-    process.exitCode = report.pass ? 0 : 1;
-  } catch (e) {
-    const redact = makeRedactor([input?.profile?.client_id, input?.profile?.client_secret].filter(string));
-    process.stderr.write(redact(e.message) + "\n"); process.exitCode = 2;
-  }
-}
