@@ -3556,7 +3556,7 @@ export default {
       results: "研究結果",
       noResults: "沒有可開啟的成果檔案。",
       checkingOutputs: "正在確認成果檔案…",
-      outputsUnavailable: "目前無法確認部分成果檔案。",
+      outputsUnavailable: "部分成果檔案目前無法開啟。",
       viewOutput: "查看成果 {{number}}",
       evaluation: {
         action_match_rate: "平均採用參考動作的機率",

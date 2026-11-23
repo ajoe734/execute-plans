@@ -3574,7 +3574,7 @@ export default {
       results: "Research results",
       noResults: "No result files are available to open.",
       checkingOutputs: "Checking result files…",
-      outputsUnavailable: "Some result files could not be verified.",
+      outputsUnavailable: "Some result files could not be opened.",
       viewOutput: "View output {{number}}",
       evaluation: {
         action_match_rate: "Average probability of matching the reference action",

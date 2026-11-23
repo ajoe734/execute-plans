@@ -118,6 +118,7 @@ function ResearchOutputFiles({ ids }: { ids: string[] }) {
   });
   const readingFailed = isError || checks?.some((result) => result.status === "rejected" && !isNotFoundError(result.reason));
   const missing = ids.length === 0 || checks?.some((result) => result.status === "fulfilled" ? !result.value?.id : isNotFoundError(result.reason));
+  const someUnavailable = readingFailed || (missing && links.length > 0);
   return (
     <div className="space-y-2">
       {ids.length > 0 && loading && <p role="status" className="text-sm text-muted-foreground">{t("research.detail.checkingOutputs")}</p>}
@@ -132,8 +133,8 @@ function ResearchOutputFiles({ ids }: { ids: string[] }) {
           ))}
         </ul>
       )}
-      {missing && <p className="text-sm text-muted-foreground">{t("research.detail.noResults")}</p>}
-      {readingFailed && <p role="status" className="text-sm text-muted-foreground">{t("research.detail.outputsUnavailable")}</p>}
+      {missing && !someUnavailable && <p className="text-sm text-muted-foreground">{t("research.detail.noResults")}</p>}
+      {someUnavailable && <p role="status" className="text-sm text-muted-foreground">{t("research.detail.outputsUnavailable")}</p>}
     </div>
   );
 }

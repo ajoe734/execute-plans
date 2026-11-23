@@ -10,7 +10,7 @@
     "owner_read_sha256": "bffb3b7ab8ed14d8f16a16c435f9dda9c3f230db51eec6d126116736285749d2"
   },
   "local_validation": {
-    "tests": "16 focused tests passed, including zero-valued metrics, legacy lineage references and positive/absent artifact reads",
+    "tests": "16 focused tests passed, including zero-valued metrics, legacy lineage references and clear messaging for mixed available and missing artifact files",
     "typecheck": "npm run typecheck passed",
     "browser_candidate": "Local Chromium used the verified tenant-dev viewer against the actual BFF. It checked three real evaluations and all nine displayed values, confirmed the three invalid links were absent, and opened the collector check. Zero page errors or attempted product mutations.",
     "browser_candidate_sha256": "abe8a7902c5dfd05c9ab97a093bb67f084e629650e264e4a266e3c9f1da90af8"

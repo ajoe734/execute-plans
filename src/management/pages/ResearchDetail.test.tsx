@@ -308,6 +308,8 @@ describe("ResearchDetail", () => {
     const link = await screen.findByRole("link", { name: "View output 1" });
     expect(link).toHaveAttribute("href", "/management/artifacts/rart-saved");
     expect(mocks.artifactGet).toHaveBeenCalledWith("rart-missing");
+    expect(screen.getByText("Some result files could not be opened.")).toBeInTheDocument();
+    expect(screen.queryByText("No result files are available to open.")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "View output 2" })).not.toBeInTheDocument();
     expect(screen.getByText("Recorded run parameters")).toBeInTheDocument();
     expect(screen.queryByText("2018-2025")).not.toBeInTheDocument();
