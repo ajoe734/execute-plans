@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -159,19 +159,25 @@ export const PersonaDetail = () => {
   const riskSavingRef = useRef(false);
   const riskIdemKeyRef = useRef<string>(idempotencyKey());
   const riskIdemTierRef = useRef<PaperRiskTier | null>(null);
+  const riskOperationRef = useRef({ personaId: id, generation: 0 });
   const { can } = usePermissions();
   const { me, loading: meLoading, error: meError } = useMe();
   const writeAccess = useAgoraWriteAccess();
   const canRetire = can("archive");
   const canEditPermission = can("edit");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // Invalidate before the new route can interact with shared save/key refs.
+    riskOperationRef.current = { personaId: id, generation: riskOperationRef.current.generation + 1 };
     setRiskEditorOpen(false);
     setRiskSaving(false);
     setRiskSaveError(null);
     riskSavingRef.current = false;
     riskIdemKeyRef.current = idempotencyKey();
     riskIdemTierRef.current = null;
+    return () => {
+      riskOperationRef.current = { personaId: undefined, generation: riskOperationRef.current.generation + 1 };
+    };
   }, [id]);
 
   useEffect(() => {
@@ -435,9 +441,13 @@ export const PersonaDetail = () => {
   };
 
   const handleSaveRiskTier = async () => {
-    if (!riskEditAccess.allowed || riskSavingRef.current) {
+    if (!riskEditAccess.allowed || riskSavingRef.current || p.id !== id) {
       return;
     }
+    const personaId = p.id;
+    const generation = ++riskOperationRef.current.generation;
+    const isCurrentOperation = () =>
+      riskOperationRef.current.personaId === personaId && riskOperationRef.current.generation === generation;
     riskSavingRef.current = true;
     setRiskSaving(true);
     setRiskSaveError(null);
@@ -447,30 +457,35 @@ export const PersonaDetail = () => {
 
     try {
       await patchPersonaRisk(
-        p.id,
+        personaId,
         { risk: selectedRiskTier },
         { idempotencyKey: activeKey },
       );
     } catch (err) {
+      if (!isCurrentOperation()) return;
       const message = err instanceof Error ? err.message : String(err);
       setRiskSaveError(t("persona.riskPolicy.errorSaveFailed", { message }));
       try {
-        const recovered = await resolvePersonaForDetail(p.id);
+        const recovered = await resolvePersonaForDetail(personaId);
+        if (!isCurrentOperation()) return;
         if (recovered) {
           setP(recovered);
         }
       } catch {
         // Keep current state when recovery GET also fails
       }
+      if (!isCurrentOperation()) return;
       riskSavingRef.current = false;
       setRiskSaving(false);
       return;
     }
+    if (!isCurrentOperation()) return;
 
     let authoritativePersona: Persona | undefined;
     try {
-      authoritativePersona = await resolvePersonaForDetail(p.id);
+      authoritativePersona = await resolvePersonaForDetail(personaId);
     } catch (err) {
+      if (!isCurrentOperation()) return;
       const message = err instanceof Error ? err.message : String(err);
       setRiskSaveError(t("persona.riskPolicy.errorRefetchFailed", { message }));
       riskIdemKeyRef.current = idempotencyKey();
@@ -478,6 +493,7 @@ export const PersonaDetail = () => {
       setRiskSaving(false);
       return;
     }
+    if (!isCurrentOperation()) return;
 
     if (!authoritativePersona) {
       setRiskSaveError(

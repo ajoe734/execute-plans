@@ -1,6 +1,7 @@
 import { createElement } from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import {
@@ -884,6 +885,127 @@ describe("PersonaDetail", () => {
           ),
         ),
       );
+
+    function RiskNavigation() {
+      const navigate = useNavigate();
+      return createElement("div", null,
+        createElement("button", { onClick: () => navigate(`/management/personas/${paperPersonaId}`) }, "Return to A"),
+        createElement("button", { onClick: () => navigate("/management/personas/persona-b") }, "Go to B"),
+      );
+    }
+
+    const otherPersona = { ...basePaperPersona, id: "persona-b", name: "Persona B" };
+    const renderNavigableDetail = () => render(createElement(MemoryRouter, {
+      initialEntries: [`/management/personas/${paperPersonaId}`],
+    }, createElement(RiskNavigation), createElement(Routes, null,
+      createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+    )));
+    const navigateToB = async () => {
+      await act(async () => { fireEvent.click(screen.getByText("Go to B")); });
+      await screen.findByRole("heading", { level: 1, name: otherPersona.name });
+    };
+    const startRiskSave = async () => {
+      fireEvent.click(await screen.findByTestId("persona-risk-edit-button"));
+      fireEvent.change(await screen.findByTestId("persona-risk-tier-select"), { target: { value: "high" } });
+      await act(async () => { fireEvent.click(screen.getByTestId("persona-risk-save-button")); });
+    };
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      let reject!: (reason: Error) => void;
+      const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+      return { promise, resolve, reject };
+    }
+
+    it.each(["success", "failure"])("ignores stale PATCH %s after navigation and preserves a newer save", async (outcome) => {
+      const oldPatch = deferred<Persona>();
+      const newPatch = deferred<Persona>();
+      const success = vi.spyOn(toast, "success");
+      const info = vi.spyOn(toast, "info");
+      vi.mocked(getPersona).mockImplementation(async (id) => id === paperPersonaId ? basePaperPersona : otherPersona);
+      vi.mocked(patchPersonaRisk).mockImplementationOnce(() => oldPatch.promise)
+        .mockImplementationOnce(() => newPatch.promise).mockResolvedValue(basePaperPersona);
+      renderNavigableDetail();
+      await startRiskSave();
+      await navigateToB();
+      // Returning to the same id must still invalidate the original operation.
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Return to A" })); });
+      await screen.findByRole("heading", { level: 1, name: basePaperPersona.name });
+      await startRiskSave();
+      const newKey = vi.mocked(patchPersonaRisk).mock.calls[1][2]?.idempotencyKey;
+      const readsBeforeCompletion = vi.mocked(getPersona).mock.calls.length;
+      await act(async () => {
+        if (outcome === "success") oldPatch.resolve(basePaperPersona);
+        else oldPatch.reject(new Error("stale PATCH error"));
+      });
+      expect(getPersona).toHaveBeenCalledTimes(readsBeforeCompletion);
+      expect(screen.getByTestId("persona-risk-save-button")).toBeDisabled();
+      expect(screen.queryByTestId("persona-risk-edit-error")).not.toBeInTheDocument();
+      expect(success).not.toHaveBeenCalled();
+      expect(info).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByTestId("persona-risk-save-button"));
+      expect(patchPersonaRisk).toHaveBeenCalledTimes(2);
+      // A failed current operation keeps its own retry key, unaffected by the stale handler.
+      await act(async () => newPatch.reject(new Error("current PATCH error")));
+      await waitFor(() => expect(screen.getByTestId("persona-risk-save-button")).toBeEnabled());
+      await act(async () => { fireEvent.click(screen.getByTestId("persona-risk-save-button")); });
+      await waitFor(() => expect(patchPersonaRisk).toHaveBeenCalledTimes(3));
+      expect(vi.mocked(patchPersonaRisk).mock.calls[2][2]?.idempotencyKey).toBe(newKey);
+    });
+
+    it.each(["effective", "pending_approval", "unavailable", "failed", "missing", "absent", "error", "recovery", "recovery-error"])(
+      "ignores stale %s GET completion after navigation while B is saving", async (outcome) => {
+        const oldRead = deferred<Persona | undefined>();
+        const newPatch = deferred<Persona>();
+        const success = vi.spyOn(toast, "success");
+        const info = vi.spyOn(toast, "info");
+        vi.mocked(getPersona).mockResolvedValueOnce(basePaperPersona)
+          .mockImplementationOnce(() => oldRead.promise).mockResolvedValue(otherPersona);
+        if (outcome.startsWith("recovery")) vi.mocked(patchPersonaRisk).mockRejectedValueOnce(new Error("lost PATCH"));
+        else vi.mocked(patchPersonaRisk).mockResolvedValueOnce(basePaperPersona);
+        vi.mocked(patchPersonaRisk).mockImplementationOnce(() => newPatch.promise);
+        renderNavigableDetail();
+        await startRiskSave();
+        await waitFor(() => expect(getPersona).toHaveBeenCalledTimes(2));
+        await navigateToB();
+        await startRiskSave();
+        await act(async () => {
+          if (outcome === "error" || outcome === "recovery-error") oldRead.reject(new Error("stale GET error"));
+          else oldRead.resolve(outcome === "absent" ? undefined : {
+            ...basePaperPersona, riskPolicyChange: outcome === "missing" ? undefined : {
+              ...basePaperPersona.riskPolicyChange!, requestedRisk: "high",
+              status: outcome === "recovery" ? "effective" : outcome,
+            },
+          });
+        });
+        expect(screen.getByRole("heading", { level: 1, name: otherPersona.name, hidden: true })).toBeVisible();
+        expect(screen.getByTestId("persona-risk-save-button")).toBeDisabled();
+        expect(screen.queryByTestId("persona-risk-edit-error")).not.toBeInTheDocument();
+        expect(success).not.toHaveBeenCalled();
+        expect(info).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByTestId("persona-risk-save-button"));
+        expect(patchPersonaRisk).toHaveBeenCalledTimes(2);
+        await act(async () => newPatch.resolve(otherPersona));
+        await waitFor(() => expect(screen.queryByTestId("persona-risk-editor")).not.toBeInTheDocument());
+        expect(success).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(["PATCH", "GET"])("invalidates pending %s on unmount without readback or toast", async (stage) => {
+      const pending = deferred<Persona>();
+      const success = vi.spyOn(toast, "success");
+      const info = vi.spyOn(toast, "info");
+      vi.mocked(getPersona).mockResolvedValueOnce(basePaperPersona).mockImplementation(() => pending.promise);
+      vi.mocked(patchPersonaRisk).mockImplementation(() => stage === "PATCH" ? pending.promise : Promise.resolve(basePaperPersona));
+      const view = renderPersonaDetail();
+      await startRiskSave();
+      await waitFor(() => expect(stage === "PATCH" ? patchPersonaRisk : getPersona).toHaveBeenCalledTimes(stage === "PATCH" ? 1 : 2));
+      view.unmount();
+      const reads = vi.mocked(getPersona).mock.calls.length;
+      await act(async () => pending.resolve(basePaperPersona));
+      expect(getPersona).toHaveBeenCalledTimes(reads);
+      expect(success).not.toHaveBeenCalled();
+      expect(info).not.toHaveBeenCalled();
+    });
 
     it("reads the agreed camelCase policy contract without promoting shadow snake_case fields", () => {
       expect(normalizePersonaRiskPolicyChange(undefined)).toBeNull();
