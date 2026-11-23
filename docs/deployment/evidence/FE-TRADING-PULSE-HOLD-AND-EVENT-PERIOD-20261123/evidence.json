@@ -9,6 +9,12 @@
   "branch": "task/FE-TRADING-PULSE-HOLD-AND-EVENT-PERIOD-20261123",
   "base_commit": "ac7555ee0f4d2672c0325b00d4a08903e42baa61",
   "anchor_commit": "1ec88a918",
+  "repair_anchor_commit": "bb278efbe",
+  "previous_review_head": "8d27d25e26ffcbc996130972a2421e5e189667a5",
+  "review_repairs": {
+    "pre_broker_rejection": "An available outcome with submitted_to_broker=false needs a positive rejection kind/focus stage, an actionable reason other than hold_signal, or required>available before a refusal badge or inferred zero fill is allowed. Missing/null/blank/reason_not_recorded reasons alone, a risk_evaluation focus, equal required/available and unavailable outcomes cannot establish a refusal. Unknown event fills remain unknown in both event cards and Persona details; actual filled quantities remain authoritative.",
+    "fill_rate_period": "Use a complete fill-details window first, recognizing endExclusiveAt/end_exclusive_at, endAt/end_at and asOf/as_of. If that object has no complete range, try a complete metricPeriods.fill_rate range. Never combine bounds from different sources or borrow latest decision dates. Bilingual tests cover all six ending aliases, source precedence, fallback from asOf=null and complementary incomplete sources."
+  },
   "scoped_artifacts": [
     "src/management/pages/oversight/_core.tsx",
     "src/management/pages/oversight/TradingPulsePage.test.tsx",
@@ -35,7 +41,7 @@
     "new": "latestHoldOverview reproduces the latest projection shape and 2026-11-22T23:34:51-52Z decision timestamps described by the governed task packet. Its three latest journey IDs are explicitly synthetic test IDs. It preserves the original older telemetry rather than inventing new trades.",
     "expectation_changes": "Original fixtures omit per-event filled_quantity for available latest executions. Tests now assert those executions remain traceable instead of inferring normal full fills from period 1/1; independently known event full fills are covered separately. Period-only labels and headers are updated in existing assertions."
   },
-  "verification_commands": [
+  "previous_head_verification_commands": [
     {
       "command": "timeout 240 npx vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/components/detail/OwnerFacts.test.tsx src/management/pages/PersonaDetail.test.ts src/management/pages/trade-journeys/TradeJourneysPage.readable.test.tsx src/management/pages/trade-journeys/TradeJourneysPage.recorded.test.tsx --maxWorkers=2",
       "exit_code": 0,
@@ -70,6 +76,34 @@
       "command": "timeout 240 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
       "exit_code": 0,
       "note": "Build successful; Vite reports existing large chunk advisories. Generated dist is excluded from commits."
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "verification_commands": [
+    {
+      "command": "timeout 180 npx vitest run src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 2,
+      "passed_tests": 34,
+      "note": "Includes both bilingual review-repair regressions and existing hold/event/history coverage. Existing React act warnings are emitted."
+    },
+    {
+      "command": "timeout 240 npx vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/management/components/detail/OwnerFacts.test.tsx src/management/pages/PersonaDetail.test.ts src/management/pages/trade-journeys/TradeJourneysPage.readable.test.tsx src/management/pages/trade-journeys/TradeJourneysPage.recorded.test.tsx --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 7,
+      "passed_tests": 162
+    },
+    {
+      "command": "timeout 240 npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 240 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "note": "Built in 1m22s with existing chunk-size advisories; generated dist is excluded."
     },
     {
       "command": "git diff --check",
