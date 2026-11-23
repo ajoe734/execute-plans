@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression tests for scripts/accept-persona-strategy-hosted-readonly.mjs.
  * Local loopback fixtures only: they prove CLI logic, NOT hosted behaviour.
@@ -28,13 +29,21 @@ function sha(text: string) {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+const MUTATED_BASELINE_PATH = "/bff/strategies?page_size=5";
+
 function baselinePaths() {
-  const paths = ["/bff/strategies?page_size=20", "/bff/strategies?hide_retired_personas=true&page_size=20", `/bff/strategies?page_size=20&persona_id=${PERSONA}`];
-  for (let i = 1; i <= 9; i++) paths.push(`/bff/strategies?page=${i}&page_size=5`);
+  const paths = [
+    MUTATED_BASELINE_PATH,
+    "/bff/strategies?page_size=50",
+    "/bff/strategies?page_size=20&page_token=20",
+    "/bff/strategies?hide_retired_personas=true&page_size=20",
+    `/bff/strategies?page_size=20&persona_id=${PERSONA}`,
+  ];
+  for (let i = 1; i <= 7; i++) paths.push(`/bff/strategies?page=${i}&page_size=5`);
   return paths;
 }
 function strategyBody(p: string, mutate: boolean) {
-  return { data: { items: [{ id: `s-${p.length}`, name: "stable", note: mutate && p === "/bff/strategies?page_size=20" ? "CHANGED" : "same" }] } };
+  return { data: { items: [{ id: `s-${p.length}`, name: "stable", note: mutate && p === MUTATED_BASELINE_PATH ? "CHANGED" : "same" }] } };
 }
 function dataSourcesBody(mode: "legacy_projection" | "governed_owner") {
   return {
@@ -448,6 +457,32 @@ describe("pure acceptance logic", () => {
     expect(out).not.toMatch(/topsecret|eyJ|abcdefghijkl/);
   });
 
+  it("admits the original 13-response capture key structure without standalone default page_size=20 and requires hide_retired", () => {
+    const origin = "http://127.0.0.1:1";
+    const allow = { isAllowedOrigin: () => true };
+    const good = makeInput(origin);
+    const keys = Object.keys(JSON.parse(good.baseline_raw));
+    expect(keys).toHaveLength(13);
+    expect(keys.filter((k) => k.startsWith("/bff/strategies"))).toHaveLength(12);
+    expect(keys).toContain("/bff/strategies?page_size=5");
+    expect(keys).toContain("/bff/strategies?page_size=50");
+    expect(keys).toContain("/bff/strategies?page_size=20&page_token=20");
+    expect(keys).toContain(cli.HIDE_RETIRED_PATH);
+    expect(keys).toContain(cli.DATA_SOURCES_PATH);
+    expect(keys).not.toContain(cli.DEFAULT_PAGE_PATH);
+    const parsed = cli.validateInput(good, allow);
+    expect(Object.keys(parsed.baseline)).toEqual(keys);
+    expect(parsed.personaPath).toBe(`/bff/strategies?page_size=20&persona_id=${PERSONA}`);
+
+    const missingHideRetired = JSON.parse(JSON.stringify(good));
+    const b = JSON.parse(missingHideRetired.baseline_raw);
+    delete b[cli.HIDE_RETIRED_PATH];
+    b["/bff/strategies?page=99&page_size=5"] = { s: 200, ms: 100, j: strategyBody("/bff/strategies?page=99&page_size=5", false) };
+    missingHideRetired.baseline_raw = JSON.stringify(b);
+    missingHideRetired.baseline_identity.sha256 = sha(missingHideRetired.baseline_raw);
+    expect(() => cli.validateInput(missingHideRetired, allow)).toThrow(/hide_retired/);
+  });
+
   it("rejects missing/incorrect inputs by field name only", () => {
     const origin = "http://127.0.0.1:1";
     const allow = { isAllowedOrigin: () => true };
@@ -463,6 +498,7 @@ describe("pure acceptance logic", () => {
       ["hash", (i) => { i.baseline_identity.sha256 = "0".repeat(64); }, /does not match/],
       ["persona", (i) => { i.expected.persona_id = "persona-nope"; }, /persona_id/],
       ["incomplete baseline", (i) => { const b = JSON.parse(i.baseline_raw); delete b["/bff/strategies?page=1&page_size=5"]; i.baseline_raw = JSON.stringify(b); i.baseline_identity.sha256 = sha(i.baseline_raw); }, /original 13/],
+      ["missing hide_retired", (i) => { const b = JSON.parse(i.baseline_raw); delete b[cli.HIDE_RETIRED_PATH]; b["/bff/strategies?page=99&page_size=5"] = { s: 200, ms: 100, j: strategyBody("/bff/strategies?page=99&page_size=5", false) }; i.baseline_raw = JSON.stringify(b); i.baseline_identity.sha256 = sha(i.baseline_raw); }, /hide_retired/],
       ["reconciliation", (i) => { i.expected.reconciliations = [{ path: "/x", pointer: "/y" }]; }, /reconciliation/],
     ];
     for (const [, mutate, pattern] of cases) {
@@ -505,6 +541,14 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     }
     expect(out.strategy.performance.fleet_browser_warm.samples).toHaveLength(20);
     expect(Object.keys(out.strategy.captures)).toHaveLength(13);
+    expect(Object.keys(out.strategy.captures)).not.toContain(cli.DEFAULT_PAGE_PATH);
+    expect(out.strategy.parity.captured_paths).toBe(13);
+    expect(out.strategy.parity.original_strategy_paths).toBe(12);
+    expect(out.strategy.performance.default_first_page).toMatchObject({ path: cli.DEFAULT_PAGE_PATH, repeats: 10, requirement_ms: 1200, pass: true });
+    expect(out.strategy.performance.default_first_page.samples_ms).toHaveLength(10);
+    expect(out.strategy.performance.per_persona).toMatchObject({ path: `/bff/strategies?page_size=20&persona_id=${PERSONA}`, repeats: 10, requirement_ms: 1200, pass: true });
+    expect(out.strategy.performance.per_persona.samples_ms).toHaveLength(10);
+    expect(out.strategy.performance.hide_retired_without_state).toMatchObject({ path: cli.HIDE_RETIRED_PATH, requirement_ms: 5000, pass: true });
     expect(out.supplementary).toMatchObject({ pass: true, api_reads: expect.any(Array), api_logout_status: 200, after_logout_me_status: 401 });
     expect(out.supplementary.api_reads).toHaveLength(9);
     expect(out.supplementary.retired_reads.map((r: { status: number }) => r.status).every((x: number) => x === 404 || x === 405)).toBe(true);
@@ -530,7 +574,7 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     expect(changed.out.strategy.performance.fleet_browser_warm.pass).toBe(true); // measured checks stay independent of parity
 
     const reconciled = await execute({ mutate: true }, (i) => {
-      (i.expected as Record<string, unknown>).reconciliations = [{ path: "/bff/strategies?page_size=20", pointer: "/data/items/0/note", owner: "strategy-owner", reason: "documented fixture reconciliation", after: "CHANGED" }];
+      (i.expected as Record<string, unknown>).reconciliations = [{ path: MUTATED_BASELINE_PATH, pointer: "/data/items/0/note", owner: "strategy-owner", reason: "documented fixture reconciliation", after: "CHANGED" }];
     });
     expect(reconciled.out.strategy.parity.exact_equal).toBe(false);
     expect(reconciled.out.strategy.parity.documented_reconciliations).toHaveLength(1);

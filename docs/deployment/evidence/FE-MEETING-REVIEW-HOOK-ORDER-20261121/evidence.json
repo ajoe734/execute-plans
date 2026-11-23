@@ -1,0 +1,59 @@
+{
+  "schema_version": "task_evidence.v1",
+  "task_id": "FE-MEETING-REVIEW-HOOK-ORDER-20261121",
+  "parent_task_id": "FE-MEETING-REVIEW-DISPOSITION-20261121",
+  "parent_merge_commit": "e92fb5176f3618dd095713acb94e63aa292afad6",
+  "failed_ci_run_id": "44920427445",
+  "failed_eslint_log_digest": "3723ae9cbe3a7a8e0fe42e3e365bc4937afe446e51978820d74aa83cd5a808ed",
+  "register_classes": [
+    "RC6",
+    "RC1"
+  ],
+  "title": "Fix the Hook order for meeting review query clients",
+  "delivery_state": "source_verified_pending_deploy",
+  "changes": {
+    "src/management/pages/meetings/MeetingDetailPage.tsx": "Replaced the try/catch-wrapped useQueryClient() call at line 118 with an unconditional useContext(QueryClientContext) read passed to registerMeetingQueryClient, preserving identical React Hook order across all renders while registering the mounted QueryClientProvider client when present and falling back cleanly when absent.",
+    "src/management/pages/oversight/HumanGateDetail.tsx": "Replaced the try/catch-wrapped useQueryClient() call at line 55 with an unconditional useContext(QueryClientContext) read passed to registerMeetingQueryClient, preserving identical React Hook order across all renders while registering the mounted QueryClientProvider client when present and falling back cleanly when absent.",
+    "src/management/pages/meetings/meetings.test.tsx": "Kept existing MeetingDetailPage review disposition and provider-owned QueryClientProvider HumanInboxPage -> MeetingDetailPage -> HumanInboxPage navigation/cache-revalidation tests, and added standalone fallback navigation/cache-revalidation coverage when QueryClientProvider is absent.",
+    "src/management/pages/oversight/HumanGateDetail.test.tsx": "Kept existing HumanGateDetailPage meeting review localization, navigation, submission, and read-only regression tests, and added coverage verifying cache invalidation and refresh across both a mounted QueryClientProvider and a standalone remount without QueryClientProvider."
+  },
+  "validation": {
+    "eslint_version": "v9.32.0",
+    "commands": [
+      {
+        "command": "npm run lint",
+        "exit_status": 0,
+        "status": "passed",
+        "summary": "exit 0 (0 errors, 105 warnings; both react-hooks/rules-of-hooks errors in MeetingDetailPage.tsx and HumanGateDetail.tsx resolved)"
+      },
+      {
+        "command": "npx vitest run src/management/pages/meetings/meetings.test.tsx src/management/pages/oversight/HumanGateDetail.test.tsx",
+        "exit_status": 0,
+        "status": "passed",
+        "counts": {
+          "test_files_passed": 2,
+          "tests_passed": 29,
+          "meetings_test_tsx_passed": 16,
+          "human_gate_detail_test_tsx_passed": 13
+        },
+        "summary": "2 test files passed, 29 tests passed (meetings.test.tsx: 16 passed; HumanGateDetail.test.tsx: 13 passed)"
+      },
+      {
+        "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+        "exit_status": 0,
+        "status": "passed",
+        "summary": "exit 0, 0 errors"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/meetings.test.tsx src/management/pages/oversight/HumanGateDetail.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx",
+        "exit_status": 0,
+        "status": "passed",
+        "counts": {
+          "test_files_passed": 4,
+          "tests_passed": 54
+        },
+        "summary": "4 test files passed, 54 tests passed (meetings.test.ts: 10, meetings.test.tsx: 16, HumanGateDetail.test.tsx: 13, HumanInboxPage.test.tsx: 15)"
+      }
+    ]
+  }
+}

@@ -253,7 +253,7 @@ export function validateInput(input, { isAllowedOrigin = isPantheonHttpsOrigin }
   const strategyPaths = paths.filter((p) => p.startsWith("/bff/strategies"));
   need(strategyPaths.length === 12 && paths.length === 13 && paths.includes(DATA_SOURCES_PATH), "baseline must be the original 13 captures (12 strategy + data-sources)");
   for (const p of paths) need(baseline[p] && baseline[p].j !== undefined, `baseline capture ${p} lacks response JSON`);
-  need(paths.includes(DEFAULT_PAGE_PATH) && paths.includes(HIDE_RETIRED_PATH), "baseline lacks original default-page/hide_retired queries");
+  need(paths.includes(HIDE_RETIRED_PATH), "baseline lacks original hide_retired query");
   const personaPath = paths.find((p) => p.includes(`persona_id=${expected.persona_id}`));
   need(Boolean(personaPath), "expected.persona_id does not occur in a baseline query");
   return { baseline, personaPath };
