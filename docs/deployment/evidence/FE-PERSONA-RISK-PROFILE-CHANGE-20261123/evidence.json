@@ -1,6 +1,6 @@
 {
   "task_id": "FE-PERSONA-RISK-PROFILE-CHANGE-20261123",
-  "owner": "Antigravity",
+  "owner": "Codex",
   "assigned_independent_reviewer": "Codex2",
   "problem_register_class": "RC2 WP2.1 / RC6 operator touchpoint",
   "backend_counterpart": "PAPER-PERSONA-RISK-PROFILE-CHANGE-20261123",
@@ -33,17 +33,17 @@
   },
   "local_validation": [
     {
-      "command": "CI=true timeout 90 ./node_modules/.bin/vitest run src/management/pages/PersonaDetail.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "command": "timeout 100 npm test -- src/management/pages/PersonaDetail.test.ts src/lib/bff-v1/personas.test.ts src/lib/bff-v1/personasRiskWrite.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
       "exit_code": 0,
-      "result": "2 test files passed, 48 tests passed (31 PersonaDetail tests including 7 focused paper risk-tier editor & policy status tests + 17 i18nParity tests)"
+      "result": "4 files and 65 tests passed: 35 PersonaDetail, 8 personas contract, 5 real live write-gate/transport, 17 i18n parity. Only HTTP is stubbed in personasRiskWrite.test.ts; neither liveWriteGated nor bffFetch is mocked there."
     },
     {
-      "command": "timeout 180 ./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && timeout 120 ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "command": "timeout 240 npm run typecheck; timeout 100 npm run typecheck:agora (independent bounded commands)",
       "exit_code": 0,
       "result": "TYPECHECK_OK (zero TypeScript errors)"
     },
     {
-      "command": "timeout 120 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false ./node_modules/.bin/vite build",
+      "command": "timeout 120 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
       "exit_code": 0,
       "result": "BUILD_OK (strict live dev production bundle compiled cleanly)"
     }
@@ -55,7 +55,25 @@
     "Request loss/error on PATCH and post-PATCH authoritative GET refetch with stable Idempotency-Key reuse on same-tier retry",
     "Rapid repeat protection blocking concurrent duplicate PATCH submissions while in flight",
     "Older BFF payload lacking data.riskPolicyChange and status=unavailable disabling edit to prevent display-only PATCH",
-    "Read-only / viewer session enforcement keeping Edit disabled while displaying authoritative requested/effective status"
+    "Read-only / viewer session enforcement keeping Edit disabled while displaying authoritative requested/effective status",
+    "Deployment write authority loading or revoked while editor is open denies editing/saving, even for an operator",
+    "VITE_BFF_REAL_WRITES=false refuses mutation before any HTTP; stub/unknown session and unavailable authority refuse PATCH; genuine bearer session dispatches scoped PATCH with Idempotency-Key",
+    "Canonical effectiveRisk null or missing stays unverified despite conflicting snake_case shadow; absent/null riskPolicyChange never inherits risk_policy_change capability",
+    "Identity tab Edit opens a visible modal and saves/refetches while preserving the original tab",
+    "GET failure preserves the last GET-verified policy state rather than adopting a PATCH response as authoritative"
   ],
-  "delivery_state": "local_validated_pending_pr_and_hosted_pair_acceptance"
+  "review_revision": {
+    "supersedes_rejected_head": "33445ea721538f39591960eaac98ff70bb4c4cfa",
+    "anchor_commit": "af0cde29d",
+    "tested_source_commit": "b721b1d8facff0169271db0eb56f53d8841eca46",
+    "pr": 1076,
+    "resolved_findings": [
+      "P1 deployment/session write safety at both UI and mutation",
+      "P1 canonical camelCase capability and explicit unknown effective risk",
+      "P2 visible editor from ordinary detail tabs"
+    ],
+    "backend_source_candidate": "ajoe734/pantheon PR #7762 at c7aafbe575cce3b216fcbd94f8c7a16a28598678 (independent review pending when recorded)",
+    "hosted_pair_acceptance": "Pending backend integration and exact FE/backend deployed pair. No hosted risk mutation, business approval, real trading pool change or deployment was performed by this revision."
+  },
+  "delivery_state": "local_validated_ready_for_new_exact_head_review_not_deployed"
 }
