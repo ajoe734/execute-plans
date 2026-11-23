@@ -1124,6 +1124,55 @@ describe("PersonaDetail", () => {
       );
     });
 
+    it.each([
+      ["zh-TW", "low"],
+      ["zh-TW", null],
+      ["en-US", "low"],
+      ["en-US", null],
+    ] as const)("shows pending exposure guards in %s with effectiveRisk=%s", async (language, effectiveRisk) => {
+      const previousLanguage = i18n.language;
+      await i18n.changeLanguage(language);
+      vi.mocked(getPersona).mockResolvedValue({
+        ...basePaperPersona,
+        risk: "high",
+        riskPolicyChange: {
+          requestedRisk: "high", effectiveRisk, status: "pending_approval",
+          policyVersion: effectiveRisk ? "1.0" : null,
+          approvalId: effectiveRisk ? "apv-existing-low" : null,
+        },
+      });
+      const view = renderPersonaDetail();
+      try {
+        const hint = await screen.findByTestId("persona-risk-policy-hint");
+        expect(hint).toBeVisible();
+        expect(screen.getByTestId("persona-risk-policy-state")).toHaveTextContent(
+          language === "zh-TW" ? "待核准" : "Pending Approval",
+        );
+        expect(screen.getByTestId("persona-requested-risk")).toHaveTextContent(
+          language === "zh-TW" ? "高風險 (high)" : "High (high)",
+        );
+        expect(screen.getByTestId("persona-effective-risk")).toHaveTextContent(
+          effectiveRisk
+            ? language === "zh-TW" ? "低風險 (low)" : "Low (low)"
+            : language === "zh-TW" ? "尚未生效" : "Not effective",
+        );
+        const requiredMessages = language === "zh-TW" ? [
+          "請求與實際生效等級不同或尚未核准時，暫停加碼及新增曝險",
+          "真正減倉或平倉仍可依一般防護規則進行",
+          "舊的生效等級不代表已授權新增風險",
+        ] : [
+          "While requested and effective tiers differ or approval is pending, increases and new exposure are held",
+          "genuine reductions or closures may proceed under normal guards",
+          "an older effective tier does not authorize new risk",
+        ];
+        for (const message of requiredMessages) expect(hint).toHaveTextContent(message);
+        expect(patchPersonaRisk).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
+        await i18n.changeLanguage(previousLanguage);
+      }
+    });
+
     it("maps pending_approval with null effectiveRisk and failed status on reload faithfully", async () => {
       await i18n.changeLanguage("zh-TW");
       vi.mocked(getPersona).mockResolvedValueOnce({
