@@ -14,6 +14,7 @@
 import {
   isStrictLiveFallback,
 } from "./liveTransport";
+import { resolveMeetingActionEvidenceHref } from "./meetings";
 import { strictLiveRead } from "./domainReads";
 import { liveStatus } from "./liveStatus";
 import { paths } from "./paths";
@@ -3259,7 +3260,7 @@ const asInboxStringList = (raw: unknown): string[] => {
   return arr
     .map((it) => {
       if (typeof it === "string") return it;
-      if (isObject(it)) return asString(it.ref ?? it.evidence_ref ?? it.ref_id ?? it.id ?? it.href ?? it.route);
+      if (isObject(it)) return asString(it.ref ?? it.evidence_ref ?? it.ref_id ?? it.artifact_id ?? it.id ?? it.href ?? it.route);
       return asString(it);
     })
     .filter(Boolean);
@@ -3383,6 +3384,98 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
   if (recommendation.includes("research")) return "research-owner";
   if (kind === "readiness_blocker") return "research-owner";
   return "";
+};
+
+const adaptInboxMeetingAction = (
+  it: Record<string, unknown>,
+  kind: HumanInboxKind,
+): HumanInboxItem["meetingAction"] | undefined => {
+  if (kind !== "meeting_action") return undefined;
+  const nested = isObject(it.meeting_action) ? (it.meeting_action as Record<string, unknown>) : {};
+  const src: Record<string, unknown> = { ...nested, ...it };
+  const ticketId = asString(src.ticket_id ?? src.action_id ?? it.source_id ?? it.item_id);
+  if (!ticketId) return undefined;
+  const meetingId = asOptionalString(src.meeting_id ?? src.origin_meeting_id ?? nested.meeting_id);
+  const revision = src.revision ?? src.ticket_revision;
+  const requestedMaterial = asOptionalString(src.requested_material ?? src.deliverable ?? nested.deliverable);
+  const humanRequirement = asOptionalString(src.human_requirement);
+  const reviewDecision = isObject(src.review_decision) ? (src.review_decision as Record<string, unknown>) : undefined;
+  const inputRequest = isObject(src.input_request) ? (src.input_request as Record<string, unknown>) : undefined;
+  const reviewReason = asOptionalString(reviewDecision?.reason);
+  const reason = asOptionalString(
+    src.reason ??
+      inputRequest?.reason ??
+      reviewDecision?.reason ??
+      src.human_requirement ??
+      src.missing_input ??
+      it.summary,
+  );
+  const responseAction = asOptionalString(src.response_action ?? src.next_transition);
+  const resumesWith = asOptionalString(src.resumes_with ?? src.resumes_label ?? src.resumes);
+  const linksObj = isObject(it.links) ? (it.links as Record<string, unknown>) : {};
+  const ticketHref =
+    asOptionalString(linksObj.ticket ?? src.ticket_href) ??
+    `/api/v1/research/tickets/${encodeURIComponent(ticketId)}`;
+  const meetingHref =
+    asOptionalString(linksObj.meeting ?? src.href ?? src.route) ??
+    (meetingId ? `/management/meetings/${encodeURIComponent(meetingId)}?action=${encodeURIComponent(ticketId)}` : undefined);
+  const rawEvidenceRefs = Array.isArray(src.evidence_refs) ? src.evidence_refs : [];
+  const evidenceRefs = rawEvidenceRefs
+    .map((entry) => {
+      if (typeof entry === "string" && entry.trim()) {
+        const id = entry.trim();
+        return {
+          kind: id.startsWith("note-") ? "research_note" : "research_artifact",
+          artifactId: id,
+          href: resolveMeetingActionEvidenceHref(undefined, id)!,
+        };
+      }
+      if (isObject(entry)) {
+        const artifactId = asString(entry.artifact_id ?? entry.id ?? entry.ref ?? entry.evidence_ref);
+        if (!artifactId) return null;
+        const refKind = asOptionalString(entry.kind);
+        const explicitHref = asOptionalString(entry.href ?? entry.route_href ?? entry.routeHref);
+        return {
+          kind: refKind ?? (artifactId.startsWith("note-") ? "research_note" : "research_artifact"),
+          artifactId,
+          ...(asOptionalString(entry.checksum) ? { checksum: asOptionalString(entry.checksum) } : {}),
+          href: resolveMeetingActionEvidenceHref(refKind, artifactId, explicitHref)!,
+        };
+      }
+      return null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+  return {
+    ticketId,
+    meetingId,
+    title: asOptionalString(src.title),
+    owner: asOptionalString(src.owner),
+    assignee: asOptionalString(src.assignee ?? src.owner),
+    assigneeKind: asOptionalString(src.assignee_kind ?? nested.assignee_kind),
+    reviewerId: asOptionalString(src.reviewer_id ?? nested.reviewer_id),
+    deliverable: requestedMaterial,
+    requestedMaterial,
+    acceptanceCriterion: asOptionalString(src.acceptance_criterion ?? nested.acceptance_criterion),
+    dueAt: asOptionalString(src.due_at ?? nested.due_at),
+    nextReview: asOptionalString(src.next_review ?? nested.next_review),
+    ...(typeof src.overdue === "boolean" ? { overdue: src.overdue } : {}),
+    ...(humanRequirement ? { humanRequirement } : {}),
+    ...(reviewReason ? { reviewReason } : {}),
+    reason,
+    missingInput: reason ?? humanRequirement,
+    responseAction,
+    nextTransition: responseAction,
+    requiredActor: asOptionalString(src.required_actor),
+    resumesWith,
+    resumesLabel: resumesWith,
+    state: asOptionalString(src.status ?? src.state ?? src.action_state),
+    ownerStatus: asOptionalString(src.owner_status),
+    ...(typeof revision === "string" || typeof revision === "number" ? { revision } : {}),
+    canRespond: asBoolean(src.can_respond ?? src.canRespond, false),
+    ...(evidenceRefs.length > 0 ? { evidenceRefs } : {}),
+    ticketHref,
+    ...(meetingHref ? { meetingHref } : {}),
+  };
 };
 
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
@@ -3535,6 +3628,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     ...(comparator !== undefined ? { comparator } : {}),
     reviewId,
     reviewType,
+    ...(adaptInboxMeetingAction(it, kind) ? { meetingAction: adaptInboxMeetingAction(it, kind) } : {}),
     decisionHref,
     allowedActions,
     blockingReasons: blockingReasons.length ? blockingReasons : undefined,

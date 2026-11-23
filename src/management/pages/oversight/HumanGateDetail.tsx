@@ -10,15 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { mgmt } from "@/lib/bff-v1";
+import { MeetingActionResponseCard } from "@/management/pages/meetings/MeetingActionCards";
 import {
   MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS,
   collectMeetingEvidenceRefs,
   countMeetingReviewNoteChars,
+  getMeetingActionTicket,
   getMeetingDetail,
   normalizeOperatorReview,
   registerMeetingQueryClient,
   resolveMeetingReviewCause,
   reviewMeeting,
+  type MeetingActionItem,
   type MeetingDetail,
   type MeetingOperatorReview,
   type MeetingsRead,
@@ -29,6 +32,9 @@ import {
   meetingIdFromInboxItem,
   meetingReviewHrefFromInboxItem,
   meetingTypeFromInboxItem,
+  ticketIdFromInboxId,
+  type HumanInboxDetail,
+  type HumanInboxMeetingAction,
 } from "@/lib/v5/management/humanInbox";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
@@ -48,6 +54,98 @@ export function personaIdFromDetail(itemId: string, manageHref?: string): string
   }
 }
 
+function synthesizeDetailFromCanonicalTicket(
+  inboxId: string,
+  ticket: MeetingActionItem,
+  retainedItem: HumanInboxDetail | null,
+): HumanInboxDetail {
+  const meetingId = ticket.origin_meeting_id ?? retainedItem?.meetingAction?.meetingId;
+  const meetingHref =
+    retainedItem?.meetingAction?.meetingHref ??
+    (meetingId
+      ? `/management/meetings/${encodeURIComponent(meetingId)}?action=${encodeURIComponent(ticket.action_id)}`
+      : undefined);
+  const actionable =
+    ticket.state === "waiting_for_input" ||
+    (ticket.owner_kind === "human" &&
+      (ticket.state === "open" || ticket.state === "in_progress" || ticket.state === "returned"));
+  const responseAction =
+    ticket.next_transition ??
+    retainedItem?.meetingAction?.responseAction ??
+    (ticket.owner_kind === "human" ? "submit" : "provide_input");
+  const work: HumanInboxMeetingAction = {
+    ...(retainedItem?.meetingAction ?? {}),
+    ticketId: ticket.ticket_id ?? ticket.action_id,
+    meetingId: meetingId ?? undefined,
+    title: ticket.title ?? retainedItem?.meetingAction?.title,
+    deliverable: ticket.deliverable ?? retainedItem?.meetingAction?.deliverable,
+    requestedMaterial: ticket.deliverable ?? retainedItem?.meetingAction?.requestedMaterial,
+    acceptanceCriterion:
+      ticket.acceptance_criterion ?? retainedItem?.meetingAction?.acceptanceCriterion,
+    dueAt: ticket.due_at ?? retainedItem?.meetingAction?.dueAt,
+    nextReview: ticket.next_review ?? retainedItem?.meetingAction?.nextReview,
+    overdue: ticket.overdue ?? retainedItem?.meetingAction?.overdue,
+    humanRequirement:
+      ticket.human_requirement ?? retainedItem?.meetingAction?.humanRequirement,
+    reason:
+      ticket.review_reason ??
+      ticket.missing_input ??
+      retainedItem?.meetingAction?.reason,
+    missingInput:
+      ticket.missing_input ??
+      ticket.review_reason ??
+      retainedItem?.meetingAction?.missingInput,
+    reviewReason: ticket.review_reason ?? retainedItem?.meetingAction?.reviewReason,
+    responseAction,
+    nextTransition: responseAction,
+    requiredActor: ticket.required_actor ?? retainedItem?.meetingAction?.requiredActor,
+    resumesWith:
+      retainedItem?.meetingAction?.resumesWith ?? ticket.required_actor ?? undefined,
+    resumesLabel:
+      retainedItem?.meetingAction?.resumesLabel ?? ticket.required_actor ?? undefined,
+    state: ticket.state,
+    revision: ticket.revision ?? retainedItem?.meetingAction?.revision,
+    canRespond: actionable ? Boolean(retainedItem?.meetingAction?.canRespond) : false,
+    ticketHref:
+      ticket.ticket_api_href ??
+      retainedItem?.meetingAction?.ticketHref ??
+      `/api/v1/research/tickets/${encodeURIComponent(ticket.action_id)}`,
+    ...(meetingHref ? { meetingHref } : {}),
+  };
+  return {
+    id: retainedItem?.id ?? inboxId,
+    kind: "meeting_action",
+    title:
+      retainedItem?.title ??
+      ticket.title ??
+      ticket.deliverable ??
+      ticket.action_id,
+    summary: retainedItem?.summary ?? ticket.missing_input ?? undefined,
+    requiredRole:
+      retainedItem?.requiredRole ?? ticket.required_actor ?? "operator",
+    consequenceIfApproved: "",
+    consequenceIfRejected: "",
+    consequenceIfIgnored: "",
+    canDecide: false,
+    canProceed: !actionable,
+    status: ticket.state,
+    sourceId: ticket.action_id,
+    meetingId: meetingId ?? undefined,
+    meetingAction: work,
+    evidenceRefs: ticket.evidence_refs,
+    detailHref: `/management/human-inbox/${encodeURIComponent(inboxId)}`,
+    links: retainedItem?.links ?? {
+      manageHref: meetingHref ?? `/management/human-inbox/${encodeURIComponent(inboxId)}`,
+      primaryObjectHref: meetingHref ?? `/management/human-inbox/${encodeURIComponent(inboxId)}`,
+      recommendedActionHref: `/management/human-inbox/${encodeURIComponent(inboxId)}`,
+    },
+    decisionType: "single",
+    signatures: [],
+    decisionHistory: [],
+    auditRefs: [],
+  };
+}
+
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
@@ -64,12 +162,52 @@ export const HumanGateDetailPage = () => {
   const [meetingReviewBusy, setMeetingReviewBusy] = useState(false);
   const [meetingReviewError, setMeetingReviewError] = useState<string | null>(null);
   const meetingReviewIdemRef = useRef<{ key: string; signature: string } | null>(null);
-  const item = data;
+  const [retainedActionItem, setRetainedActionItem] = useState<HumanInboxDetail | null>(null);
+  const [canonicalTicket, setCanonicalTicket] = useState<MeetingActionItem | null>(null);
+  const [ticketCheckDone, setTicketCheckDone] = useState(false);
+
+  const routeTicketId = ticketIdFromInboxId(id) ?? (data?.kind === "meeting_action" ? data.meetingAction?.ticketId : undefined);
+
+  useEffect(() => {
+    if (data && data.kind === "meeting_action") {
+      setRetainedActionItem(data);
+    }
+  }, [data]);
+
+  useEffect(() => {
+    let live = true;
+    if (!routeTicketId) {
+      setTicketCheckDone(true);
+      return;
+    }
+    if (loading) return;
+    if (data && data.kind === "meeting_action") {
+      setTicketCheckDone(true);
+      return;
+    }
+    setTicketCheckDone(false);
+    void getMeetingActionTicket(routeTicketId).then((res) => {
+      if (!live) return;
+      if (res.state === "ok") {
+        setCanonicalTicket(res.data);
+      }
+      setTicketCheckDone(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [routeTicketId, loading, data]);
+
+  const item: HumanInboxDetail | undefined =
+    data ??
+    (canonicalTicket && routeTicketId
+      ? synthesizeDetailFromCanonicalTicket(id, canonicalTicket, retainedActionItem)
+      : undefined);
   const isMeetingReview = item?.kind === "meeting_review";
   const meetingId = item && isMeetingReview ? meetingIdFromInboxItem(item) : undefined;
   const meetingHref = item && isMeetingReview ? meetingReviewHrefFromInboxItem(item) : undefined;
-  const notFound = Boolean(error) && isNotFoundError(error);
-  const hasLoadError = Boolean(error) && !notFound;
+  const notFound = Boolean(error) && isNotFoundError(error) && !item;
+  const hasLoadError = Boolean(error) && !notFound && !item;
 
   useEffect(() => {
     let live = true;
@@ -86,7 +224,7 @@ export const HumanGateDetailPage = () => {
     };
   }, [isMeetingReview, meetingId]);
 
-  if (loading && !item) {
+  if ((loading || (routeTicketId && !ticketCheckDone)) && !item) {
     return (
       <section className="p-6 space-y-4" aria-label={t("mgmt.inbox.title")}>
         <header className="flex flex-wrap items-center justify-between gap-2">
@@ -347,6 +485,23 @@ export const HumanGateDetailPage = () => {
           </ul>
         </Card>
       )}
+
+      {item.kind === "meeting_action" && item.meetingAction ? (
+        <MeetingActionResponseCard
+          work={item.meetingAction}
+          meetingHref={
+            item.meetingAction.meetingHref ??
+            (item.meetingAction.meetingId
+              ? `/management/meetings/${encodeURIComponent(item.meetingAction.meetingId)}?action=${encodeURIComponent(item.meetingAction.ticketId)}`
+              : undefined)
+          }
+          initialContinuation={canonicalTicket}
+          onSaved={(_, latestTicket) => {
+            if (latestTicket) setCanonicalTicket(latestTicket);
+            refresh();
+          }}
+        />
+      ) : null}
 
       {isMeetingReview && (
         <Card className="p-4 space-y-3" data-testid="inbox-meeting-review-card">
