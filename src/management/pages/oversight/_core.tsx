@@ -2782,8 +2782,18 @@ const isNormalPulseHold = (outcome: ManagementTradingPulseLatestOutcome | undefi
   return !(required !== null && available !== null && required > available);
 };
 
-const isPulsePreBrokerRejection = (outcome: ManagementTradingPulseLatestOutcome | undefined): boolean =>
-  outcome?.submittedToBroker === false && outcome.reasonCode !== "hold_signal";
+const isPulsePreBrokerRejection = (outcome: ManagementTradingPulseLatestOutcome | undefined): boolean => {
+  if (outcome?.status !== "available" || outcome.submittedToBroker !== false) return false;
+  const rejectionMarkers = ["rejected", "rejection", "pre_broker_rejected", "pre_broker_rejection"];
+  const hasRejectionMarker = [outcome.kind ?? outcome.outcome_kind, outcome.focusStage]
+    .some((value) => typeof value === "string" && rejectionMarkers.includes(value.trim().toLowerCase()));
+  const reason = String(outcome.reasonCode ?? "").trim().toLowerCase();
+  const hasRejectionReason = reason !== "hold_signal" && hasActionablePulseOutcomeReason(reason);
+  const required = pulseNumber(outcome.required);
+  const available = pulseNumber(outcome.available);
+  return hasRejectionMarker || hasRejectionReason
+    || (required !== null && available !== null && required > available);
+};
 
 const resolvePulseEventQuantities = (outcome: ManagementTradingPulseLatestOutcome | undefined) => {
   const requested = pulseNumber(outcome?.requestedQuantity);
@@ -3228,11 +3238,16 @@ const TradingPulsePersonaDetailsSection = ({
                           <div className="text-[11px] text-muted-foreground">
                             {(() => {
                               const period = fillDetails?.window;
-                              const range = period && typeof period === "object" ? period : perf?.metricPeriods?.fill_rate;
-                              const start = range?.startAt ?? range?.start_at;
-                              const end = range?.asOf ?? range?.as_of;
-                              return start && end
-                                ? t("mgmt.pulse.pnlPeriodRangeFmt", { start: safeDateTime(start), end: safeDateTime(end) })
+                              const range = [period, perf?.metricPeriods?.fill_rate].map((candidate) => {
+                                if (!candidate || typeof candidate !== "object") return null;
+                                const start = candidate.startAt ?? candidate.start_at;
+                                const end = candidate.endExclusiveAt ?? candidate.end_exclusive_at
+                                  ?? candidate.endAt ?? candidate.end_at ?? candidate.asOf ?? candidate.as_of;
+                                return typeof start === "string" && typeof end === "string" && start && end
+                                  ? { start, end } : null;
+                              }).find((candidate) => candidate !== null);
+                              return range
+                                ? t("mgmt.pulse.pnlPeriodRangeFmt", { start: safeDateTime(range.start), end: safeDateTime(range.end) })
                                 : typeof period === "string" && !isPulseTechnicalId(period)
                                   ? t("mgmt.pulse.fillRatePeriodFmt", { period })
                                   : t("mgmt.pulse.pnlPeriodUnverified");

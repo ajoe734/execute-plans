@@ -1750,6 +1750,107 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     }
   });
 
+  it("requires positive pre-broker rejection evidence before inferring zero event fills in both languages", async () => {
+    const cases = [
+      { patch: { reason_code: null }, rejected: false },
+      { patch: { reason_code: "reason_not_recorded" }, rejected: false },
+      { patch: { reason_code: "  " }, rejected: false },
+      { patch: { reason_code: null, focus_stage: "risk_evaluation" }, rejected: false },
+      { patch: { reason_code: null, required: 100, available: 100 }, rejected: false },
+      { patch: { reason_code: null, kind: "rejected" }, rejected: true },
+      { patch: { reason_code: null, focus_stage: "pre_broker_rejected" }, rejected: true },
+      { patch: { reason_code: "reason_not_recorded", required: 101, available: 100 }, rejected: true },
+      { patch: { reason_code: "insufficient_cash" }, rejected: true },
+      { patch: { reason_code: "risk_limit_exceeded" }, rejected: true },
+      { patch: { status: "unavailable", reason_code: "insufficient_cash" }, rejected: false },
+    ];
+    for (const language of ["zh-TW", "en-US"]) {
+      await i18n.changeLanguage(language);
+      for (const { patch, rejected } of cases) {
+        const payload = latestHoldOverview();
+        const row = payload.data.runtime_rows[0];
+        payload.data.runtime_rows = [{ ...row, latest_outcome: {
+          ...row.latest_outcome, requested_quantity: 452, submitted_to_broker: false, ...patch,
+        } }];
+        mockTradingPulseLive(payload);
+        const view = renderPage(<TradingPulsePage />);
+        const events = screen.getByTestId("trading-pulse-notable-events");
+        expect(within(events).getAllByRole("listitem")).toHaveLength(1);
+        const detail = within(screen.getByTestId("trading-pulse-persona-details")).getAllByRole("row")[1];
+        const outcomeCell = within(detail).getAllByRole("cell")[4];
+        const rejectionLabel = i18n.t("mgmt.pulse.eventPreBrokerRejected");
+        const unknownLabel = i18n.t("mgmt.pulse.eventFillUnknown");
+        const zeroFill = i18n.t("mgmt.pulse.eventOrderFillQtyFmt", {
+          requested: "452", filled: "0", rate: "0%", unit: i18n.t("mgmt.pulse.unitShares"),
+        });
+        if (rejected) {
+          expect(events, JSON.stringify(patch)).toHaveTextContent(rejectionLabel);
+          expect(events).toHaveTextContent(zeroFill);
+          expect(outcomeCell).toHaveTextContent(rejectionLabel);
+          expect(outcomeCell).not.toHaveTextContent(unknownLabel);
+        } else {
+          for (const surface of [events, outcomeCell]) {
+            expect(surface, JSON.stringify(patch)).not.toHaveTextContent(rejectionLabel);
+            expect(surface).toHaveTextContent(unknownLabel);
+            expect(surface).not.toHaveTextContent(zeroFill);
+          }
+        }
+        expect(within(events).getByRole("link").getAttribute("href")).toContain("tj_fixture-latest-hold-0");
+        view.unmount();
+      }
+    }
+  });
+
+  it("renders complete fill-rate windows and falls back to complete metric periods without borrowing decision dates in both languages", async () => {
+    const start = "2026-11-16T00:00:00Z";
+    const end = "2026-11-22T12:00:00Z";
+    const fallbackStart = "2026-11-15T00:00:00Z";
+    const fallbackEnd = "2026-11-21T12:00:00Z";
+    for (const language of ["zh-TW", "en-US"]) {
+      await i18n.changeLanguage(language);
+      for (const endKey of ["endAt", "end_at", "endExclusiveAt", "end_exclusive_at", "asOf", "as_of"]) {
+        for (const useFallback of [false, true]) {
+          const payload = latestHoldOverview();
+          const row = payload.data.runtime_rows[0];
+          const window = { start_at: start, as_of: null, ...(!useFallback ? { [endKey]: end } : {}) };
+          const performance_context = {
+            ...row.performance_context,
+            fill_rate_details: { ...row.performance_context.fill_rate_details, window },
+            metric_periods: { ...row.performance_context.metric_periods, fill_rate: {
+              startAt: fallbackStart, asOf: null, [endKey]: fallbackEnd,
+            } },
+          };
+          mockTradingPulseLive({ ...payload, data: { ...payload.data, runtime_rows: [{ ...row, performance_context }] } });
+          const view = renderPage(<TradingPulsePage />);
+          const detail = within(screen.getByTestId("trading-pulse-persona-details")).getAllByRole("row")[1];
+          const rateCell = within(detail).getAllByRole("cell")[2];
+          expect(rateCell, `${endKey}, fallback=${useFallback}`).toHaveTextContent(i18n.t("mgmt.pulse.pnlPeriodRangeFmt", {
+            start: new Date(useFallback ? fallbackStart : start).toLocaleString(),
+            end: new Date(useFallback ? fallbackEnd : end).toLocaleString(),
+          }));
+          expect(rateCell).not.toHaveTextContent(i18n.t("mgmt.pulse.pnlPeriodUnverified"));
+          expect(rateCell).not.toHaveTextContent("23:34:51");
+          view.unmount();
+        }
+      }
+    }
+    // Neither partial source establishes a range; do not mix their bounds.
+    for (const language of ["zh-TW", "en-US"]) {
+      await i18n.changeLanguage(language);
+      const payload = latestHoldOverview();
+      const row = payload.data.runtime_rows[0];
+      mockTradingPulseLive({ ...payload, data: { ...payload.data, runtime_rows: [{ ...row, performance_context: {
+        ...row.performance_context,
+        fill_rate_details: { ...row.performance_context.fill_rate_details, window: { startAt: start, asOf: null } },
+        metric_periods: { fill_rate: { startAt: null, endExclusiveAt: end } },
+      } }] } });
+      const view = renderPage(<TradingPulsePage />);
+      const detail = within(screen.getByTestId("trading-pulse-persona-details")).getAllByRole("row")[1];
+      expect(within(detail).getAllByRole("cell")[2]).toHaveTextContent(i18n.t("mgmt.pulse.pnlPeriodUnverified"));
+      view.unmount();
+    }
+  });
+
   it("preserves real Persona-scoped history navigation to the 2317 rejection and the origin return through the existing journey pages at 390px in both languages", async () => {
     const originalWidth = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
