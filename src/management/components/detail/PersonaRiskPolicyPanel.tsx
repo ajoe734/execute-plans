@@ -96,11 +96,10 @@ export function evaluatePaperPersonaRiskEditAccess(input: {
   me: MeResponse | null;
   meLoading: boolean;
   meError: Error | null;
-  isLiveMode: boolean;
   writeAllowed: boolean;
   writeLoading: boolean;
 }): PaperPersonaRiskEditAccess {
-  const { persona, canEditPermission, me, meLoading, meError, isLiveMode } = input;
+  const { persona, canEditPermission, me, meLoading, meError } = input;
   if (!isPaperPersonaScope(persona)) {
     return { allowed: false, reasonKey: "persona.riskPolicy.unsupportedPersonaReason" };
   }
@@ -121,8 +120,8 @@ export function evaluatePaperPersonaRiskEditAccess(input: {
     !canEditPermission ||
     Boolean(meError) ||
     (Array.isArray(persona?.availableActions) && persona.availableActions.length === 0) ||
-    (me !== null && !meHasOperatorWriteAuthority(me)) ||
-    (isLiveMode && (meLoading || !me))
+    meLoading ||
+    !meHasOperatorWriteAuthority(me)
   ) {
     return { allowed: false, reasonKey: "persona.riskPolicy.readOnlyHint" };
   }

@@ -3,7 +3,7 @@ import { safeDateTime } from "@/lib/utils";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { bffV1, detectMode, idempotencyKey } from "@/lib/bff-v1";
+import { bffV1, idempotencyKey } from "@/lib/bff-v1";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import {
@@ -398,7 +398,6 @@ export const PersonaDetail = () => {
     me,
     meLoading,
     meError,
-    isLiveMode: detectMode() === "live",
     writeAllowed: writeAccess.writeAllowed,
     writeLoading: writeAccess.loading,
   });
@@ -446,9 +445,8 @@ export const PersonaDetail = () => {
     riskIdemKeyRef.current = activeKey;
     riskIdemTierRef.current = selectedRiskTier;
 
-    let patchResponse: Persona;
     try {
-      patchResponse = await patchPersonaRisk(
+      await patchPersonaRisk(
         p.id,
         { risk: selectedRiskTier },
         { idempotencyKey: activeKey },
@@ -474,9 +472,6 @@ export const PersonaDetail = () => {
       authoritativePersona = await resolvePersonaForDetail(p.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (patchResponse?.riskPolicyChange) {
-        setP(patchResponse);
-      }
       setRiskSaveError(t("persona.riskPolicy.errorRefetchFailed", { message }));
       riskIdemKeyRef.current = idempotencyKey();
       riskSavingRef.current = false;

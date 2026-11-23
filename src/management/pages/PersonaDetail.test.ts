@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import {
   PersonaDetail,
@@ -830,6 +830,20 @@ describe("PersonaDetail", () => {
   });
 
   describe("paper Persona risk-tier editor and effective policy status (FE-PERSONA-RISK-PROFILE-CHANGE-20261123)", () => {
+    beforeEach(() => {
+      vi.spyOn(meSession, "useMe").mockReturnValue({
+        me: {
+          user: { id: "operator-1", displayName: "Operator", email: "operator@example.test" },
+          tenant: { id: "t_default", name: "Default", tz: "Asia/Taipei", locale: "zh-TW" },
+          roles: ["ops"], capabilities: ["persona.view", "persona.edit"], env: "dev",
+          featureFlags: {}, serverTime: "2026-11-23T02:00:00Z",
+          sessionExpiresAt: "2026-11-23T10:00:00Z", permissionsVersion: "v1",
+        },
+        loading: false, error: null, refresh: vi.fn(),
+      });
+    });
+    afterEach(() => vi.restoreAllMocks());
+
     const paperPersonaId = "persona-6507750312870d03a241";
     const basePaperPersona: Persona = {
       id: paperPersonaId,
@@ -924,7 +938,11 @@ describe("PersonaDetail", () => {
     });
 
     it("saves through a visible risk editor from the identity tab and preserves that tab", async () => {
-      vi.mocked(getPersona).mockResolvedValue(basePaperPersona);
+      vi.mocked(getPersona).mockResolvedValueOnce(basePaperPersona).mockResolvedValue({
+        ...basePaperPersona, riskPolicyChange: {
+          ...basePaperPersona.riskPolicyChange!, requestedRisk: "high", status: "pending_approval",
+        },
+      });
       vi.mocked(patchPersonaRisk).mockResolvedValueOnce(basePaperPersona);
       renderPersonaDetail(paperPersonaId, "?tab=identity");
       const edit = await screen.findByTestId("persona-risk-edit-button");
@@ -938,6 +956,24 @@ describe("PersonaDetail", () => {
       ));
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
       expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(/身分|Identity/);
+    });
+
+    it("disables an open editor if write authority is revoked before save", async () => {
+      vi.mocked(getPersona).mockResolvedValue(basePaperPersona);
+      const view = renderPersonaDetail();
+      fireEvent.click(await screen.findByTestId("persona-risk-edit-button"));
+      expect(await screen.findByTestId("persona-risk-tier-select")).toBeVisible();
+      vi.mocked(useAgoraWriteAccess).mockReturnValue({
+        ...vi.mocked(useAgoraWriteAccess)(), writeAllowed: false,
+      });
+      view.rerender(createElement(MemoryRouter, {
+        initialEntries: [`/management/personas/${paperPersonaId}`],
+      }, createElement(Routes, null, createElement(Route, {
+        path: "/management/personas/:id", element: createElement(PersonaDetail),
+      }))));
+      expect(screen.queryByTestId("persona-risk-save-button")).not.toBeInTheDocument();
+      expect(screen.getByTestId("persona-risk-readonly-hint")).toBeVisible();
+      expect(patchPersonaRisk).not.toHaveBeenCalled();
     });
 
     it("exercises save and authoritative GET refetch on the actual PATCH/GET request path with Idempotency-Key when policy is effective", async () => {
@@ -1177,6 +1213,8 @@ describe("PersonaDetail", () => {
       });
       const secondKey = vi.mocked(patchPersonaRisk).mock.calls[1]?.[2]?.idempotencyKey;
       expect(secondKey).toBe(firstKey);
+      // A PATCH body cannot replace the last verified GET when refetch fails.
+      expect(screen.getByTestId("persona-requested-risk")).toHaveTextContent("低風險");
     });
 
     it("protects against rapid repeat clicks while PATCH/GET save is in flight", async () => {
