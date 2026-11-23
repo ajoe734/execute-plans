@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression tests for scripts/accept-persona-strategy-hosted-readonly.mjs.
  * Local loopback fixtures only: they prove CLI logic, NOT hosted behaviour.
