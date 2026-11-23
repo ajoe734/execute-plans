@@ -1,0 +1,61 @@
+{
+  "task_id": "FE-PERSONA-RISK-PROFILE-CHANGE-20261123",
+  "owner": "Antigravity",
+  "assigned_independent_reviewer": "Codex2",
+  "problem_register_class": "RC2 WP2.1 / RC6 operator touchpoint",
+  "backend_counterpart": "PAPER-PERSONA-RISK-PROFILE-CHANGE-20261123",
+  "evidence_kind": "local_validation_not_hosted_acceptance",
+  "joint_contract": {
+    "route": "GET /bff/personas/{id}, PATCH /bff/personas/{id}",
+    "read_field": "data.riskPolicyChange",
+    "read_properties": [
+      "requestedRisk",
+      "effectiveRisk",
+      "status",
+      "policyVersion",
+      "approvalId"
+    ],
+    "statuses": [
+      "effective",
+      "pending_approval",
+      "unavailable",
+      "failed"
+    ],
+    "patch_body": {
+      "risk": "low | medium | high"
+    },
+    "patch_headers": [
+      "Authorization / session credentials",
+      "Idempotency-Key"
+    ],
+    "authoritative_source": "GET /bff/personas/{id} refetch after PATCH",
+    "legacy_or_unsupported_guard": "When data.riskPolicyChange is absent or status is unavailable/unsupported, or persona is non-paper/live/retired/research_only, the Edit button remains a disabled NonProductionActionButton and no display-only PATCH is exposed."
+  },
+  "local_validation": [
+    {
+      "command": "CI=true timeout 90 ./node_modules/.bin/vitest run src/management/pages/PersonaDetail.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "result": "2 test files passed, 48 tests passed (31 PersonaDetail tests including 7 focused paper risk-tier editor & policy status tests + 17 i18nParity tests)"
+    },
+    {
+      "command": "timeout 180 ./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && timeout 120 ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "result": "TYPECHECK_OK (zero TypeScript errors)"
+    },
+    {
+      "command": "timeout 120 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false ./node_modules/.bin/vite build",
+      "exit_code": 0,
+      "result": "BUILD_OK (strict live dev production bundle compiled cleanly)"
+    }
+  ],
+  "covered_operator_workflows": [
+    "Save and authoritative GET refetch on actual PATCH /bff/personas/{id} + GET /bff/personas/{id} request path with Idempotency-Key when policy is effective",
+    "Pending approval vs effectiveRisk display on save and reload without claiming unapproved requestedRisk is effective",
+    "Reload with null effectiveRisk (pending_approval) and explicit failed status with backend reason",
+    "Request loss/error on PATCH and post-PATCH authoritative GET refetch with stable Idempotency-Key reuse on same-tier retry",
+    "Rapid repeat protection blocking concurrent duplicate PATCH submissions while in flight",
+    "Older BFF payload lacking data.riskPolicyChange and status=unavailable disabling edit to prevent display-only PATCH",
+    "Read-only / viewer session enforcement keeping Edit disabled while displaying authoritative requested/effective status"
+  ],
+  "delivery_state": "local_validated_pending_pr_and_hosted_pair_acceptance"
+}

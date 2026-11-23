@@ -202,7 +202,7 @@ export function PersonaRiskPolicyPanel({
   const reason = change?.reason?.trim() || null;
 
   const tierText = (tier: PaperRiskTier | null): string =>
-    tier ? t(`risk.${tier}`, { defaultValue: tier }) : t("persona.riskPolicy.notRecorded");
+    tier ? t(`persona.riskPolicy.tiers.${tier}`, { defaultValue: tier }) : t("persona.riskPolicy.notRecorded");
 
   const statusText = t(`persona.riskPolicy.status.${statusKind}`);
 
@@ -258,7 +258,12 @@ export function PersonaRiskPolicyPanel({
           </div>
           <div className="mt-1 text-sm">
             {requestedTier ? (
-              <RiskBadge level={requestedTier} />
+              <span className="inline-flex items-center gap-1.5">
+                <RiskBadge level={requestedTier} />
+                <span className="text-xs text-muted-foreground">
+                  {t(`persona.riskPolicy.tiers.${requestedTier}`)}
+                </span>
+              </span>
             ) : (
               <span className="text-muted-foreground">{t("persona.riskPolicy.notRecorded")}</span>
             )}
@@ -271,7 +276,12 @@ export function PersonaRiskPolicyPanel({
           </div>
           <div className="mt-1 text-sm">
             {effectiveTier ? (
-              <RiskBadge level={effectiveTier} />
+              <span className="inline-flex items-center gap-1.5">
+                <RiskBadge level={effectiveTier} />
+                <span className="text-xs text-muted-foreground">
+                  {t(`persona.riskPolicy.tiers.${effectiveTier}`)}
+                </span>
+              </span>
             ) : statusKind === "unavailable" ? (
               <span className="text-muted-foreground">{t("persona.riskPolicy.status.unavailable")}</span>
             ) : statusKind === "legacy_unreported" ? (

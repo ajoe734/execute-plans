@@ -11,9 +11,21 @@ import {
   TRADING_PULSE_RETURN_HREF,
 } from "./PersonaDetail";
 import i18n from "@/i18n";
-import { bffV1, type CapitalPool, type Persona, type Strategy } from "@/lib/bff-v1";
-import { getPersona, getPersonaManagement, runPersonaAction } from "@/lib/bff-v1/personas";
+import { bffV1, setMockResolver, type CapitalPool, type Persona, type Strategy } from "@/lib/bff-v1";
+import {
+  getPersona,
+  getPersonaManagement,
+  normalizePersonaRiskPolicyChange,
+  patchPersonaRisk,
+  runPersonaAction,
+} from "@/lib/bff-v1/personas";
 import * as writes from "@/lib/bff-v1/writes";
+import { usePlatform } from "@/platform/store";
+import * as meSession from "@/lib/v4/session/me";
+
+const personasHoisted = vi.hoisted(() => ({
+  actual: null as unknown as typeof import("@/lib/bff-v1/personas"),
+}));
 
 vi.mock("@/lib/bff-v1", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bff-v1")>();
@@ -30,19 +42,27 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
 
 vi.mock("@/lib/bff-v1/personas", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bff-v1/personas")>();
+  personasHoisted.actual = actual;
   return {
     ...actual,
     getPersona: vi.fn(),
     getPersonaManagement: vi.fn().mockResolvedValue(undefined),
+    patchPersonaRisk: vi.fn(actual.patchPersonaRisk),
   };
 });
 
 describe("PersonaDetail", () => {
   beforeEach(() => {
+    setMockResolver(undefined);
+    usePlatform.getState().setRole("admin");
     vi.mocked(getPersona).mockReset();
     vi.mocked(getPersonaManagement).mockReset().mockResolvedValue(undefined);
+    vi.mocked(patchPersonaRisk)
+      .mockReset()
+      .mockImplementation((...args) => personasHoisted.actual.patchPersonaRisk(...args));
     vi.mocked(bffV1.strategies.listForPersona).mockReset().mockResolvedValue([]);
     vi.mocked(bffV1.capitalPools.list).mockReset().mockResolvedValue([]);
+    vi.mocked(bffV1.audit.list).mockReset().mockResolvedValue([]);
   });
 
   it("resolves persona detail from the BFF persona endpoint", async () => {
@@ -792,6 +812,452 @@ describe("PersonaDetail", () => {
         .queryAllByRole("link")
         .filter((a) => a.getAttribute("href") === "/management/trading-pulse");
       expect(pulseAnchors).toHaveLength(0);
+    });
+  });
+
+  describe("paper Persona risk-tier editor and effective policy status (FE-PERSONA-RISK-PROFILE-CHANGE-20261123)", () => {
+    const paperPersonaId = "persona-6507750312870d03a241";
+    const basePaperPersona: Persona = {
+      id: paperPersonaId,
+      name: "青禾｜2330 台股 Paper 學習 R1",
+      owner: "pantheon-dev-operator-a",
+      updatedAt: "2026-11-23T01:00:00Z",
+      state: "approved",
+      lifecycleStatus: "paper_running",
+      capitalMode: "paper",
+      deploymentStage: "paper",
+      paperLedgerId: "paper-ledger-06d4775a9b6a8f63b311",
+      runtimeBindingId: "rb-06d4775a9b6a8f63b311",
+      risk: "low",
+      archetype: "quant",
+      routedStrategies: 1,
+      successRate: 0.52,
+      riskPolicyChange: {
+        requestedRisk: "low",
+        effectiveRisk: "low",
+        status: "effective",
+        policyVersion: "1.0",
+        approvalId: "apv-risk-profile-550ae83ccfeaafa69ec1",
+      },
+    };
+
+    const renderPersonaDetail = (personaId = paperPersonaId) =>
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: [`/management/personas/${encodeURIComponent(personaId)}`] },
+          createElement(
+            Routes,
+            null,
+            createElement(Route, {
+              path: "/management/personas/:id",
+              element: createElement(PersonaDetail),
+            }),
+          ),
+        ),
+      );
+
+    it("normalizes riskPolicyChange payloads across camelCase and snake_case wire shapes", () => {
+      expect(normalizePersonaRiskPolicyChange(undefined)).toBeNull();
+      expect(normalizePersonaRiskPolicyChange(null)).toBeNull();
+      expect(
+        normalizePersonaRiskPolicyChange({
+          requestedRisk: "medium",
+          effectiveRisk: "low",
+          status: "pending_approval",
+          policyVersion: "1.0",
+          approvalId: "apv-1",
+        }),
+      ).toEqual({
+        requestedRisk: "medium",
+        effectiveRisk: "low",
+        status: "pending_approval",
+        policyVersion: "1.0",
+        approvalId: "apv-1",
+      });
+      expect(
+        normalizePersonaRiskPolicyChange({
+          requested_risk: "HIGH",
+          effective_risk: null,
+          status: "failed",
+          policy_version: 2,
+          approval_id: "",
+          resolution: { reason: "risk_policy_profile_mapping_unapproved" },
+        }),
+      ).toEqual({
+        requestedRisk: "high",
+        effectiveRisk: null,
+        status: "failed",
+        policyVersion: "2",
+        approvalId: null,
+        reason: "risk_policy_profile_mapping_unapproved",
+      });
+    });
+
+    it("exercises save and authoritative GET refetch on the actual PATCH/GET request path with Idempotency-Key when policy is effective", async () => {
+      await i18n.changeLanguage("zh-TW");
+      const requests: Array<{
+        method: string;
+        path: string;
+        headers: Record<string, string>;
+        body?: unknown;
+      }> = [];
+
+      let serverState: Persona = { ...basePaperPersona };
+
+      setMockResolver((method, path) => {
+        if (path === `/bff/personas/${paperPersonaId}` && method.toUpperCase() === "GET") {
+          return async (req) => {
+            requests.push({ method: req.method, path: req.path, headers: req.headers });
+            return {
+              kind: "json",
+              status: 200,
+              body: { data: serverState, meta: { snapshot_at: "2026-11-23T02:00:00Z" } },
+            };
+          };
+        }
+        if (path === `/bff/personas/${paperPersonaId}` && method.toUpperCase() === "PATCH") {
+          return async (req) => {
+            requests.push({
+              method: req.method,
+              path: req.path,
+              headers: req.headers,
+              body: req.body,
+            });
+            const requested = (req.body as { risk?: string })?.risk as "low" | "medium" | "high";
+            // Simulate PATCH returning intermediate state while authoritative GET returns full verified policyVersion/approvalId
+            serverState = {
+              ...serverState,
+              risk: requested,
+              updatedAt: "2026-11-23T02:01:00Z",
+              riskPolicyChange: {
+                requestedRisk: requested,
+                effectiveRisk: requested,
+                status: "effective",
+                policyVersion: "2.0",
+                approvalId: "apv-risk-profile-medium-v2",
+              },
+            };
+            return {
+              kind: "json",
+              status: 200,
+              body: {
+                data: {
+                  ...serverState,
+                  riskPolicyChange: {
+                    requestedRisk: requested,
+                    effectiveRisk: "low",
+                    status: "pending_approval",
+                    policyVersion: "1.0",
+                    approvalId: "apv-stale-patch-body",
+                  },
+                },
+                meta: { snapshot_at: "2026-11-23T02:01:00Z" },
+              },
+            };
+          };
+        }
+        return undefined;
+      });
+      vi.mocked(getPersona).mockImplementation((id) => personasHoisted.actual.getPersona(id));
+
+      renderPersonaDetail();
+
+      expect(await screen.findByTestId("persona-risk-policy-status")).toBeInTheDocument();
+      expect(screen.getByTestId("persona-risk-policy-state")).toHaveTextContent("已生效");
+      expect(screen.getByTestId("persona-requested-risk")).toHaveTextContent("低風險");
+      expect(screen.getByTestId("persona-effective-risk")).toHaveTextContent("低風險");
+      expect(screen.getByTestId("persona-risk-policy-version")).toHaveTextContent("1.0");
+      expect(screen.getByTestId("persona-risk-approval-id")).toHaveTextContent("apv-risk-profile-550ae83ccfeaafa69ec1");
+
+      const editButton = screen.getByTestId("persona-risk-edit-button");
+      expect(editButton).not.toBeDisabled();
+      fireEvent.click(editButton);
+
+      const select = await screen.findByTestId("persona-risk-tier-select");
+      expect(select).toHaveValue("low");
+      fireEvent.change(select, { target: { value: "medium" } });
+      expect(select).toHaveValue("medium");
+
+      const saveButton = screen.getByTestId("persona-risk-save-button");
+      fireEvent.click(saveButton);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("persona-risk-editor")).not.toBeInTheDocument();
+      });
+
+      // Verify actual HTTP requests: initial GET -> PATCH -> authoritative GET
+      expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual([
+        `GET /bff/personas/${paperPersonaId}`,
+        `PATCH /bff/personas/${paperPersonaId}`,
+        `GET /bff/personas/${paperPersonaId}`,
+      ]);
+      const patchReq = requests[1];
+      expect(patchReq.body).toEqual({ risk: "medium" });
+      expect(patchReq.headers["Idempotency-Key"]).toMatch(/^idk_/);
+
+      // Authoritative GET state wins over intermediate PATCH response body
+      expect(screen.getByTestId("persona-risk-policy-state")).toHaveTextContent("已生效");
+      expect(screen.getByTestId("persona-requested-risk")).toHaveTextContent("中風險");
+      expect(screen.getByTestId("persona-effective-risk")).toHaveTextContent("中風險");
+      expect(screen.getByTestId("persona-risk-policy-version")).toHaveTextContent("2.0");
+      expect(screen.getByTestId("persona-risk-approval-id")).toHaveTextContent("apv-risk-profile-medium-v2");
+    });
+
+    it("maps pending_approval vs effectiveRisk faithfully on save and reload without claiming unapproved risk is effective", async () => {
+      await i18n.changeLanguage("zh-TW");
+      const pendingPersona: Persona = {
+        ...basePaperPersona,
+        risk: "high",
+        riskPolicyChange: {
+          requestedRisk: "high",
+          effectiveRisk: "low",
+          status: "pending_approval",
+          policyVersion: "1.0",
+          approvalId: "apv-risk-profile-550ae83ccfeaafa69ec1",
+        },
+      };
+
+      vi.mocked(getPersona)
+        .mockResolvedValueOnce(basePaperPersona)
+        .mockResolvedValueOnce(pendingPersona);
+      vi.mocked(patchPersonaRisk).mockResolvedValueOnce(pendingPersona);
+
+      renderPersonaDetail();
+
+      const editButton = await screen.findByTestId("persona-risk-edit-button");
+      fireEvent.click(editButton);
+
+      const select = await screen.findByTestId("persona-risk-tier-select");
+      fireEvent.change(select, { target: { value: "high" } });
+      fireEvent.click(screen.getByTestId("persona-risk-save-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("persona-risk-policy-state")).toHaveTextContent("待核准");
+      });
+      expect(screen.getByTestId("persona-requested-risk")).toHaveTextContent("高風險 (high)");
+      expect(screen.getByTestId("persona-effective-risk")).toHaveTextContent("低風險 (low)");
+      expect(screen.getByTestId("persona-risk-policy-hint")).toHaveTextContent(
+        "新風險等級請求（高風險 (high)）已記錄並等待治理核准；核准前仍維持目前實際生效風險等級（低風險 (low)）。",
+      );
+    });
+
+    it("maps pending_approval with null effectiveRisk and failed status on reload faithfully", async () => {
+      await i18n.changeLanguage("zh-TW");
+      vi.mocked(getPersona).mockResolvedValueOnce({
+        ...basePaperPersona,
+        risk: "medium",
+        riskPolicyChange: {
+          requestedRisk: "medium",
+          effectiveRisk: null,
+          status: "pending_approval",
+          policyVersion: null,
+          approvalId: null,
+        },
+      });
+
+      const view = renderPersonaDetail();
+
+      expect(await screen.findByTestId("persona-risk-policy-state")).toHaveTextContent("待核准");
+      expect(screen.getByTestId("persona-requested-risk")).toHaveTextContent("中風險 (medium)");
+      expect(screen.getByTestId("persona-effective-risk")).toHaveTextContent("尚未生效");
+      expect(screen.getByTestId("persona-risk-policy-version")).toHaveTextContent("未綁定");
+      expect(screen.getByTestId("persona-risk-approval-id")).toHaveTextContent("尚無核准紀錄");
+      expect(screen.getByTestId("persona-risk-policy-hint")).toHaveTextContent(
+        "新風險等級請求（中風險 (medium)）已記錄並等待治理核准；目前尚無已驗證生效的風險政策。",
+      );
+      view.unmount();
+
+      vi.mocked(getPersona).mockResolvedValueOnce({
+        ...basePaperPersona,
+        risk: "high",
+        riskPolicyChange: {
+          requestedRisk: "high",
+          effectiveRisk: "low",
+          status: "failed",
+          policyVersion: "1.0",
+          approvalId: "apv-risk-profile-550ae83ccfeaafa69ec1",
+          reason: "paper_risk_change_binding_readback_failed",
+        },
+      });
+
+      renderPersonaDetail();
+      expect(await screen.findByTestId("persona-risk-policy-state")).toHaveTextContent("變更失敗");
+      expect(screen.getByTestId("persona-risk-policy-hint")).toHaveTextContent(
+        "paper_risk_change_binding_readback_failed",
+      );
+    });
+
+    it("surfaces request loss/error on PATCH and post-PATCH GET refetch, and reuses Idempotency-Key on same-tier retry", async () => {
+      await i18n.changeLanguage("zh-TW");
+      vi.mocked(getPersona).mockResolvedValue(basePaperPersona);
+      vi.mocked(patchPersonaRisk)
+        .mockRejectedValueOnce(new Error("HTTP 503 Paper risk change unavailable"))
+        .mockResolvedValueOnce({
+          ...basePaperPersona,
+          risk: "medium",
+          riskPolicyChange: {
+            requestedRisk: "medium",
+            effectiveRisk: "low",
+            status: "pending_approval",
+            policyVersion: "1.0",
+            approvalId: "apv-risk-profile-550ae83ccfeaafa69ec1",
+          },
+        });
+
+      renderPersonaDetail();
+
+      fireEvent.click(await screen.findByTestId("persona-risk-edit-button"));
+      fireEvent.change(await screen.findByTestId("persona-risk-tier-select"), {
+        target: { value: "medium" },
+      });
+      fireEvent.click(screen.getByTestId("persona-risk-save-button"));
+
+      const errAlert = await screen.findByTestId("persona-risk-edit-error");
+      expect(errAlert).toHaveTextContent("風險等級變更失敗：HTTP 503 Paper risk change unavailable");
+      expect(screen.getByTestId("persona-risk-editor")).toBeInTheDocument();
+
+      const firstKey = vi.mocked(patchPersonaRisk).mock.calls[0]?.[2]?.idempotencyKey;
+      expect(firstKey).toMatch(/^idk_/);
+
+      // Retry same tier ("medium") -> reuses identical Idempotency-Key; simulate GET refetch failure on second attempt
+      vi.mocked(getPersona).mockRejectedValueOnce(new Error("GET readback network timeout"));
+      fireEvent.click(screen.getByTestId("persona-risk-save-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("persona-risk-edit-error")).toHaveTextContent(
+          "風險等級請求已送出，但重新讀取權威生效狀態（GET）失敗：GET readback network timeout",
+        );
+      });
+      const secondKey = vi.mocked(patchPersonaRisk).mock.calls[1]?.[2]?.idempotencyKey;
+      expect(secondKey).toBe(firstKey);
+    });
+
+    it("protects against rapid repeat clicks while PATCH/GET save is in flight", async () => {
+      await i18n.changeLanguage("zh-TW");
+      vi.mocked(getPersona).mockResolvedValue(basePaperPersona);
+
+      let resolvePatch!: (value: Persona) => void;
+      vi.mocked(patchPersonaRisk).mockImplementationOnce(
+        () =>
+          new Promise<Persona>((resolve) => {
+            resolvePatch = resolve;
+          }),
+      );
+
+      renderPersonaDetail();
+
+      fireEvent.click(await screen.findByTestId("persona-risk-edit-button"));
+      fireEvent.change(await screen.findByTestId("persona-risk-tier-select"), {
+        target: { value: "high" },
+      });
+
+      const saveButton = screen.getByTestId("persona-risk-save-button");
+      fireEvent.click(saveButton);
+      fireEvent.click(saveButton);
+      fireEvent.click(saveButton);
+
+      expect(patchPersonaRisk).toHaveBeenCalledTimes(1);
+      expect(saveButton).toBeDisabled();
+
+      const updated: Persona = {
+        ...basePaperPersona,
+        risk: "high",
+        riskPolicyChange: {
+          requestedRisk: "high",
+          effectiveRisk: "high",
+          status: "effective",
+          policyVersion: "3.0",
+          approvalId: "apv-risk-profile-high-v3",
+        },
+      };
+      vi.mocked(getPersona).mockResolvedValue(updated);
+      resolvePatch(updated);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("persona-effective-risk")).toHaveTextContent("高風險 (high)");
+      });
+      expect(patchPersonaRisk).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not expose unsafe display-only PATCH on older BFF payloads lacking riskPolicyChange or when status is unavailable", async () => {
+      await i18n.changeLanguage("zh-TW");
+      const legacyPaperPersona: Persona = {
+        ...basePaperPersona,
+        riskPolicyChange: undefined,
+      };
+      vi.mocked(getPersona).mockResolvedValueOnce(legacyPaperPersona);
+
+      const view = renderPersonaDetail();
+
+      expect(await screen.findByTestId("persona-risk-policy-status")).toBeInTheDocument();
+      expect(screen.getByTestId("persona-risk-policy-state")).toHaveTextContent(
+        "未提供生效狀態（舊版回應）",
+      );
+      expect(screen.getByTestId("persona-risk-policy-hint")).toHaveTextContent(
+        "後端未回傳權威風險政策變更狀態（riskPolicyChange），已停用風險等級編輯以避免僅修改顯示標籤。",
+      );
+      const editButton = screen.getByTestId("persona-risk-edit-button");
+      expect(editButton).toBeDisabled();
+      fireEvent.click(editButton);
+      expect(screen.queryByTestId("persona-risk-editor")).not.toBeInTheDocument();
+      expect(patchPersonaRisk).not.toHaveBeenCalled();
+      view.unmount();
+
+      // Explicit status="unavailable" from BFF when Capital owner is unreachable
+      vi.mocked(getPersona).mockResolvedValueOnce({
+        ...basePaperPersona,
+        riskPolicyChange: {
+          requestedRisk: null,
+          effectiveRisk: null,
+          status: "unavailable",
+          policyVersion: null,
+          approvalId: null,
+        },
+      });
+
+      renderPersonaDetail();
+      expect(await screen.findByTestId("persona-risk-policy-state")).toHaveTextContent("暫無資料");
+      expect(screen.getByTestId("persona-risk-edit-button")).toBeDisabled();
+      expect(screen.queryByTestId("persona-risk-editor")).not.toBeInTheDocument();
+    });
+
+    it("enforces read-only access for unprivileged/viewer sessions while still displaying authoritative risk status", async () => {
+      await i18n.changeLanguage("zh-TW");
+      vi.mocked(getPersona).mockResolvedValue(basePaperPersona);
+      const useMeSpy = vi.spyOn(meSession, "useMe").mockReturnValue({
+        me: {
+          user: { id: "u_viewer", displayName: "Viewer", email: "viewer@pantheon.local" },
+          tenant: { id: "t_default", name: "Default", tz: "Asia/Taipei", locale: "zh-TW" },
+          roles: ["viewer"],
+          capabilities: ["persona.view"],
+          env: "dev",
+          featureFlags: {},
+          serverTime: "2026-11-23T02:00:00Z",
+          sessionExpiresAt: "2026-11-23T10:00:00Z",
+          permissionsVersion: "v1",
+        },
+        loading: false,
+        error: null,
+        refresh: vi.fn(),
+      });
+
+      try {
+        renderPersonaDetail();
+
+        expect(await screen.findByTestId("persona-risk-policy-status")).toBeInTheDocument();
+        expect(screen.getByTestId("persona-risk-policy-state")).toHaveTextContent("已生效");
+        expect(screen.getByTestId("persona-risk-readonly-hint")).toHaveTextContent(
+          "目前工作階段為唯讀或無操作員權限，僅可檢視風險政策狀態。",
+        );
+        const editButton = screen.getByTestId("persona-risk-edit-button");
+        expect(editButton).toBeDisabled();
+        fireEvent.click(editButton);
+        expect(screen.queryByTestId("persona-risk-editor")).not.toBeInTheDocument();
+        expect(patchPersonaRisk).not.toHaveBeenCalled();
+      } finally {
+        useMeSpy.mockRestore();
+      }
     });
   });
 });
