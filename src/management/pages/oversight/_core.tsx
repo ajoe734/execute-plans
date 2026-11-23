@@ -2784,11 +2784,26 @@ const isNormalPulseHold = (outcome: ManagementTradingPulseLatestOutcome | undefi
 
 const isPulsePreBrokerRejection = (outcome: ManagementTradingPulseLatestOutcome | undefined): boolean => {
   if (outcome?.status !== "available" || outcome.submittedToBroker !== false) return false;
+  // Recorded fills and non-rejection outcomes contradict a pre-broker refusal.
+  if ((pulseNumber(outcome.filledQuantity) ?? 0) > 0) return false;
   const rejectionMarkers = ["rejected", "rejection", "pre_broker_rejected", "pre_broker_rejection"];
-  const hasRejectionMarker = [outcome.kind ?? outcome.outcome_kind, outcome.focusStage]
+  const kind = String(outcome.kind ?? outcome.outcome_kind ?? "").trim().toLowerCase();
+  if (kind && !rejectionMarkers.includes(kind)) return false;
+  const hasRejectionMarker = [kind, outcome.focusStage]
     .some((value) => typeof value === "string" && rejectionMarkers.includes(value.trim().toLowerCase()));
   const reason = String(outcome.reasonCode ?? "").trim().toLowerCase();
-  const hasRejectionReason = reason !== "hold_signal" && hasActionablePulseOutcomeReason(reason);
+  if ([
+    "hold_signal", "partially_filled", "runtime_unhealthy_at_reconciliation", "reconciliation_deferred_runtime_unhealthy",
+    "reconciliation_identity_unverified", "reconciliation_evidence_incomplete", "reconciliation_check_failed",
+    "broker_record_missing", "broker_fill_mismatch", "position_variance", "cash_variance",
+    "broker_unavailable_at_reconciliation", "reconciliation_deferred_broker_unavailable",
+    "long_cash", "long_lever", "short_via_future", "close_leg",
+  ].includes(reason)) return false;
+  const hasRejectionReason = [
+    "insufficient_cash", "insufficient_buying_power", "insufficient_initial_margin", "insufficient_funds",
+    "insufficient_position", "sell_without_holdings", "kill_switch", "risk_limit_exceeded",
+    "max_position_exceeded", "exposure_limit_exceeded",
+  ].includes(reason);
   const required = pulseNumber(outcome.required);
   const available = pulseNumber(outcome.available);
   return hasRejectionMarker || hasRejectionReason

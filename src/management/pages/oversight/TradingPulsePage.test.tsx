@@ -1721,7 +1721,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       { patch: { reason_code: null, status: "unavailable", requested_quantity: 10, filled_quantity: 3 }, notable: true },
       { patch: { reason_code: "reason_not_recorded", requested_quantity: 10, filled_quantity: 4, submitted_to_broker: true }, notable: true, rate: "40%", filled: "4" },
       { patch: { reason_code: null, requested_quantity: 10, filled_quantity: 12, submitted_to_broker: true }, notable: true, rate: "120%", filled: "12" },
-      { patch: { reason_code: "insufficient_cash", requested_quantity: 452, submitted_to_broker: false }, notable: true, rate: "0%", filled: "0" },
+      { patch: { kind: null, reason_code: "insufficient_cash", requested_quantity: 452, submitted_to_broker: false }, notable: true, rate: "0%", filled: "0" },
       { patch: { kind: "normal", reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: false },
       { patch: { kind: "no_trade", reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: true },
       { patch: { kind: "variance", reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: true },
@@ -1750,7 +1750,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     }
   });
 
-  it("requires positive pre-broker rejection evidence before inferring zero event fills in both languages", async () => {
+  it.each(["zh-TW", "en-US"])("requires positive pre-broker rejection evidence before inferring zero event fills in %s", async (language) => {
     const cases = [
       { patch: { reason_code: null }, rejected: false },
       { patch: { reason_code: "reason_not_recorded" }, rejected: false },
@@ -1760,42 +1760,82 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       { patch: { reason_code: null, kind: "rejected" }, rejected: true },
       { patch: { reason_code: null, focus_stage: "pre_broker_rejected" }, rejected: true },
       { patch: { reason_code: "reason_not_recorded", required: 101, available: 100 }, rejected: true },
-      { patch: { reason_code: "insufficient_cash" }, rejected: true },
-      { patch: { reason_code: "risk_limit_exceeded" }, rejected: true },
+      ...[
+        "insufficient_cash", "insufficient_buying_power", "insufficient_initial_margin", "insufficient_funds",
+        "insufficient_position", "sell_without_holdings", "kill_switch", "risk_limit_exceeded",
+        "max_position_exceeded", "exposure_limit_exceeded",
+      ].map((reason_code) => ({ patch: { reason_code }, rejected: true })),
+      ...[
+        "partially_filled", "reconciliation_evidence_incomplete", "reconciliation_identity_unverified",
+        "reconciliation_check_failed", "runtime_unhealthy_at_reconciliation", "reconciliation_deferred_runtime_unhealthy",
+        "broker_record_missing", "broker_fill_mismatch", "position_variance", "cash_variance",
+        "broker_unavailable_at_reconciliation", "reconciliation_deferred_broker_unavailable",
+        "long_cash", "long_lever", "short_via_future", "close_leg", "future_unknown_reason",
+      ].map((reason_code) => ({ patch: { reason_code }, rejected: false })),
+      ...["normal", "no_trade", "open", "variance", "deferred"].map((kind) => ({
+        patch: { kind, reason_code: "insufficient_cash" }, rejected: false,
+      })),
+      { patch: { kind: "rejected", reason_code: "partially_filled" }, rejected: false },
+      { patch: { reason_code: "reconciliation_evidence_incomplete", required: 101, available: 100 }, rejected: false },
       { patch: { status: "unavailable", reason_code: "insufficient_cash" }, rejected: false },
     ];
+    await i18n.changeLanguage(language);
+    for (const { patch, rejected } of cases) {
+      const payload = latestHoldOverview();
+      const row = payload.data.runtime_rows[0];
+      payload.data.runtime_rows = [{ ...row, latest_outcome: {
+        ...row.latest_outcome, kind: null, requested_quantity: 10, filled_quantity: null, submitted_to_broker: false, ...patch,
+      } }];
+      mockTradingPulseLive(payload);
+      const view = renderPage(<TradingPulsePage />);
+      const events = screen.getByTestId("trading-pulse-notable-events");
+      expect(within(events).getAllByRole("listitem")).toHaveLength(1);
+      const detail = within(screen.getByTestId("trading-pulse-persona-details")).getAllByRole("row")[1];
+      const outcomeCell = within(detail).getAllByRole("cell")[4];
+      const rejectionLabel = i18n.t("mgmt.pulse.eventPreBrokerRejected");
+      const unknownLabel = i18n.t("mgmt.pulse.eventFillUnknown");
+      const zeroFill = i18n.t("mgmt.pulse.eventOrderFillQtyFmt", {
+        requested: "10", filled: "0", rate: "0%", unit: i18n.t("mgmt.pulse.unitShares"),
+      });
+      if (rejected) {
+        expect(events, JSON.stringify(patch)).toHaveTextContent(rejectionLabel);
+        expect(events).toHaveTextContent(zeroFill);
+        expect(outcomeCell).toHaveTextContent(rejectionLabel);
+        expect(outcomeCell).not.toHaveTextContent(unknownLabel);
+      } else {
+        for (const surface of [events, outcomeCell]) {
+          expect(surface, JSON.stringify(patch)).not.toHaveTextContent(rejectionLabel);
+          expect(surface).toHaveTextContent(unknownLabel);
+          expect(surface).not.toHaveTextContent(zeroFill);
+        }
+      }
+      expect(within(events).getByRole("link").getAttribute("href")).toContain("tj_fixture-latest-hold-0");
+      view.unmount();
+    }
+  }, 15000);
+
+  it("retains positive event fills without a pre-broker refusal badge even when rejection fields conflict in both languages", async () => {
     for (const language of ["zh-TW", "en-US"]) {
       await i18n.changeLanguage(language);
-      for (const { patch, rejected } of cases) {
+      for (const filled of [4, 12]) {
         const payload = latestHoldOverview();
         const row = payload.data.runtime_rows[0];
         payload.data.runtime_rows = [{ ...row, latest_outcome: {
-          ...row.latest_outcome, requested_quantity: 452, submitted_to_broker: false, ...patch,
+          ...row.latest_outcome, kind: "rejected", focus_stage: "pre_broker_rejected", reason_code: "insufficient_cash",
+          requested_quantity: 10, filled_quantity: filled, submitted_to_broker: false, required: 101, available: 100,
         } }];
         mockTradingPulseLive(payload);
         const view = renderPage(<TradingPulsePage />);
         const events = screen.getByTestId("trading-pulse-notable-events");
-        expect(within(events).getAllByRole("listitem")).toHaveLength(1);
         const detail = within(screen.getByTestId("trading-pulse-persona-details")).getAllByRole("row")[1];
         const outcomeCell = within(detail).getAllByRole("cell")[4];
-        const rejectionLabel = i18n.t("mgmt.pulse.eventPreBrokerRejected");
-        const unknownLabel = i18n.t("mgmt.pulse.eventFillUnknown");
-        const zeroFill = i18n.t("mgmt.pulse.eventOrderFillQtyFmt", {
-          requested: "452", filled: "0", rate: "0%", unit: i18n.t("mgmt.pulse.unitShares"),
-        });
-        if (rejected) {
-          expect(events, JSON.stringify(patch)).toHaveTextContent(rejectionLabel);
-          expect(events).toHaveTextContent(zeroFill);
-          expect(outcomeCell).toHaveTextContent(rejectionLabel);
-          expect(outcomeCell).not.toHaveTextContent(unknownLabel);
-        } else {
-          for (const surface of [events, outcomeCell]) {
-            expect(surface, JSON.stringify(patch)).not.toHaveTextContent(rejectionLabel);
-            expect(surface).toHaveTextContent(unknownLabel);
-            expect(surface).not.toHaveTextContent(zeroFill);
-          }
+        for (const surface of [events, outcomeCell]) {
+          expect(surface).not.toHaveTextContent(i18n.t("mgmt.pulse.eventPreBrokerRejected"));
+          expect(surface).not.toHaveTextContent(i18n.t("mgmt.pulse.eventFillUnknown"));
         }
-        expect(within(events).getByRole("link").getAttribute("href")).toContain("tj_fixture-latest-hold-0");
+        expect(events).toHaveTextContent(i18n.t("mgmt.pulse.eventOrderFillQtyFmt", {
+          requested: "10", filled: String(filled), rate: `${filled * 10}%`, unit: i18n.t("mgmt.pulse.unitShares"),
+        }));
         view.unmount();
       }
     }
