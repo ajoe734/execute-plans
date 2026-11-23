@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
@@ -15,8 +15,34 @@ import {
   TRADING_PULSE_HOSTED_WIRE_SAMPLE,
   TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE,
 } from "@/lib/bff-v1/__tests__/fixtures/trading-pulse";
+import * as journeysApi from "@/lib/bff-v1/tradeJourneys";
+import { TradeJourneysPage, TradeJourneyDetailPage } from "../trade-journeys/TradeJourneysPage";
+import { fixtureMeta, rejectedRow, rejectedDetailStages, rejectedTimeline } from "../trade-journeys/__fixtures__/readableJourneys";
 import { PersonaDetail } from "../PersonaDetail";
 import { TradingPulsePage } from "./_core";
+
+// Reproduces the latest hosted projection described in the task packet. Journey
+// IDs are synthetic fixture IDs; period telemetry remains the original sample.
+function latestHoldOverview() {
+  return {
+    ...TRADING_PULSE_HOSTED_WIRE_SAMPLE,
+    data: {
+      ...TRADING_PULSE_HOSTED_WIRE_SAMPLE.data,
+      runtime_rows: TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows.map((row, index) => ({
+        ...row,
+        underlying_symbol: ["2330.TWSE", "0050.TWSE", "2317.TWSE"][index],
+        latest_outcome: {
+          status: "available", kind: "no_trade", reason_code: "hold_signal",
+          occurred_at: index === 0 ? "2026-11-22T23:34:51Z" : "2026-11-22T23:34:52Z",
+          requested_quantity: 1, filled_quantity: null, submitted_to_broker: null,
+          side: null, order_id: null, broker_order_id: null, required: null, available: null,
+          journey_id: `tj_fixture-latest-hold-${index}`,
+        } as Record<string, unknown>,
+        links: { ...row.links, journey: `/management/trade-journeys/tj_fixture-latest-hold-${index}?tenant_id=tenant-dev&environment=paper` },
+      })),
+    },
+  };
+}
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
@@ -139,10 +165,11 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       within(pnlSection).getByText("其餘 1 位尚無成交損益或未達可比較條件"),
     ).toBeInTheDocument();
 
-    // 4. Notable trading event: only 澄川 2317 pre-broker risk rejection (452 requested, 0 filled, insufficient cash);
-    // verified normal 1/1 fills (青禾 2330, 衡岳 0050) without actionable reasons stay in Persona details only.
+    // 4. Keep the known rejection and the latest execution without event fill
+    // evidence. The period's 1/1 cannot establish a full fill for that event.
     expect(within(eventsSection).getByText("澄川｜2317 台股 Paper")).toBeInTheDocument();
-    expect(within(eventsSection).queryByText("青禾｜2330 台股 Paper 學習 R3")).not.toBeInTheDocument();
+    expect(within(eventsSection).getByText("青禾｜2330 台股 Paper 學習 R3")).toBeInTheDocument();
+    expect(within(eventsSection).getByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toBeInTheDocument();
     expect(within(eventsSection).queryByText("衡岳｜0050 台股 ETF Paper")).not.toBeInTheDocument();
     expect(within(eventsSection).getByText("送券商前風控拒單（未送出委託）")).toBeInTheDocument();
     expect(within(eventsSection).getByText("資金不足")).toBeInTheDocument();
@@ -163,9 +190,9 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(within(qingheRow).getByText("模擬交易")).toBeInTheDocument();
     expect(within(qingheRow).getByText("運行中")).toBeInTheDocument();
     expect(within(qingheRow).getByText("1 筆成交")).toBeInTheDocument();
-    expect(within(qingheRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
+    expect(within(qingheRow).getByText("100%（區間意向 1 股、成交 1 股）")).toBeInTheDocument();
     expect(within(qingheRow).getByText(/TWD -168\.09（虧損）/)).toBeInTheDocument();
-    expect(within(qingheRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
+    expect(within(qingheRow).getByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toBeInTheDocument();
     expect(within(qingheRow).getByText("平均滑價 0 bps")).toBeInTheDocument();
     expect(within(qingheRow).getByText("最大回撤 1.2%")).toBeInTheDocument();
     expect(
@@ -177,7 +204,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(within(chengchuanRow).getByText("模擬交易")).toBeInTheDocument();
     expect(within(chengchuanRow).getByText("0 筆成交")).toBeInTheDocument();
     expect(within(chengchuanRow).getByText("尚未成交")).toBeInTheDocument();
-    expect(within(chengchuanRow).getByText("0%（該次意向 452 股、成交 0 股）")).toBeInTheDocument();
+    expect(within(chengchuanRow).getByText("0%（區間意向 452 股、成交 0 股）")).toBeInTheDocument();
     expect(within(chengchuanRow).getByText("尚無成交損益（帳本幣別 TWD）")).toBeInTheDocument();
     expect(within(chengchuanRow).getByText("資金不足")).toBeInTheDocument();
     expect(within(chengchuanRow).getByText("送券商前風控拒單（未送出委託）")).toBeInTheDocument();
@@ -214,7 +241,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(screen.getByText("Operational Personas: 3")).toBeInTheDocument();
     expect(screen.getByText("Paper: 3")).toBeInTheDocument();
     expect(screen.getByText("Coverage: 2 / 3 Personas")).toBeInTheDocument();
-    expect(screen.getByText("0% (Requested 452 shares, filled 0 shares)")).toBeInTheDocument();
+    expect(screen.getByText("0% (Period intent 452 shares, filled 0 shares)")).toBeInTheDocument();
     expect(screen.getByText("No fill P&L yet (ledger currency TWD)")).toBeInTheDocument();
     expect(screen.getByText("P&L Performance")).toBeInTheDocument();
     expect(screen.getByText("Drawdown Control")).toBeInTheDocument();
@@ -941,9 +968,9 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent ?? "");
     expect(headers).toEqual([
       "Persona ／ 標的",
-      "成交筆數",
-      "成交率",
-      "損益",
+      "區間成交筆數",
+      "區間成交率",
+      "區間損益",
       "近期事件與資料時間",
     ]);
 
@@ -967,7 +994,8 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     // 澄川 (row 3) null P&L cell has zero digits while Fill Rate cell renders once in human language without duplicate raw unit code
     const chengchuanCells = Array.from(bodyRows[2].querySelectorAll("td")).map((td) => td.textContent ?? "");
     expect(chengchuanCells[1]).toContain("0 筆成交");
-    expect(chengchuanCells[2]).toBe("0%（該次意向 452 股、成交 0 股）");
+    expect(chengchuanCells[2]).toContain("0%（區間意向 452 股、成交 0 股）");
+    expect(chengchuanCells[2]).toContain("計算期間：");
     expect(chengchuanCells[2]).not.toMatch(/SHARES|absolute_order_quantity/);
     expect(chengchuanCells[3]).toBe("尚無成交損益（帳本幣別 TWD）");
     expect(chengchuanCells[3]).not.toMatch(/\d/);
@@ -1129,7 +1157,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     const zhEvents = screen.getByTestId("trading-pulse-notable-events");
     expect(within(zhEvents).getByText("資料暫時無法取得（無法計算成交率）")).toBeInTheDocument();
     expect(within(zhEvents).getByText("上次資料已過期（無法確認當期成交率）")).toBeInTheDocument();
-    expect(within(zhEvents).getByText("尚無可計算的成交率")).toBeInTheDocument();
+    expect(within(zhEvents).getByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toBeInTheDocument();
     expect(within(zhEvents).queryByText("尚未有委託（尚無可計算的成交率）")).not.toBeInTheDocument();
     zhView.unmount();
 
@@ -1173,7 +1201,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(
       within(enEvents).getByText("Last data is stale (current fill rate unavailable)"),
     ).toBeInTheDocument();
-    expect(within(enEvents).getByText("Fill rate not available yet")).toBeInTheDocument();
+    expect(within(enEvents).getByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toBeInTheDocument();
     expect(
       within(enEvents).queryByText("No orders submitted yet (fill rate not available)"),
     ).not.toBeInTheDocument();
@@ -1348,7 +1376,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     }
   });
 
-  it("handles real hosted 1/1 absolute_order_quantity wire shape with two normal full-fill Personas and one pre-broker rejection without raw machine units or routine green alert cards in zh-TW and en-US", async () => {
+  it("handles real hosted 1/1 absolute_order_quantity wire shape with period full fills, unconfirmed latest executions and one pre-broker rejection without raw machine units in zh-TW and en-US", async () => {
     const hostedRealShapeOverview = {
       ...TRADING_PULSE_HOSTED_WIRE_SAMPLE,
       data: {
@@ -1487,10 +1515,10 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       "僅模擬執行監控工作階段未完整建立；下方顯示目前已讀取的交易明細（詳見底部資料診斷）。",
     );
 
-    // 2. Notable events section contains ONLY 澄川 2317 pre-broker rejection; 青禾 and 衡岳 are not promoted
+    // 2. The pre-broker rejection stays first; missing per-event fills stay traceable.
     const zhEvents = screen.getByTestId("trading-pulse-notable-events");
     const zhEventItems = within(zhEvents).getAllByRole("listitem");
-    expect(zhEventItems).toHaveLength(1);
+    expect(zhEventItems).toHaveLength(3);
     expect(within(zhEvents).getByText("澄川｜2317 台股 Paper")).toBeInTheDocument();
     expect(within(zhEvents).getByText("標的 2317.TWSE")).toBeInTheDocument();
     expect(within(zhEvents).getByText("送券商前風控拒單（未送出委託）")).toBeInTheDocument();
@@ -1498,9 +1526,8 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     expect(
       within(zhEvents).getByText("該次意向 452 股、成交 0 股（成交率 0%）"),
     ).toBeInTheDocument();
-    expect(within(zhEvents).queryByText(/青禾/)).not.toBeInTheDocument();
-    expect(within(zhEvents).queryByText(/衡岳/)).not.toBeInTheDocument();
-    expect(within(zhEvents).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
+    expect(within(zhEvents).getAllByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toHaveLength(2);
+    expect(within(zhEvents).queryByText("該次意向 1 股、成交 1 股（成交率 100%）")).not.toBeInTheDocument();
 
     // 3. Persona details table keeps all 3 Personas, their fill rates once in human language, and their journey links
     const zhPersonaSection = screen.getByTestId("trading-pulse-persona-details");
@@ -1511,21 +1538,19 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     const zhHengyueRow = zhRows.find((r) => r.textContent?.includes("衡岳｜0050 台股 ETF Paper")) as HTMLElement;
     const zhChengchuanRow = zhRows.find((r) => r.textContent?.includes("澄川｜2317 台股 Paper")) as HTMLElement;
 
-    expect(within(zhQingheRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
-    expect(within(zhQingheRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
-    expect(within(zhQingheRow).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
+    expect(within(zhQingheRow).getByText("100%（區間意向 1 股、成交 1 股）")).toBeInTheDocument();
+    expect(within(zhQingheRow).getByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toBeInTheDocument();
     expect(
       within(zhQingheRow).getByRole("link", { name: "查看交易旅程" }).getAttribute("href"),
     ).toContain("tj_29473e86-63ff-5384-bda1-23eef61cebb2");
 
-    expect(within(zhHengyueRow).getByText("100%（該次意向 1 股、成交 1 股）")).toBeInTheDocument();
-    expect(within(zhHengyueRow).getByText("無風控拒單或異常事件")).toBeInTheDocument();
-    expect(within(zhHengyueRow).queryByText(/原因未紀錄|一般執行紀錄/)).not.toBeInTheDocument();
+    expect(within(zhHengyueRow).getByText("100%（區間意向 1 股、成交 1 股）")).toBeInTheDocument();
+    expect(within(zhHengyueRow).getByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toBeInTheDocument();
     expect(
       within(zhHengyueRow).getByRole("link", { name: "查看交易旅程" }).getAttribute("href"),
     ).toContain("tj_0050-normal-fill");
 
-    expect(within(zhChengchuanRow).getByText("0%（該次意向 452 股、成交 0 股）")).toBeInTheDocument();
+    expect(within(zhChengchuanRow).getByText("0%（區間意向 452 股、成交 0 股）")).toBeInTheDocument();
     expect(within(zhChengchuanRow).getByText("資金不足")).toBeInTheDocument();
 
     // 4. Never leaks raw absolute_order_quantity
@@ -1543,23 +1568,23 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     );
 
     const enEvents = screen.getByTestId("trading-pulse-notable-events");
-    expect(within(enEvents).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(enEvents).getAllByRole("listitem")).toHaveLength(3);
     expect(within(enEvents).getByText("澄川｜2317 台股 Paper")).toBeInTheDocument();
     expect(
       within(enEvents).getByText("Requested 452 shares, filled 0 shares (0% fill rate)"),
     ).toBeInTheDocument();
-    expect(within(enEvents).queryByText(/青禾|衡岳/)).not.toBeInTheDocument();
-    expect(within(enEvents).queryByText(/Reason not recorded|Standard execution record/)).not.toBeInTheDocument();
+    expect(within(enEvents).getAllByText(i18n.t("mgmt.pulse.eventFillUnknown"))).toHaveLength(2);
+    expect(within(enEvents).queryByText("Requested 1 shares, filled 1 shares (100% fill rate)")).not.toBeInTheDocument();
 
     const enPersonaSection = screen.getByTestId("trading-pulse-persona-details");
     expect(
-      within(enPersonaSection).getAllByText("100% (Requested 1 shares, filled 1 shares)"),
+      within(enPersonaSection).getAllByText("100% (Period intent 1 shares, filled 1 shares)"),
     ).toHaveLength(2);
     expect(
-      within(enPersonaSection).getByText("0% (Requested 452 shares, filled 0 shares)"),
+      within(enPersonaSection).getByText("0% (Period intent 452 shares, filled 0 shares)"),
     ).toBeInTheDocument();
     expect(
-      within(enPersonaSection).getAllByText("No risk rejection or exception events"),
+      within(enPersonaSection).getAllByText(i18n.t("mgmt.pulse.eventFillUnknown")),
     ).toHaveLength(2);
 
     const enFullText = enView.container.textContent ?? "";
@@ -1580,10 +1605,10 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     mockTradingPulseLive(rawUnits);
     const unitsZh = renderPage(<TradingPulsePage />);
     expect(
-      within(screen.getByTestId("trading-pulse-persona-details")).getAllByText("100%（該次意向 1 股、成交 1 股）"),
+      within(screen.getByTestId("trading-pulse-persona-details")).getAllByText("100%（區間意向 1 股、成交 1 股）"),
     ).toHaveLength(2);
     expect(
-      within(screen.getByTestId("trading-pulse-persona-details")).getByText("0%（該次意向 452 單位、成交 0 單位）"),
+      within(screen.getByTestId("trading-pulse-persona-details")).getByText("0%（區間意向 452 單位、成交 0 單位）"),
     ).toBeInTheDocument();
     unitsZh.unmount();
 
@@ -1637,4 +1662,141 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     );
     normRowHealthView.unmount();
   });
+  it("renders three latest no_trade / hold_signal decisions independently of older 1/1 and 0/452 period telemetry in both languages", async () => {
+    for (const language of ["zh-TW", "en-US"]) {
+      await i18n.changeLanguage(language);
+      mockTradingPulseLive(latestHoldOverview());
+      const view = renderPage(<TradingPulsePage />);
+      const events = screen.getByTestId("trading-pulse-notable-events");
+      expect(within(events).queryAllByRole("listitem")).toHaveLength(0);
+      expect(events).toHaveTextContent(i18n.t("mgmt.pulse.eventsEmpty"));
+      const rows = within(screen.getByTestId("trading-pulse-persona-details")).getAllByRole("row").slice(1);
+      expect(rows).toHaveLength(3);
+      rows.forEach((row, index) => {
+        const cells = within(row).getAllByRole("cell");
+        const source = TRADING_PULSE_HOSTED_WIRE_SAMPLE.data.runtime_rows[index];
+        expect(cells[0]).toHaveTextContent(source.persona_name);
+        expect(cells[2]).toHaveTextContent(i18n.t("mgmt.pulse.fillRateKnownWithBasisFmt", {
+          rate: index === 2 ? "0%" : "100%", requested: index === 2 ? "452" : "1", filled: index === 2 ? "0" : "1",
+          unit: i18n.t("mgmt.pulse.unitShares"),
+        }));
+        expect(cells[4]).toHaveTextContent(i18n.t("tradeJourneys.reasons.hold_signal"));
+        expect(cells[4]).not.toHaveTextContent(i18n.t("mgmt.pulse.eventPreBrokerRejected"));
+        expect(cells[4]).not.toHaveTextContent(language === "zh-TW" ? "該次意向" : "Requested");
+        expect(cells[4]).not.toHaveTextContent("452");
+        expect(within(cells[4]).getByText(i18n.t("mgmt.pulse.eventOccurredAtFmt", {
+          time: new Date(index === 0 ? "2026-11-22T23:34:51Z" : "2026-11-22T23:34:52Z").toLocaleString(),
+        }))).toBeInTheDocument();
+        const latest = within(row).getByRole("link", { name: i18n.t("mgmt.pulse.openLatestJourney") });
+        const url = new URL(latest.getAttribute("href")!, "https://fixture.test");
+        expect(url.pathname).toBe(`/management/trade-journeys/tj_fixture-latest-hold-${index}`);
+        expect(url.searchParams.get("tenant_id")).toBe("tenant-dev");
+        expect(url.searchParams.get("environment")).toBe("paper");
+        expect(url.searchParams.get("return_to")).toBe("/management/trading-pulse");
+      });
+      const rateCell = within(rows[0]).getAllByRole("cell")[2];
+      expect(rateCell).toHaveTextContent(i18n.t("mgmt.pulse.pnlPeriodRangeFmt", {
+        start: new Date("2026-11-16T00:00:00Z").toLocaleString(),
+        end: new Date("2026-11-22T12:00:00Z").toLocaleString(),
+      }));
+      expect(rateCell).not.toHaveTextContent("23:34:51");
+      expect(view.container.textContent).not.toContain("absolute_order_quantity");
+      view.unmount();
+    }
+  });
+
+  it("uses only event evidence for partial/over/full fills and keeps contradictory holds, missing quantities and uncertain outcomes traceable in both languages", async () => {
+    const cases = [
+      { patch: { submitted_to_broker: false }, notable: false },
+      { patch: { submitted_to_broker: true }, notable: true },
+      { patch: { order_id: "order-contradiction" }, notable: true },
+      { patch: { broker_order_id: "broker-contradiction" }, notable: true },
+      { patch: { side: "buy" }, notable: true },
+      { patch: { filled_quantity: 1 }, notable: true },
+      { patch: { required: 101, available: 100 }, notable: true },
+      { patch: { kind: "rejected" }, notable: true },
+      { patch: { status: "unavailable" }, notable: true },
+      { patch: { reason_code: null }, notable: true },
+      { patch: { reason_code: null, status: "not_observed", submitted_to_broker: true }, notable: true },
+      { patch: { reason_code: null, status: "unavailable", requested_quantity: 10, filled_quantity: 3 }, notable: true },
+      { patch: { reason_code: "reason_not_recorded", requested_quantity: 10, filled_quantity: 4, submitted_to_broker: true }, notable: true, rate: "40%", filled: "4" },
+      { patch: { reason_code: null, requested_quantity: 10, filled_quantity: 12, submitted_to_broker: true }, notable: true, rate: "120%", filled: "12" },
+      { patch: { reason_code: "insufficient_cash", requested_quantity: 452, submitted_to_broker: false }, notable: true, rate: "0%", filled: "0" },
+      { patch: { reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: false },
+      // Same requested quantity as period denominator still does not prove this event filled.
+      { patch: { reason_code: "reason_not_recorded", requested_quantity: 1, filled_quantity: null }, notable: true },
+    ];
+    for (const language of ["zh-TW", "en-US"]) {
+      await i18n.changeLanguage(language);
+      for (const { patch, notable, rate, filled } of cases) {
+        const payload = latestHoldOverview();
+        payload.data.runtime_rows = [{ ...payload.data.runtime_rows[0], latest_outcome: { ...payload.data.runtime_rows[0].latest_outcome, ...patch } }];
+        mockTradingPulseLive(payload);
+        const view = renderPage(<TradingPulsePage />);
+        const events = screen.getByTestId("trading-pulse-notable-events");
+        expect(within(events).queryAllByRole("listitem"), JSON.stringify(patch)).toHaveLength(notable ? 1 : 0);
+        if (rate) {
+          expect(events).toHaveTextContent(i18n.t("mgmt.pulse.eventOrderFillQtyFmt", {
+            requested: String(patch.requested_quantity), filled, rate, unit: i18n.t("mgmt.pulse.unitShares"),
+          }));
+          expect(events).not.toHaveTextContent(language === "zh-TW" ? "區間意向" : "Period intent");
+        } else if (notable && patch.filled_quantity == null) {
+          expect(events).not.toHaveTextContent(language === "zh-TW" ? "成交率 100%" : "100% fill rate");
+        }
+        view.unmount();
+      }
+    }
+  });
+
+  it("preserves real Persona-scoped history navigation to the 2317 rejection and the origin return through the existing journey pages at 390px in both languages", async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const listMock = vi.spyOn(journeysApi, "listTradeJourneys").mockResolvedValue({
+      data: { items: [rejectedRow] }, page_info: { total: 1, page_size: 25, next_page_token: null }, meta: fixtureMeta,
+    });
+    vi.spyOn(journeysApi, "subscribeTradeJourneys").mockReturnValue({ close() {} });
+    vi.spyOn(journeysApi, "getTradeJourney").mockResolvedValue({ data: { ...rejectedRow, stages: rejectedDetailStages }, meta: fixtureMeta });
+    vi.spyOn(journeysApi, "getTradeJourneyTimeline").mockResolvedValue({ data: { items: rejectedTimeline }, page_info: { total: rejectedTimeline.length, page_size: 100 }, meta: fixtureMeta });
+    vi.spyOn(journeysApi, "getTradeJourneyEvidence").mockResolvedValue({ data: {}, meta: fixtureMeta });
+    try {
+      for (const language of ["zh-TW", "en-US"]) {
+        await i18n.changeLanguage(language);
+        mockTradingPulseLive(latestHoldOverview());
+        const view = render(
+          <I18nextProvider i18n={i18n}>
+            <MemoryRouter initialEntries={["/management/trading-pulse"]}>
+              <Routes>
+                <Route path="/management/trading-pulse" element={<TradingPulsePage />} />
+                <Route path="/management/trade-journeys" element={<TradeJourneysPage />} />
+                <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} />
+              </Routes>
+            </MemoryRouter>
+          </I18nextProvider>,
+        );
+        const row = within(screen.getByTestId("trading-pulse-persona-details")).getAllByRole("row")[3];
+        const history = within(row).getByRole("link", { name: i18n.t("mgmt.pulse.openPersonaJourneys") });
+        const url = new URL(history.getAttribute("href")!, "https://fixture.test");
+        expect(url.searchParams.get("persona_id")).toBe(rejectedRow.persona_id);
+        fireEvent.click(history);
+        const historicalLink = await waitFor(() => {
+          const link = document.querySelector(`a[href^="/management/trade-journeys/${rejectedRow.journey_id}?"]`);
+          expect(link).toBeInTheDocument();
+          return link!;
+        });
+        expect(listMock).toHaveBeenLastCalledWith(expect.objectContaining({ tenant_id: "tenant-dev", environment: "paper", persona_id: rejectedRow.persona_id }), expect.any(AbortSignal));
+        fireEvent.click(historicalLink);
+        await screen.findByLabelText(i18n.t("tradeJourneys.stages.risk_evaluation") + ": " + i18n.t("tradeJourneys.stageStatuses.riskRejected"));
+        expect(document.body).toHaveTextContent("452");
+        expect(document.body).toHaveTextContent(i18n.t("tradeJourneys.reasons.insufficient_cash"));
+        expect(journeysApi.getTradeJourney).toHaveBeenLastCalledWith(rejectedRow.journey_id, expect.objectContaining({ tenant_id: "tenant-dev", environment: "paper" }), expect.any(AbortSignal));
+        fireEvent.click(screen.getByRole("link", { name: i18n.t("tradeJourneys.backTo", { label: i18n.t("mgmt.pulse.title") }) }));
+        expect(screen.getByTestId("trading-pulse-notable-events")).toHaveTextContent(i18n.t("mgmt.pulse.eventsEmpty"));
+        view.unmount();
+      }
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+      vi.restoreAllMocks();
+    }
+  });
+
 });

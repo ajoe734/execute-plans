@@ -2811,8 +2811,11 @@ const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => 
   if (isNormalPulseHold(row.latestOutcome) || isVerifiedNormalFullFillRow(row)) return false;
   const outcome = row.latestOutcome;
   if (outcome && outcome.status === "available") return true;
-  if (outcome?.submittedToBroker === false) return true;
+  if (typeof outcome?.submittedToBroker === "boolean") return true;
   if (outcome?.reasonCode) return true;
+  const requested = pulseNumber(outcome?.requestedQuantity);
+  const filled = pulseNumber(outcome?.filledQuantity);
+  if (requested !== null && requested > 0 && filled !== null && filled !== requested) return true;
   const reqAmt = pulseNumber(outcome?.required);
   const availAmt = pulseNumber(outcome?.available);
   if (reqAmt !== null && availAmt !== null && reqAmt > availAmt) return true;
@@ -2946,8 +2949,6 @@ const TradingPulseNotableEventsSection = ({
                       <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
                     ) : missingFillRateKind === "stale" ? (
                       <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
-                    ) : missingFillRateKind === "no_orders" ? (
-                      <span>{t("mgmt.pulse.fillRateNoOrders")}</span>
                     ) : (
                       <span className="text-muted-foreground">{t("mgmt.pulse.eventFillUnknown")}</span>
                     )
@@ -3323,6 +3324,9 @@ const TradingPulsePersonaDetailsSection = ({
                                 unit: unitInfo.localized,
                               })}
                             </div>
+                          )}
+                          {!normalHold && resolvePulseEventQuantities(outcome).rate === null && (
+                            <div className="text-[11px]">{t("mgmt.pulse.eventFillUnknown")}</div>
                           )}
                           {outcomeRequired !== null && outcomeAvailable !== null && (
                             <div className="text-[11px] text-muted-foreground">
