@@ -97,6 +97,8 @@ export function evaluatePaperPersonaRiskEditAccess(input: {
   meLoading: boolean;
   meError: Error | null;
   isLiveMode: boolean;
+  writeAllowed: boolean;
+  writeLoading: boolean;
 }): PaperPersonaRiskEditAccess {
   const { persona, canEditPermission, me, meLoading, meError, isLiveMode } = input;
   if (!isPaperPersonaScope(persona)) {
@@ -114,6 +116,8 @@ export function evaluatePaperPersonaRiskEditAccess(input: {
     return { allowed: false, reasonKey: "persona.riskPolicy.unsupportedPersonaReason" };
   }
   if (
+    input.writeLoading ||
+    !input.writeAllowed ||
     !canEditPermission ||
     Boolean(meError) ||
     (Array.isArray(persona?.availableActions) && persona.availableActions.length === 0) ||

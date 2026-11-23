@@ -22,6 +22,14 @@ import {
 import * as writes from "@/lib/bff-v1/writes";
 import { usePlatform } from "@/platform/store";
 import * as meSession from "@/lib/v4/session/me";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+import { liveWriteGated } from "@/lib/bff-v1/writeGate";
+
+vi.mock("@/agora/useAgoraWriteAccess", () => ({ useAgoraWriteAccess: vi.fn() }));
+vi.mock("@/lib/bff-v1/writeGate", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/bff-v1/writeGate")>(),
+  liveWriteGated: vi.fn(),
+}));
 
 const personasHoisted = vi.hoisted(() => ({
   actual: null as unknown as typeof import("@/lib/bff-v1/personas"),
@@ -53,6 +61,12 @@ vi.mock("@/lib/bff-v1/personas", async (importOriginal) => {
 
 describe("PersonaDetail", () => {
   beforeEach(() => {
+    vi.mocked(liveWriteGated).mockReset().mockResolvedValue(true);
+    vi.mocked(useAgoraWriteAccess).mockReset().mockReturnValue({
+      agoraCapabilities: [], capabilities: [], roles: ["operator"], loading: false,
+      interactionAllowed: false, interactionDisabledReason: null,
+      writeAllowed: true, writeDisabledReason: null,
+    });
     setMockResolver(undefined);
     usePlatform.getState().setRole("admin");
     vi.mocked(getPersona).mockReset();
@@ -841,11 +855,11 @@ describe("PersonaDetail", () => {
       },
     };
 
-    const renderPersonaDetail = (personaId = paperPersonaId) =>
+    const renderPersonaDetail = (personaId = paperPersonaId, search = "") =>
       render(
         createElement(
           MemoryRouter,
-          { initialEntries: [`/management/personas/${encodeURIComponent(personaId)}`] },
+          { initialEntries: [`/management/personas/${encodeURIComponent(personaId)}${search}`] },
           createElement(
             Routes,
             null,
@@ -857,7 +871,7 @@ describe("PersonaDetail", () => {
         ),
       );
 
-    it("normalizes riskPolicyChange payloads across camelCase and snake_case wire shapes", () => {
+    it("reads the agreed camelCase policy contract without promoting shadow snake_case fields", () => {
       expect(normalizePersonaRiskPolicyChange(undefined)).toBeNull();
       expect(normalizePersonaRiskPolicyChange(null)).toBeNull();
       expect(
@@ -885,13 +899,45 @@ describe("PersonaDetail", () => {
           resolution: { reason: "risk_policy_profile_mapping_unapproved" },
         }),
       ).toEqual({
-        requestedRisk: "high",
+        requestedRisk: null,
         effectiveRisk: null,
         status: "failed",
-        policyVersion: "2",
+        policyVersion: null,
         approvalId: null,
-        reason: "risk_policy_profile_mapping_unapproved",
       });
+    });
+
+    it.each([
+      ["read-only deployment", false, false],
+      ["write authority still loading", true, true],
+    ])("disables operator Edit for %s", async (_label, writeAllowed, loading) => {
+      vi.mocked(getPersona).mockResolvedValue(basePaperPersona);
+      vi.mocked(useAgoraWriteAccess).mockReturnValue({
+        ...vi.mocked(useAgoraWriteAccess)(), writeAllowed, loading,
+      });
+      renderPersonaDetail();
+      const edit = await screen.findByTestId("persona-risk-edit-button");
+      expect(edit).toBeDisabled();
+      fireEvent.click(edit);
+      expect(screen.queryByTestId("persona-risk-editor")).not.toBeInTheDocument();
+      expect(patchPersonaRisk).not.toHaveBeenCalled();
+    });
+
+    it("saves through a visible risk editor from the identity tab and preserves that tab", async () => {
+      vi.mocked(getPersona).mockResolvedValue(basePaperPersona);
+      vi.mocked(patchPersonaRisk).mockResolvedValueOnce(basePaperPersona);
+      renderPersonaDetail(paperPersonaId, "?tab=identity");
+      const edit = await screen.findByTestId("persona-risk-edit-button");
+      fireEvent.click(edit);
+      expect(await screen.findByRole("dialog")).toBeVisible();
+      expect(screen.getByTestId("persona-risk-tier-select")).toBeVisible();
+      fireEvent.change(screen.getByTestId("persona-risk-tier-select"), { target: { value: "high" } });
+      fireEvent.click(screen.getByTestId("persona-risk-save-button"));
+      await waitFor(() => expect(patchPersonaRisk).toHaveBeenCalledWith(
+        paperPersonaId, { risk: "high" }, expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(/身分|Identity/);
     });
 
     it("exercises save and authoritative GET refetch on the actual PATCH/GET request path with Idempotency-Key when policy is effective", async () => {

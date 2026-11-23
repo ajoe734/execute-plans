@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { bffV1, detectMode, idempotencyKey } from "@/lib/bff-v1";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
@@ -398,6 +399,8 @@ export const PersonaDetail = () => {
     meLoading,
     meError,
     isLiveMode: detectMode() === "live",
+    writeAllowed: writeAccess.writeAllowed,
+    writeLoading: writeAccess.loading,
   });
 
   const handleToggleRiskEditor = () => {
@@ -660,11 +663,11 @@ export const PersonaDetail = () => {
                   personaName={p.name}
                   className="mb-4"
                 />
-                {showPaperRiskPolicySurface && (
+                {showPaperRiskPolicySurface && !riskEditorOpen && (
                   <PersonaRiskPolicyPanel
                     persona={p}
                     editAccess={riskEditAccess}
-                    editorOpen={riskEditorOpen}
+                    editorOpen={false}
                     selectedTier={selectedRiskTier}
                     saving={riskSaving}
                     saveError={riskSaveError}
@@ -841,6 +844,23 @@ export const PersonaDetail = () => {
           },
         ]}
       />
+      <Dialog open={riskEditorOpen} onOpenChange={(open) => { if (!open) handleCancelRiskEditor(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle>{t("persona.riskPolicy.editorTitle")}</DialogTitle>
+          <DialogDescription>{t("persona.riskPolicy.editorDesc")}</DialogDescription>
+          <PersonaRiskPolicyPanel
+            persona={p}
+            editAccess={riskEditAccess}
+            editorOpen={riskEditorOpen}
+            selectedTier={selectedRiskTier}
+            saving={riskSaving}
+            saveError={riskSaveError}
+            onSelectTier={handleSelectRiskTier}
+            onSave={() => void handleSaveRiskTier()}
+            onCancel={handleCancelRiskEditor}
+          />
+        </DialogContent>
+      </Dialog>
       {writeAccess.interactionDisabledReason ? (
         <p className="px-6 pb-2 text-xs font-semibold text-amber-700" data-testid="persona-interaction-disabled-reason">
           {writeAccess.interactionDisabledReason}
