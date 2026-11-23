@@ -35,15 +35,16 @@
     {
       "command": "timeout 100 npm test -- src/management/pages/PersonaDetail.test.ts src/lib/bff-v1/personas.test.ts src/lib/bff-v1/personasRiskWrite.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
       "exit_code": 0,
-      "result": "4 files and 65 tests passed: 35 PersonaDetail, 8 personas contract, 5 real live write-gate/transport, 17 i18n parity. Only HTTP is stubbed in personasRiskWrite.test.ts; neither liveWriteGated nor bffFetch is mocked there."
+      "result": "4 files and 69 tests passed: 39 PersonaDetail, 8 personas contract, 5 real live write-gate/transport, 17 i18n parity. Includes four visible pending-hint cases for zh-TW/en-US with effectiveRisk=low/null. Only HTTP is stubbed in personasRiskWrite.test.ts; neither liveWriteGated nor bffFetch is mocked there."
     },
     {
-      "command": "timeout 240 npm run typecheck; timeout 100 npm run typecheck:agora (independent bounded commands)",
+      "command": "timeout 240 npm run typecheck",
       "exit_code": 0,
       "result": "TYPECHECK_OK (zero TypeScript errors)"
     },
     {
       "command": "timeout 120 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "tested_source_commit": "b721b1d8facff0169271db0eb56f53d8841eca46",
       "exit_code": 0,
       "result": "BUILD_OK (strict live dev production bundle compiled cleanly)"
     }
@@ -51,6 +52,7 @@
   "covered_operator_workflows": [
     "Save and authoritative GET refetch on actual PATCH /bff/personas/{id} + GET /bff/personas/{id} request path with Idempotency-Key when policy is effective",
     "Pending approval vs effectiveRisk display on save and reload without claiming unapproved requestedRisk is effective",
+    "Visible pending hint in zh-TW/en-US with effectiveRisk=low/null explains increases/new exposure are held while tiers differ or approval is pending, genuine reductions/closures may proceed under normal guards, and an older effective tier does not authorize new risk",
     "Reload with null effectiveRisk (pending_approval) and explicit failed status with backend reason",
     "Request loss/error on PATCH and post-PATCH authoritative GET refetch with stable Idempotency-Key reuse on same-tier retry",
     "Rapid repeat protection blocking concurrent duplicate PATCH submissions while in flight",
@@ -74,6 +76,24 @@
     ],
     "backend_source_candidate": "ajoe734/pantheon PR #7762 at c7aafbe575cce3b216fcbd94f8c7a16a28598678 (independent review pending when recorded)",
     "hosted_pair_acceptance": "Pending backend integration and exact FE/backend deployed pair. No hosted risk mutation, business approval, real trading pool change or deployment was performed by this revision."
+  },
+  "pending_guidance_revision": {
+    "supersedes_rejected_head": "aabc2507992788e9d9c4809bc727962ce2351ac8",
+    "tested_source_commit": "c9a789ccc89d52a05663067cccb65ff5d63a9e8c",
+    "base_commit": "cd42fa8e8fdd084c472e6c442015b7d872b8cfc8",
+    "resolved_finding": "P2 pending-risk operator acceptance: both pending messages in both locales retain requested/effective facts and explain exposure holds, guarded reductions/closures and old-policy non-authorization.",
+    "regression_baseline": {
+      "command": "timeout 100 npm test -- src/management/pages/PersonaDetail.test.ts -t 'shows pending exposure guards'",
+      "result": "4 cases failed against pre-fix locale text at aabc2507992788e9d9c4809bc727962ce2351ac8 because visible pending hints lacked the required guidance; all four pass in the current 69-test suite.",
+      "exit_code": 1,
+      "expected_failure": true
+    },
+    "diff_check": {
+      "command": "git diff --check origin/dev HEAD",
+      "exit_code": 0
+    },
+    "scope": "Locale pending hints and focused visible-panel tests only; editor, transport and backend policy behavior retain the prior reviewed fixes.",
+    "hosted_pair_acceptance": "Not performed; no deployment or real pool mutation."
   },
   "delivery_state": "local_validated_ready_for_new_exact_head_review_not_deployed"
 }
