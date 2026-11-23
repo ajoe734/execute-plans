@@ -45,7 +45,7 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
   it.each([
     [{ owner_kind: "persona", owner_id: "persona-alpha", owner_display_name: "澄川" }, "澄川", "persona"],
     [{ meeting_action: { owner_kind: "human", owner_id: "operator", owner_display_name: "Operator" } }, "Operator", "human"],
-    [{ owner_kind: "human", owner_id: "operator" }, "operator", "human"],
+    [{ owner_kind: "human", owner_id: "operator", owner: "research" }, "operator", "human"],
     [{ assignee: { kind: "human", display_name: "Alice" } }, "Alice", "human"],
     [{ assignee: "Alice", assignee_kind: "human" }, "Alice", "human"],
     [{ meeting_action: { assignee: "Alice", assignee_kind: "human" } }, "Alice", "human"],
@@ -1086,6 +1086,11 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
       return undefined;
     });
 
+    detailPayload = { ...detailPayload, anonymised_labels_revealed: true };
+    const revealed = await getMeetingDetail("mtg-w48-001");
+    if (revealed.state !== "ok" || revealed.data.prior_actions?.state !== "ok") throw new Error("missing revealed fixture");
+    expect(revealed.data.prior_actions.items[0].owner_label).toBe("澄川");
+    detailPayload = { ...detailPayload, anonymised_labels_revealed: false };
     const okRes = await getMeetingDetail("mtg-w48-001");
     expect(okRes.state).toBe("ok");
     if (okRes.state === "ok") {

@@ -1281,13 +1281,17 @@ export function normalizeMeetingAction(raw: unknown): MeetingActionItem | null {
     : isRecord(origin.assignee) ? origin.assignee
     : isRecord(origin.owner) ? origin.owner : {};
   const ownerKind = optText(raw.owner_kind ?? raw.assignee_kind ?? owner.kind ?? origin.owner_kind ?? origin.assignee_kind);
-  const ownerId = optText(raw.owner_id ?? owner.id ?? origin.owner_id);
+  const ownerId = optText(
+    raw.owner_id ?? raw.assignee_id ?? owner.id ?? origin.owner_id ?? origin.assignee_id ??
+      (typeof raw.assignee === "string" ? raw.assignee : null) ??
+      (typeof origin.assignee === "string" ? origin.assignee : null),
+  );
   const ownerLabel = optText(
     raw.owner_display_name ?? raw.assignee_label ?? raw.owner_label ?? owner.display_name ??
       owner.label ?? origin.owner_display_name ?? origin.assignee_label ?? origin.owner_label ??
       (typeof raw.assignee === "string" ? raw.assignee : null) ??
-      (typeof raw.owner === "string" ? raw.owner : null) ??
-      (typeof origin.assignee === "string" ? origin.assignee : null) ?? ownerId,
+      (typeof origin.assignee === "string" ? origin.assignee : null) ?? ownerId ??
+      (typeof raw.owner === "string" ? raw.owner : null),
   );
   const liveOwnerStatus = normalizeLiveOwnerStatus(raw.live_owner_status);
   const executedRaw = raw.executed;
@@ -1890,9 +1894,10 @@ function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDet
       synthesisRecord?.prior_action_reviews,
   );
   const displayActionOwner = (action: MeetingActionItem): MeetingActionItem => {
-    if (cleaned.anonymised_labels_revealed !== false || action.owner_kind !== "persona") return action;
+    if (cleaned.anonymised_labels_revealed !== false || action.owner_kind === "human") return action;
     const labels = isRecord(cleaned.label_reveal) ? cleaned.label_reveal : {};
     const label = Object.entries(labels).find(([, id]) => id === action.owner_id)?.[0];
+    if (action.owner_kind !== "persona" && !label) return action;
     return { ...action, owner_label: label ?? "#?" };
   };
   if (priorActions?.state === "ok") priorActions.items = priorActions.items.map(displayActionOwner);
