@@ -1,6 +1,8 @@
 # FE-MEETING-ACTION-FOLLOWTHROUGH-20261123 — Evidence
 
-Status: `merged-candidate` (local validation complete; not yet deployed or accepted on hosted dev).
+Status: `review-candidate` (local component/browser validation complete; independent review, merge and hosted acceptance pending).
+
+Owner: Codex. Assigned reviewer: Codex2. PR: [#1077](https://github.com/ajoe734/execute-plans/pull/1077).
 
 ## Scope & Contract Alignment
 
@@ -30,7 +32,41 @@ Status: `merged-candidate` (local validation complete; not yet deployed or accep
 
 ## Local Validation
 
-- `npx vitest run src/management/pages/meetings/MeetingActionCards.test.tsx src/lib/bff-v1/meetings.test.ts src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/meetings/meetings.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts`: **7 test files, 96 tests passed**.
+- `npx vitest run src/management/pages/meetings/MeetingActionCards.test.tsx src/lib/bff-v1/meetings.test.ts src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/meetings/meetings.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts`: **7 test files, 108 tests passed**.
 - `npm run typecheck:app` (`tsc -p tsconfig.app.json --noEmit`): **0 errors**.
 - `npm run typecheck:agora` (`tsc -p tsconfig.agora.json --noEmit`): **0 errors**.
-- `env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build`: **strict-live dev production build succeeded**.
+- `node scripts/build-e2e-server.mjs` (Playwright prerequisite): **strict-live read-only production build succeeded** using the configured dev BFF base and `SAFE_BUILD_MODE`.
+
+
+## Review rework and removed paths
+
+- Canonical flat/nested action owner fields now resolve alongside legacy assignees. A service-level `owner` cannot replace a recorded accountable ID. Unrevealed Persona owners use the existing `label_reveal` mapping (`#?` when unavailable); revealed records show their recorded display name. Adapter tests cover both visibility states, and original meeting-route assertions cover Persona and human owners.
+- Empty degraded, partial, unknown or paginated prior-action reads retain their incomplete-source warning. The removed early empty branch only runs after source completeness is established. `unavailable`, `forbidden`, and genuine historical empty remain separate.
+- Deleted the redundant `resolveInboxMeetingActionEvidenceHref` implementation in `management.ts`; Inbox calls the existing meeting resolver. A typed reference containing `/management/artifacts/artifact-shared` keeps that exact URL on both original pages. Absolute URLs also have adapter regression coverage.
+- No historical renderers were removed: proposal/downstream work is distinct from adopted research tickets; operator review closes an unreadable synthesis rather than accepting ticket work; W47 zero-action minutes remain historical truth. Existing incident/approval/promotion/readiness inbox kinds keep their distinct workflows. No alternate route, store, scheduler, style system or translation family was introduced by this rework.
+- Current dev caller trace: `MeetingDetailPage -> getMeetingDetail -> consultation-owned minutes`; `HumanInboxPage` / `HumanGateDetailPage -> mgmt.humanInbox -> BFF contributor`; response/readback uses the existing research-owned ticket facade. FE persists no action state. The two declared prerequisite changes remain integrated in the branch base `fac4cfc12`.
+
+## Saved browser evidence
+
+Command (exit 0, **4 passed**):
+
+```sh
+MEETING_ACTION_EVIDENCE_DIR=docs/deployment/evidence/FE-MEETING-ACTION-FOLLOWTHROUGH-20261123/browser npx playwright test e2e/meeting-action-followthrough.spec.ts --project=chromium
+```
+
+| Locale | Viewport | Outcome record |
+|---|---|---|
+| en-US | 1440 × 1000 | [desktop](browser/en-US-1440.json) |
+| en-US | 390 × 1000 | [narrow](browser/en-US-390.json) |
+| zh-TW | 1440 × 1000 | [desktop](browser/zh-TW-1440.json) |
+| zh-TW | 390 × 1000 | [narrow](browser/zh-TW-390.json) |
+
+Each case saves five PNGs in `browser/`: meeting, inbox, view-only detail, canonical same-ticket readback after reload, and degraded meeting history. [SHA-256 inventory](browser-sha256.json) binds all 24 saved outputs. The three original normal routes have no horizontal overflow in either viewport. Screenshots use sanitized contract fixtures; shell counts/offline indicators reflect intentionally absent unrelated fixtures.
+
+All browser HTTP boundaries are intercepted on loopback with contained fixture authentication. Real writes remain **false**, and each outcome records **zero mutation requests**. Browser validation exercises required fields, the closed write gate, retained retry text, source permissions, actual evidence hrefs, owner visibility, and reload of the same ticket after the fixture owner state advances independently. Successful PATCH/provide-input, idempotent retry and canonical response continuation are covered in the focused unit/component suites; the browser run does not claim successful submission to a real owner.
+
+Focused verification used the source bytes committed as `f31a17b88`; the build ran before that commit, so its local manifest names predecessor anchor `15df32329`. This is local component evidence, never a deployment SHA claim. Production build, app/agora typechecks and all seven focused suites exited 0. Existing React test scheduling and bundle-size warnings are non-fatal.
+
+## Remaining proof ownership
+
+No known residual FE defect from the requested rework. `MEETING-ACTION-TWO-MEETING-PROOF-20261123` and `MEETING-HOSTED-ACCEPTANCE-20261115` retain real-owner two-meeting and hosted FE/BFF acceptance. This PR has not been declared merged, deployed, or accepted. Only the supervisor integrator may merge after Codex2 approves the frozen PR head; deployment evidence must then name the served commit.

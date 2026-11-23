@@ -1,7 +1,7 @@
 {
   "task_id": "FE-MEETING-ACTION-FOLLOWTHROUGH-20261123",
-  "owner": "Antigravity",
-  "assigned_independent_reviewer": "Codex",
+  "owner": "Codex",
+  "assigned_independent_reviewer": "Codex2",
   "backend_counterparts": [
     "RESEARCH-MEETING-ACTION-TICKETS-20261123",
     "MEETING-ACTION-ADOPTION-AND-REVIEW-20261123",
@@ -9,7 +9,7 @@
     "BFF-MEETING-ACTION-HUMAN-INBOX-20261123"
   ],
   "evidence_kind": "local_validation_not_hosted_acceptance",
-  "tested_source_commit": "1b74fecfbb8b6308e45284bd32d2b72d92fc6be8",
+  "tested_source_commit": "f31a17b886327a3a8a1d0315f0e691c9a3b0206b",
   "joint_contract": {
     "routes": [
       "GET /bff/management/meetings/{meeting_id}",
@@ -73,9 +73,9 @@
   },
   "local_validation": [
     {
-      "command": "npx vitest run src/management/pages/meetings/MeetingActionCards.test.tsx src/lib/bff-v1/meetings.test.ts src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/meetings/meetings.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "command": "npx vitest run --maxWorkers=2 src/management/pages/meetings/MeetingActionCards.test.tsx src/lib/bff-v1/meetings.test.ts src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/meetings/meetings.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts",
       "exit_code": 0,
-      "result": "7 test files and 96 tests passed: 10 MeetingActionCards, 13 BFF meetings client, 16 HumanInboxPage, 19 MeetingsCenter/MeetingDetailPage, 17 i18nParity, 10 management v5, 11 contract-drift."
+      "result": "7 files, 108 tests passed: MeetingActionCards 16, BFF meetings 19, HumanInboxPage 16, meeting routes 19, i18nParity 17, management v5 10, contract drift 11."
     },
     {
       "command": "npm run typecheck:app && npm run typecheck:agora",
@@ -83,9 +83,19 @@
       "result": "TYPECHECK_OK (zero TypeScript errors across app and agora configs)"
     },
     {
-      "command": "env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "command": "node scripts/build-e2e-server.mjs (Playwright webServer prerequisite)",
       "exit_code": 0,
-      "result": "BUILD_OK (strict-live dev production bundle compiled cleanly with zero mock fixture leakage)"
+      "result": "Production Vite build passed; SAFE_BUILD_MODE enforces live/strict and real writes false, BFF base https://api.dev.mvl-cap.tw. Browser traffic intercepted with contained contract fixtures."
+    },
+    {
+      "command": "MEETING_ACTION_EVIDENCE_DIR=docs/deployment/evidence/FE-MEETING-ACTION-FOLLOWTHROUGH-20261123/browser npx playwright test e2e/meeting-action-followthrough.spec.ts --project=chromium",
+      "exit_code": 0,
+      "result": "4 passed: en-US/zh-TW at 1440x1000 and 390x1000. Three original product routes, 20 screenshots and four per-case outcome records."
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "result": "No whitespace errors."
     }
   ],
   "covered_operator_workflows": [
@@ -100,5 +110,47 @@
     "Submits human response via canonical PATCH /api/v1/research/tickets/{ticket_id} with action (submit | provide_input), expected_revision, evidence_note, and Idempotency-Key (reused on same-content retry)",
     "Reads back canonical GET /api/v1/research/tickets/{ticket_id} after PATCH and on reload after the ticket leaves the human_actionable=true inbox list, rendering updated ticket status and resolved evidence_notes body on the same ticket_id"
   ],
-  "delivery_state": "local_validated_ready_for_pr_and_independent_review_not_deployed"
+  "delivery_state": "local_validated_pending_independent_review_not_merged_or_deployed",
+  "source_binding_note": "Tests and browser build ran before the source commit was created; f31a17b88 commits the same tested source bytes. The fixture build manifest reports predecessor anchor 15df32329. No deployed SHA claim.",
+  "review_rework": {
+    "AC1": "Normalize flat and meeting_action nested owner_kind/owner_id/owner_display_name plus legacy assignee forms. Use accountable ID over service owner. Persona owners in unrevealed meetings use existing round labels; missing mapping uses #?. Revealed meetings retain display names.",
+    "AC2": "Preserve incomplete status across raw/read/source/page metadata. Empty degraded, partial, unknown and paginated reads never claim priorEmpty. Known unavailable/denied remain distinct; historical genuine empty still supported.",
+    "shared_evidence_authority": "Deleted resolveInboxMeetingActionEvidenceHref; adaptInboxMeetingAction now uses existing resolveMeetingActionEvidenceHref. Adapter regressions cover absolute/path references with supplied kind; browser asserts the same existing artifact href on normal meeting, Inbox and detail routes.",
+    "AC3": "Saved normal-route Chromium outcomes and screenshots for both locales and viewports."
+  },
+  "browser_evidence": {
+    "directory": "browser/",
+    "cases": [
+      "en-US-1440.json",
+      "en-US-390.json",
+      "zh-TW-1440.json",
+      "zh-TW-390.json"
+    ],
+    "screenshots_per_case": [
+      "meeting",
+      "inbox",
+      "detail-viewer",
+      "detail-readback",
+      "degraded"
+    ],
+    "assertions": [
+      "Previous decisions precede discussion",
+      "Recorded owner and anonymous Persona label visible",
+      "Same existing evidence href across meeting/inbox/detail",
+      "No horizontal overflow on all three normal routes",
+      "Required input and same meeting/ticket links",
+      "Field validation, read-only write-gate failure and same-content retry preserve text with zero network writes",
+      "Source can_respond=false hides response form",
+      "Reload reads canonical same-ID ticket after leaving actionable queue",
+      "Empty degraded history never displays no-prior-decisions"
+    ],
+    "write_coverage_boundary": "Successful submit/provide_input, canonical PATCH payload, idempotency, failure/retry and readback are mock unit/component coverage. Browser runs use real writes false and make zero mutation requests; submitted state is independently advanced fixture data, not a successful browser write.",
+    "artifact_hashes": "browser-sha256.json"
+  },
+  "residual_ownership": [
+    {
+      "owner": "MEETING-ACTION-TWO-MEETING-PROOF-20261123 / MEETING-HOSTED-ACCEPTANCE-20261115",
+      "pending": "Real-owner two-meeting, genuine authorized human input, and served FE/BFF browser acceptance; local fixture proof does not satisfy those observations."
+    }
+  ]
 }
