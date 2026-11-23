@@ -424,11 +424,37 @@ export interface Strategy extends BaseObject {
   metricsPersonaId?: string | null;
 }
 
+export type PaperRiskTier = "low" | "medium" | "high";
+export const PAPER_RISK_TIERS: readonly PaperRiskTier[] = ["low", "medium", "high"] as const;
+
+export type PersonaRiskPolicyChangeStatus =
+  | "effective"
+  | "pending_approval"
+  | "unavailable"
+  | "failed"
+  | (string & {});
+
+export interface PersonaRiskPolicyChange {
+  requestedRisk: PaperRiskTier | null;
+  effectiveRisk: PaperRiskTier | null;
+  status: PersonaRiskPolicyChangeStatus;
+  policyVersion?: string | null;
+  approvalId?: string | null;
+  reason?: string | null;
+}
+
 export interface Persona extends BaseObject {
   archetype: string;
   routedStrategies: number;
   successRate: number;
   lifecycleStatus?: PersonaStatus | "research_only" | "consultable" | "paper_owner" | "live_owner" | "frozen" | string;
+  capitalMode?: "paper" | "canary" | "live" | string | null;
+  deploymentStage?: "research" | "paper" | "canary" | "live" | string | null;
+  paperLedgerId?: string | null;
+  runtimeBindingId?: string | null;
+  runtimeId?: string | null;
+  deploymentPlanId?: string | null;
+  riskPolicyChange?: PersonaRiskPolicyChange | null;
   mandate?: string;
   strategyFamily?: string;
   traits?: {

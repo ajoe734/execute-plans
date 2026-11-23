@@ -1,20 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bffV1 } from "@/lib/bff-v1";
+import { bffV1, detectMode, idempotencyKey } from "@/lib/bff-v1";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import {
   getPersonaManagement,
+  patchPersonaRisk,
   runPersonaAction,
   testPersonaPrompt,
+  type PaperRiskTier,
   type PersonaManagementEnvelope,
 } from "@/lib/bff-v1/personas";
 import { interaction, type EligibilityResponse } from "@/lib/bff-v1/agora/interaction";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
+import { useMe } from "@/lib/v4/session/me";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff-v1";
 import { ArrowLeft, Pause, Edit, Beaker, Trophy, Lock, Archive, Inbox, MessageSquare, GitCompare, Lightbulb, History } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -25,6 +28,13 @@ import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
+import {
+  PersonaRiskPolicyPanel,
+  classifyRiskPolicyStatus,
+  evaluatePaperPersonaRiskEditAccess,
+  isPaperPersonaScope,
+  resolveInitialEditorRiskTier,
+} from "../components/detail/PersonaRiskPolicyPanel";
 import { RoutePolicyPreview } from "../components/detail/RoutePolicyPreview";
 import { PermissionMatrixEmbed } from "../components/detail/PermissionMatrixEmbed";
 import { ActivityMonitor } from "../components/detail/ActivityMonitor";
@@ -141,9 +151,32 @@ export const PersonaDetail = () => {
   const [interactionBusy, setInteractionBusy] = useState<string | null>(null);
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const [proposalStrategyKey, setProposalStrategyKey] = useState("");
+  const [riskEditorOpen, setRiskEditorOpen] = useState(false);
+  const [selectedRiskTier, setSelectedRiskTier] = useState<PaperRiskTier>("low");
+  const [riskSaving, setRiskSaving] = useState(false);
+  const [riskSaveError, setRiskSaveError] = useState<string | null>(null);
+  const riskSavingRef = useRef(false);
+  const riskIdemKeyRef = useRef<string>(idempotencyKey());
+  const riskIdemTierRef = useRef<PaperRiskTier | null>(null);
   const { can } = usePermissions();
+  const { me, loading: meLoading, error: meError } = useMe();
   const writeAccess = useAgoraWriteAccess();
   const canRetire = can("archive");
+  const canEditPermission = can("edit");
+
+  useEffect(() => {
+    setRiskEditorOpen(false);
+    setRiskSaving(false);
+    setRiskSaveError(null);
+    riskSavingRef.current = false;
+    riskIdemKeyRef.current = idempotencyKey();
+    riskIdemTierRef.current = null;
+  }, [id]);
+
+  useEffect(() => {
+    if (!p || riskEditorOpen || riskSavingRef.current) return;
+    setSelectedRiskTier(resolveInitialEditorRiskTier(p));
+  }, [p, riskEditorOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -345,13 +378,168 @@ export const PersonaDetail = () => {
     .map(immutableStrategyTarget)
     .filter((item): item is ImmutableStrategyTarget => Boolean(item));
   const headerState = p.lifecycleStatus?.trim() || p.state;
+  const headerObject = p.riskPolicyChange
+    ? {
+        ...p,
+        risk: p.riskPolicyChange.effectiveRisk ?? p.risk,
+        reportedFields: {
+          ...(p as Persona & { reportedFields?: { risk?: boolean } }).reportedFields,
+          risk: p.riskPolicyChange.effectiveRisk !== null,
+        },
+      }
+    : p;
   const requestedTab = new URLSearchParams(location.search).get("tab")?.trim() || undefined;
   const tradingPulseReturnHref = resolvePersonaTradingPulseReturnHref(location.state);
+  const showPaperRiskPolicySurface = isPaperPersonaScope(p) || Boolean(p.riskPolicyChange);
+  const riskEditAccess = evaluatePaperPersonaRiskEditAccess({
+    persona: p,
+    canEditPermission,
+    me,
+    meLoading,
+    meError,
+    isLiveMode: detectMode() === "live",
+  });
+
+  const handleToggleRiskEditor = () => {
+    if (!riskEditAccess.allowed || riskSavingRef.current) return;
+    setRiskSaveError(null);
+    setRiskEditorOpen((prev) => {
+      const nextOpen = !prev;
+      if (nextOpen) {
+        const initialTier = resolveInitialEditorRiskTier(p);
+        setSelectedRiskTier(initialTier);
+        riskIdemKeyRef.current = idempotencyKey();
+        riskIdemTierRef.current = initialTier;
+      }
+      return nextOpen;
+    });
+  };
+
+  const handleSelectRiskTier = (nextTier: PaperRiskTier) => {
+    if (riskSavingRef.current) return;
+    setSelectedRiskTier(nextTier);
+    setRiskSaveError(null);
+    if (riskIdemTierRef.current !== nextTier) {
+      riskIdemKeyRef.current = idempotencyKey();
+      riskIdemTierRef.current = nextTier;
+    }
+  };
+
+  const handleCancelRiskEditor = () => {
+    if (riskSavingRef.current) return;
+    setRiskEditorOpen(false);
+    setRiskSaveError(null);
+    setSelectedRiskTier(resolveInitialEditorRiskTier(p));
+  };
+
+  const handleSaveRiskTier = async () => {
+    if (!riskEditAccess.allowed || riskSavingRef.current) {
+      return;
+    }
+    riskSavingRef.current = true;
+    setRiskSaving(true);
+    setRiskSaveError(null);
+    const activeKey = riskIdemKeyRef.current || idempotencyKey();
+    riskIdemKeyRef.current = activeKey;
+    riskIdemTierRef.current = selectedRiskTier;
+
+    let patchResponse: Persona;
+    try {
+      patchResponse = await patchPersonaRisk(
+        p.id,
+        { risk: selectedRiskTier },
+        { idempotencyKey: activeKey },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setRiskSaveError(t("persona.riskPolicy.errorSaveFailed", { message }));
+      try {
+        const recovered = await resolvePersonaForDetail(p.id);
+        if (recovered) {
+          setP(recovered);
+        }
+      } catch {
+        // Keep current state when recovery GET also fails
+      }
+      riskSavingRef.current = false;
+      setRiskSaving(false);
+      return;
+    }
+
+    let authoritativePersona: Persona | undefined;
+    try {
+      authoritativePersona = await resolvePersonaForDetail(p.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (patchResponse?.riskPolicyChange) {
+        setP(patchResponse);
+      }
+      setRiskSaveError(t("persona.riskPolicy.errorRefetchFailed", { message }));
+      riskIdemKeyRef.current = idempotencyKey();
+      riskSavingRef.current = false;
+      setRiskSaving(false);
+      return;
+    }
+
+    if (!authoritativePersona) {
+      setRiskSaveError(
+        t("persona.riskPolicy.errorRefetchFailed", {
+          message: t("errors.RESOURCE_NOT_FOUND", { defaultValue: "Persona not found on readback" }),
+        }),
+      );
+      riskIdemKeyRef.current = idempotencyKey();
+      riskSavingRef.current = false;
+      setRiskSaving(false);
+      return;
+    }
+
+    setP(authoritativePersona);
+    const authChange = authoritativePersona.riskPolicyChange;
+    if (!authChange) {
+      setRiskSaveError(t("persona.riskPolicy.errorCapabilityMissingAfterSave"));
+      riskIdemKeyRef.current = idempotencyKey();
+      riskSavingRef.current = false;
+      setRiskSaving(false);
+      return;
+    }
+
+    const classified = classifyRiskPolicyStatus(authChange);
+    const tierLabel = t(`risk.${authChange.requestedRisk ?? selectedRiskTier}`, {
+      defaultValue: authChange.requestedRisk ?? selectedRiskTier,
+    });
+
+    if (classified === "effective") {
+      riskIdemKeyRef.current = idempotencyKey();
+      setRiskEditorOpen(false);
+      toast.success(t("persona.riskPolicy.toastEffective", { tier: tierLabel }));
+    } else if (classified === "pending_approval") {
+      riskIdemKeyRef.current = idempotencyKey();
+      setRiskEditorOpen(false);
+      toast.info(t("persona.riskPolicy.toastPending", { tier: tierLabel }));
+    } else if (classified === "unavailable") {
+      setRiskSaveError(
+        authChange.reason
+          ? `${t("persona.riskPolicy.unavailableHint")} (${authChange.reason})`
+          : t("persona.riskPolicy.unavailableHint"),
+      );
+      riskIdemKeyRef.current = idempotencyKey();
+    } else {
+      setRiskSaveError(
+        authChange.reason
+          ? `${t("persona.riskPolicy.failedHint")} (${authChange.reason})`
+          : t("persona.riskPolicy.failedHint"),
+      );
+      riskIdemKeyRef.current = idempotencyKey();
+    }
+
+    riskSavingRef.current = false;
+    setRiskSaving(false);
+  };
 
   return (
     <>
       <ObjectDetailLayout
-        object={p}
+        object={headerObject}
         state={headerState}
         subtitle={`${p.archetype} · ${p.id}`}
         defaultTab={requestedTab}
@@ -400,9 +588,28 @@ export const PersonaDetail = () => {
                 <Inbox className="h-4 w-4 mr-1" />{t("mgmt.inbox.openForPersona")}
               </Link>
             </Button>
-            <NonProductionActionButton size="sm" variant="outline" status="owner endpoint exists with frontend wiring pending">
-              <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
-            </NonProductionActionButton>
+            {riskEditAccess.allowed ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={riskEditorOpen ? "default" : "outline"}
+                data-testid="persona-risk-edit-button"
+                aria-expanded={riskEditorOpen}
+                disabled={riskSaving}
+                onClick={handleToggleRiskEditor}
+              >
+                <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
+              </Button>
+            ) : (
+              <NonProductionActionButton
+                size="sm"
+                variant="outline"
+                data-testid="persona-risk-edit-button"
+                reason={t(riskEditAccess.reasonKey || "persona.riskPolicy.unsupportedPersonaReason")}
+              >
+                <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
+              </NonProductionActionButton>
+            )}
             <Button size="sm" variant="outline" onClick={async () => {
               const receipt = await testPersonaPrompt(p.id, "manual test");
               toast.success(t("persona.ops.testToast", { name: p.name }), {
@@ -453,6 +660,20 @@ export const PersonaDetail = () => {
                   personaName={p.name}
                   className="mb-4"
                 />
+                {showPaperRiskPolicySurface && (
+                  <PersonaRiskPolicyPanel
+                    persona={p}
+                    editAccess={riskEditAccess}
+                    editorOpen={riskEditorOpen}
+                    selectedTier={selectedRiskTier}
+                    saving={riskSaving}
+                    saveError={riskSaveError}
+                    onSelectTier={handleSelectRiskTier}
+                    onSave={() => void handleSaveRiskTier()}
+                    onCancel={handleCancelRiskEditor}
+                    className="mb-4"
+                  />
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label={t("table.type")} value={p.archetype} />
                   <Field label={t("nav.strategies")} value={p.routedStrategies} mono />
