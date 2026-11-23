@@ -968,7 +968,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
     const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent ?? "");
     expect(headers).toEqual([
       "Persona ／ 標的",
-      "區間成交筆數",
+      "帳本成交筆數",
       "區間成交率",
       "區間損益",
       "近期事件與資料時間",
@@ -1722,7 +1722,9 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       { patch: { reason_code: "reason_not_recorded", requested_quantity: 10, filled_quantity: 4, submitted_to_broker: true }, notable: true, rate: "40%", filled: "4" },
       { patch: { reason_code: null, requested_quantity: 10, filled_quantity: 12, submitted_to_broker: true }, notable: true, rate: "120%", filled: "12" },
       { patch: { reason_code: "insufficient_cash", requested_quantity: 452, submitted_to_broker: false }, notable: true, rate: "0%", filled: "0" },
-      { patch: { reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: false },
+      { patch: { kind: "normal", reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: false },
+      { patch: { kind: "no_trade", reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: true },
+      { patch: { kind: "variance", reason_code: null, requested_quantity: 10, filled_quantity: 10, submitted_to_broker: true }, notable: true },
       // Same requested quantity as period denominator still does not prove this event filled.
       { patch: { reason_code: "reason_not_recorded", requested_quantity: 1, filled_quantity: null }, notable: true },
     ];

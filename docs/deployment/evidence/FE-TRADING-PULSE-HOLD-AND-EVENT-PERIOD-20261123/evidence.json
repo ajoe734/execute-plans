@@ -23,7 +23,7 @@
     },
     "event_and_period_quantities": {
       "local_passed": true,
-      "summary": "Event display and full-fill classification use only latestOutcome requested/filled quantities. An explicit available pre-broker rejection may establish zero fills for that intent. Period telemetry never supplies an event quantity, rate or full-fill proof. Partial/overfills use their own 4/10 (40%) and 12/10 (120%) quantities even while period telemetry is 1/1. Available executions lacking per-event fill evidence stay visible with an unconfirmed-event-fill message. Existing period counts, 1/1 and 0/452 ratios, P&L, source-failure/staleness/unknown semantics, rankings and diagnostics remain available. Table headers and ratio basis identify period statistics; rate dates come only from its own window/metric period, otherwise the period is unverified."
+      "summary": "Event display and full-fill classification use only latestOutcome requested/filled quantities. An explicit available pre-broker rejection may establish zero fills for that intent. Period telemetry never supplies an event quantity, rate or full-fill proof. A non-normal explicit outcome kind (e.g. no_trade or variance) cannot be classified as an ordinary full fill even when its quantities are equal. Partial/overfills use their own 4/10 (40%) and 12/10 (120%) quantities even while period telemetry is 1/1. Available executions lacking per-event fill evidence stay visible with an unconfirmed-event-fill message. Existing ledger fill counts, period 1/1 and 0/452 ratios, P&L, source-failure/staleness/unknown semantics, rankings and diagnostics remain available. The count header identifies ledger fills, while rate/P&L headers and the ratio basis identify period statistics; rate dates come only from its own window/metric period, otherwise the period is unverified."
     },
     "historical_navigation": {
       "local_passed": true,
@@ -47,7 +47,14 @@
       "exit_code": 0,
       "passed_files": 1,
       "passed_tests": 15,
-      "note": "Final focused rerun includes additional non-available submission and partial-fill uncertainty cases after the broader suite."
+      "note": "Final focused rerun includes non-available submission, partial-fill uncertainty and contradictory outcome-kind cases after the broader suite."
+    },
+    {
+      "command": "timeout 180 npx vitest run src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 2,
+      "passed_tests": 32,
+      "note": "Final refinement: non-normal explicit outcome kinds cannot be ordinary full fills; the count header names ledger fills without inventing their period."
     },
     {
       "command": "timeout 60 node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",

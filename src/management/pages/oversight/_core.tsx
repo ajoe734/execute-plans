@@ -2799,6 +2799,8 @@ const resolvePulseEventQuantities = (outcome: ManagementTradingPulseLatestOutcom
 const isVerifiedNormalFullFillRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
   const outcome = row.latestOutcome;
   if (outcome?.status !== "available" || outcome.submittedToBroker === false) return false;
+  const kind = outcome.kind ?? outcome.outcome_kind;
+  if (kind && kind !== "normal") return false;
   if (hasActionablePulseOutcomeReason(outcome.reasonCode)) return false;
   const required = pulseNumber(outcome.required);
   const available = pulseNumber(outcome.available);
