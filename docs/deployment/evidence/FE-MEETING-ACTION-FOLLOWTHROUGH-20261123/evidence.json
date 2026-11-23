@@ -1,0 +1,104 @@
+{
+  "task_id": "FE-MEETING-ACTION-FOLLOWTHROUGH-20261123",
+  "owner": "Antigravity",
+  "assigned_independent_reviewer": "Codex",
+  "backend_counterparts": [
+    "RESEARCH-MEETING-ACTION-TICKETS-20261123",
+    "MEETING-ACTION-ADOPTION-AND-REVIEW-20261123",
+    "PERSONA-MEETING-ACTION-EXECUTION-20261123",
+    "BFF-MEETING-ACTION-HUMAN-INBOX-20261123"
+  ],
+  "evidence_kind": "local_validation_not_hosted_acceptance",
+  "tested_source_commit": "1b74fecfbb8b6308e45284bd32d2b72d92fc6be8",
+  "joint_contract": {
+    "routes": [
+      "GET /bff/management/meetings/{meeting_id}",
+      "GET /bff/management/human-inbox",
+      "PATCH /api/v1/research/tickets/{ticket_id}",
+      "GET /api/v1/research/tickets/{ticket_id}"
+    ],
+    "meeting_detail_fields": [
+      "prior_actions",
+      "prior_action_reviews",
+      "action_read",
+      "prior_actions_source",
+      "adopted_actions",
+      "decision_kind",
+      "no_action_reason",
+      "participant_capabilities",
+      "participant_action_capabilities"
+    ],
+    "human_inbox_item_fields": [
+      "kind=meeting_action",
+      "ticket_id",
+      "meeting_id",
+      "meeting_type",
+      "owner_kind",
+      "owner_id",
+      "deliverable",
+      "requested_material",
+      "acceptance_criterion",
+      "human_requirement",
+      "reason",
+      "review_reason",
+      "status",
+      "action_state",
+      "response_action",
+      "resumes_with",
+      "required_actor",
+      "can_respond",
+      "revision",
+      "due_at",
+      "next_review",
+      "overdue",
+      "evidence_refs",
+      "links.ticket",
+      "links.meeting"
+    ],
+    "patch_body": {
+      "action": "submit | provide_input",
+      "expected_revision": "integer",
+      "evidence_note": {
+        "title": "string (1..120)",
+        "body": "string (1..2000)",
+        "source_refs": "string[] (optional)"
+      },
+      "evidence_refs": "Array<{ kind, artifact_id }> (optional)"
+    },
+    "patch_headers": [
+      "Authorization / session credentials",
+      "Idempotency-Key"
+    ],
+    "authoritative_ticket_readback": "GET /api/v1/research/tickets/{ticket_id} after PATCH and on reload after the ticket leaves the human_actionable=true inbox queue"
+  },
+  "local_validation": [
+    {
+      "command": "npx vitest run src/management/pages/meetings/MeetingActionCards.test.tsx src/lib/bff-v1/meetings.test.ts src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/meetings/meetings.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "exit_code": 0,
+      "result": "7 test files and 96 tests passed: 10 MeetingActionCards, 13 BFF meetings client, 16 HumanInboxPage, 19 MeetingsCenter/MeetingDetailPage, 17 i18nParity, 10 management v5, 11 contract-drift."
+    },
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "result": "TYPECHECK_OK (zero TypeScript errors across app and agora configs)"
+    },
+    {
+      "command": "env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "result": "BUILD_OK (strict-live dev production bundle compiled cleanly with zero mock fixture leakage)"
+    }
+  ],
+  "covered_operator_workflows": [
+    "Meeting detail (/management/meetings/:id) in zh-TW and en-US displays previous decisions (PriorActionsSection) first, followed by adopted tasks (AdoptedActionsSection) and participant capability limits (ParticipantCapabilities), above the deliberation rounds",
+    "Each meeting action displays accountable owner, expected deliverable, acceptance criterion, due/review schedule, execution result, navigable evidence links (/management/artifacts/:id and /management/evidence?ref_id=:id), resolved evidence_notes body, review decision/reason, live owner status separate from frozen meeting state, and next step",
+    "Distinguishes round discussion (participant stance unchanged) from chair decision to retain the strategy pool (decision_kind=retain_pool), and submitted (awaiting chair review) from accepted",
+    "Distinguishes prior_actions owner unavailable (action_read.status=unavailable), permission denied (action_read.status=denied), partial/degraded page reads, and genuine zero prior obligations (legacy W47 records) even when prior_actions is an empty array []",
+    "Displays dispatch_pending action receipts truthfully with dispatch_error and no fake ticket link when ticket_id is null",
+    "Translates participant capability statuses (allowed, advisory_only, restricted_data, suspended, no_workflow, expired_access, downgraded_access, owner_unavailable) in plain language without leaking persona_id or persona_display_name when anonymised_labels_revealed=false",
+    "Human Inbox (/management/human-inbox and /management/human-inbox/:id) consumes verbatim BFF _human_input_ticket_items fields (response_action, can_respond, resumes_with, human_requirement, reason, requested_material, acceptance_criterion, required_actor, ticket_id, revision, status, evidence_refs, links.ticket, links.meeting)",
+    "Enforces authentic operator (can_respond=true) vs read-only viewer (can_respond=false) permissions while preserving direct-human requirement/reason separate from requested deliverable",
+    "Submits human response via canonical PATCH /api/v1/research/tickets/{ticket_id} with action (submit | provide_input), expected_revision, evidence_note, and Idempotency-Key (reused on same-content retry)",
+    "Reads back canonical GET /api/v1/research/tickets/{ticket_id} after PATCH and on reload after the ticket leaves the human_actionable=true inbox list, rendering updated ticket status and resolved evidence_notes body on the same ticket_id"
+  ],
+  "delivery_state": "local_validated_ready_for_pr_and_independent_review_not_deployed"
+}
