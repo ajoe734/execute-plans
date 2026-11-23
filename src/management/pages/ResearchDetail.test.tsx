@@ -12,6 +12,7 @@ import { SkillSandboxStudio } from "./studios/SkillSandboxStudio";
 
 const mocks = vi.hoisted(() => ({
   researchGet: vi.fn(),
+  artifactGet: vi.fn(),
   auditList: vi.fn(),
   personaFleetGet: vi.fn(),
   runActionSafe: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
     bffV1: {
       ...actual.bffV1,
       research: { ...actual.bffV1.research, get: mocks.researchGet },
+      artifacts: { ...actual.bffV1.artifacts, get: mocks.artifactGet },
       audit: { ...actual.bffV1.audit, list: mocks.auditList },
       skills: { ...actual.bffV1.skills, list: mocks.skillsList },
       jobs: { ...actual.bffV1.jobs, cancel: mocks.jobsCancel },
@@ -110,6 +112,7 @@ function fleetRow(): ManagementPersonaFleetRow {
 describe("ResearchDetail", () => {
   beforeEach(() => {
     mocks.researchGet.mockReset();
+    mocks.artifactGet.mockReset().mockResolvedValue(undefined);
     mocks.auditList.mockReset();
     mocks.personaFleetGet.mockReset();
     mocks.runActionSafe.mockReset();
@@ -287,6 +290,7 @@ describe("ResearchDetail", () => {
   });
 
   it("links saved run outputs and shows only recorded parameters", async () => {
+    mocks.artifactGet.mockImplementation(async (id: string) => id === "rart-saved" ? { id } : undefined);
     mocks.researchGet.mockResolvedValue(normalizeResearchTask({
       id: "research-with-output",
       task_type: "rapid_eval",
@@ -295,7 +299,7 @@ describe("ResearchDetail", () => {
         run_id: "run-with-output",
         status: "completed",
         parameters: { symbol: "2330", folds: 3 },
-        artifact_refs: [{ artifact_id: "rart-saved" }, { uri: "file:///var/private/other" }],
+        artifact_refs: [{ artifact_id: "rart-saved" }, { artifact_id: "rart-missing" }, { uri: "file:///var/private/other" }],
       }],
     }));
     mocks.auditList.mockResolvedValue([]);
@@ -303,9 +307,39 @@ describe("ResearchDetail", () => {
     renderDetail();
     const link = await screen.findByRole("link", { name: "View output 1" });
     expect(link).toHaveAttribute("href", "/management/artifacts/rart-saved");
+    expect(mocks.artifactGet).toHaveBeenCalledWith("rart-missing");
+    expect(screen.getByText("Some result files could not be opened.")).toBeInTheDocument();
+    expect(screen.queryByText("No result files are available to open.")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "View output 2" })).not.toBeInTheDocument();
     expect(screen.getByText("Recorded run parameters")).toBeInTheDocument();
     expect(screen.queryByText("2018-2025")).not.toBeInTheDocument();
+  });
+
+  it("shows recorded candidate evaluation values and omits the generated lineage link", async () => {
+    mocks.researchGet.mockResolvedValue(normalizeResearchTask({
+      id: "legacy-evaluation",
+      name: "rapid eval",
+      task_type: "rapid_eval",
+      runs: [{
+        run_id: "candidate-run",
+        status: "completed",
+        artifact_refs: ["artifact-sic-example"],
+        metadata: {
+          candidate_id: "sic-example",
+          policy_learning_handoff: true,
+          evaluation_summary: { action_match_rate: 0.509567713104, return_gap: 0, kl_divergence: 1.978105521242 },
+        },
+      }],
+    }));
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+    renderDetail();
+    expect(await screen.findByText("50.96%")).toBeInTheDocument();
+    expect(screen.getByText("0", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("1.9781")).toBeInTheDocument();
+    expect(screen.getByText("No result files are available to open.")).toBeInTheDocument();
+    expect(mocks.artifactGet).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link", { name: /view output/i })).not.toBeInTheDocument();
   });
 
   it("shows a weekly collector change in the same detail route as a read-only check", async () => {

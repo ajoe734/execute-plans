@@ -3572,8 +3572,15 @@ export default {
     },
     detail: {
       results: "Research results",
-      noResults: "No result links were recorded.",
+      noResults: "No result files are available to open.",
+      checkingOutputs: "Checking result files…",
+      outputsUnavailable: "Some result files could not be opened.",
       viewOutput: "View output {{number}}",
+      evaluation: {
+        action_match_rate: "Average probability of matching the reference action",
+        return_gap: "Return gap (reference policy minus model)",
+        kl_divergence: "Action distribution difference (KL divergence)",
+      },
       recordedParameters: "Recorded run parameters",
       parameters: { symbol: "Symbol", sample_window: "Sample window", folds: "Folds", seed: "Random seed" },
       technicalDetails: "Technical details",
