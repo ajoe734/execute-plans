@@ -14,6 +14,7 @@
 import {
   isStrictLiveFallback,
 } from "./liveTransport";
+import { resolveMeetingActionEvidenceHref } from "./meetings";
 import { strictLiveRead } from "./domainReads";
 import { liveStatus } from "./liveStatus";
 import { paths } from "./paths";
@@ -3385,23 +3386,6 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
   return "";
 };
 
-const resolveInboxMeetingActionEvidenceHref = (kind: string | undefined, artifactId: string, explicitHref?: string): string => {
-  if (explicitHref && (explicitHref.startsWith("/management/") || /^https?:\/\//i.test(explicitHref))) {
-    return explicitHref;
-  }
-  const normalizedKind = (kind ?? "").trim().toLowerCase();
-  if (normalizedKind === "research_note" || artifactId.startsWith("note-") || artifactId.startsWith("evref-")) {
-    return `/management/evidence?ref_id=${encodeURIComponent(artifactId)}`;
-  }
-  if (normalizedKind === "research_artifact" || artifactId.startsWith("artifact-") || artifactId.startsWith("rart-")) {
-    return `/management/artifacts/${encodeURIComponent(artifactId)}`;
-  }
-  if (artifactId.startsWith("/management/") || /^https?:\/\//i.test(artifactId)) {
-    return artifactId;
-  }
-  return `/management/evidence?ref_id=${encodeURIComponent(artifactId)}`;
-};
-
 const adaptInboxMeetingAction = (
   it: Record<string, unknown>,
   kind: HumanInboxKind,
@@ -3443,7 +3427,7 @@ const adaptInboxMeetingAction = (
         return {
           kind: id.startsWith("note-") ? "research_note" : "research_artifact",
           artifactId: id,
-          href: resolveInboxMeetingActionEvidenceHref(undefined, id),
+          href: resolveMeetingActionEvidenceHref(undefined, id)!,
         };
       }
       if (isObject(entry)) {
@@ -3455,7 +3439,7 @@ const adaptInboxMeetingAction = (
           kind: refKind ?? (artifactId.startsWith("note-") ? "research_note" : "research_artifact"),
           artifactId,
           ...(asOptionalString(entry.checksum) ? { checksum: asOptionalString(entry.checksum) } : {}),
-          href: resolveInboxMeetingActionEvidenceHref(refKind, artifactId, explicitHref),
+          href: resolveMeetingActionEvidenceHref(refKind, artifactId, explicitHref)!,
         };
       }
       return null;

@@ -20,6 +20,7 @@ import {
   formatMeetingRosterRule,
   getMeetingActionTicket,
   mgmtMeetingReviewPath,
+  normalizeMeetingAction,
   reviewMeeting,
   submitMeetingActionResponse,
 } from "./meetings";
@@ -39,6 +40,19 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
     setMockResolver(undefined);
     vi.unstubAllEnvs();
     liveStatus._reset();
+  });
+
+  it.each([
+    [{ owner_kind: "persona", owner_id: "persona-alpha", owner_display_name: "澄川" }, "澄川", "persona"],
+    [{ meeting_action: { owner_kind: "human", owner_id: "operator", owner_display_name: "Operator" } }, "Operator", "human"],
+    [{ owner_kind: "human", owner_id: "operator" }, "operator", "human"],
+    [{ assignee: { kind: "human", display_name: "Alice" } }, "Alice", "human"],
+    [{ assignee: "Alice", assignee_kind: "human" }, "Alice", "human"],
+    [{ meeting_action: { assignee: "Alice", assignee_kind: "human" } }, "Alice", "human"],
+  ])("normalizes canonical and legacy accountable owners: %j", (fields, label, kind) => {
+    expect(normalizeMeetingAction({ ticket_id: "tkt-w47-1", ...fields })).toMatchObject({
+      owner_label: label, owner_kind: kind,
+    });
   });
 
   it("builds canonical management meetings paths", () => {
@@ -1077,6 +1091,10 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
     if (okRes.state === "ok") {
       expect(okRes.data.decision_kind).toBe("adopt_actions");
       expect(okRes.data.prior_actions?.state).toBe("ok");
+      if (okRes.data.prior_actions?.state === "ok") {
+        expect(okRes.data.prior_actions.items[0]).toMatchObject({ owner_label: "#1", owner_kind: "persona" });
+      }
+      expect(okRes.data.adopted_actions?.[0]).toMatchObject({ owner_label: "operator", owner_kind: "human" });
       if (okRes.data.prior_actions?.state === "ok") {
         const prior = okRes.data.prior_actions.items[0];
         expect(prior.ticket_id).toBe("tkt-w47-1");

@@ -60,6 +60,31 @@ describe("meeting action follow-through", () => {
   });
   afterEach(cleanup);
 
+  it.each(["degraded", "partial", "unknown"])("does not claim an empty history for %s reads", (status) => {
+    const read = normalizePriorActions([], { status, reason: "research_owner_timeout" });
+    wrap(<PriorActionsSection read={read} />);
+    expect(screen.getByTestId("meeting-prior-actions-degraded")).toHaveTextContent("research_owner_timeout");
+    expect(screen.queryByTestId("meeting-prior-actions-empty")).toBeNull();
+  });
+
+  it("keeps empty partial pages and conflicting source statuses incomplete", () => {
+    const read = normalizePriorActions([], { status: "ok" }, { status: "partial", has_more: true });
+    wrap(<PriorActionsSection read={read} />);
+    expect(screen.getByTestId("meeting-prior-actions-degraded")).toBeInTheDocument();
+    expect(screen.getByTestId("meeting-prior-actions-has-more")).toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-prior-actions-empty")).toBeNull();
+  });
+
+  it.each(["/management/artifacts/artifact-shared", "https://evidence.example.test/result"])(
+    "uses the same evidence authority in meeting and inbox for %s", (href) => {
+      const refs = [{ kind: "research_artifact", artifact_id: href }];
+      const meeting = normalizeMeetingAction({ ticket_id: "tkt-shared", evidence_refs: refs })!;
+      const inbox = adaptHumanInboxList({ items: [{ kind: "meeting_action", id: "meeting_action:tkt-shared", ticket_id: "tkt-shared", evidence_refs: refs }] })!;
+      expect(meeting.evidence_items?.[0].href).toBe(href);
+      expect(inbox[0].meetingAction?.evidenceRefs?.[0].href).toBe(href);
+    },
+  );
+
   it("normalizes canonical M/R/B action fields: waiting_for_input, typed evidence_refs, nested downstream, live_owner_status, and dispatch_pending without ticket_id", () => {
     const submitted = normalizeMeetingAction({
       ticket_id: "rt-action-1",

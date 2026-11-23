@@ -2077,6 +2077,8 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
 
     // 3. Prior action shows returned review reason, navigable artifact link, and evidence note body
     expect(priorSection).toHaveTextContent("Validate chip concentration threshold");
+    expect(within(priorSection).getByTestId("meeting-action-owner")).toHaveTextContent("#1");
+    expect(within(priorSection).getByTestId("meeting-action-owner")).not.toHaveTextContent("澄川");
     expect(priorSection).toHaveTextContent(
       "Sharpe below 1.25 acceptance criterion; add liquidity tier filter.",
     );
@@ -2093,6 +2095,7 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
     expect(adoptedSection).toHaveTextContent("Confirm exchange fee schedule update");
     expect(adoptedSection).toHaveTextContent("Requires operator sign-off on exchange fee schedule.");
     const humanActionRow = within(adoptedSection).getByTestId("meeting-action-tkt-adopt-human");
+    expect(within(humanActionRow).getByTestId("meeting-action-owner")).toHaveTextContent("operator");
     expect(
       within(humanActionRow).getByTestId("meeting-action-live-status"),
     ).toHaveTextContent("Submitted, not yet accepted");

@@ -282,7 +282,7 @@ export function PriorActionsSection({
         >
           {t(`${FT}.priorForbidden`)}
         </p>
-      ) : read.items.length === 0 ? (
+      ) : read.items.length === 0 && !read.degraded_reason && !read.has_more ? (
         <p className="text-sm text-muted-foreground" data-testid="meeting-prior-actions-empty">
           {t(`${FT}.priorEmpty`)}
         </p>

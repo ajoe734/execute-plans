@@ -666,6 +666,7 @@ export interface MeetingActionItem {
   origin_meeting_id?: string | null;
   title?: string | null;
   owner_label?: string | null;
+  owner_id?: string | null;
   owner_kind?: string | null;
   deliverable?: string | null;
   acceptance_criterion?: string | null;
@@ -1275,8 +1276,19 @@ export function normalizeMeetingAction(raw: unknown): MeetingActionItem | null {
   const reviewDecisionObj = isRecord(raw.review_decision) ? raw.review_decision : {};
   const recordedDispObj = isRecord(raw.recorded_disposition) ? raw.recorded_disposition : {};
   const inputRequestObj = isRecord(raw.input_request) ? raw.input_request : {};
-  const owner = isRecord(raw.assignee) ? raw.assignee : {};
-  const ownerKind = optText(raw.assignee_kind ?? owner.kind ?? origin.assignee_kind);
+  const owner = isRecord(raw.assignee) ? raw.assignee
+    : isRecord(raw.owner) ? raw.owner
+    : isRecord(origin.assignee) ? origin.assignee
+    : isRecord(origin.owner) ? origin.owner : {};
+  const ownerKind = optText(raw.owner_kind ?? raw.assignee_kind ?? owner.kind ?? origin.owner_kind ?? origin.assignee_kind);
+  const ownerId = optText(raw.owner_id ?? owner.id ?? origin.owner_id);
+  const ownerLabel = optText(
+    raw.owner_display_name ?? raw.assignee_label ?? raw.owner_label ?? owner.display_name ??
+      owner.label ?? origin.owner_display_name ?? origin.assignee_label ?? origin.owner_label ??
+      (typeof raw.assignee === "string" ? raw.assignee : null) ??
+      (typeof raw.owner === "string" ? raw.owner : null) ??
+      (typeof origin.assignee === "string" ? origin.assignee : null) ?? ownerId,
+  );
   const liveOwnerStatus = normalizeLiveOwnerStatus(raw.live_owner_status);
   const executedRaw = raw.executed;
   // Never treat a missing signal as "executed": only a submitted result or explicit flag counts.
@@ -1324,14 +1336,8 @@ export function normalizeMeetingAction(raw: unknown): MeetingActionItem | null {
     ticket_id: ticketId,
     origin_meeting_id: optText(raw.origin_meeting_id ?? raw.meeting_id ?? origin.meeting_id),
     title: optText(raw.title),
-    owner_label: optText(
-      raw.assignee_label ??
-        raw.owner_label ??
-        owner.display_name ??
-        owner.label ??
-        raw.assignee ??
-        raw.owner,
-    ),
+    owner_label: ownerLabel,
+    owner_id: ownerId,
     owner_kind: ownerKind,
     deliverable: optText(raw.deliverable ?? raw.requested_material ?? origin.deliverable),
     acceptance_criterion: optText(raw.acceptance_criterion ?? origin.acceptance_criterion),
@@ -1412,14 +1418,6 @@ export function normalizePriorActions(
   priorActionsSource?: unknown,
   priorActionReviews?: unknown,
 ): MeetingActionsRead | undefined {
-  if (
-    raw === undefined &&
-    raw === null &&
-    actionRead === undefined &&
-    priorActionsSource === undefined
-  ) {
-    return undefined;
-  }
   if (raw === undefined || raw === null) {
     if (actionRead === undefined && priorActionsSource === undefined) return undefined;
   }
@@ -1452,6 +1450,7 @@ export function normalizePriorActions(
   let pageDenied = false;
   let pageUnavailable = false;
   let pageReason = "";
+  let incomplete = false;
 
   for (const c of candidates) {
     const st = String(c.status ?? c.state ?? "").trim().toLowerCase();
@@ -1462,6 +1461,13 @@ export function normalizePriorActions(
     if (st === "unavailable" && rsn === "live_action_owner_status_not_recorded" && c === readObj && !sourceObj) {
       continue;
     }
+    if (c.has_more === true || optText(c.next_page_token)) hasMore = true;
+    if (st && !["ok", "not_recorded"].includes(st)) {
+      incomplete = true;
+      if (!pageReason && rsn) pageReason = rsn;
+    }
+    if (st === "unavailable" || st === "error") pageUnavailable = true;
+    if (["denied", "forbidden", "permission_denied"].includes(st)) pageDenied = true;
     if (!explicitStatus && st) {
       explicitStatus = st;
       explicitReason = rsn;
@@ -1473,6 +1479,10 @@ export function normalizePriorActions(
         const pst = String(p.status ?? "").trim().toLowerCase();
         const prsn = optText(p.reason) ?? "";
         if (p.has_more === true || optText(p.next_page_token)) hasMore = true;
+        if (pst && !["ok", "not_recorded"].includes(pst)) {
+          incomplete = true;
+          if (!pageReason && prsn) pageReason = prsn;
+        }
         if (pst === "denied" || pst === "forbidden" || pst === "permission_denied") {
           pageDenied = true;
           if (!pageReason && prsn) pageReason = prsn;
@@ -1502,8 +1512,9 @@ export function normalizePriorActions(
     return { state: "unavailable", reason: effectiveReason };
   }
 
-  if (rawItemsSource !== null || explicitStatus === "ok" || explicitStatus === "not_recorded" || explicitStatus === "degraded") {
+  if (rawItemsSource !== null || explicitStatus === "ok" || explicitStatus === "not_recorded" || explicitStatus === "degraded" || incomplete || hasMore) {
     const degraded =
+      incomplete ||
       explicitStatus === "degraded" ||
       explicitStatus === "unavailable" ||
       pageUnavailable ||
@@ -1878,6 +1889,13 @@ function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDet
       synthesisRecord?.action_reviews ??
       synthesisRecord?.prior_action_reviews,
   );
+  const displayActionOwner = (action: MeetingActionItem): MeetingActionItem => {
+    if (cleaned.anonymised_labels_revealed !== false || action.owner_kind !== "persona") return action;
+    const labels = isRecord(cleaned.label_reveal) ? cleaned.label_reveal : {};
+    const label = Object.entries(labels).find(([, id]) => id === action.owner_id)?.[0];
+    return { ...action, owner_label: label ?? "#?" };
+  };
+  if (priorActions?.state === "ok") priorActions.items = priorActions.items.map(displayActionOwner);
   const capabilities = normalizeCapabilities(
     cleaned.participant_capabilities ??
       cleaned.participant_action_capabilities ??
@@ -1928,7 +1946,7 @@ function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDet
     synthesis,
     adopted_actions: normalizeMeetingActionList(
       cleaned.adopted_actions ?? cleaned.actions ?? synthesis?.actions,
-    ),
+    ).map(displayActionOwner),
     ...(priorActions !== undefined ? { prior_actions: priorActions } : {}),
     no_action_reason: optText(cleaned.no_action_reason ?? synthesis?.no_action_reason),
     ...(decisionKind ? { decision_kind: decisionKind } : {}),
