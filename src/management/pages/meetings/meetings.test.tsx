@@ -1895,4 +1895,256 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
       ).not.toBeInTheDocument(),
     );
   });
+
+  it("renders prior decisions first, adopted actions with live owner status separate from frozen meeting state, navigable evidence links, dispatch_pending receipts, chair retain_pool decision vs round stance unchanged, and anonymized participant capability limits in en-US and zh-TW (FE-MEETING-ACTION-FOLLOWTHROUGH-20261123)", async () => {
+    const makeFollowThroughMeeting = (overrides: Record<string, unknown> = {}) => ({
+      status: "ok",
+      owner: "consultation",
+      data: {
+        id: "mtg-w48-follow",
+        meeting_id: "mtg-w48-follow",
+        meeting_type: "MT-1",
+        topic: "Weekly pool evolution review W48",
+        status: "closed",
+        outcome: "ACTIONS_ADOPTED",
+        decision_kind: "adopt_actions",
+        chair_persona_id: "persona-alpha",
+        chair_persona_display_name: "澄川",
+        anonymised_labels_revealed: false,
+        label_reveal: {
+          "#1": "persona-alpha",
+          "#2": "advisor-ext-1",
+        },
+        participants: [
+          {
+            persona_id: "persona-alpha",
+            persona_display_name: "SECRET_CHAIR_IDENTITY",
+            role: "chair",
+            origin: "institutional",
+          },
+          {
+            persona_id: "advisor-ext-1",
+            persona_display_name: "SECRET_ADVISOR_IDENTITY",
+            role: "advisor",
+            origin: "agora_advisor",
+          },
+        ],
+        action_read: {
+          status: "ok",
+          owner: "research",
+          reason: null,
+          pages: 1,
+        },
+        prior_actions: [
+          {
+            ticket_id: "tkt-prior-returned",
+            title: "Validate chip concentration threshold",
+            owner_kind: "persona",
+            owner_id: "persona-alpha",
+            owner_display_name: "澄川",
+            deliverable: "experiment_spec",
+            acceptance_criterion: "60d Sharpe > 1.25",
+            due_meeting_type: "MT-1",
+            status: "submitted",
+            live_owner_status: "returned",
+            executed: true,
+            evidence_refs: [
+              { kind: "research_artifact", artifact_id: "artifact-chip-v1" },
+            ],
+            evidence_notes: [
+              {
+                note_id: "note-chip-1",
+                title: "Initial backtest run",
+                body: "Out-of-sample Sharpe reached 1.19; turnover filter needed.",
+                source_refs: ["artifact-chip-v1"],
+              },
+            ],
+            revision: 2,
+          },
+        ],
+        prior_action_reviews: [
+          {
+            ticket_id: "tkt-prior-returned",
+            decision: "returned",
+            reason: "Sharpe below 1.25 acceptance criterion; add liquidity tier filter.",
+          },
+        ],
+        adopted_actions: [
+          {
+            ticket_id: "tkt-adopt-human",
+            title: "Confirm exchange fee schedule update",
+            owner_kind: "human",
+            owner_id: "operator",
+            deliverable: "external_action",
+            acceptance_criterion: "Attach updated fee schedule",
+            status: "open",
+            live_owner_status: "submitted",
+            human_requirement: "Requires operator sign-off on exchange fee schedule.",
+            evidence_refs: [{ kind: "research_note", artifact_id: "note-fee-2026" }],
+            revision: 2,
+          },
+          {
+            ticket_id: null,
+            title: "Queued factor stress test",
+            owner_kind: "persona",
+            owner_id: "persona-alpha",
+            deliverable: "experiment_spec",
+            acceptance_criterion: "Max drawdown < 8%",
+            status: "dispatch_pending",
+            dispatch_error: "research_ticket_writer_busy",
+          },
+        ],
+        participant_action_capabilities: [
+          {
+            label: "#1",
+            role: "chair",
+            persona_id: "persona-alpha",
+            persona_display_name: "SECRET_CHAIR_IDENTITY",
+            status: "allowed",
+            reason: "eligible",
+            can_receive_persona_action: true,
+            allowed_deliverables: ["experiment_spec", "risk_check_report"],
+            denial_reasons: {},
+          },
+          {
+            label: "#2",
+            role: "advisor",
+            persona_id: "advisor-ext-1",
+            persona_display_name: "SECRET_ADVISOR_IDENTITY",
+            status: "restricted_data",
+            reason: "confidential_account_scope",
+            can_receive_persona_action: false,
+            allowed_deliverables: [],
+            denial_reasons: { experiment_spec: "confidential_account_scope" },
+          },
+        ],
+        rounds: [
+          {
+            round: 1,
+            positions: [
+              {
+                label: "#1",
+                role: "chair",
+                stance: "propose_filtered_experiment",
+                changed: false,
+              },
+            ],
+          },
+          {
+            round: 2,
+            positions: [
+              {
+                label: "#1",
+                role: "chair",
+                stance: "propose_filtered_experiment",
+                changed: false,
+              },
+            ],
+          },
+        ],
+        synthesis: {
+          outcome: "ACTIONS_ADOPTED",
+          proposals: [],
+        },
+        proposals: [],
+        writebacks: [],
+        ...overrides,
+      },
+    });
+
+    on("GET", "/bff/management/meetings/mtg-w48-follow", () => json(makeFollowThroughMeeting()));
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = renderDetail("/management/meetings/mtg-w48-follow?action=tkt-adopt-human");
+
+    const priorSection = await screen.findByTestId("meeting-prior-actions");
+    const roundsSection = screen.getByTestId("meeting-detail-rounds");
+    const adoptedSection = screen.getByTestId("meeting-adopted-actions");
+
+    // 1. Previous decisions appear first, then adopted actions, both above discussion rounds
+    expect(
+      priorSection.compareDocumentPosition(adoptedSection) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      adoptedSection.compareDocumentPosition(roundsSection) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // 2. Back to Human Inbox link is rendered when ?action= is present
+    expect(screen.getByTestId("meeting-detail-back-to-inbox")).toHaveAttribute(
+      "href",
+      "/management/human-inbox",
+    );
+
+    // 3. Prior action shows returned review reason, navigable artifact link, and evidence note body
+    expect(priorSection).toHaveTextContent("Validate chip concentration threshold");
+    expect(priorSection).toHaveTextContent(
+      "Sharpe below 1.25 acceptance criterion; add liquidity tier filter.",
+    );
+    expect(priorSection).toHaveTextContent(
+      "Out-of-sample Sharpe reached 1.19; turnover filter needed.",
+    );
+    const artifactLink = within(priorSection).getByRole("link", {
+      name: "artifact-chip-v1",
+    });
+    expect(artifactLink).toHaveAttribute("href", "/management/artifacts/artifact-chip-v1");
+
+    // 4. Adopted actions show frozen meeting state ("Open") separate from live owner status ("Submitted (awaiting chair review)"),
+    // navigable evidence note link, and honest dispatch_pending receipt without fake ticket link
+    expect(adoptedSection).toHaveTextContent("Confirm exchange fee schedule update");
+    expect(adoptedSection).toHaveTextContent("Requires operator sign-off on exchange fee schedule.");
+    const humanActionRow = within(adoptedSection).getByTestId("meeting-action-tkt-adopt-human");
+    expect(
+      within(humanActionRow).getByTestId("meeting-action-live-status"),
+    ).toHaveTextContent("Submitted, not yet accepted");
+    expect(
+      within(humanActionRow).getByRole("link", { name: "note-fee-2026" }),
+    ).toHaveAttribute("href", "/management/evidence?ref_id=note-fee-2026");
+    expect(adoptedSection).toHaveTextContent("Queued factor stress test");
+    expect(adoptedSection).toHaveTextContent("research_ticket_writer_busy");
+
+    // 5. Anonymized participant capability limits show plain status without leaking SECRET_ADVISOR_IDENTITY
+    const capSection = screen.getByTestId("meeting-capabilities");
+    expect(capSection).toHaveTextContent("#1");
+    expect(capSection).toHaveTextContent("#2");
+    expect(capSection).toHaveTextContent(
+      "Restricted data — required dataset is not accessible for this deliverable",
+    );
+    expect(capSection).not.toHaveTextContent("SECRET_ADVISOR_IDENTITY");
+    expect(capSection).not.toHaveTextContent("SECRET_CHAIR_IDENTITY");
+    unmount();
+
+    // 6. zh-TW check for chair retain_pool decision vs round participant stance unchanged, and prior_actions unavailable
+    routes = [];
+    on("GET", "/bff/management/meetings/mtg-w48-retain", () =>
+      json(
+        makeFollowThroughMeeting({
+          id: "mtg-w48-retain",
+          meeting_id: "mtg-w48-retain",
+          outcome: "RETAIN_POOL",
+          decision_kind: "retain_pool",
+          no_action_reason: "Pool Sharpe and turnover remain within target band.",
+          prior_actions: [],
+          prior_action_reviews: [],
+          action_read: {
+            status: "unavailable",
+            owner: "research",
+            reason: "prior_action_owner_unavailable",
+          },
+          adopted_actions: [],
+        }),
+      ),
+    );
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = renderDetail("/management/meetings/mtg-w48-retain");
+
+    expect(await screen.findByTestId("meeting-prior-actions-unavailable")).toBeInTheDocument();
+    expect(screen.queryByTestId("meeting-prior-actions-empty")).not.toBeInTheDocument();
+    expect(screen.getByTestId("meeting-retain-pool-decision")).toHaveTextContent(
+      "主席決議維持目前策略池配置：Pool Sharpe and turnover remain within target band.",
+    );
+    expect(screen.getByTestId("meeting-round-2")).toHaveTextContent("維持立場");
+    unmountZh();
+    await i18n.changeLanguage("en-US");
+  });
 });

@@ -1,7 +1,7 @@
 // Management Meeting Detail Page (FE-MANAGEMENT-MEETINGS-20261115, SD_PERSONA_MEETINGS_2026-11-15 §11.3 & §12.9).
 import { useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import { QueryClientContext } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -122,6 +122,8 @@ function caseCitationIndex(items: MeetingCaseFileItem[], ref: string): number {
 
 export const MeetingDetailPage = () => {
   const { id = "" } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const focusedActionId = searchParams.get("action")?.trim() || undefined;
   const { t, i18n } = useTranslation();
   const access = useAgoraWriteAccess();
   registerMeetingQueryClient(useContext(QueryClientContext));
@@ -406,7 +408,7 @@ export const MeetingDetailPage = () => {
             ← {t("meetingsCenter.detail.backToCenter", { defaultValue: "Back to Meetings Center" })}
           </Link>
         </Button>
-        {isReview ? (
+        {isReview || focusedActionId ? (
           <Button asChild size="sm" variant="outline">
             <Link to="/management/human-inbox" data-testid="meeting-detail-back-to-inbox">
               {t("mgmt.inbox.backToInbox", { defaultValue: "Back to Human Inbox" })}
@@ -853,8 +855,13 @@ export const MeetingDetailPage = () => {
 
       {/* Follow-through first: previous decisions, then what this meeting adopted. */}
       <Card className="space-y-4 p-4 sm:p-6" data-testid="meeting-detail-follow-through">
-        <PriorActionsSection read={m.prior_actions} />
-        <AdoptedActionsSection actions={m.adopted_actions ?? []} noActionReason={m.no_action_reason} />
+        <PriorActionsSection read={m.prior_actions} focusedActionId={focusedActionId} />
+        <AdoptedActionsSection
+          actions={m.adopted_actions ?? []}
+          noActionReason={m.no_action_reason}
+          decisionKind={m.decision_kind}
+          focusedActionId={focusedActionId}
+        />
         <ParticipantCapabilities
           items={m.participant_capabilities ?? []}
           revealed={m.anonymised_labels_revealed !== false}

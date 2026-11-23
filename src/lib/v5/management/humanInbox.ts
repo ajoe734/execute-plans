@@ -58,26 +58,51 @@ export interface HumanInboxAllowedActions {
   canRequestEvidence?: boolean;
 }
 
+export interface HumanInboxMeetingActionEvidenceRef {
+  kind: "research_artifact" | "research_note" | string;
+  artifactId: string;
+  checksum?: string;
+  href?: string;
+}
+
 /** Human-facing work carried by a meeting-linked research ticket (the original ticket, no new id). */
 export interface HumanInboxMeetingAction {
   /** Research ticket id (also the stable action id). */
   ticketId: string;
   meetingId?: string;
+  title?: string;
+  owner?: string;
+  assignee?: string;
+  assigneeKind?: "persona" | "human" | string;
+  reviewerId?: string;
+  /** Requested deliverable / material (from requested_material or deliverable). */
   deliverable?: string;
+  requestedMaterial?: string;
   acceptanceCriterion?: string;
   dueAt?: string;
   nextReview?: string;
-  /** Specific missing input / authorization requested from the human. */
+  overdue?: boolean;
+  /** Direct human requirement recorded by the chair (distinct from deliverable). */
+  humanRequirement?: string;
+  /** Specific missing input / authorization or return reason requested from the human. */
   missingInput?: string;
-  /** Owner-provided next transition: `submit` or `provide_input`. */
+  reason?: string;
+  reviewReason?: string;
+  /** Owner-provided next transition: `submit` or `provide_input` (from response_action or next_transition). */
+  responseAction?: string;
   nextTransition?: string;
   requiredActor?: string;
-  /** Persona (or other accountable owner) that resumes after the human responds. */
+  /** Persona or reviewer that resumes after the human responds (from resumes_with or resumes_label). */
+  resumesWith?: string;
   resumesLabel?: string;
   state?: string;
+  ownerStatus?: string;
   revision?: string | number;
   /** Source-granted permission; false renders a view-only item. */
   canRespond: boolean;
+  evidenceRefs?: HumanInboxMeetingActionEvidenceRef[];
+  ticketHref?: string;
+  meetingHref?: string;
 }
 
 export interface HumanInboxItem {
@@ -262,6 +287,21 @@ export function meetingTypeFromInboxItem(
     if (!text) continue;
     const match = /\b(MT-[1-6])\b/i.exec(text);
     if (match?.[1]) return match[1].toUpperCase();
+  }
+  return undefined;
+}
+
+export function ticketIdFromInboxId(rawId: string): string | undefined {
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(rawId);
+    } catch {
+      return rawId;
+    }
+  })().trim();
+  if (decoded.startsWith("meeting_action:")) {
+    const rest = decoded.slice("meeting_action:".length).trim();
+    return rest || undefined;
   }
   return undefined;
 }

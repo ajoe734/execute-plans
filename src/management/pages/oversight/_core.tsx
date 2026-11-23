@@ -32,8 +32,14 @@ import {
   statusLabel,
 } from "@/lib/enumLabels";
 import {
-  HUMAN_INBOX_KINDS, humanInboxRank, type HumanInboxItem, type HumanInboxList,
+  HUMAN_INBOX_KINDS,
+  humanInboxRank,
+  type HumanInboxItem,
+  type HumanInboxList,
+  type HumanInboxMeetingAction,
 } from "@/lib/v5/management/humanInbox";
+import type { MeetingActionItem } from "@/lib/bff-v1/meetings";
+import { MeetingActionResponseCard } from "@/management/pages/meetings/MeetingActionCards";
 import { mgmt } from "@/lib/bff-v1";
 import {
   adaptEvolutionJournalList,
@@ -1539,6 +1545,9 @@ export const HumanInboxPage = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [expandedSummaries, setExpandedSummaries] = useState<Record<string, boolean>>({});
+  const [continuedActions, setContinuedActions] = useState<
+    Record<string, { work: HumanInboxMeetingAction; ticket: MeetingActionItem | null }>
+  >({});
   const toggleSummary = (id: string) =>
     setExpandedSummaries((prev) => ({ ...prev, [id]: !prev[id] }));
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
@@ -1568,7 +1577,10 @@ export const HumanInboxPage = () => {
   );
   const surfaces = data?.meta?.surfaces ?? {};
   const isDegraded = Object.values(surfaces).some(
-    (surface) => surface.status === "degraded" || surface.status === "unavailable"
+    (surface) =>
+      surface.status === "degraded" ||
+      surface.status === "unavailable" ||
+      surface.status === "denied",
   );
   const isInitialPending = loading && !data && !error;
   const isTransportUnavailable = Boolean(error);
@@ -1883,6 +1895,26 @@ export const HumanInboxPage = () => {
               <div><dt className="text-muted-foreground">{t("mgmt.inbox.ifIgnored")}</dt><dd className="text-foreground">{it.consequenceIfIgnored}</dd></div>
             </dl>
           )}
+          {it.kind === "meeting_action" && it.meetingAction ? (
+            <div className="mt-3">
+              <MeetingActionResponseCard
+                work={it.meetingAction}
+                meetingHref={it.meetingAction.meetingHref ?? it.links?.manageHref}
+                initialContinuation={continuedActions[it.meetingAction.ticketId]?.ticket ?? null}
+                onSaved={(_, canonicalTicket) => {
+                  const actionWork = it.meetingAction!;
+                  setContinuedActions((prev) => ({
+                    ...prev,
+                    [actionWork.ticketId]: {
+                      work: { ...actionWork, canRespond: false },
+                      ticket: canonicalTicket,
+                    },
+                  }));
+                  void refresh?.();
+                }}
+              />
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             {/* Live BFF inbox items lack the FE-composed detailHref/links; guard
                 so a degraded/real payload renders instead of crashing the page. */}
@@ -1918,6 +1950,27 @@ export const HumanInboxPage = () => {
         </Card>
         );
       })}
+      {Object.values(continuedActions)
+        .filter(
+          (entry) =>
+            !visibleItems.some(
+              (it) =>
+                it.kind === "meeting_action" &&
+                it.meetingAction?.ticketId === entry.work.ticketId,
+            ),
+        )
+        .map((entry) => (
+          <div
+            key={`continued-${entry.work.ticketId}`}
+            data-testid={`inbox-continued-ticket-${entry.work.ticketId}`}
+          >
+            <MeetingActionResponseCard
+              work={entry.work}
+              meetingHref={entry.work.meetingHref}
+              initialContinuation={entry.ticket}
+            />
+          </div>
+        ))}
     </section>
   );
 };
