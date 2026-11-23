@@ -3554,8 +3554,15 @@ export default {
     },
     detail: {
       results: "研究結果",
-      noResults: "沒有已記錄的成果連結。",
+      noResults: "沒有可開啟的成果檔案。",
+      checkingOutputs: "正在確認成果檔案…",
+      outputsUnavailable: "目前無法確認部分成果檔案。",
       viewOutput: "查看成果 {{number}}",
+      evaluation: {
+        action_match_rate: "平均採用參考動作的機率",
+        return_gap: "報酬差（參考策略減去模型）",
+        kl_divergence: "動作分布差異（KL 散度）",
+      },
       recordedParameters: "已記錄的執行參數",
       parameters: { symbol: "標的", sample_window: "樣本期間", folds: "折數", seed: "亂數種子" },
       technicalDetails: "技術資訊",

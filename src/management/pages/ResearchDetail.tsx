@@ -6,10 +6,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1, mgmt, runActionSafe, BffError } from "@/lib/bff-v1";
 import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
-import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
+import { isNotFoundError, useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
-import type { AuditEvent, ResearchTask } from "@/lib/bff-v1";
+import type { AuditEvent, ResearchTask, ResearchTaskRun } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow, ManagementResearchProject } from "@/lib/bff-v1/management";
 import { Package, Ban, RotateCcw, Archive, AlertTriangle, Inbox } from "lucide-react";
 import { toast } from "sonner";
@@ -94,6 +94,59 @@ function present(v: unknown): string | undefined {
   const text = String(v).trim();
   if (!text || /^(nan|none|null|undefined)$/i.test(text)) return undefined;
   return text;
+}
+
+function savedOutputReferences(run: ResearchTaskRun): string[] {
+  const refs = run.artifactRefs ?? run.artifact_refs ?? [];
+  const candidate = run.metadata?.candidate_id;
+  if (run.metadata?.policy_learning_handoff !== true || typeof candidate !== "string") return refs;
+  // Candidate intake records a lineage reference but only saves the task and run.
+  return refs.filter((id) => id !== `artifact-${candidate}`);
+}
+
+function ResearchOutputFiles({ ids }: { ids: string[] }) {
+  const t = useT();
+  const { data, loading, isError } = useLiveDetail(
+    async () => ({ checks: await Promise.allSettled(ids.map((id) => bffV1.artifacts.get(id))) }),
+    ids,
+    { auto: false },
+  );
+  const checks = data?.checks;
+  const links = ids.filter((_, index) => {
+    const result = checks?.[index];
+    return result?.status === "fulfilled" && Boolean(result.value?.id);
+  });
+  const readingFailed = isError || checks?.some((result) => result.status === "rejected" && !isNotFoundError(result.reason));
+  const missing = ids.length === 0 || checks?.some((result) => result.status === "fulfilled" ? !result.value?.id : isNotFoundError(result.reason));
+  return (
+    <div className="space-y-2">
+      {ids.length > 0 && loading && <p role="status" className="text-sm text-muted-foreground">{t("research.detail.checkingOutputs")}</p>}
+      {links.length > 0 && (
+        <ul className="space-y-2">
+          {links.map((id, index) => (
+            <li key={id}>
+              <Link className="text-sm text-primary underline" to={"/management/artifacts/" + encodeURIComponent(id)}>
+                {t("research.detail.viewOutput", { number: index + 1 })}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {missing && <p className="text-sm text-muted-foreground">{t("research.detail.noResults")}</p>}
+      {readingFailed && <p role="status" className="text-sm text-muted-foreground">{t("research.detail.outputsUnavailable")}</p>}
+    </div>
+  );
+}
+
+function recordedEvaluation(run?: ResearchTaskRun) {
+  const summary = run?.metadata?.evaluation_summary;
+  const metrics = run?.metadata?.metrics;
+  const entries = ["action_match_rate", "return_gap", "kl_divergence"].flatMap((key) => {
+    const from = (record: unknown) => record && typeof record === "object" ? (record as Record<string, unknown>)[key] : undefined;
+    const reported = [from(summary), from(metrics)].find((value): value is number => typeof value === "number" && Number.isFinite(value));
+    return reported === undefined ? [] : [{ key, value: reported }];
+  });
+  return entries;
 }
 
 export const ResearchDetail = () => {
@@ -188,7 +241,8 @@ export const ResearchDetail = () => {
     ? researchContext.frameworks
     : uniq([x.framework, ...(x.frameworks ?? [])]);
   const lastRun = x.runs?.at(-1);
-  const outputIds = uniq([x.artifactId, ...(x.runs ?? []).flatMap((run) => run.artifactRefs ?? run.artifact_refs ?? [])]);
+  const outputIds = uniq([x.artifactId, ...(x.runs ?? []).flatMap(savedOutputReferences)]);
+  const evaluation = recordedEvaluation(lastRun);
   const recordedParameters = Object.entries({
     symbol: present(lastRun?.parameters?.symbol),
     sample_window: present(lastRun?.parameters?.sample_window),
@@ -391,19 +445,17 @@ export const ResearchDetail = () => {
                   </Section>
                 )}
                 <Section title={t("research.detail.results")}>
-                  {outputIds.length ? (
-                    <ul className="space-y-2">
-                      {outputIds.map((artifactId, index) => (
-                        <li key={artifactId}>
-                          <Link className="text-sm text-primary underline" to={"/management/artifacts/" + encodeURIComponent(artifactId)}>
-                            {t("research.detail.viewOutput", { number: index + 1 })}
-                          </Link>
-                        </li>
+                  {evaluation.length > 0 && (
+                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {evaluation.map(({ key, value }) => (
+                        <Field key={key} label={t("research.detail.evaluation." + key)} value={new Intl.NumberFormat(undefined, {
+                          style: key === "action_match_rate" ? "percent" : "decimal",
+                          maximumFractionDigits: key === "action_match_rate" ? 2 : 4,
+                        }).format(value)} />
                       ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{t("research.detail.noResults")}</p>
+                    </div>
                   )}
+                  <ResearchOutputFiles key={JSON.stringify([x.id, outputIds])} ids={outputIds} />
                 </Section>
                 {recordedParameters.length > 0 && (
                   <Section title={t("research.detail.recordedParameters")}>

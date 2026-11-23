@@ -812,6 +812,7 @@ export interface ResearchTaskRun {
   createdAt?: string;
   created_at?: string | null;
   parameters?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   inputRefs?: Record<string, unknown>;
   input_refs?: Record<string, unknown>;
   artifactRefs?: string[];
