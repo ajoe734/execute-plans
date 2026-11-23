@@ -1786,6 +1786,7 @@ describe("TradingPulsePage operator-readable overview, Persona details, and rank
       payload.data.runtime_rows = [{ ...row, latest_outcome: {
         ...row.latest_outcome, kind: null, requested_quantity: 10, filled_quantity: null, submitted_to_broker: false, ...patch,
       } }];
+      if (!("kind" in patch)) delete payload.data.runtime_rows[0].latest_outcome.kind;
       mockTradingPulseLive(payload);
       const view = renderPage(<TradingPulsePage />);
       const events = screen.getByTestId("trading-pulse-notable-events");
