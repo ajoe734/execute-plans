@@ -2768,58 +2768,84 @@ const hasActionablePulseOutcomeReason = (reasonCode: unknown): boolean => {
   return Boolean(normalized) && normalized !== "reason_not_recorded";
 };
 
+// A generated intent quantity on a hold is not an order. Never use period
+// telemetry to establish whether this latest decision placed or filled one.
+const isNormalPulseHold = (outcome: ManagementTradingPulseLatestOutcome | undefined): boolean => {
+  if (outcome?.status !== "available" || outcome.reasonCode !== "hold_signal") return false;
+  const kind = outcome.kind ?? outcome.outcome_kind;
+  if (kind && kind !== "no_trade") return false;
+  if (outcome.submittedToBroker === true || outcome.side || outcome.orderId || outcome.brokerOrderId) return false;
+  const filled = pulseNumber(outcome.filledQuantity);
+  if (filled !== null && filled !== 0) return false;
+  const required = pulseNumber(outcome.required);
+  const available = pulseNumber(outcome.available);
+  return !(required !== null && available !== null && required > available);
+};
+
+const isPulsePreBrokerRejection = (outcome: ManagementTradingPulseLatestOutcome | undefined): boolean => {
+  if (outcome?.status !== "available" || outcome.submittedToBroker !== false) return false;
+  // Recorded fills and non-rejection outcomes contradict a pre-broker refusal.
+  if ((pulseNumber(outcome.filledQuantity) ?? 0) > 0) return false;
+  const rejectionMarkers = ["rejected", "rejection", "pre_broker_rejected", "pre_broker_rejection"];
+  const kind = String(outcome.kind ?? outcome.outcome_kind ?? "").trim().toLowerCase();
+  if (kind && !rejectionMarkers.includes(kind)) return false;
+  const hasRejectionMarker = [kind, outcome.focusStage]
+    .some((value) => typeof value === "string" && rejectionMarkers.includes(value.trim().toLowerCase()));
+  const reason = String(outcome.reasonCode ?? "").trim().toLowerCase();
+  if ([
+    "hold_signal", "partially_filled", "runtime_unhealthy_at_reconciliation", "reconciliation_deferred_runtime_unhealthy",
+    "reconciliation_identity_unverified", "reconciliation_evidence_incomplete", "reconciliation_check_failed",
+    "broker_record_missing", "broker_fill_mismatch", "position_variance", "cash_variance",
+    "broker_unavailable_at_reconciliation", "reconciliation_deferred_broker_unavailable",
+    "long_cash", "long_lever", "short_via_future", "close_leg",
+  ].includes(reason)) return false;
+  const hasRejectionReason = [
+    "insufficient_cash", "insufficient_buying_power", "insufficient_initial_margin", "insufficient_funds",
+    "insufficient_position", "sell_without_holdings", "kill_switch", "risk_limit_exceeded",
+    "max_position_exceeded", "exposure_limit_exceeded",
+  ].includes(reason);
+  const required = pulseNumber(outcome.required);
+  const available = pulseNumber(outcome.available);
+  return hasRejectionMarker || hasRejectionReason
+    || (required !== null && available !== null && required > available);
+};
+
+const resolvePulseEventQuantities = (outcome: ManagementTradingPulseLatestOutcome | undefined) => {
+  const requested = pulseNumber(outcome?.requestedQuantity);
+  // An explicit pre-broker rejection establishes no fill for this intent.
+  const filled = pulseNumber(outcome?.filledQuantity)
+    ?? (outcome?.status === "available" && isPulsePreBrokerRejection(outcome) ? 0 : null);
+  const rate = outcome?.status === "available" && requested !== null && requested > 0 && filled !== null && filled >= 0
+    ? filled / requested
+    : null;
+  return { requested, filled, rate };
+};
+
 const isVerifiedNormalFullFillRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
   const outcome = row.latestOutcome;
-  if (outcome?.submittedToBroker === false) return false;
-  if (hasActionablePulseOutcomeReason(outcome?.reasonCode)) return false;
-  const reqAmt = pulseNumber(outcome?.required);
-  const availAmt = pulseNumber(outcome?.available);
-  if (reqAmt !== null && availAmt !== null && reqAmt > availAmt) return false;
-  if (!isPulseSourceVerifiedAvailable(row.performanceContext?.sourceStatus)) return false;
-  if (!isPulseFillRateDetailsVerified(row)) return false;
-  const fillDetails = row.performanceContext?.fillRateDetails;
-  const detailsStatus = String(fillDetails?.status ?? "").trim().toLowerCase();
-  if (!["known", "available", "ok", "verified"].includes(detailsStatus)) return false;
-  const verifiedRate = resolvePulseVerifiedFillRate(row);
-  if (verifiedRate === null || Math.abs(verifiedRate - 1) > 1e-9) return false;
-  const num = pulseNumber(fillDetails?.numerator);
-  const den = pulseNumber(fillDetails?.denominator);
-  if (num === null || den === null || den <= 0 || num !== den) return false;
-  const outcomeReqQty = pulseNumber(outcome?.requestedQuantity);
-  const outcomeFillQty = pulseNumber(outcome?.filledQuantity);
-  if (outcomeReqQty !== null && (outcomeReqQty <= 0 || outcomeReqQty !== den)) return false;
-  if (outcomeFillQty !== null && (outcomeFillQty <= 0 || outcomeFillQty !== num)) return false;
-  if (outcomeReqQty !== null && outcomeFillQty !== null && outcomeFillQty !== outcomeReqQty) {
-    return false;
-  }
-  const fillCount = resolvePulseRowFillCount(row);
-  return fillCount !== null && fillCount > 0;
+  if (outcome?.status !== "available" || outcome.submittedToBroker === false) return false;
+  const kind = outcome.kind ?? outcome.outcome_kind;
+  if (kind && kind !== "normal") return false;
+  if (hasActionablePulseOutcomeReason(outcome.reasonCode)) return false;
+  const required = pulseNumber(outcome.required);
+  const available = pulseNumber(outcome.available);
+  if (required !== null && available !== null && required > available) return false;
+  const { rate } = resolvePulseEventQuantities(outcome);
+  return rate === 1;
 };
 
 const isNotableOutcomeRow = (row: ManagementTradingPulseRuntimeRow): boolean => {
-  if (isVerifiedNormalFullFillRow(row)) return false;
+  if (isNormalPulseHold(row.latestOutcome) || isVerifiedNormalFullFillRow(row)) return false;
   const outcome = row.latestOutcome;
   if (outcome && outcome.status === "available") return true;
-  if (outcome?.submittedToBroker === false) return true;
+  if (typeof outcome?.submittedToBroker === "boolean") return true;
   if (outcome?.reasonCode) return true;
+  const requested = pulseNumber(outcome?.requestedQuantity);
+  const filled = pulseNumber(outcome?.filledQuantity);
+  if (requested !== null && requested > 0 && filled !== null && filled !== requested) return true;
   const reqAmt = pulseNumber(outcome?.required);
   const availAmt = pulseNumber(outcome?.available);
   if (reqAmt !== null && availAmt !== null && reqAmt > availAmt) return true;
-  const outcomeReqQty = pulseNumber(outcome?.requestedQuantity);
-  const outcomeFillQty = pulseNumber(outcome?.filledQuantity);
-  if (
-    outcomeReqQty !== null
-    && outcomeReqQty > 0
-    && ((outcomeFillQty !== null && outcomeFillQty !== outcomeReqQty) || resolvePulseRowFillCount(row) === 0)
-  ) {
-    return true;
-  }
-  if (isPulseFillRateDetailsVerified(row) && resolvePulseVerifiedFillRate(row) !== null) {
-    const fillDetails = row.performanceContext?.fillRateDetails;
-    const num = pulseNumber(fillDetails?.numerator);
-    const den = pulseNumber(fillDetails?.denominator);
-    if (num !== null && den !== null && den > 0 && num !== den) return true;
-  }
   return false;
 };
 
@@ -2857,19 +2883,14 @@ const TradingPulseNotableEventsSection = ({
             const outcome = row.latestOutcome;
             const perf = row.performanceContext;
             const fillDetails = perf?.fillRateDetails;
-            const verifiedFillRate = resolvePulseVerifiedFillRate(row);
+            const { requested: reqQty, filled: fillQty, rate: verifiedFillRate } = resolvePulseEventQuantities(outcome);
             const missingFillRateKind = resolvePulseMissingFillRateKind(row);
-            const canUseFillDetails = isPulseFillRateDetailsVerified(row) && verifiedFillRate !== null;
             const displayName = resolvePulsePersonaDisplayName(row, t);
             const symbol = resolvePulseRowSymbol(row);
             const submitted = outcome?.submittedToBroker;
-            const reasonText = formatPulseOutcomeReason(outcome?.reasonCode, t);
-            const reqQty = pulseNumber(
-              outcome?.requestedQuantity ?? (canUseFillDetails ? fillDetails?.denominator : null),
-            );
-            const fillQty = pulseNumber(
-              outcome?.filledQuantity ?? (canUseFillDetails ? fillDetails?.numerator : null),
-            );
+            const reasonText = outcome?.reasonCode === "hold_signal"
+              ? t("mgmt.pulse.eventHoldConflict")
+              : formatPulseOutcomeReason(outcome?.reasonCode, t);
             const unitInfo = formatPulseQuantityUnit(fillDetails?.unit, t, symbol);
             const reqAmt = pulseNumber(outcome?.required);
             const availAmt = pulseNumber(outcome?.available);
@@ -2915,7 +2936,7 @@ const TradingPulseNotableEventsSection = ({
                     </Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {submitted === false && (
+                    {isPulsePreBrokerRejection(outcome) && (
                       <Badge variant="outline" className={statusTone("failed")}>
                         {t("mgmt.pulse.eventPreBrokerRejected")}
                       </Badge>
@@ -2955,10 +2976,8 @@ const TradingPulseNotableEventsSection = ({
                       <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
                     ) : missingFillRateKind === "stale" ? (
                       <span className="text-status-warning">{t("mgmt.pulse.fillRateStale")}</span>
-                    ) : missingFillRateKind === "no_orders" ? (
-                      <span>{t("mgmt.pulse.fillRateNoOrders")}</span>
                     ) : (
-                      <span className="text-muted-foreground">{t("mgmt.pulse.fillRateUnknown")}</span>
+                      <span className="text-muted-foreground">{t("mgmt.pulse.eventFillUnknown")}</span>
                     )
                   )}
 
@@ -3101,6 +3120,7 @@ const TradingPulsePersonaDetailsSection = ({
                 const pnlAt = perf?.pnlAt;
 
                 const outcome = row.latestOutcome;
+                const normalHold = isNormalPulseHold(outcome);
                 const outcomeSubmitted = outcome?.submittedToBroker;
                 const outcomeReasonCode = outcome?.reasonCode;
                 const outcomeOccurredAt = outcome?.occurredAt;
@@ -3230,6 +3250,24 @@ const TradingPulsePersonaDetailsSection = ({
                                 })
                               : (formatPulsePercentFromFraction(verifiedFillRate) ?? "0%")}
                           </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {(() => {
+                              const period = fillDetails?.window;
+                              const range = [period, perf?.metricPeriods?.fill_rate].map((candidate) => {
+                                if (!candidate || typeof candidate !== "object") return null;
+                                const start = candidate.startAt ?? candidate.start_at;
+                                const end = candidate.endExclusiveAt ?? candidate.end_exclusive_at
+                                  ?? candidate.endAt ?? candidate.end_at ?? candidate.asOf ?? candidate.as_of;
+                                return typeof start === "string" && typeof end === "string" && start && end
+                                  ? { start, end } : null;
+                              }).find((candidate) => candidate !== null);
+                              return range
+                                ? t("mgmt.pulse.pnlPeriodRangeFmt", { start: safeDateTime(range.start), end: safeDateTime(range.end) })
+                                : typeof period === "string" && !isPulseTechnicalId(period)
+                                  ? t("mgmt.pulse.fillRatePeriodFmt", { period })
+                                  : t("mgmt.pulse.pnlPeriodUnverified");
+                            })()}
+                          </div>
                         </div>
                       ) : missingFillRateKind === "unavailable" ? (
                         <span className="text-status-warning">{t("mgmt.pulse.fillRateSourceUnavailable")}</span>
@@ -3295,7 +3333,7 @@ const TradingPulsePersonaDetailsSection = ({
                       && (outcome.status === "available" || outcomeReasonCode || outcomeSubmitted !== null) ? (
                         <div className="space-y-0.5 text-foreground">
                           <div className="flex flex-wrap items-center gap-1">
-                            {outcomeSubmitted === false && (
+                            {isPulsePreBrokerRejection(outcome) && (
                               <Badge variant="outline" className={statusTone("failed")}>
                                 {t("mgmt.pulse.eventPreBrokerRejected")}
                               </Badge>
@@ -3305,15 +3343,22 @@ const TradingPulsePersonaDetailsSection = ({
                                 {t("mgmt.pulse.eventSubmittedToBroker")}
                               </Badge>
                             )}
-                            <span className="font-medium">{formatPulseOutcomeReason(outcomeReasonCode, t)}</span>
+                            <span className="font-medium">{normalHold
+                              ? t("tradeJourneys.reasons.hold_signal")
+                              : outcomeReasonCode === "hold_signal"
+                                ? t("mgmt.pulse.eventHoldConflict")
+                                : formatPulseOutcomeReason(outcomeReasonCode, t)}</span>
                           </div>
-                          {outcomeReqQty !== null && (
+                          {!normalHold && outcomeReqQty !== null && (
                             <div className="text-[11px] text-muted-foreground">
                               {t("mgmt.pulse.eventOrderRequestedOnlyFmt", {
                                 requested: formatPulseInt(outcomeReqQty),
                                 unit: unitInfo.localized,
                               })}
                             </div>
+                          )}
+                          {!normalHold && resolvePulseEventQuantities(outcome).rate === null && (
+                            <div className="text-[11px]">{t("mgmt.pulse.eventFillUnknown")}</div>
                           )}
                           {outcomeRequired !== null && outcomeAvailable !== null && (
                             <div className="text-[11px] text-muted-foreground">
