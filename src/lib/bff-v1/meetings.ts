@@ -572,6 +572,8 @@ export interface MeetingSynthesis {
   } | null;
   dissent_memo_id?: string | null;
   dissent_summary?: string | null;
+  actions?: unknown[];
+  no_action_reason?: string | null;
   outcome?: string | null;
   summary?: string | null;
   unreadable_reason?: string | null;
@@ -616,7 +618,60 @@ export interface MeetingUsage {
   [key: string]: unknown;
 }
 
+export type MeetingActionState =
+  | "open"
+  | "in_progress"
+  | "waiting_human_input"
+  | "submitted"
+  | "returned"
+  | "accepted"
+  | "unknown";
+
+export interface MeetingActionItem {
+  /** Stable action id; equals the research ticket id for ticket-backed work. */
+  action_id: string;
+  origin_meeting_id?: string | null;
+  title?: string | null;
+  owner_label?: string | null;
+  owner_kind?: string | null;
+  deliverable?: string | null;
+  acceptance_criterion?: string | null;
+  due_at?: string | null;
+  next_review?: string | null;
+  state: MeetingActionState;
+  /** Whether the assignee has actually produced a result (distinct from acceptance). */
+  executed: boolean;
+  evidence_refs: string[];
+  review_reason?: string | null;
+  review_source?: string | null;
+  required_actor?: string | null;
+  next_transition?: string | null;
+  missing_input?: string | null;
+  ticket_href?: string | null;
+  downstream_ref?: string | null;
+  /** "retain_pool" and similar chair decisions, distinct from a participant stance. */
+  decision_kind?: string | null;
+}
+
+export type MeetingActionsRead =
+  | { state: "ok"; items: MeetingActionItem[] }
+  | { state: "unavailable"; reason: string }
+  | { state: "forbidden"; reason: string };
+
+export interface MeetingParticipantCapability {
+  label: string;
+  persona_id?: string | null;
+  limits: string[];
+}
+
 export interface MeetingDetail extends MeetingSummaryItem {
+  /** Actions adopted by this meeting's chair (frozen reference). */
+  adopted_actions?: MeetingActionItem[];
+  /** Same-series obligations assembled for this meeting; reviewed first. */
+  prior_actions?: MeetingActionsRead;
+  /** Reason the chair ended without adopting an action. */
+  no_action_reason?: string | null;
+  participant_capabilities?: MeetingParticipantCapability[];
   attribution_record_id?: string | null;
   attribution_record?: MeetingAttributionRecord | null;
   agenda?: string[] | string | null;
@@ -988,6 +1043,173 @@ export function collectMeetingEvidenceRefs(cleaned: Record<string, unknown>): st
   return refs;
 }
 
+
+const MEETING_ACTION_STATES: readonly MeetingActionState[] = [
+  "open", "in_progress", "waiting_human_input", "submitted", "returned", "accepted",
+];
+
+function optText(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+export function normalizeMeetingAction(raw: unknown): MeetingActionItem | null {
+  if (!isRecord(raw)) return null;
+  const actionId = optText(raw.action_id) ?? optText(raw.ticket_id) ?? optText(raw.id);
+  if (!actionId) return null;
+  const rawState = String(raw.state ?? raw.status ?? "").trim().toLowerCase();
+  const state = (MEETING_ACTION_STATES as readonly string[]).includes(rawState)
+    ? (rawState as MeetingActionState)
+    : "unknown";
+  const refs = Array.isArray(raw.evidence_refs)
+    ? raw.evidence_refs
+        .map((r) => (typeof r === "string" ? r : isRecord(r) ? optText(r.href ?? r.ref ?? r.id) : null))
+        .filter((r): r is string => Boolean(r))
+    : [];
+  const review = isRecord(raw.review) ? raw.review : {};
+  const owner = isRecord(raw.assignee) ? raw.assignee : {};
+  const executedRaw = raw.executed;
+  // Never treat a missing signal as "executed": only a submitted result or explicit flag counts.
+  const executed =
+    typeof executedRaw === "boolean"
+      ? executedRaw
+      : state === "submitted" || state === "accepted" || (state === "returned" && refs.length > 0);
+  return {
+    action_id: actionId,
+    origin_meeting_id: optText(raw.origin_meeting_id ?? raw.meeting_id),
+    title: optText(raw.title),
+    owner_label: optText(raw.assignee_label ?? raw.owner_label ?? owner.display_name ?? owner.label ?? raw.assignee),
+    owner_kind: optText(raw.assignee_kind ?? owner.kind),
+    deliverable: optText(raw.deliverable),
+    acceptance_criterion: optText(raw.acceptance_criterion),
+    due_at: optText(raw.due_at),
+    next_review: optText(raw.next_review),
+    state,
+    executed,
+    evidence_refs: refs,
+    review_reason: optText(raw.review_reason ?? review.reason),
+    review_source: optText(raw.review_source ?? review.source),
+    required_actor: optText(raw.required_actor),
+    next_transition: optText(raw.next_transition),
+    missing_input: optText(raw.missing_input ?? raw.requested_material),
+    ticket_href: optText(raw.ticket_href),
+    downstream_ref: optText(raw.downstream_ref),
+    decision_kind: optText(raw.decision_kind),
+  };
+}
+
+function normalizeMeetingActionList(raw: unknown): MeetingActionItem[] {
+  return Array.isArray(raw)
+    ? raw.map(normalizeMeetingAction).filter((a): a is MeetingActionItem => a !== null)
+    : [];
+}
+
+/** Owner unavailable, empty, and permission denied stay distinct. */
+export function normalizePriorActions(raw: unknown): MeetingActionsRead | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (Array.isArray(raw)) return { state: "ok", items: normalizeMeetingActionList(raw) };
+  if (!isRecord(raw)) return undefined;
+  const status = String(raw.status ?? raw.state ?? "").trim().toLowerCase();
+  const reason = optText(raw.reason) ?? "unknown";
+  if (status === "forbidden" || status === "permission_denied") return { state: "forbidden", reason };
+  if (status === "unavailable" || status === "error") return { state: "unavailable", reason };
+  if (Array.isArray(raw.items)) return { state: "ok", items: normalizeMeetingActionList(raw.items) };
+  return undefined;
+}
+
+function normalizeCapabilities(raw: unknown): MeetingParticipantCapability[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.filter(isRecord).map((c, i) => ({
+    label: optText(c.label ?? c.participant_label) ?? optText(c.persona_display_name) ?? `#${i + 1}`,
+    persona_id: optText(c.persona_id),
+    limits: Array.isArray(c.limits ?? c.limitations)
+      ? ((c.limits ?? c.limitations) as unknown[]).filter((x): x is string => typeof x === "string" && !!x.trim())
+      : [],
+  }));
+}
+
+export interface MeetingActionResponseInput {
+  ticketId: string;
+  /** Owner-provided next transition: `submit` (human deliverable) or `provide_input` (Persona resume). */
+  transition: string;
+  evidenceNote?: { title: string; body: string };
+  evidenceRefs?: string[];
+  revision?: string | number;
+}
+
+export const MEETING_ACTION_NOTE_TITLE_MAX = 120;
+export const MEETING_ACTION_NOTE_BODY_MAX = 2000;
+export const MEETING_ACTION_TRANSITIONS: readonly string[] = ["submit", "provide_input"];
+
+export type MeetingActionFieldError = "transition" | "note_required" | "title_too_long" | "body_too_long";
+
+export function validateMeetingActionResponse(input: MeetingActionResponseInput): MeetingActionFieldError | null {
+  if (!MEETING_ACTION_TRANSITIONS.includes(input.transition)) return "transition";
+  const title = input.evidenceNote?.title.trim() ?? "";
+  const body = input.evidenceNote?.body.trim() ?? "";
+  const hasRefs = (input.evidenceRefs?.length ?? 0) > 0;
+  if (!title && !body && !hasRefs) return "note_required";
+  if (!hasRefs && (!title || !body)) return "note_required";
+  if (title.length > MEETING_ACTION_NOTE_TITLE_MAX) return "title_too_long";
+  if (body.length > MEETING_ACTION_NOTE_BODY_MAX) return "body_too_long";
+  return null;
+}
+
+export type MeetingActionResponseResult =
+  | { state: "ok"; action: MeetingActionItem | null; replayed: boolean }
+  | { state: "invalid"; reason: MeetingActionFieldError }
+  | { state: "conflict"; reason: string }
+  | { state: "forbidden"; reason: string }
+  | { state: "unavailable"; reason: string };
+
+/**
+ * Human response on the ORIGINAL research ticket (no new page, no new backend id).
+ * The owner binds the note idempotently; retries must reuse `idempotencyKey`.
+ */
+export async function submitMeetingActionResponse(
+  input: MeetingActionResponseInput,
+  idempotencyKey?: string,
+): Promise<MeetingActionResponseResult> {
+  const invalid = validateMeetingActionResponse(input);
+  if (invalid) return { state: "invalid", reason: invalid };
+  const ticketId = input.ticketId.trim();
+  if (!ticketId) return { state: "unavailable", reason: "missing_ticket_id" };
+  if (shouldCheckLiveWriteGate()) {
+    const allowed = await liveWriteGated();
+    if (!allowed) return { state: "unavailable", reason: "live_write_gate_closed" };
+  }
+  const note = input.evidenceNote;
+  const body: Record<string, unknown> = {
+    transition: input.transition,
+    ...(note && (note.title.trim() || note.body.trim())
+      ? { evidence_note: { title: note.title.trim(), body: note.body.trim() } }
+      : {}),
+    ...(input.evidenceRefs?.length ? { evidence_refs: input.evidenceRefs } : {}),
+    ...(input.revision !== undefined ? { revision: input.revision } : {}),
+  };
+  try {
+    const raw = await bffFetch({
+      method: "PATCH",
+      path: `/api/v1/research/tickets/${encodeURIComponent(ticketId)}`,
+      body,
+      idempotencyKey: idempotencyKey?.trim() || mintIdempotencyKey(),
+    });
+    const rec = isRecord(raw) ? raw : {};
+    const data = isRecord(rec.data) ? rec.data : rec;
+    const ticket = isRecord(data.ticket) ? data.ticket : data;
+    const action = normalizeMeetingAction({ ...ticket, action_id: ticket.action_id ?? ticket.ticket_id ?? ticketId });
+    const replayed = rec.replayed === true || data.replayed === true || (isRecord(rec.meta) && rec.meta.replayed === true);
+    return { state: "ok", action, replayed };
+  } catch (err) {
+    if (err instanceof BffError) {
+      const reason = extractErrorReason(err);
+      if (err.status === 409 || err.status === 412) return { state: "conflict", reason };
+      if (err.status === 401 || err.status === 403) return { state: "forbidden", reason };
+      return { state: "unavailable", reason };
+    }
+    return { state: "unavailable", reason: err instanceof Error && err.message.trim() ? err.message.trim() : MEETINGS_REASON_UNKNOWN };
+  }
+}
+
 function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDetail | undefined {
   const data = isRecord(raw.data) ? raw.data : raw;
   const resolvedId = String(data.meeting_id ?? data.id ?? raw.meeting_id ?? raw.id ?? "").trim();
@@ -1055,6 +1277,16 @@ function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDet
         }) as unknown as MeetingRound)
       : [],
     synthesis,
+    adopted_actions: normalizeMeetingActionList(
+      cleaned.adopted_actions ?? cleaned.actions ?? synthesis?.actions,
+    ),
+    ...(normalizePriorActions(cleaned.prior_actions) !== undefined
+      ? { prior_actions: normalizePriorActions(cleaned.prior_actions) }
+      : {}),
+    no_action_reason: optText(cleaned.no_action_reason ?? synthesis?.no_action_reason),
+    ...(normalizeCapabilities(cleaned.participant_capabilities) !== undefined
+      ? { participant_capabilities: normalizeCapabilities(cleaned.participant_capabilities) }
+      : {}),
     proposals: proposalsRaw.filter(isRecord) as unknown as MeetingProposalItem[],
     writebacks: Array.isArray(cleaned.writebacks)
       ? (cleaned.writebacks.filter(isRecord) as unknown as MeetingWritebackEntry[])

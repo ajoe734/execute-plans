@@ -3385,6 +3385,32 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
   return "";
 };
 
+const adaptInboxMeetingAction = (
+  it: Record<string, unknown>,
+  kind: HumanInboxKind,
+): HumanInboxItem["meetingAction"] | undefined => {
+  if (kind !== "meeting_action") return undefined;
+  const src = isObject(it.meeting_action) ? (it.meeting_action as Record<string, unknown>) : it;
+  const ticketId = asString(src.ticket_id ?? src.action_id ?? it.source_id);
+  if (!ticketId) return undefined;
+  const revision = src.revision ?? src.ticket_revision;
+  return {
+    ticketId,
+    meetingId: asOptionalString(src.meeting_id ?? src.origin_meeting_id),
+    deliverable: asOptionalString(src.deliverable),
+    acceptanceCriterion: asOptionalString(src.acceptance_criterion),
+    dueAt: asOptionalString(src.due_at),
+    nextReview: asOptionalString(src.next_review),
+    missingInput: asOptionalString(src.missing_input ?? src.requested_material),
+    nextTransition: asOptionalString(src.next_transition),
+    requiredActor: asOptionalString(src.required_actor),
+    resumesLabel: asOptionalString(src.resumes_label ?? src.resumes),
+    state: asOptionalString(src.state ?? src.status),
+    ...(typeof revision === "string" || typeof revision === "number" ? { revision } : {}),
+    canRespond: asBoolean(src.can_respond ?? src.canRespond, false),
+  };
+};
+
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
   const inferredKind =
     it.incident_id !== undefined || it.incident_cluster_id !== undefined
@@ -3535,6 +3561,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     ...(comparator !== undefined ? { comparator } : {}),
     reviewId,
     reviewType,
+    ...(adaptInboxMeetingAction(it, kind) ? { meetingAction: adaptInboxMeetingAction(it, kind) } : {}),
     decisionHref,
     allowedActions,
     blockingReasons: blockingReasons.length ? blockingReasons : undefined,

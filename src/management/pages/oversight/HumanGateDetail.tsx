@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { mgmt } from "@/lib/bff-v1";
+import { MeetingActionResponseCard } from "@/management/pages/meetings/MeetingActionCards";
 import {
   MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS,
   collectMeetingEvidenceRefs,
@@ -347,6 +348,14 @@ export const HumanGateDetailPage = () => {
           </ul>
         </Card>
       )}
+
+      {item.kind === "meeting_action" && item.meetingAction ? (
+        <MeetingActionResponseCard
+          work={item.meetingAction}
+          meetingHref={item.meetingAction.meetingId ? `/management/meetings/${encodeURIComponent(item.meetingAction.meetingId)}` : undefined}
+          onSaved={() => refresh()}
+        />
+      ) : null}
 
       {isMeetingReview && (
         <Card className="p-4 space-y-3" data-testid="inbox-meeting-review-card">

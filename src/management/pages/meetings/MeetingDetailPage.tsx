@@ -29,6 +29,11 @@ import {
   type MeetingPreReadInterpretation,
   type MeetingsRead,
 } from "@/lib/bff-v1/meetings";
+import {
+  AdoptedActionsSection,
+  ParticipantCapabilities,
+  PriorActionsSection,
+} from "./MeetingActionCards";
 import { isFailedMeeting, meetingLastError, meetingTopicText } from "./meetingDisplay";
 
 function BffSubjectInline({
@@ -845,6 +850,16 @@ export const MeetingDetailPage = () => {
           ) : null}
         </Card>
       ) : null}
+
+      {/* Follow-through first: previous decisions, then what this meeting adopted. */}
+      <Card className="space-y-4 p-4 sm:p-6" data-testid="meeting-detail-follow-through">
+        <PriorActionsSection read={m.prior_actions} />
+        <AdoptedActionsSection actions={m.adopted_actions ?? []} noActionReason={m.no_action_reason} />
+        <ParticipantCapabilities
+          items={m.participant_capabilities ?? []}
+          revealed={m.anonymised_labels_revealed !== false}
+        />
+      </Card>
 
       <Card id="meeting-discussion" className="space-y-4 p-4 sm:p-6" data-testid="meeting-detail-rounds">
         <div className="flex flex-wrap items-center justify-between gap-2">
