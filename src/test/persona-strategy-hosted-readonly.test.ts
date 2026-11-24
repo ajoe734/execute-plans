@@ -1,9 +1,11 @@
+// @vitest-environment node
 /**
  * Regression tests for scripts/accept-persona-strategy-hosted-readonly.mjs.
  * Local loopback fixtures only: they prove CLI logic, NOT hosted behaviour.
  */
 import { chromium } from "@playwright/test";
 import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -28,13 +30,21 @@ function sha(text: string) {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+const MUTATED_BASELINE_PATH = "/bff/strategies?page_size=5";
+
 function baselinePaths() {
-  const paths = ["/bff/strategies?page_size=20", "/bff/strategies?hide_retired_personas=true&page_size=20", `/bff/strategies?page_size=20&persona_id=${PERSONA}`];
-  for (let i = 1; i <= 9; i++) paths.push(`/bff/strategies?page=${i}&page_size=5`);
+  const paths = [
+    MUTATED_BASELINE_PATH,
+    "/bff/strategies?page_size=50",
+    "/bff/strategies?page_size=20&page_token=20",
+    "/bff/strategies?hide_retired_personas=true&page_size=20",
+    `/bff/strategies?page_size=20&persona_id=${PERSONA}`,
+  ];
+  for (let i = 1; i <= 7; i++) paths.push(`/bff/strategies?page=${i}&page_size=5`);
   return paths;
 }
 function strategyBody(p: string, mutate: boolean) {
-  return { data: { items: [{ id: `s-${p.length}`, name: "stable", note: mutate && p === "/bff/strategies?page_size=20" ? "CHANGED" : "same" }] } };
+  return { data: { items: [{ id: `s-${p.length}`, name: "stable", note: mutate && p === MUTATED_BASELINE_PATH ? "CHANGED" : "same" }] } };
 }
 function dataSourcesBody(mode: "legacy_projection" | "governed_owner") {
   return {
@@ -448,6 +458,32 @@ describe("pure acceptance logic", () => {
     expect(out).not.toMatch(/topsecret|eyJ|abcdefghijkl/);
   });
 
+  it("admits the original 13-response capture key structure without standalone default page_size=20 and requires hide_retired", () => {
+    const origin = "http://127.0.0.1:1";
+    const allow = { isAllowedOrigin: () => true };
+    const good = makeInput(origin);
+    const keys = Object.keys(JSON.parse(good.baseline_raw));
+    expect(keys).toHaveLength(13);
+    expect(keys.filter((k) => k.startsWith("/bff/strategies"))).toHaveLength(12);
+    expect(keys).toContain("/bff/strategies?page_size=5");
+    expect(keys).toContain("/bff/strategies?page_size=50");
+    expect(keys).toContain("/bff/strategies?page_size=20&page_token=20");
+    expect(keys).toContain(cli.HIDE_RETIRED_PATH);
+    expect(keys).toContain(cli.DATA_SOURCES_PATH);
+    expect(keys).not.toContain(cli.DEFAULT_PAGE_PATH);
+    const parsed = cli.validateInput(good, allow);
+    expect(Object.keys(parsed.baseline)).toEqual(keys);
+    expect(parsed.personaPath).toBe(`/bff/strategies?page_size=20&persona_id=${PERSONA}`);
+
+    const missingHideRetired = JSON.parse(JSON.stringify(good));
+    const b = JSON.parse(missingHideRetired.baseline_raw);
+    delete b[cli.HIDE_RETIRED_PATH];
+    b["/bff/strategies?page=99&page_size=5"] = { s: 200, ms: 100, j: strategyBody("/bff/strategies?page=99&page_size=5", false) };
+    missingHideRetired.baseline_raw = JSON.stringify(b);
+    missingHideRetired.baseline_identity.sha256 = sha(missingHideRetired.baseline_raw);
+    expect(() => cli.validateInput(missingHideRetired, allow)).toThrow(/hide_retired/);
+  });
+
   it("rejects missing/incorrect inputs by field name only", () => {
     const origin = "http://127.0.0.1:1";
     const allow = { isAllowedOrigin: () => true };
@@ -463,6 +499,7 @@ describe("pure acceptance logic", () => {
       ["hash", (i) => { i.baseline_identity.sha256 = "0".repeat(64); }, /does not match/],
       ["persona", (i) => { i.expected.persona_id = "persona-nope"; }, /persona_id/],
       ["incomplete baseline", (i) => { const b = JSON.parse(i.baseline_raw); delete b["/bff/strategies?page=1&page_size=5"]; i.baseline_raw = JSON.stringify(b); i.baseline_identity.sha256 = sha(i.baseline_raw); }, /original 13/],
+      ["missing hide_retired", (i) => { const b = JSON.parse(i.baseline_raw); delete b[cli.HIDE_RETIRED_PATH]; b["/bff/strategies?page=99&page_size=5"] = { s: 200, ms: 100, j: strategyBody("/bff/strategies?page=99&page_size=5", false) }; i.baseline_raw = JSON.stringify(b); i.baseline_identity.sha256 = sha(i.baseline_raw); }, /hide_retired/],
       ["reconciliation", (i) => { i.expected.reconciliations = [{ path: "/x", pointer: "/y" }]; }, /reconciliation/],
     ];
     for (const [, mutate, pattern] of cases) {
@@ -505,6 +542,14 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     }
     expect(out.strategy.performance.fleet_browser_warm.samples).toHaveLength(20);
     expect(Object.keys(out.strategy.captures)).toHaveLength(13);
+    expect(Object.keys(out.strategy.captures)).not.toContain(cli.DEFAULT_PAGE_PATH);
+    expect(out.strategy.parity.captured_paths).toBe(13);
+    expect(out.strategy.parity.original_strategy_paths).toBe(12);
+    expect(out.strategy.performance.default_first_page).toMatchObject({ path: cli.DEFAULT_PAGE_PATH, repeats: 10, requirement_ms: 1200, pass: true });
+    expect(out.strategy.performance.default_first_page.samples_ms).toHaveLength(10);
+    expect(out.strategy.performance.per_persona).toMatchObject({ path: `/bff/strategies?page_size=20&persona_id=${PERSONA}`, repeats: 10, requirement_ms: 1200, pass: true });
+    expect(out.strategy.performance.per_persona.samples_ms).toHaveLength(10);
+    expect(out.strategy.performance.hide_retired_without_state).toMatchObject({ path: cli.HIDE_RETIRED_PATH, requirement_ms: 5000, pass: true });
     expect(out.supplementary).toMatchObject({ pass: true, api_reads: expect.any(Array), api_logout_status: 200, after_logout_me_status: 401 });
     expect(out.supplementary.api_reads).toHaveLength(9);
     expect(out.supplementary.retired_reads.map((r: { status: number }) => r.status).every((x: number) => x === 404 || x === 405)).toBe(true);
@@ -530,7 +575,7 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     expect(changed.out.strategy.performance.fleet_browser_warm.pass).toBe(true); // measured checks stay independent of parity
 
     const reconciled = await execute({ mutate: true }, (i) => {
-      (i.expected as Record<string, unknown>).reconciliations = [{ path: "/bff/strategies?page_size=20", pointer: "/data/items/0/note", owner: "strategy-owner", reason: "documented fixture reconciliation", after: "CHANGED" }];
+      (i.expected as Record<string, unknown>).reconciliations = [{ path: MUTATED_BASELINE_PATH, pointer: "/data/items/0/note", owner: "strategy-owner", reason: "documented fixture reconciliation", after: "CHANGED" }];
     });
     expect(reconciled.out.strategy.parity.exact_equal).toBe(false);
     expect(reconciled.out.strategy.parity.documented_reconciliations).toHaveLength(1);
@@ -620,4 +665,127 @@ describe("sequential protocol against a local fixture (not hosted proof)", () =>
     expect(out.strategy.data_sources.pass).toBe(true);
     expect(out.profiles.TEST_ADMIN.errors).toEqual([]);
   }, 120_000);
+});
+
+describe("Trading Pulse mode in the existing viewer runner", () => {
+  it("shares pair and strict auth checks while keeping each mode's extra posture requirements", () => {
+    const manifest = { frontendSha: PAIR.fe, bffCommit: PAIR.bff,
+      buildMode: { VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict" } };
+    const version = { source_commit_sha: PAIR.bff, config_posture: { auth_mode: "strict", auth_stub: false } };
+    const pulse = { mode: "trading-pulse" };
+    expect(cli.assessPair(manifest, version, PAIR, pulse).ok).toBe(true);
+    expect(cli.assessPair(manifest, version, PAIR).failures).toEqual(expect.arrayContaining([
+      "deploymentState mismatch", "root mismatch", "pairId mismatch", "mfa_required mismatch",
+    ]));
+    for (const options of [undefined, pulse]) {
+      expect(cli.assessPair({ ...manifest, frontendSha: "wrong" }, version, PAIR, options).failures).toContain("frontendSha mismatch");
+      expect(cli.assessPair({ ...manifest, bffCommit: "wrong" }, version, PAIR, options).failures).toContain("bffCommit mismatch");
+      expect(cli.assessPair(manifest, { ...version, source_commit_sha: "wrong" }, PAIR, options).failures).toContain("version.source_commit_sha mismatch");
+      expect(cli.assessPair(manifest, { ...version, config_posture: { auth_mode: "stub", auth_stub: true } }, PAIR, options).failures)
+        .toEqual(expect.arrayContaining(["auth_mode mismatch", "auth_stub mismatch"]));
+    }
+    expect(cli.assessPair({ ...manifest, buildMode: {} }, version, PAIR, pulse).failures)
+      .toEqual(["VITE_BFF_MODE mismatch", "VITE_BFF_FALLBACK mismatch"]);
+  });
+
+  it("routes the actual process entry without circular-import deadlock and returns terminal input exits", () => {
+    for (const [options, error] of [
+      [["--mode", "trading-pulse"], "viewer GUI credentials"],
+      [[], "profiles"],
+      [["--record-baseline"], "requires trading-pulse mode"],
+    ] as [string[], string][]) {
+      const child = spawnSync(process.execPath, ["scripts/accept-persona-strategy-hosted-readonly.mjs", "--out-dir", "/unused", ...options], {
+        input: "{}", encoding: "utf8", timeout: 10_000,
+      });
+      expect(child.error).toBeUndefined();
+      expect(child.status).toBe(2);
+      expect(child.stderr).toContain(error);
+      expect(child.stderr).not.toContain("unsettled top-level await");
+    }
+  });
+  it("keeps the original default and rejects ambiguous modes/options", async () => {
+    expect(cli.parseArgs(["--out-dir", "/private"])).toEqual({ outDir: "/private", mode: "persona-strategy", baseline: false });
+    expect(cli.parseArgs(["--mode", "trading-pulse", "--out-dir", "/private", "--record-baseline"])).toEqual({ outDir: "/private", mode: "trading-pulse", baseline: true });
+    for (const args of [["--out-dir"], ["--out-dir", "/x", "--mode", "other"],
+      ["--out-dir", "/x", "--record-baseline"], ["--out-dir", "/x", "--out-dir", "/y"], ["--unknown", "/x"]]) {
+      expect(() => cli.parseArgs(args)).toThrow();
+    }
+    await expect(cli.run({}, { mode: "trading-pulse", outDir: "/unused" })).rejects.toThrow("viewer GUI credentials");
+    await expect(cli.run({}, { outDir: "/unused" })).rejects.toThrow("profiles");
+    const helper = fs.readFileSync("scripts/accept-trading-pulse-hosted-readonly.mjs", "utf8");
+    expect(helper).not.toContain("process.argv");
+    expect(helper).not.toContain("chromium.launch");
+  });
+
+  it.each([false, true])("runs three real Chromium viewer sessions through shared mode (blocked attempts=%s)", async (attemptWrites) => {
+    const FE = "https://app.dev.mvl-cap.tw", BFF = "https://api.dev.mvl-cap.tw";
+    const fe = "a".repeat(40), bff = "b".repeat(40);
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "shared-pulse-fixture-"));
+    const browser = await chromium.launch({ headless: true });
+    const credentials = { client_id: "offline-viewer", client_secret: "offline-viewer-secret" };
+    const logins: unknown[] = [], viewports: unknown[] = [];
+    const manifest = { frontendSha: fe, bffCommit: bff, pairId: "offline-pair", deploymentState: "accepted",
+      buildMode: { VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict", VITE_BFF_REAL_WRITES: "false" } };
+    const version = { source_commit_sha: bff, config_posture: { auth_mode: "strict", auth_stub: false } };
+    const html = `<html><body><header>Private session</header><nav><a href="/management/trading-pulse">交易脈動 Trading Pulse</a></nav>
+      <main><h1>Persona Fleet</h1><input id="dev-account"><input id="dev-password"><button>Sign in</button></main>
+      <script>
+        const api = '${BFF}';
+        document.querySelector('button').onclick = async () => {
+          await fetch(api+'/bff/auth/dev-login', {method:'POST',body:JSON.stringify({client_id:document.querySelector('#dev-account').value,client_secret:document.querySelector('#dev-password').value})});
+          ${attemptWrites ? "await fetch(api+'/bff/strategies', {method:'POST',body:'{}'}).catch(()=>{}); await fetch('https://foreign.invalid/probe').catch(()=>{});" : ""}
+        };
+        document.querySelector('a').onclick = async (e) => {
+          e.preventDefault(); history.pushState({},'', '/management/trading-pulse');
+          await fetch(api+'/bff/management/trading-pulse');
+          document.querySelector('main').innerHTML = '<h1>'+ (localStorage.getItem('pantheon.locale') === 'en-US' ? 'Trading Pulse' : '交易脈動') +'</h1><details><summary>資料診斷 Diagnostics</summary><p>rt-offline</p></details>';
+          await fetch(api+'/bff/management/trading-pulse/rankings');
+        };
+      </script></body></html>`;
+    // Preserve the runner's route guard; fulfill only requests it explicitly allows.
+    // All fixture traffic is intercepted before network; no real credentials or BFF.
+    const fixtureChromium = { launch: async () => ({
+      newContext: async (options: any) => {
+        viewports.push({ locale: options.locale, width: options.viewport.width });
+        const ctx = await browser.newContext(options), install = ctx.route.bind(ctx);
+        ctx.route = async (pattern: any, guard: any) => install(pattern, async (route: any) => guard({
+          request: () => route.request(), abort: (reason: string) => route.abort(reason),
+          continue: async () => {
+            const request = route.request(), url = new URL(request.url());
+            expect([FE, BFF]).toContain(url.origin);
+            if (url.pathname === "/bff/auth/dev-login") logins.push(request.postDataJSON());
+            if (url.origin === FE) return route.fulfill({ contentType: "text/html; charset=utf-8", body: html });
+            const body = url.pathname === "/bff/me" ? { data: { tenant_id: "offline-tenant", roles: ["viewer"] } } : { data: {} };
+            return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+          },
+        }));
+        return ctx;
+      }, close: () => browser.close(),
+    }) };
+    try {
+      const result = await cli.run({ profile: credentials, expected: { fe, bff, tenant_id: "offline-tenant" } }, {
+        mode: "trading-pulse", baseline: true, outDir, chromium: fixtureChromium,
+        fetchImpl: async (url: string) => ({ status: 200, json: async () => url === FE + "/deployment.json" ? manifest : version }),
+      });
+      expect(logins).toEqual([credentials, credentials, credentials]);
+      expect(viewports).toEqual([{ locale: "zh-TW", width: 1440 }, { locale: "zh-TW", width: 390 }, { locale: "en-US", width: 1440 }]);
+      expect(result.out.mode).toBe("baseline_failure_record_only");
+      expect(result.out.pass).toBe(false);
+      expect(result.out.pair_before).toEqual(result.out.pair_after);
+      expect(result.out.blocked_writes).toEqual(attemptWrites ? Array.from({ length: 3 }, () => [
+        { method: "POST", path: "/bff/strategies", foreign_origin: false },
+        { method: "GET", path: "/probe", foreign_origin: true },
+      ]).flat() : []);
+      expect(result.out.runs.every((r: any) => r.entry === "sidebar" && r.checks.includes("masked_screenshot") === (r.locale === "zh-TW"))).toBe(true);
+      expect(result.out.failures.join(" ")).toContain("missing_current_roster_witness");
+      expect(result.out.failures.join(" ")).toContain("missing_historical_event_witness");
+      const files = fs.readdirSync(result.dir);
+      expect(files.sort()).toEqual(["desktop.png", "narrow.png", "summary.json"]);
+      expect(result.out.evidence.bytes).toBe(files.reduce((n, f) => n + fs.statSync(path.join(result.dir, f)).size, 0));
+      expect(result.out.evidence.bytes).toBeLessThanOrEqual(5 * 1024 * 1024);
+      expect(fs.readFileSync(path.join(result.dir, "summary.json"), "utf8")).not.toContain(credentials.client_secret);
+    } finally {
+      await browser.close(); fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

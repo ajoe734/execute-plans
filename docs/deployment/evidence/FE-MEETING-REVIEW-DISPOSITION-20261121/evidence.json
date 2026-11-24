@@ -1,0 +1,58 @@
+{
+  "schema_version": "task_evidence.v1",
+  "task_id": "FE-MEETING-REVIEW-DISPOSITION-20261121",
+  "paired_backend_task_id": "MEETING-REVIEW-DISPOSITION-20261121",
+  "paired_backend_merge_commit": "20ad89fe3cddc6c1426ea3b139a9de3c94a1fc7c",
+  "register_class": "RC2",
+  "title": "Make the meeting review actionable from the human inbox and readable after refresh",
+  "delivery_state": "source_verified_pending_deploy",
+  "incident": {
+    "inbox_id": "meeting_review:mtg-2c016da5651a0dc4",
+    "meeting_id": "mtg-2c016da5651a0dc4",
+    "meeting_type": "MT-1",
+    "persona_id": "persona-2448c7053e33ea48da47",
+    "persona_display_name": "澄川",
+    "closed_at": "2026-11-20T17:40:52Z",
+    "status": "closed",
+    "outcome": "REVIEW",
+    "rounds": 2,
+    "proposals_count": 0,
+    "stored_synthesis": "Synthesis empty or unreadable; recorded as REVIEW with no proposal.",
+    "stored_unreadable_reason": null,
+    "normalized_legacy_cause": "unknown"
+  },
+  "changes": {
+    "src/lib/bff-v1/meetings.ts": "Added reviewMeeting(meetingId, { note }, idempotencyKey) calling POST /bff/management/meetings/{id}/review with write-gate check, countMeetingReviewNoteChars 1..2000 Unicode code-point validation (matching backend len(note) <= 2000 including supplementary-plane CJK/emoji), Idempotency-Key header, and Human Inbox + Human Gate Detail cache invalidation/inactive-query eviction across both getSharedQueryClient() and any provider-owned QueryClient instances (registered via QueryClient prototype hooks and registerMeetingQueryClient) plus V5 event emission on save; normalized operator_review (status, disposition='closed_no_proposal', note, reviewed_by, reviewed_at, cause), unreadable_reason/synthesis_unreadable_reason (fallback 'unknown' on legacy REVIEW rows), and visible evidence_refs (stripping withheld private memory item IDs and recursively sanitizing retained citation/evidence_ref objects); added buildFollowUpConveneInput(detail) to reuse conveneMeeting with source meeting context.",
+    "src/lib/v5/management/humanInbox.ts": "Added optional meetingId/meetingType/unreadableReason/cause fields to HumanInboxItem and helpers meetingIdFromInboxItem, meetingReviewHrefFromInboxItem, and meetingTypeFromInboxItem.",
+    "src/management/pages/meetings/MeetingDetailPage.tsx": "Registered active provider QueryClient with registerMeetingQueryClient and added Back to Human Inbox navigation link on REVIEW meetings; added Meeting Synthesis Review & Operator Disposition card for REVIEW meetings showing localized blocking reason (synthesis_review_required), localized review cause ('unknown' legacy explanation vs specific stored cause), available deliberation transcript (rounds & positions) and shared case-file facts alongside the reason, accurate evidence citations or explicit empty-citation notice, a separate follow-up research convene path (Meetings Center convene link + explicit operator convene button using buildFollowUpConveneInput/conveneMeeting, never automatic on page load), pre-submission consequence callout, review note textarea + submit button with accidental-resubmit protection and truthful backend error reporting, persisted operator_review readback (note, reviewed_by, reviewed_at, closed_no_proposal) across refresh while keeping original REVIEW synthesis/outcome/0 proposals intact, and read-only inspection without write controls for read-only users.",
+    "src/management/pages/oversight/HumanGateDetail.tsx": "Registered active provider QueryClient with registerMeetingQueryClient; localized machine blocking reason codes (synthesis_review_required, etc.) with secondary raw code while preserving free-text blocking reasons; enriched meeting_review inbox detail with getMeetingDetail readback, localized cause explanation, transcript/case-file stats, accurate meeting evidence refs (or accurate empty-evidence explanation), direct link to /management/meetings/{id} and follow-up convene flow, and actionable meeting review disposition form / persisted review display / read-only notice.",
+    "src/i18n/locales/zh-TW.ts": "Added enumLabels.reasons for synthesis_review_required, unknown, closed_no_proposal, model_output_missing, synthesis_empty, synthesis_unreadable, invalid_json, more_research_requested, review_note_required, review_note_too_long, meeting_already_reviewed, meeting_not_in_review, insufficient_role, operator_required, plus meetingsCenter.detail.review and mgmt.inbox meeting review strings.",
+    "src/i18n/locales/en-US.ts": "Added matching English translations in parity with zh-TW.ts."
+  },
+  "hosted_browser_acceptance_steps_for_coordinator": [
+    "1. Pre-check release identity: Verify https://app.dev.mvl-cap.tw/deployment.json serves an accepted pair containing Pantheon BFF >= 20ad89fe3cddc6c1426ea3b139a9de3c94a1fc7c and this execute-plans commit.",
+    "2. Read-only inspection of the reported legacy item (DO NOT mutate mtg-2c016da5651a0dc4 during verification): Open https://app.dev.mvl-cap.tw/management/human-inbox and locate card meeting_review:mtg-2c016da5651a0dc4 (澄川 MT-1). Click '開啟詳情' / 'Open detail' (/management/human-inbox/meeting_review%3Amtg-2c016da5651a0dc4) and verify: (a) the blocking reason is localized ('會議綜合結論為待人工審查（REVIEW，零提案），需操作員審核處置 (synthesis_review_required)' in zh-TW and 'Meeting synthesis ended in REVIEW with no proposal and requires operator review disposition (synthesis_review_required)' in en-US); (b) the cause section accurately explains that this legacy record did not store a detailed machine cause code (cause: unknown); (c) visible evidence citations from the meeting case file/rounds are shown (or accurate empty-citation notice if none); (d) click '前往會議審核頁' / 'Open meeting review' (or '開啟處理頁' / 'Open action page') to navigate directly to /management/meetings/mtg-2c016da5651a0dc4.",
+    "3. Verify MeetingDetailPage explanation and separate follow-up convene path on /management/meetings/mtg-2c016da5651a0dc4: Confirm the Meeting Synthesis Review & Operator Disposition card renders above the rounds with: (a) the legacy unknown-cause explanation alongside the stored synthesis summary ('Synthesis empty or unreadable; recorded as REVIEW with no proposal.') and the 2-round deliberation transcript summary where participants requested more research; (b) the separate '需要更多研究？以本場會議脈絡另行召開會議' / 'Need More Research? Convene a Follow-Up Meeting with Source Context' section linking to /management/meetings?tab=upcoming&type=MT-1&persona_id=persona-2448c7053e33ea48da47&source_meeting_id=mtg-2c016da5651a0dc4; (c) no automatic POST /review or POST /meetings firing on page load (Network tab shows GET requests only).",
+    "4. Read-only role check: While logged in as the viewer principal (or on the read-only deployment profile), open /management/meetings/mtg-2c016da5651a0dc4 and /management/human-inbox/meeting_review%3Amtg-2c016da5651a0dc4. Confirm the explanation, cause, rounds, case-file items, and evidence refs are readable while write controls (review note textarea, close-review submit button, and inline follow-up convene button) are hidden and the read-only notice is shown.",
+    "5. Action and reload verification on an isolated nonfinancial record: Using the isolated dev acceptance fixture meeting (mtg-dev-acceptance-review-disposition-20261121, or an isolated nonfinancial closed REVIEW test meeting) as an authenticated operator with governed writes enabled: (a) open /management/meetings/<isolated_meeting_id>; (b) verify the pre-submission consequence banner states that submitting closes the review as closed_no_proposal, removes meeting_review:<isolated_meeting_id> from the pending Human Inbox, and preserves the original REVIEW outcome, synthesis, transcript, and 0 proposals; (c) enter a review note and click '記錄審核並以無提案結案' / 'Close Review with No Proposal'; (d) verify POST /bff/management/meetings/<isolated_meeting_id>/review returns 200 OK and the form immediately transitions to the persisted review card showing note, reviewed_by, reviewed_at, and disposition closed_no_proposal with no submit button remaining; (e) reload the browser page (F5) and confirm GET /bff/management/meetings/<isolated_meeting_id> still renders the persisted note, reviewer, and timestamp while Chair Synthesis still shows Outcome: REVIEW and Proposals shows 0 proposals; (f) navigate back to /management/human-inbox and confirm meeting_review:<isolated_meeting_id> is no longer in the pending queue."
+  ],
+  "validation": {
+    "commands": [
+      {
+        "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+        "status": "passed",
+        "summary": "exit 0, 0 errors"
+      },
+      {
+        "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/dev-root node scripts/contract-drift-check.mjs",
+        "status": "passed",
+        "summary": "[contract-drift] Agora bundle aligned: 49 schemas, 99 routes, 75 sha256 entries"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/meetings.test.tsx src/management/pages/oversight/HumanGateDetail.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/v5/useV5Live.test.tsx src/agora/i18n.guard.test.ts src/lib/__tests__/enumLabels.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+        "status": "passed",
+        "summary": "8 test files passed, 88 tests passed"
+      }
+    ]
+  }
+}

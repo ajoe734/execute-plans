@@ -5,12 +5,71 @@
 // `unavailable` with the recorded reason; unknown meeting IDs surface as `not_found`.
 // Private memory is stripped everywhere as defense-in-depth.
 
+import { QueryClient } from "@tanstack/react-query";
 import { bffFetch, detectMode, getMockResolver } from "./client";
 import { BffError } from "./errors";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";
 import { paths } from "./paths";
+import { getSharedQueryClient } from "./queryKeys";
 import { readBffEnv } from "./runtimeEnv";
+import { emitV5Event } from "./sse/bridge";
 import { liveWriteGated } from "./writeGate";
+
+const knownQueryClients = new Set<QueryClient>();
+const QUERY_CLIENT_TRACKED = Symbol.for("pantheon.meetings.queryClientTracked");
+
+export function registerMeetingQueryClient(client: QueryClient | null | undefined): void {
+  if (
+    client &&
+    typeof client.invalidateQueries === "function" &&
+    typeof client.removeQueries === "function"
+  ) {
+    if (knownQueryClients.has(client)) {
+      knownQueryClients.delete(client);
+    } else if (knownQueryClients.size >= 32) {
+      const oldest = knownQueryClients.values().next().value;
+      if (oldest) knownQueryClients.delete(oldest);
+    }
+    knownQueryClients.add(client);
+  }
+}
+
+function installQueryClientTracker(): void {
+  const proto = QueryClient?.prototype as
+    | (QueryClient & { [QUERY_CLIENT_TRACKED]?: boolean })
+    | undefined;
+  if (!proto || proto[QUERY_CLIENT_TRACKED]) return;
+  Object.defineProperty(proto, QUERY_CLIENT_TRACKED, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+
+  const origMount = proto.mount;
+  if (typeof origMount === "function") {
+    proto.mount = function (this: QueryClient, ...args: Parameters<QueryClient["mount"]>) {
+      registerMeetingQueryClient(this);
+      return origMount.apply(this, args);
+    };
+  }
+
+  const origDefaultQueryOptions = proto.defaultQueryOptions;
+  if (typeof origDefaultQueryOptions === "function") {
+    proto.defaultQueryOptions = function (
+      this: QueryClient,
+      options: Parameters<QueryClient["defaultQueryOptions"]>[0],
+    ) {
+      registerMeetingQueryClient(this);
+      return (origDefaultQueryOptions as (opts: unknown) => unknown).call(
+        this,
+        options,
+      ) as ReturnType<QueryClient["defaultQueryOptions"]>;
+    } as QueryClient["defaultQueryOptions"];
+  }
+}
+
+installQueryClientTracker();
 
 export type MeetingsRead<T> =
   | { state: "ok"; data: T; owner?: string; meta?: Record<string, unknown> }
@@ -18,6 +77,11 @@ export type MeetingsRead<T> =
   | { state: "unavailable"; reason: string; owner?: string };
 
 export const MEETINGS_REASON_UNKNOWN = "consultation_owner_unavailable";
+export const MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS = 2000;
+
+export function countMeetingReviewNoteChars(note: string): number {
+  return Array.from(note).length;
+}
 
 const PRIVATE_SCOPES = new Set([
   "persona_private",
@@ -63,12 +127,57 @@ export function isPrivateMemoryItem(item: Record<string, unknown>): boolean {
   return false;
 }
 
-export function stripPrivateMemory<T>(obj: T): T {
+function collectWithheldPrivateRefIds(node: unknown, out = new Set<string>()): Set<string> {
+  const addRefValue = (val: unknown) => {
+    if (typeof val === "string" && val.trim()) {
+      out.add(val.trim());
+    } else if (isRecord(val)) {
+      for (const k of ["item_id", "id", "ref", "ref_id", "evidence_ref", "source_id", "record_id"]) {
+        const s = typeof val[k] === "string" ? val[k].trim() : "";
+        if (s) out.add(s);
+      }
+    }
+  };
+  const collectFromPrivateRecord = (rec: Record<string, unknown>) => {
+    addRefValue(rec);
+    if (Array.isArray(rec.citations)) {
+      for (const c of rec.citations) addRefValue(c);
+    }
+    if (Array.isArray(rec.evidence_refs)) {
+      for (const r of rec.evidence_refs) addRefValue(r);
+    }
+  };
+  const walk = (cur: unknown) => {
+    if (Array.isArray(cur)) {
+      for (const elem of cur) {
+        if (isRecord(elem) && isPrivateMemoryItem(elem)) {
+          collectFromPrivateRecord(elem);
+        } else {
+          walk(elem);
+        }
+      }
+      return;
+    }
+    if (isRecord(cur)) {
+      if (isPrivateMemoryItem(cur)) {
+        collectFromPrivateRecord(cur);
+        return;
+      }
+      for (const v of Object.values(cur)) {
+        walk(v);
+      }
+    }
+  };
+  walk(node);
+  return out;
+}
+
+function stripPrivateMemoryInner<T>(obj: T, withheldIds: Set<string>): T {
   if (Array.isArray(obj)) {
     const out: unknown[] = [];
     for (const elem of obj) {
       if (isRecord(elem) && isPrivateMemoryItem(elem)) continue;
-      const stripped = stripPrivateMemory(elem);
+      const stripped = stripPrivateMemoryInner(elem, withheldIds);
       if (stripped !== undefined) out.push(stripped);
     }
     return out as unknown as T;
@@ -90,8 +199,21 @@ export function stripPrivateMemory<T>(obj: T): T {
           });
         continue;
       }
-      const stripped = stripPrivateMemory(v);
-      if (stripped !== undefined || v === null) {
+      const candidate =
+        ["evidence_refs", "citations", "accepted", "disputed"].includes(k) && Array.isArray(v) && withheldIds.size > 0
+          ? v.filter((entry) => {
+              if (typeof entry === "string") return !withheldIds.has(entry.trim());
+              if (isRecord(entry)) {
+                for (const rk of ["item_id", "id", "ref", "ref_id", "evidence_ref", "source_id", "record_id"]) {
+                  const s = typeof entry[rk] === "string" ? entry[rk].trim() : "";
+                  if (s && withheldIds.has(s)) return false;
+                }
+              }
+              return true;
+            })
+          : v;
+      const stripped = stripPrivateMemoryInner(candidate, withheldIds);
+      if (stripped !== undefined || candidate === null) {
         cleaned[k] = stripped;
       }
     }
@@ -100,12 +222,27 @@ export function stripPrivateMemory<T>(obj: T): T {
   return obj;
 }
 
+export function stripPrivateMemory<T>(obj: T): T {
+  const withheldIds = collectWithheldPrivateRefIds(obj);
+  return stripPrivateMemoryInner(obj, withheldIds);
+}
+
 function extractErrorReason(err: BffError): string {
   const details = err.envelope?.error?.details;
   if (isRecord(details) && typeof details.reason === "string" && details.reason) {
     return details.reason;
   }
+  const errPayload = err.envelope?.error as unknown as Record<string, unknown> | undefined;
+  if (errPayload && typeof errPayload.reason === "string" && errPayload.reason) {
+    return errPayload.reason;
+  }
   if (err.envelope?.error?.cause) return err.envelope.error.cause;
+  const msg = typeof err.message === "string" ? err.message.trim() : "";
+  const colonMatch = /:\s*([a-z0-9]+(?:_[a-z0-9]+)+)$/i.exec(msg);
+  if (colonMatch) return colonMatch[1];
+  if (err.code === "UNKNOWN_ERROR" && msg && !/^HTTP\s+\d+$/i.test(msg)) {
+    return msg;
+  }
   return err.code || MEETINGS_REASON_UNKNOWN;
 }
 
@@ -123,7 +260,9 @@ async function readMeetingsSurface<T>(
       }
       return { state: "unavailable", reason: extractErrorReason(err) };
     }
-    return { state: "unavailable", reason: MEETINGS_REASON_UNKNOWN };
+    const fallbackReason =
+      err instanceof Error && err.message.trim() ? err.message.trim() : MEETINGS_REASON_UNKNOWN;
+    return { state: "unavailable", reason: fallbackReason };
   }
 
   const body = stripPrivateMemory(isRecord(raw) ? raw : {});
@@ -184,6 +323,17 @@ export interface MeetingConvenedBy {
   redacted?: boolean;
 }
 
+export interface MeetingOperatorReview {
+  status: "pending" | "reviewed" | string;
+  disposition?: "closed_no_proposal" | string | null;
+  note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  cause?: string | null;
+  unreadable_reason?: string | null;
+  [key: string]: unknown;
+}
+
 export interface MeetingSummaryItem {
   id?: string;
   meeting_id: string;
@@ -191,6 +341,10 @@ export interface MeetingSummaryItem {
   topic?: string;
   status: string;
   outcome?: string | null;
+  synthesis_unreadable_reason?: string | null;
+  unreadable_reason?: string | null;
+  operator_review?: MeetingOperatorReview | null;
+  evidence_refs?: string[];
   chair_persona_id?: string | null;
   chair_persona_display_name?: string | null;
   chair_persona_name_missing?: boolean;
@@ -287,6 +441,20 @@ export interface MeetingProposalsData {
   items: MeetingProposalItem[];
 }
 
+export interface MeetingRosterRule {
+  chair?: string;
+  participants?: string[];
+  min_trading_personas?: number;
+  requires_risk?: boolean;
+  requires_red_team?: boolean;
+  red_team_assigned_case?: string;
+  allow_agora_advisor?: boolean;
+  allow_owning_user_servant?: boolean;
+  allow_subject_trader_servant?: boolean;
+  description?: string;
+  [key: string]: unknown;
+}
+
 export interface MeetingTypeRule {
   meeting_type: string;
   name?: string;
@@ -294,7 +462,7 @@ export interface MeetingTypeRule {
   enabled: boolean;
   cadence?: string;
   weekly_cadence_day?: string;
-  roster_rule?: string;
+  roster_rule?: MeetingRosterRule;
   budget?: {
     max_participants?: number;
     max_rounds?: number;
@@ -343,6 +511,9 @@ export interface MeetingCaseFileItem {
   kind?: string;
   relevance_scope?: string;
   source_owner?: string;
+  source_id?: string;
+  status?: string;
+  unavailable_reason?: string;
   excerpt?: string;
   agora_user_id?: string;
   trader_id?: string;
@@ -375,8 +546,8 @@ export interface MeetingRoundPosition {
   confidence?: number;
   citations?: string[];
   changed?: boolean;
-  accepts?: string | string[];
-  disputes?: string | string[];
+  accepted?: string[];
+  disputed?: string[];
   rationale?: string;
   summary?: string;
   proposals?: unknown[];
@@ -393,6 +564,7 @@ export interface MeetingRound {
 export interface MeetingSynthesis {
   proposals: MeetingProposalItem[];
   tally?: {
+    by_stance?: Record<string, number>;
     support?: number;
     dissent?: number;
     binding?: boolean;
@@ -402,6 +574,8 @@ export interface MeetingSynthesis {
   dissent_summary?: string | null;
   outcome?: string | null;
   summary?: string | null;
+  unreadable_reason?: string | null;
+  cause?: string | null;
   [key: string]: unknown;
 }
 
@@ -461,6 +635,11 @@ export interface MeetingDetail extends MeetingSummaryItem {
   writebacks: MeetingWritebackEntry[];
   usage?: MeetingUsage | null;
   agora_records?: Array<Record<string, unknown>>;
+  replayed?: boolean;
+}
+
+export interface ReviewMeetingInput {
+  note: string;
 }
 
 export interface ConveneMeetingInput {
@@ -592,6 +771,37 @@ export function getMeetingProposals(
   );
 }
 
+export function formatMeetingRosterRule(rule?: MeetingRosterRule | null): string {
+  if (!isRecord(rule)) return "—";
+  const description = typeof rule.description === "string" ? rule.description.trim() : "";
+  if (description) return description;
+
+  const parts: string[] = [];
+  if (typeof rule.chair === "string" && rule.chair.trim()) {
+    parts.push(`chair: ${rule.chair.trim()}`);
+  }
+  const participants = Array.isArray(rule.participants)
+    ? rule.participants
+        .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+        .map((p) => p.trim())
+    : [];
+  if (participants.length > 0) {
+    parts.push(`participants: ${participants.join(" + ")}`);
+  }
+  if (typeof rule.min_trading_personas === "number" && Number.isFinite(rule.min_trading_personas)) {
+    parts.push(`min_trading_personas=${rule.min_trading_personas}`);
+  }
+  if (rule.requires_risk === true) {
+    parts.push("requires_risk");
+  }
+  if (rule.requires_red_team === true) {
+    const assignedCase =
+      typeof rule.red_team_assigned_case === "string" ? rule.red_team_assigned_case.trim() : "";
+    parts.push(assignedCase ? `requires_red_team (${assignedCase})` : "requires_red_team");
+  }
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
 export function getMeetingCatalogue(
   filters: { personaId?: string } = {},
 ): Promise<MeetingsRead<MeetingCatalogueData>> {
@@ -627,6 +837,232 @@ export function getMeetingCatalogue(
   );
 }
 
+export function mgmtMeetingReviewPath(meetingId: string): string {
+  return `${paths.mgmtMeetingDetail(meetingId)}/review`;
+}
+
+export function resolveMeetingReviewCause(
+  cleaned: Record<string, unknown>,
+  synthesis?: MeetingSynthesis | null,
+): string | null {
+  const opReview = isRecord(cleaned.operator_review) ? cleaned.operator_review : null;
+  const candidates = [
+    cleaned.synthesis_unreadable_reason,
+    cleaned.unreadable_reason,
+    synthesis?.unreadable_reason,
+    synthesis?.cause,
+    opReview?.cause,
+    opReview?.unreadable_reason,
+  ];
+  for (const cand of candidates) {
+    if (typeof cand === "string" && cand.trim()) {
+      return cand.trim();
+    }
+  }
+  const outcome = String(cleaned.outcome ?? synthesis?.outcome ?? "").trim().toUpperCase();
+  const status = String(cleaned.status ?? "").trim().toUpperCase();
+  if (outcome === "REVIEW" || status === "REVIEW" || opReview !== null) {
+    return "unknown";
+  }
+  return null;
+}
+
+export function normalizeOperatorReview(
+  raw: unknown,
+  fallbackCause?: string | null,
+): MeetingOperatorReview | null {
+  if (!isRecord(raw)) return null;
+  const status = String(raw.status ?? "").trim().toLowerCase();
+  const noteRaw = raw.note ?? raw.rationale;
+  const note = typeof noteRaw === "string" && noteRaw.trim() ? noteRaw.trim() : null;
+  const reviewedByRaw = raw.reviewed_by ?? raw.reviewedBy ?? raw.actor ?? raw.decided_by;
+  const reviewedBy =
+    typeof reviewedByRaw === "string" && reviewedByRaw.trim() ? reviewedByRaw.trim() : null;
+  const reviewedAtRaw = raw.reviewed_at ?? raw.reviewedAt ?? raw.decided_at ?? raw.timestamp;
+  const reviewedAt =
+    typeof reviewedAtRaw === "string" && reviewedAtRaw.trim() ? reviewedAtRaw.trim() : null;
+  const causeRaw = raw.cause ?? raw.unreadable_reason;
+  const cause =
+    (typeof causeRaw === "string" && causeRaw.trim() ? causeRaw.trim() : null) ??
+    (fallbackCause && fallbackCause.trim() ? fallbackCause.trim() : "unknown");
+
+  if (status === "reviewed" || (note && (reviewedBy || reviewedAt))) {
+    const disposition =
+      typeof raw.disposition === "string" && raw.disposition.trim()
+        ? raw.disposition.trim()
+        : "closed_no_proposal";
+    return {
+      ...raw,
+      status: "reviewed",
+      disposition,
+      note,
+      reviewed_by: reviewedBy,
+      reviewed_at: reviewedAt,
+      cause,
+      unreadable_reason: cause,
+    };
+  }
+  if (status === "pending") {
+    return {
+      ...raw,
+      status: "pending",
+      disposition: null,
+      note: null,
+      reviewed_by: null,
+      reviewed_at: null,
+      cause,
+      unreadable_reason: cause,
+    };
+  }
+  return null;
+}
+
+export function collectMeetingEvidenceRefs(cleaned: Record<string, unknown>): string[] {
+  const seen = new Set<string>();
+  const refs: string[] = [];
+  const pushRef = (val: unknown) => {
+    if (typeof val === "string") {
+      const s = val.trim();
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        refs.push(s);
+      }
+      return;
+    }
+    if (isRecord(val)) {
+      for (const k of ["ref", "evidence_ref", "ref_id", "item_id", "id", "source_id", "record_id"]) {
+        const s = typeof val[k] === "string" ? val[k].trim() : "";
+        if (s) {
+          if (!seen.has(s)) {
+            seen.add(s);
+            refs.push(s);
+          }
+          return;
+        }
+      }
+    }
+  };
+
+  if (Array.isArray(cleaned.evidence_refs)) {
+    for (const r of cleaned.evidence_refs) pushRef(r);
+  }
+  if (Array.isArray(cleaned.case_file_items)) {
+    for (const cf of cleaned.case_file_items) {
+      if (isRecord(cf)) pushRef(cf.item_id ?? cf.source_id ?? cf.id);
+    }
+  }
+  const preRead = cleaned.pre_read;
+  const preReadItems = Array.isArray(preRead)
+    ? preRead
+    : isRecord(preRead)
+      ? Array.isArray(preRead.interpretations)
+        ? preRead.interpretations
+        : Array.isArray(preRead.items)
+          ? preRead.items
+          : []
+      : [];
+  for (const interp of preReadItems) {
+    if (isRecord(interp) && Array.isArray(interp.citations)) {
+      for (const c of interp.citations) pushRef(c);
+    }
+  }
+  if (Array.isArray(cleaned.rounds)) {
+    for (const rnd of cleaned.rounds) {
+      if (isRecord(rnd) && Array.isArray(rnd.positions)) {
+        for (const pos of rnd.positions) {
+          if (isRecord(pos) && Array.isArray(pos.citations)) {
+            for (const c of pos.citations) pushRef(c);
+          }
+        }
+      }
+    }
+  }
+  if (isRecord(cleaned.synthesis) && typeof cleaned.synthesis.dissent_memo_id === "string") {
+    pushRef(cleaned.synthesis.dissent_memo_id);
+  }
+  if (typeof cleaned.attribution_record_id === "string") {
+    pushRef(cleaned.attribution_record_id);
+  } else if (isRecord(cleaned.attribution_record) && typeof cleaned.attribution_record.record_id === "string") {
+    pushRef(cleaned.attribution_record.record_id);
+  }
+  return refs;
+}
+
+function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDetail | undefined {
+  const data = isRecord(raw.data) ? raw.data : raw;
+  const resolvedId = String(data.meeting_id ?? data.id ?? raw.meeting_id ?? raw.id ?? "").trim();
+  if (!resolvedId) return undefined;
+  const cleaned = stripPrivateMemory(data);
+  const synthesisRaw = isRecord(cleaned.synthesis)
+    ? (cleaned.synthesis as unknown as MeetingSynthesis)
+    : null;
+  const reviewCause = resolveMeetingReviewCause(cleaned, synthesisRaw);
+  const synthesis = synthesisRaw
+    ? {
+        ...synthesisRaw,
+        ...(reviewCause && synthesisRaw.unreadable_reason === undefined
+          ? { unreadable_reason: reviewCause }
+          : {}),
+        ...(reviewCause && synthesisRaw.cause === undefined ? { cause: reviewCause } : {}),
+      }
+    : null;
+  const operatorReview = normalizeOperatorReview(cleaned.operator_review, reviewCause);
+  const proposalsRaw = Array.isArray(cleaned.proposals)
+    ? cleaned.proposals
+    : Array.isArray(synthesis?.proposals)
+      ? synthesis.proposals
+      : [];
+  const evidenceRefs = collectMeetingEvidenceRefs(cleaned);
+  const replayed =
+    typeof cleaned.replayed === "boolean"
+      ? cleaned.replayed
+      : typeof raw.replayed === "boolean"
+        ? raw.replayed
+        : isRecord(raw.meta) && typeof raw.meta.replayed === "boolean"
+          ? raw.meta.replayed
+          : undefined;
+  return {
+    ...cleaned,
+    id: resolvedId,
+    meeting_id: resolvedId,
+    meeting_type: String(cleaned.meeting_type ?? cleaned.type ?? ""),
+    status: String(cleaned.status ?? ""),
+    ...(reviewCause !== null
+      ? {
+          unreadable_reason:
+            typeof cleaned.unreadable_reason === "string" && cleaned.unreadable_reason.trim()
+              ? cleaned.unreadable_reason.trim()
+              : reviewCause,
+          synthesis_unreadable_reason:
+            typeof cleaned.synthesis_unreadable_reason === "string" &&
+            cleaned.synthesis_unreadable_reason.trim()
+              ? cleaned.synthesis_unreadable_reason.trim()
+              : reviewCause,
+        }
+      : {}),
+    operator_review: operatorReview,
+    evidence_refs: evidenceRefs,
+    participants: Array.isArray(cleaned.participants)
+      ? (cleaned.participants.filter(isRecord) as unknown as MeetingParticipant[])
+      : [],
+    case_file_items: Array.isArray(cleaned.case_file_items)
+      ? (cleaned.case_file_items.filter(isRecord) as unknown as MeetingCaseFileItem[])
+      : [],
+    rounds: Array.isArray(cleaned.rounds)
+      ? cleaned.rounds.filter(isRecord).map((round) => ({
+          ...round,
+          positions: Array.isArray(round.positions) ? round.positions.filter(isRecord) : [],
+        }) as unknown as MeetingRound)
+      : [],
+    synthesis,
+    proposals: proposalsRaw.filter(isRecord) as unknown as MeetingProposalItem[],
+    writebacks: Array.isArray(cleaned.writebacks)
+      ? (cleaned.writebacks.filter(isRecord) as unknown as MeetingWritebackEntry[])
+      : [],
+    ...(replayed !== undefined ? { replayed } : {}),
+  } as MeetingDetail;
+}
+
 export function getMeetingDetail(meetingId: string): Promise<MeetingsRead<MeetingDetail>> {
   return readMeetingsSurface<MeetingDetail>(
     () =>
@@ -634,42 +1070,50 @@ export function getMeetingDetail(meetingId: string): Promise<MeetingsRead<Meetin
         method: "GET",
         path: paths.mgmtMeetingDetail(meetingId),
       }),
-    (raw) => {
-      const data = isRecord(raw.data) ? raw.data : raw;
-      const resolvedId = String(data.meeting_id ?? data.id ?? raw.meeting_id ?? raw.id ?? "").trim();
-      if (!resolvedId) return undefined;
-      const cleaned = stripPrivateMemory(data);
-      const synthesis = isRecord(cleaned.synthesis)
-        ? (cleaned.synthesis as unknown as MeetingSynthesis)
-        : null;
-      const proposalsRaw = Array.isArray(cleaned.proposals)
-        ? cleaned.proposals
-        : Array.isArray(synthesis?.proposals)
-          ? synthesis.proposals
-          : [];
-      return {
-        ...cleaned,
-        id: resolvedId,
-        meeting_id: resolvedId,
-        meeting_type: String(cleaned.meeting_type ?? cleaned.type ?? ""),
-        status: String(cleaned.status ?? ""),
-        participants: Array.isArray(cleaned.participants)
-          ? (cleaned.participants.filter(isRecord) as unknown as MeetingParticipant[])
-          : [],
-        case_file_items: Array.isArray(cleaned.case_file_items)
-          ? (cleaned.case_file_items.filter(isRecord) as unknown as MeetingCaseFileItem[])
-          : [],
-        rounds: Array.isArray(cleaned.rounds)
-          ? (cleaned.rounds.filter(isRecord) as unknown as MeetingRound[])
-          : [],
-        synthesis,
-        proposals: proposalsRaw.filter(isRecord) as unknown as MeetingProposalItem[],
-        writebacks: Array.isArray(cleaned.writebacks)
-          ? (cleaned.writebacks.filter(isRecord) as unknown as MeetingWritebackEntry[])
-          : [],
-      } as MeetingDetail;
-    },
+    normalizeMeetingDetailPayload,
   );
+}
+
+export function buildFollowUpConveneInput(
+  detail: Pick<
+    MeetingDetail,
+    | "meeting_id"
+    | "meeting_type"
+    | "topic"
+    | "chair_persona_id"
+    | "participants"
+    | "subject_ref"
+    | "evidence_refs"
+    | "attribution_record_id"
+  >,
+): ConveneMeetingInput {
+  const meetingType = String(detail.meeting_type || "MT-1").trim() || "MT-1";
+  const baseTopic = String(detail.topic ?? "").trim();
+  const topic = baseTopic
+    ? `${baseTopic} (follow-up research for ${detail.meeting_id})`
+    : `Follow-up research for ${detail.meeting_id}`;
+  const participantIds = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(detail.participants)
+          ? detail.participants.map((p) => String(p.persona_id ?? "").trim())
+          : []),
+        String(detail.chair_persona_id ?? "").trim(),
+      ].filter(Boolean),
+    ),
+  );
+  const evidenceRefs =
+    Array.isArray(detail.evidence_refs) && detail.evidence_refs.length > 0
+      ? detail.evidence_refs
+      : [detail.meeting_id];
+  return {
+    meeting_type: meetingType,
+    topic,
+    ...(participantIds.length > 0 ? { participants: participantIds } : {}),
+    subject_ref: detail.subject_ref ?? { source_meeting_id: detail.meeting_id },
+    evidence_refs: evidenceRefs,
+    ...(detail.attribution_record_id ? { attribution_record_id: detail.attribution_record_id } : {}),
+  };
 }
 
 function shouldCheckLiveWriteGate(): boolean {
@@ -711,10 +1155,118 @@ export async function conveneMeeting(
   );
 }
 
+export async function reviewMeeting(
+  meetingId: string,
+  input: ReviewMeetingInput,
+  idempotencyKey?: string,
+): Promise<MeetingsRead<MeetingDetail>> {
+  const cleanId = String(meetingId ?? "").trim();
+  if (!cleanId) {
+    return { state: "not_found", reason: "missing_meeting_id", owner: "consultation" };
+  }
+  const cleanNote = String(input?.note ?? "").trim();
+  if (!cleanNote) {
+    return { state: "unavailable", reason: "review_note_required", owner: "consultation" };
+  }
+  if (countMeetingReviewNoteChars(cleanNote) > MEETING_OPERATOR_REVIEW_NOTE_MAX_CHARS) {
+    return { state: "unavailable", reason: "review_note_too_long", owner: "consultation" };
+  }
+  if (shouldCheckLiveWriteGate()) {
+    const allowed = await liveWriteGated();
+    if (!allowed) {
+      return { state: "unavailable", reason: "live_write_gate_closed", owner: "consultation" };
+    }
+  }
+  const key = idempotencyKey?.trim() || mintIdempotencyKey();
+  const res = await readMeetingsSurface<MeetingDetail>(
+    () =>
+      bffFetch({
+        method: "POST",
+        path: mgmtMeetingReviewPath(cleanId),
+        body: { note: cleanNote },
+        idempotencyKey: key,
+      }),
+    normalizeMeetingDetailPayload,
+  );
+  if (res.state === "ok") {
+    const inboxItemId = `meeting_review:${cleanId}`;
+    const matchInboxQuery = (q: {
+      queryKey: readonly unknown[];
+      state?: { data?: unknown };
+    }) => {
+      const keyMatch = q.queryKey.some((part) => {
+        if (typeof part !== "string") return false;
+        const lower = part.toLowerCase();
+        return (
+          lower.includes("humaninbox") ||
+          lower.includes("human_inbox") ||
+          lower.includes("human-inbox") ||
+          lower.includes("humangate") ||
+          lower.includes("human_gate") ||
+          lower.includes("human-gate") ||
+          lower.includes("governancedecisionqueue") ||
+          lower.includes("inbox") ||
+          lower === "v5.live.anonymous" ||
+          part === cleanId ||
+          part === inboxItemId
+        );
+      });
+      if (keyMatch) return true;
+      const data = q.state?.data;
+      if (Array.isArray(data)) {
+        return data.some(
+          (entry) =>
+            (typeof entry === "string" &&
+              (entry === inboxItemId || entry === cleanId || entry.includes(cleanId))) ||
+            (isRecord(entry) &&
+              (entry.id === inboxItemId ||
+                entry.inbox_id === inboxItemId ||
+                entry.meetingId === cleanId ||
+                entry.meeting_id === cleanId ||
+                entry.kind === "meeting_review")),
+        );
+      }
+      if (isRecord(data)) {
+        return (
+          data.id === inboxItemId ||
+          data.inbox_id === inboxItemId ||
+          data.meetingId === cleanId ||
+          data.meeting_id === cleanId
+        );
+      }
+      return false;
+    };
+    const clients = new Set<QueryClient>([getSharedQueryClient(), ...knownQueryClients]);
+    for (const qc of clients) {
+      try {
+        await qc.invalidateQueries({ predicate: matchInboxQuery });
+        qc.removeQueries({ predicate: matchInboxQuery, type: "inactive" });
+      } catch {
+        // Query client invalidation is best-effort per client.
+      }
+    }
+    try {
+      emitV5Event({
+        channel: "oversight.humanInbox",
+        type: "meeting_review.resolved",
+        payload: {
+          meeting_id: cleanId,
+          inbox_id: inboxItemId,
+          operator_review: res.data.operator_review ?? null,
+        },
+      });
+    } catch {
+      // Realtime event emission is best-effort.
+    }
+  }
+  return res;
+}
+
 export const meetings = {
   list: getMeetings,
   proposals: getMeetingProposals,
   catalogue: getMeetingCatalogue,
   detail: getMeetingDetail,
   convene: conveneMeeting,
+  review: reviewMeeting,
 };

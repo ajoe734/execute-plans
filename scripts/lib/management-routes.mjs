@@ -156,7 +156,7 @@ export const ENTITY_LIST_ENDPOINTS = {
   rebalance: "/bff/rebalances",
   evolution: "/bff/evolution-programs",
   meetings: "/bff/management/meetings",
-  experiments: "/bff/research-experiments",
+  experiments: "/bff/research-tasks",
   artifacts: "/bff/artifacts",
   deployments: "/bff/deployments",
   incidents: "/bff/incidents",
