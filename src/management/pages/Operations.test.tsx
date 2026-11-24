@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, within, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { Route, Routes } from "react-router-dom";
@@ -439,7 +439,7 @@ const unavailable = () => new BffError(503, {
 } as never);
 
 const confirm = (name: string) => {
-  fireEvent.change(screen.getByPlaceholderText("confirm.memoPlaceholder"), { target: { value: MEMO } });
+  fireEvent.change(screen.getByPlaceholderText(/^confirm.memoPlaceholder/), { target: { value: MEMO } });
   const boxes = screen.getAllByRole("textbox");
   if (boxes.length > 1) fireEvent.change(boxes[boxes.length - 1], { target: { value: name } });
   fireEvent.click(screen.getByRole("button", { name: "actions.confirm" }));
@@ -500,6 +500,17 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     confirm("APPROVE");
     await waitFor(() => expect(m.toast.warning).toHaveBeenCalled());
     expect(m.toast.success).not.toHaveBeenCalled();
+  });
+
+  it("explains the decision risk vs high-risk confirm and lists unmet requirements while disabled", async () => {
+    m.list.mockResolvedValue([row("a1", 7)]);
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "actions.approve" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("confirm.governanceRiskNote")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("confirm-unmet")).toBeInTheDocument();
+    expect(within(dialog).getByText("confirm.unmet.memo")).toBeInTheDocument();
+    expect(within(dialog).getByText("confirm.unmet.token")).toBeInTheDocument();
   });
 
   it("refreshes on 409 without re-voting", async () => {

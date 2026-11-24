@@ -1120,6 +1120,8 @@ export const ApprovalsPage = () => {
                     onOpenChange={setApproveOpen}
                     title={t("confirmDialog.approveTitle", { subject: active.subject })}
                     description={t("confirmDialog.approveDesc", { kind: active.kind })}
+                    risk="high"
+                    riskImpact={t("confirm.governanceRiskNote", { decision: t(`risk.${active.riskLevel ?? "unavailable"}`) })}
                     confirmToken="APPROVE"
                     onConfirm={(memo) => decide(active, "approve", memo)}
                   />
@@ -1128,6 +1130,8 @@ export const ApprovalsPage = () => {
                     onOpenChange={setRejectOpen}
                     title={t("confirmDialog.rejectTitle", { subject: active.subject })}
                     description={t("confirmDialog.rejectDesc")}
+                    risk="high"
+                    riskImpact={t("confirm.governanceRiskNote", { decision: t(`risk.${active.riskLevel ?? "unavailable"}`) })}
                     confirmToken="REJECT"
                     destructive
                     onConfirm={(memo) => decide(active, "reject", memo)}
