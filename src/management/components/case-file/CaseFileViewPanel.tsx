@@ -15,11 +15,12 @@ import { readCaseFileView } from "@/lib/bff-v1/caseFile";
 const anchorId = (scope: string, itemId: string) => `cf-${scope}-${itemId}`;
 const dash = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
 
-function Unavailable({ reason, testId }: { reason?: string | null; testId: string }) {
+function Unavailable({ reason, testId, title }: { reason?: string | null; testId: string; title?: string }) {
   const { t } = useTranslation();
   return (
     <div role="status" data-testid={testId}
          className="rounded border border-dashed border-border p-2 text-sm text-muted-foreground">
+      {title ? <span className="mr-1 font-medium text-foreground">{title} ·</span> : null}
       {t("caseFile.unavailable")}
       <span className="ml-2 font-mono text-xs" data-testid={`${testId}-reason`}>
         ({reason || t("caseFile.reasonNotRecorded")})
@@ -146,7 +147,9 @@ export function CaseFileViewPanel({
 }) {
   const { t } = useTranslation();
   const result = read ?? readCaseFileView(view);
-  if (result.state === "unavailable") return <Unavailable testId={`${testId}-unavailable`} reason={result.reason} />;
+  if (result.state === "unavailable") {
+    return <Unavailable testId={`${testId}-unavailable`} reason={result.reason} title={t("caseFile.title")} />;
+  }
   const v: CaseFileView = result.view;
   const cases = Array.isArray(v.case_files) ? v.case_files : v.case_file ? [v.case_file] : [];
   const citeScope = (c: CaseFile) => (cases.length > 1 ? `${scope}-${c.case_file_id}` : scope);

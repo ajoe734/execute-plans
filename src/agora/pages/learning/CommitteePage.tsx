@@ -12,6 +12,7 @@ import {
   isUnsponsoredCandidateProposal,
   publishCommitteeMemo,
   sessionIdOf,
+  stripPrivateMemory,
   type CandidateDecisionReadback,
   type CommitteeMeetingProposal,
   type CommitteeMemo,
@@ -123,26 +124,30 @@ function Memos({ sessionId }: { sessionId: string }) {
       <ReadBoundary result={result}>
         {(memos) => (
           <ul className="space-y-2">
-            {memos.map((memo) => (
-              <li key={memo.memo_id} className="rounded border border-border p-2 text-sm" data-testid={`memo-${memo.memo_id}`}>
-                <p><code>{memo.memo_id}</code> · {memo.status ?? t("agora.learning.notReported")}</p>
-                {memo.summary ? <p>{memo.summary}</p> : null}
-                <div className="mt-2">
-                  <CaseFileViewPanel view={memo.case_file_view} scope={`memo-${memo.memo_id}`}
-                                     testId={`memo-${memo.memo_id}-case-file`} />
-                </div>
-                {memo.status !== "published" ? (
-                  <button
-                    type="button"
-                    className="mt-1 rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
-                    disabled={!write.allowed || busy === memo.memo_id}
-                    onClick={() => void publish(memo)}
-                  >
-                    {t("agora.learning.committee.publish")}
-                  </button>
-                ) : null}
-              </li>
-            ))}
+            {memos.map((rawMemo) => {
+              const memo = stripPrivateMemory(rawMemo);
+              return (
+                <li key={memo.memo_id} className="rounded border border-border p-2 text-sm" data-testid={`memo-${memo.memo_id}`}>
+                  <p><code>{memo.memo_id}</code> · {memo.status ?? t("agora.learning.notReported")}</p>
+                  {memo.summary ? <p>{memo.summary}</p> : null}
+                  {memo.recommendation ? <p>{memo.recommendation}</p> : null}
+                  <div className="mt-2">
+                    <CaseFileViewPanel view={memo.case_file_view} scope={`memo-${memo.memo_id}`}
+                                       testId={`memo-${memo.memo_id}-case-file`} />
+                  </div>
+                  {memo.status !== "published" ? (
+                    <button
+                      type="button"
+                      className="mt-1 rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
+                      disabled={!write.allowed || busy === memo.memo_id}
+                      onClick={() => void publish(memo)}
+                    >
+                      {t("agora.learning.committee.publish")}
+                    </button>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </ReadBoundary>
@@ -196,7 +201,7 @@ function DeliberativeMeetingDetail({ session }: { session: CommitteeSession }) {
     void getCommitteeMemos(meetingId).then((res) => {
       if (!live) return;
       if (res.state === "ok") {
-        setDissentMemos(res.data);
+        setDissentMemos(stripPrivateMemory(res.data));
       }
     });
 
@@ -340,6 +345,13 @@ function DeliberativeMeetingDetail({ session }: { session: CommitteeSession }) {
                   <code>{m.memo_id}</code> · {m.status ?? t("agora.learning.notReported")}
                   {m.summary ? <p>{m.summary}</p> : null}
                   {m.recommendation ? <p>{m.recommendation}</p> : null}
+                  <div className="mt-2">
+                    <CaseFileViewPanel
+                      view={m.case_file_view}
+                      scope={`memo-${m.memo_id}`}
+                      testId={`memo-${m.memo_id}-case-file`}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

@@ -2,9 +2,24 @@ import { Section, Field } from "@/management/pages/ObjectDetailLayout";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import type { Persona } from "@/lib/bff-v1";
+import { classifyRiskPolicyStatus } from "./PersonaRiskPolicyPanel";
 
 export const PersonaIdentityTab = ({ p }: { p: Persona }) => {
   const t = useT();
+  const riskPolicy = p.riskPolicyChange;
+  const riskStatus = riskPolicy ? classifyRiskPolicyStatus(riskPolicy) : null;
+  const riskSummary = riskPolicy
+    ? `${t("persona.riskPolicy.requestedRisk")}: ${
+        riskPolicy.requestedRisk ? t(`risk.${riskPolicy.requestedRisk}`, { defaultValue: riskPolicy.requestedRisk }) : t("persona.riskPolicy.notRecorded")
+      } · ${t("persona.riskPolicy.effectiveRisk")}: ${
+        riskPolicy.effectiveRisk
+          ? t(`risk.${riskPolicy.effectiveRisk}`, { defaultValue: riskPolicy.effectiveRisk })
+          : riskStatus === "unavailable"
+            ? t("persona.riskPolicy.status.unavailable")
+            : t("persona.riskPolicy.notEffective")
+      } (${t(`persona.riskPolicy.status.${riskStatus ?? "unavailable"}`)})`
+    : p.risk;
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Section title={t("phase13.persona.identity.charter")}>
@@ -21,7 +36,7 @@ export const PersonaIdentityTab = ({ p }: { p: Persona }) => {
       </Section>
       <Section title={t("phase13.persona.identity.tone")}>
         <p className="text-sm">{t("phase13.persona.identity.toneValue")}</p>
-        <Field label={t("phase13.persona.identity.riskAppetite")} value={p.risk} mono />
+        <Field label={t("phase13.persona.identity.riskAppetite")} value={riskSummary} mono />
       </Section>
     </div>
   );

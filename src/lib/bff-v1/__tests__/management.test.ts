@@ -9,6 +9,7 @@ import {
   adaptManagementEvidenceDetail,
   adaptManagementEvidenceOverview,
   adaptTradingPulseOverview,
+  adaptTradingPulseRankings,
   adaptHumanInboxDetail,
   adaptHumanInboxList,
   adaptManagementPersonaFleet,
@@ -20,8 +21,13 @@ import {
   adaptQuarterlyRankingRows,
   adaptEvolutionQualificationReport,
   defaultTradingPulseModel,
+  LIVE_RANKING_BLOCKS,
   mgmt,
 } from "@/lib/bff-v1/management";
+import {
+  TRADING_PULSE_HOSTED_WIRE_SAMPLE,
+  TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE,
+} from "./fixtures/trading-pulse";
 import { paths } from "@/lib/bff-v1/paths";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import {
@@ -937,6 +943,857 @@ describe("mgmt façade (PM-Live)", () => {
 
     expect(out?.cards[0]).toMatchObject({ cardId: "paper", value: 1.42 });
     expect(out?.meta.surfaces.management_trading_pulse.source).toBe("local_snapshot");
+  });
+
+  it("locks the 2026-11-22 Trading Pulse joint wire contract for operator_scope, pnl_groups, performance_context, latest_outcome, and real links", () => {
+    const model = adaptTradingPulseOverview(TRADING_PULSE_HOSTED_WIRE_SAMPLE);
+    expect(model).not.toBeNull();
+
+    // 1. summary.operator_scope: verified roster excluding deploy probes
+    expect(model?.summary.operatorScope).toMatchObject({
+      status: "verified",
+      tenantId: "tenant-dev",
+      tenant_id: "tenant-dev",
+      personaCount: 3,
+      persona_count: 3,
+      runtimeCount: 3,
+      runtime_count: 3,
+      verifiedRuntimeCount: 3,
+      verified_runtime_count: 3,
+      reason: null,
+      byStage: {
+        paper: {
+          personaCount: 3,
+          persona_count: 3,
+          runtimeCount: 3,
+          runtime_count: 3,
+        },
+      },
+    });
+    expect(model?.summary.fillRateAggregation).toBe("arithmetic_mean_of_observed_runtime_rates");
+
+    // 2. summary.pnl_groups: comparable TWD paper group with negative PnL subtotal (-177.819) and 2/3 persona coverage
+    expect(model?.summary.pnlGroups).toHaveLength(1);
+    expect(model?.summary.pnlGroups[0]).toMatchObject({
+      stage: "paper",
+      currency: "TWD",
+      periodStartAt: "2026-11-16T00:00:00Z",
+      periodEndAt: "2026-11-22T12:00:00Z",
+      asOf: "2026-11-22T12:00:00Z",
+      pnlDefinition: "realized_plus_unrealized",
+      value: -177.819,
+      coveredPersonaCount: 2,
+      eligiblePersonaCount: 3,
+      coveredRuntimeCount: 2,
+      eligibleRuntimeCount: 3,
+    });
+    expect(model?.summary.worstSlippageBps).toBe(0);
+
+    // 3. runtimeRows: verified names, underlying symbols, stage, binding, tenant, 0 bps slippage, and 2317 pre-broker risk rejection
+    expect(model?.runtimeRows).toHaveLength(3);
+    const qinghe = model?.runtimeRows.find((r) => r.runtimeId === "rt-ad81501b");
+    const hengyue = model?.runtimeRows.find((r) => r.runtimeId === "rt-0050paper");
+    const chengchuan = model?.runtimeRows.find((r) => r.runtimeId === "rt-3252fa75");
+
+    expect(qinghe).toMatchObject({
+      personaId: "persona-2448c7053e33ea48da47",
+      personaName: "青禾｜2330 台股 Paper 學習 R3",
+      strategyId: "strategy-persona-06d4775a9b6a8f63b311",
+      strategyName: "2330 台股 Paper 學習策略",
+      underlyingSymbol: "2330",
+      tenantId: "tenant-dev",
+      deploymentStage: "paper",
+      runtimeBindingId: "rb-3823397e125e4579ba5f4174067087ed",
+      totalTrades: 1,
+      metrics: {
+        pnl: -168.085,
+        drawdown: 0.012,
+        sharpe_ratio: null,
+        fill_rate: 1.0,
+        avg_slippage_bps: 0,
+        total_trades: 1,
+      },
+      links: {
+        manageHref: "/management/personas/persona-2448c7053e33ea48da47",
+        persona: "/management/personas/persona-2448c7053e33ea48da47",
+        personaHref: "/management/personas/persona-2448c7053e33ea48da47",
+        strategy: "/management/strategies/strategy-persona-06d4775a9b6a8f63b311",
+        strategyHref: "/management/strategies/strategy-persona-06d4775a9b6a8f63b311",
+        journey: "/management/trade-journeys/tj_29473e86-63ff-5384-bda1-23eef61cebb2?tenant_id=tenant-dev&environment=paper",
+        journeyHref: "/management/trade-journeys/tj_29473e86-63ff-5384-bda1-23eef61cebb2?tenant_id=tenant-dev&environment=paper",
+      },
+    });
+    expect(qinghe?.performanceContext).toMatchObject({
+      ledgerFillCount: 1,
+      pnlCurrency: "TWD",
+      pnlPeriodStartAt: "2026-11-16T00:00:00Z",
+      pnlAt: "2026-11-22T12:00:00Z",
+      pnlDefinition: "realized_plus_unrealized",
+      sharpeRatioStatus: "insufficient_samples",
+      sharpeRatioReason: "min_10_daily_returns_required",
+      latestReportAt: "2026-11-22T11:58:00Z",
+      lastFillAt: "2026-11-16T06:52:08Z",
+      snapshotAt: "2026-11-22T12:00:00Z",
+      sourceStatus: "available",
+    });
+
+    expect(hengyue?.metrics.pnl).toBe(-9.734);
+    expect(hengyue?.metrics.avg_slippage_bps).toBe(0);
+    expect(hengyue?.performanceContext.sharpeRatioStatus).toBe("zero_variance");
+    expect(hengyue?.performanceContext.sharpeRatioReason).toBe("zero_return_variance");
+    expect(hengyue?.latestOutcome.status).toBe("not_observed");
+    expect(hengyue?.latestOutcome.journeyId).toBeNull();
+    expect(hengyue?.links?.journey).toBeUndefined();
+
+    // 澄川 (2317): TWD 100,000 available, 0 fills, 0/452 shares (0% fill rate), null PnL with no_fills reason, insufficient_cash pre-broker rejection
+    expect(chengchuan).toMatchObject({
+      personaId: "persona-6507750312870d03a241",
+      personaName: "澄川｜2317 台股 Paper",
+      strategyId: "strategy-persona-039ad01f8bcd2b4aa466",
+      strategyName: "2317 台股 Paper 策略",
+      underlyingSymbol: "2317",
+      tenantId: "tenant-dev",
+      runtimeId: "rt-3252fa75",
+      runtimeBindingId: "rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4",
+      deploymentStage: "paper",
+      executedTradeCount: 0,
+      totalTrades: 0,
+      metrics: {
+        pnl: null,
+        drawdown: null,
+        sharpe_ratio: null,
+        fill_rate: 0,
+        avg_slippage_bps: null,
+        total_trades: 0,
+      },
+    });
+    expect(chengchuan?.performanceContext).toMatchObject({
+      ledgerFillCount: 0,
+      pnlCurrency: "TWD",
+      pnlPeriodStartAt: null,
+      pnlAt: null,
+      pnlDefinition: null,
+      fillRateDetails: {
+        status: "known",
+        basis: "filled_quantity_over_submitted_quantity",
+        unit: "SHARES",
+        numerator: 0,
+        denominator: 452,
+      },
+      sharpeRatioStatus: "unavailable",
+      sharpeRatioReason: "no_fills",
+      metricReasons: {
+        pnl: "no_fills",
+        drawdown: "no_fills",
+        sharpe_ratio: "no_fills",
+        avg_slippage_bps: "no_fills",
+      },
+      latestReportAt: "2026-11-19T23:46:17Z",
+      lastFillAt: null,
+      snapshotAt: "2026-11-22T12:00:00Z",
+      sourceStatus: "available",
+    });
+    expect(chengchuan?.latestOutcome).toMatchObject({
+      status: "available",
+      occurredAt: "2026-11-19T23:46:17Z",
+      reasonCode: "insufficient_cash",
+      submittedToBroker: false,
+      requestedQuantity: 452,
+      required: 100034.3461,
+      available: 100000,
+      currency: "TWD",
+      journeyId: "tj_79726064-4cc2-5510-8e11-7f5e59ff89bd",
+      sourceEventId: "91d55953-b575-4fe8-8d39-6e0cade58d59",
+      focusStage: "risk_evaluation",
+      journeyHref: "/management/trade-journeys/tj_79726064-4cc2-5510-8e11-7f5e59ff89bd?tenant_id=tenant-dev&environment=paper",
+    });
+    expect(chengchuan?.links).toMatchObject({
+      manageHref: "/management/personas/persona-6507750312870d03a241",
+      persona: "/management/personas/persona-6507750312870d03a241",
+      strategy: "/management/strategies/strategy-persona-039ad01f8bcd2b4aa466",
+      journey: "/management/trade-journeys/tj_79726064-4cc2-5510-8e11-7f5e59ff89bd?tenant_id=tenant-dev&environment=paper",
+    });
+  });
+
+  it("adapts live Trading Pulse rankings with verified names, symbols, units, comparison scopes, metric reasons, and navigation links", () => {
+    const blocks = adaptTradingPulseRankings(TRADING_PULSE_RANKINGS_HOSTED_WIRE_SAMPLE);
+    expect(blocks).not.toBeNull();
+    expect(blocks?.map((b) => b.kind)).toEqual([...LIVE_RANKING_BLOCKS]);
+    expect(blocks?.summary).toMatchObject({
+      runtimeCount: 3,
+      rankingBlockCount: 4,
+      rankedItemCount: 7,
+      eligibleItemCount: 7,
+      missingMetricItemCount: 5,
+      topRuntimeId: "rt-0050paper",
+      operatorScope: {
+        status: "verified",
+        personaCount: 3,
+        runtimeCount: 3,
+      },
+    });
+    expect(blocks?.meta?.snapshotAt).toBe("2026-11-22T12:00:00Z");
+
+    const pnlBlock = blocks?.find((b) => b.kind === "pnl-leaders");
+    expect(pnlBlock).toMatchObject({
+      blockId: "pnl-leaders",
+      metric: "pnl",
+      sortOrder: "desc",
+      rankingBasis: "within_comparison_scope",
+      eligibleItemCount: 2,
+      missingMetricCount: 1,
+      missingMetricRuntimeIds: ["rt-3252fa75"],
+      metricReasons: { "rt-3252fa75": "no_fills" },
+    });
+    expect(pnlBlock?.rows).toHaveLength(2);
+    expect(pnlBlock?.rows[0]).toMatchObject({
+      rank: 1,
+      subjectId: "rb-0050paper",
+      subjectLabel: "衡岳｜0050 台股 ETF Paper",
+      personaId: "persona-hengyue-0050",
+      personaName: "衡岳｜0050 台股 ETF Paper",
+      strategyId: "strategy-persona-0050",
+      strategyName: "0050 台股 ETF 策略",
+      underlyingSymbol: "0050",
+      tenantId: "tenant-dev",
+      deploymentStage: "paper",
+      metricValue: -9.734,
+      metricUnit: "TWD",
+      rankingUnit: "TWD",
+      comparisonScope: {
+        stage: "paper",
+        unit: "TWD",
+        definition: "realized_plus_unrealized",
+      },
+      links: {
+        manageHref: "/management/personas/persona-hengyue-0050",
+        persona: "/management/personas/persona-hengyue-0050",
+        strategy: "/management/strategies/strategy-persona-0050",
+      },
+    });
+    expect(pnlBlock?.rows[1]).toMatchObject({
+      rank: 2,
+      personaName: "青禾｜2330 台股 Paper 學習 R3",
+      underlyingSymbol: "2330",
+      metricValue: -168.085,
+      metricUnit: "TWD",
+      links: {
+        manageHref: "/management/personas/persona-2448c7053e33ea48da47",
+        journey: "/management/trade-journeys/tj_29473e86-63ff-5384-bda1-23eef61cebb2?tenant_id=tenant-dev&environment=paper",
+      },
+    });
+
+    const execBlock = blocks?.find((b) => b.kind === "execution-quality");
+    expect(execBlock?.secondaryMetric).toBe("avg_slippage_bps");
+    expect(execBlock?.rows).toHaveLength(3);
+    expect(execBlock?.rows[2]).toMatchObject({
+      rank: 3,
+      personaName: "澄川｜2317 台股 Paper",
+      underlyingSymbol: "2317",
+      metricValue: 0,
+      metricUnit: "fraction",
+      latestOutcome: {
+        reasonCode: "insufficient_cash",
+        submittedToBroker: false,
+        requestedQuantity: 452,
+        journeyId: "tj_79726064-4cc2-5510-8e11-7f5e59ff89bd",
+        journeyHref: "/management/trade-journeys/tj_79726064-4cc2-5510-8e11-7f5e59ff89bd?tenant_id=tenant-dev&environment=paper",
+      },
+      links: {
+        manageHref: "/management/personas/persona-6507750312870d03a241",
+        persona: "/management/personas/persona-6507750312870d03a241",
+        strategy: "/management/strategies/strategy-persona-039ad01f8bcd2b4aa466",
+        journey: "/management/trade-journeys/tj_79726064-4cc2-5510-8e11-7f5e59ff89bd?tenant_id=tenant-dev&environment=paper",
+      },
+    });
+
+    const sharpeBlock = blocks?.find((b) => b.kind === "sharpe-leaders");
+    expect(sharpeBlock?.rows).toEqual([]);
+    expect(sharpeBlock?.missingMetricCount).toBe(3);
+    expect(sharpeBlock?.metricReasons).toEqual({
+      "rt-ad81501b": "min_10_daily_returns_required",
+      "rt-0050paper": "zero_return_variance",
+      "rt-3252fa75": "no_fills",
+    });
+  });
+
+  it("distinguishes 0, null, missing fields, 0/0 vs 0/452 fill rate, stale data, and source failure without synthesizing fake values or links", () => {
+    const out = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          operator_scope: {
+            status: "unavailable",
+            tenant_id: "tenant-dev",
+            persona_count: null,
+            runtime_count: null,
+            by_stage: {},
+            reason: "persona_directory_unavailable",
+          },
+          pnl_groups: [],
+          runtime_count: null,
+          total_pnl: null,
+          worst_drawdown: null,
+          average_fill_rate: null,
+          worst_slippage_bps: 0,
+          total_trades: null,
+          by_status: {},
+          by_stage: {},
+          by_baseline_status: {},
+        },
+        cards: [],
+        runtime_rows: [
+          {
+            // Row A: 0/0 fill_rate_details (no submitted orders), true zero PnL & drawdown & 0 bps slippage, missing persona_name/strategy_name/links
+            runtime_id: "rt-zero-vs-no-orders",
+            runtime_binding_id: "rb-zero-vs-no-orders",
+            deployment_stage: "canary",
+            status: "active",
+            telemetry_summary: {
+              metrics: {
+                pnl: 0,
+                drawdown: 0,
+                sharpe_ratio: null,
+                fill_rate: 0,
+                avg_slippage_bps: 0,
+              },
+            },
+            performance_context: {
+              ledger_fill_count: null,
+              pnl_currency: "TWD",
+              pnl_period_start_at: "2026-11-20T00:00:00Z",
+              pnl_at: "2026-11-22T12:00:00Z",
+              pnl_definition: "realized_plus_unrealized",
+              fill_rate_details: {
+                status: "unknown",
+                reason: "no_submitted_orders",
+                basis: "filled_quantity_over_submitted_quantity",
+                unit: "SHARES",
+                numerator: 0,
+                denominator: 0,
+              },
+              sharpe_ratio_status: "unknown",
+              sharpe_ratio_reason: "source_unavailable",
+              snapshot_at: "2026-11-22T12:00:00Z",
+            },
+            links: {
+              persona: "#",
+              strategy: "/management/strategies",
+              journey: "/management/trade-journeys",
+            },
+          },
+          {
+            // Row B: stale telemetry data with missing optional fields
+            runtime_id: "rt-stale-1",
+            runtime_binding_id: "rb-stale-1",
+            persona_id: "persona-stale-1",
+            deployment_stage: "paper",
+            status: "active",
+            telemetry_summary: {
+              collected_at: "2026-11-21T01:00:00Z",
+              staleness: {
+                is_stale: true,
+                status: "stale",
+                age_seconds: 86400,
+                threshold_seconds: 3600,
+              },
+              metrics: {
+                pnl: -50.25,
+              },
+            },
+          },
+        ],
+      },
+      meta: {
+        snapshot_at: "2026-11-22T12:00:00Z",
+        surfaces: {
+          management_trading_pulse: { status: "unavailable", source: "bff_composed", message: "persona_directory_unavailable" },
+        },
+      },
+    });
+
+    expect(out).not.toBeNull();
+    // Roster failure preserves null counts and never synthesizes 0
+    expect(out?.summary.operatorScope.status).toBe("unavailable");
+    expect(out?.summary.operatorScope.personaCount).toBeNull();
+    expect(out?.summary.operatorScope.runtimeCount).toBeNull();
+    expect(out?.summary.operatorScope.reason).toBe("persona_directory_unavailable");
+    expect(out?.summary.runtimeCount).toBeNull();
+    expect(out?.summary.totalTrades).toBeNull();
+    expect(out?.summary.totalPnl).toBeNull();
+    expect(out?.summary.worstSlippageBps).toBe(0);
+
+    const rowA = out?.runtimeRows[0];
+    expect(rowA?.deploymentStage).toBe("canary");
+    // Missing names remain null, never synthesized from runtime_id
+    expect(rowA?.personaName).toBeNull();
+    expect(rowA?.strategyName).toBeNull();
+    expect(rowA?.underlyingSymbol).toBeNull();
+    // True 0 PnL, 0 drawdown, 0 bps slippage preserved; 0/0 fill rate becomes null with reason
+    expect(rowA?.metrics.pnl).toBe(0);
+    expect(rowA?.metrics.drawdown).toBe(0);
+    expect(rowA?.metrics.avg_slippage_bps).toBe(0);
+    expect(rowA?.metrics.fill_rate).toBeNull();
+    expect(rowA?.totalTrades).toBeNull();
+    expect(rowA?.performanceContext.fillRateDetails?.numerator).toBe(0);
+    expect(rowA?.performanceContext.fillRateDetails?.denominator).toBe(0);
+    expect(rowA?.performanceContext.metricReasons.fill_rate).toBe("no_submitted_orders");
+    expect(rowA?.performanceContext.metricReasons.sharpe_ratio).toBe("source_unavailable");
+    // Missing trade date stays null (never copied from snapshot_at)
+    expect(rowA?.performanceContext.lastFillAt).toBeNull();
+    // Fake '#', bare '/management/strategies', and unfiltered '/management/trade-journeys' links are rejected
+    expect(rowA?.links).toBeUndefined();
+
+    const rowB = out?.runtimeRows[1];
+    expect(rowB?.performanceContext.sourceStatus).toBe("stale");
+    expect(rowB?.performanceContext.latestReportAt).toBe("2026-11-21T01:00:00Z");
+    expect(rowB?.performanceContext.lastFillAt).toBeNull();
+    // Verified personaId produces a real persona link without inventing strategy/journey links
+    expect(rowB?.links).toEqual({
+      manageHref: "/management/personas/persona-stale-1",
+      primaryObjectHref: "/management/personas/persona-stale-1",
+      persona: "/management/personas/persona-stale-1",
+      personaHref: "/management/personas/persona-stale-1",
+      persona_href: "/management/personas/persona-stale-1",
+    });
+
+    // Rankings adapter excludes stale, unavailable, null-metric, and uncomparable PnL rows
+    const ranked = adaptTradingPulseRankings({
+      data: {
+        items: [
+          {
+            block_id: "pnl-leaders",
+            label: "P&L Leaders",
+            metric: "pnl",
+            items: [
+              {
+                runtime_id: "rt-stale-1",
+                pnl: -50.25,
+                performance_context: {
+                  source_status: "stale",
+                  pnl_currency: "TWD",
+                  pnl_period_start_at: "2026-11-16T00:00:00Z",
+                  pnl_at: "2026-11-22T12:00:00Z",
+                  pnl_definition: "realized_plus_unrealized",
+                },
+              },
+              {
+                runtime_id: "rt-uncomparable-pnl",
+                pnl: 100,
+                performance_context: {
+                  source_status: "available",
+                  pnl_currency: null,
+                  pnl_period_start_at: null,
+                  pnl_at: null,
+                  pnl_definition: null,
+                },
+              },
+              {
+                runtime_id: "rt-null-pnl",
+                pnl: null,
+              },
+              {
+                runtime_id: "rt-valid-zero-pnl",
+                persona_id: "persona-zero",
+                persona_name: "零損益測試",
+                pnl: 0,
+                ranking_unit: "TWD",
+                performance_context: {
+                  source_status: "available",
+                  pnl_currency: "TWD",
+                  pnl_period_start_at: "2026-11-16T00:00:00Z",
+                  pnl_at: "2026-11-22T12:00:00Z",
+                  pnl_definition: "realized_plus_unrealized",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(ranked?.[0].rows).toHaveLength(1);
+    expect(ranked?.[0].rows[0].runtimeId).toBe("rt-valid-zero-pnl");
+    expect(ranked?.[0].rows[0].metricValue).toBe(0);
+    expect(ranked?.[0].missingMetricRuntimeIds).toEqual([
+      "rt-stale-1",
+      "rt-uncomparable-pnl",
+      "rt-null-pnl",
+    ]);
+  });
+
+  it("preserves null fill_rate for unknown positive denominator (0/452 source_unavailable) while distinguishing known 0/452 and 0/0", () => {
+    const out = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: { runtime_count: 3, by_status: { active: 3 } },
+        runtime_rows: [
+          {
+            runtime_id: "rt-unknown-pos-denom",
+            runtime_binding_id: "rb-unknown-pos-denom",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 452,
+                reason: "source_unavailable",
+                unit: "SHARES",
+              },
+              metric_reasons: {
+                fill_rate: "source_unavailable",
+              },
+            },
+          },
+          {
+            runtime_id: "rt-known-zero-pos-denom",
+            runtime_binding_id: "rb-known-zero-pos-denom",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: 0 },
+            performance_context: {
+              fill_rate_details: {
+                status: "known",
+                numerator: 0,
+                denominator: 452,
+                reason: null,
+                unit: "SHARES",
+              },
+            },
+          },
+          {
+            runtime_id: "rt-zero-over-zero",
+            runtime_binding_id: "rb-zero-over-zero",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: 0 },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 0,
+                reason: "no_submitted_orders",
+                unit: "SHARES",
+              },
+            },
+          },
+          {
+            runtime_id: "rt-zero-denom-unknown-no-reason",
+            runtime_binding_id: "rb-zero-denom-unknown-no-reason",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 0,
+                reason: null,
+                unit: "SHARES",
+              },
+              source_status: "available",
+            },
+          },
+          {
+            runtime_id: "rt-zero-denom-source-unavailable",
+            runtime_binding_id: "rb-zero-denom-source-unavailable",
+            deployment_stage: "paper",
+            status: "degraded",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "unknown",
+                numerator: 0,
+                denominator: 0,
+                reason: null,
+                unit: "SHARES",
+              },
+              source_status: "unavailable",
+            },
+          },
+          {
+            runtime_id: "rt-zero-denom-stale",
+            runtime_binding_id: "rb-zero-denom-stale",
+            deployment_stage: "paper",
+            status: "active",
+            metrics: { fill_rate: null },
+            performance_context: {
+              fill_rate_details: {
+                status: "stale",
+                numerator: 0,
+                denominator: 0,
+                reason: null,
+                unit: "SHARES",
+              },
+              source_status: "stale",
+            },
+          },
+        ],
+      },
+    });
+
+    const unknownPos = out?.runtimeRows.find((r) => r.runtimeId === "rt-unknown-pos-denom");
+    const knownZero = out?.runtimeRows.find((r) => r.runtimeId === "rt-known-zero-pos-denom");
+    const zeroOverZero = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-over-zero");
+    const zeroDenomUnknown = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-denom-unknown-no-reason");
+    const zeroDenomUnavailable = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-denom-source-unavailable");
+    const zeroDenomStale = out?.runtimeRows.find((r) => r.runtimeId === "rt-zero-denom-stale");
+
+    expect(unknownPos?.metrics.fill_rate).toBeNull();
+    expect(unknownPos?.performanceContext?.fillRateDetails).toMatchObject({
+      status: "unknown",
+      numerator: 0,
+      denominator: 452,
+      reason: "source_unavailable",
+    });
+    expect(unknownPos?.performanceContext?.metricReasons.fill_rate).toBe("source_unavailable");
+
+    expect(knownZero?.metrics.fill_rate).toBe(0);
+    expect(knownZero?.performanceContext?.fillRateDetails).toMatchObject({
+      status: "known",
+      numerator: 0,
+      denominator: 452,
+      reason: null,
+    });
+    expect(knownZero?.performanceContext?.metricReasons.fill_rate).toBeUndefined();
+
+    expect(zeroOverZero?.metrics.fill_rate).toBeNull();
+    expect(zeroOverZero?.performanceContext?.metricReasons.fill_rate).toBe("no_submitted_orders");
+
+    expect(zeroDenomUnknown?.metrics.fill_rate).toBeNull();
+    expect(zeroDenomUnknown?.performanceContext?.metricReasons.fill_rate).toBe("unknown");
+    expect(zeroDenomUnavailable?.metrics.fill_rate).toBeNull();
+    expect(zeroDenomUnavailable?.performanceContext?.metricReasons.fill_rate).toBe("source_unavailable");
+    expect(zeroDenomStale?.metrics.fill_rate).toBeNull();
+    expect(zeroDenomStale?.performanceContext?.metricReasons.fill_rate).toBe("stale");
+
+    const rankings = adaptTradingPulseRankings({
+      data: {
+        items: [
+          {
+            block_id: "execution-quality",
+            label: "Execution Quality",
+            metric: "fill_rate",
+            items: [
+              {
+                runtime_id: "rt-unknown-pos-denom",
+                fill_rate: 0,
+                performance_context: {
+                  fill_rate_details: {
+                    status: "unknown",
+                    numerator: 0,
+                    denominator: 452,
+                    reason: "source_unavailable",
+                  },
+                  metric_reasons: { fill_rate: "source_unavailable" },
+                },
+              },
+              {
+                runtime_id: "rt-known-zero-pos-denom",
+                fill_rate: 0,
+                performance_context: {
+                  fill_rate_details: {
+                    status: "known",
+                    numerator: 0,
+                    denominator: 452,
+                    reason: null,
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(rankings?.[0].rows.map((r) => r.runtimeId)).toEqual(["rt-known-zero-pos-denom"]);
+    expect(rankings?.[0].missingMetricRuntimeIds).toEqual(["rt-unknown-pos-denom"]);
+  });
+
+  it("rejects protocol-relative URLs, unsupported trade-journey focus keys, and generic unfiltered manage/primary hrefs while preserving supported entity and focus routes", () => {
+    const out = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: { runtime_count: 3, by_status: { active: 3 } },
+        runtime_rows: [
+          {
+            runtime_id: "rt-bad-links",
+            runtime_binding_id: "rb-bad-links",
+            deployment_stage: "paper",
+            status: "active",
+            latest_outcome: {
+              status: "available",
+              source_event_id: "e1",
+              journey_href: "/management/trade-journeys?source_event_id=e1",
+            },
+            links: {
+              manageHref: "/management/trade-journeys",
+              primaryObjectHref: "//example.test/path",
+              persona: "//example.test/management/personas/p-1",
+              strategy: "/management/strategies",
+              journey: "/management/trade-journeys?event_id=e1",
+              evidenceHref: "/management/trade-journeys?journey_id=j1",
+              recommendedActionHref: "/management/personas",
+              auditHref: "/management/audit",
+            },
+          },
+          {
+            runtime_id: "rt-supported-focus",
+            runtime_binding_id: "rb-supported-focus",
+            persona_id: "persona-valid-1",
+            strategy_id: "strategy-valid-1",
+            tenant_id: "tenant-dev",
+            deployment_stage: "paper",
+            status: "active",
+            latest_outcome: {
+              status: "available",
+              decision_id: "dec-42",
+            },
+            links: {
+              manageHref: "/management/trade-journeys",
+              primaryObjectHref: "/management/personas",
+              journey: "/management/trade-journeys?journey_id=tj-unsupported",
+            },
+          },
+          {
+            runtime_id: "rt-explicit-valid-focus",
+            runtime_binding_id: "rb-explicit-valid-focus",
+            deployment_stage: "paper",
+            status: "active",
+            links: {
+              manageHref: "/management/governance-decisions?tab=capital&capital_id=cp-1",
+              journey: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+            },
+          },
+        ],
+      },
+    });
+
+    const badRow = out?.runtimeRows.find((r) => r.runtimeId === "rt-bad-links");
+    expect(badRow?.links).toBeUndefined();
+    expect(badRow?.latestOutcome?.journeyHref).toBeNull();
+
+    const fallbackRow = out?.runtimeRows.find((r) => r.runtimeId === "rt-supported-focus");
+    expect(fallbackRow?.links).toEqual({
+      manageHref: "/management/personas/persona-valid-1",
+      primaryObjectHref: "/management/personas/persona-valid-1",
+      persona: "/management/personas/persona-valid-1",
+      personaHref: "/management/personas/persona-valid-1",
+      persona_href: "/management/personas/persona-valid-1",
+      strategy: "/management/strategies/strategy-valid-1",
+      strategyHref: "/management/strategies/strategy-valid-1",
+      strategy_href: "/management/strategies/strategy-valid-1",
+      journey: "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+      journeyHref: "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+      journey_href: "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+    });
+    expect(fallbackRow?.latestOutcome?.journeyHref).toBe(
+      "/management/trade-journeys?tenant_id=tenant-dev&environment=paper&decision_id=dec-42",
+    );
+
+    const explicitValidRow = out?.runtimeRows.find((r) => r.runtimeId === "rt-explicit-valid-focus");
+    expect(explicitValidRow?.links).toEqual({
+      manageHref: "/management/governance-decisions?tab=capital&capital_id=cp-1",
+      primaryObjectHref: "/management/governance-decisions?tab=capital&capital_id=cp-1",
+      journey: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+      journeyHref: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+      journey_href: "/management/trade-journeys?order_id=ord-99&tenant_id=tenant-dev&environment=paper",
+    });
+  });
+
+  it("keeps Trading Pulse overview readable when rankings fail and never falls back to seed performance in live mode", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/trading-pulse/rankings")) {
+        return jsonResponse({ error: { code: "UPSTREAM_UNAVAILABLE", message: "Rankings failed" } }, 503);
+      }
+      return jsonResponse(TRADING_PULSE_HOSTED_WIRE_SAMPLE);
+    });
+
+    const overview = await mgmt.tradingPulse.getLiveOnly();
+    expect(overview?.summary.operatorScope.status).toBe("verified");
+    expect(overview?.summary.operatorScope.personaCount).toBe(3);
+    expect(overview?.runtimeRows).toHaveLength(3);
+
+    await expect(mgmt.tradingPulse.rankingsLiveOnly()).rejects.toThrow();
+    await expect(mgmt.tradingPulse.rankings()).rejects.toThrow();
+
+    // Even when rankings endpoint returns 200 with empty/malformed data in live mode, it must not fall back to defaultPulseRankings()
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/trading-pulse/rankings")) {
+        return jsonResponse({ data: {} });
+      }
+      return jsonResponse({ data: {} });
+    });
+
+    const liveEmptyRankings = await mgmt.tradingPulse.rankings();
+    expect(liveEmptyRankings).toEqual([]);
+    expect(liveEmptyRankings).not.toEqual(defaultPulseRankings());
+
+    // And legacy overview without operator_scope marks operatorScope as unverified with null counts
+    const legacyOverview = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtime_count: 2,
+          by_status: { active: 2 },
+        },
+        runtime_rows: [
+          {
+            runtime_id: "rt-legacy-1",
+            strategy_id: "strategy-legacy-1",
+            deployment_stage: "live",
+            status: "active",
+            metrics: { pnl: 12.3 },
+          },
+        ],
+        baseline_comparisons: [
+          {
+            runtime_id: "rt-legacy-1",
+            strategy_id: "strategy-legacy-1",
+            deployment_stage: "live",
+            status: "ok",
+            metric_count: 1,
+            breached_metric_count: 0,
+            watch_metric_count: 0,
+            paper_baseline: { captured_at: "2026-11-01T00:00:00Z", metrics: { return_percent: 1.2 } },
+            observed_state: { observed_at: "2026-11-22T00:00:00Z", metrics: { return_percent: 1.1 } },
+            drift_groups: [
+              {
+                group_id: "perf",
+                label: "Performance",
+                metrics: [
+                  {
+                    metric_id: "return_percent",
+                    label: "Return",
+                    unit: "%",
+                    baseline_value: 1.2,
+                    observed_value: 1.1,
+                    delta: -0.1,
+                    status: "ok",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(legacyOverview?.summary.operatorScope).toMatchObject({
+      status: "unverified",
+      personaCount: null,
+      runtimeCount: null,
+    });
+    expect(legacyOverview?.summary.runtimeCount).toBe(2);
+    // Preserves StrategyPaperLiveTab compatibility
+    expect(legacyOverview?.baselineComparisons[0]).toMatchObject({
+      runtimeId: "rt-legacy-1",
+      strategyId: "strategy-legacy-1",
+      status: "ok",
+      metricCount: 1,
+    });
   });
 
   it("humanInbox.list returns no mock rows outside live mode", async () => {

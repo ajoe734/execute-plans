@@ -1,0 +1,75 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADING-PULSE-VISIBLE-UNITS-AND-EVENTS-20261122",
+  "title": "移除交易脈動預設畫面的內部成交量碼並收斂提醒",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADING-PULSE-VISIBLE-UNITS-AND-EVENTS-20261122",
+  "problem_register": {
+    "root_cause_class": "RC6",
+    "work_package": "WP6.1-WP6.4"
+  },
+  "prerequisites": [
+    {
+      "task_id": "FE-TRADING-PULSE-OPERATOR-PAGE-20261122",
+      "status": "done",
+      "merge_commit": "b5d91e038"
+    },
+    {
+      "task_id": "FE-TRADING-PULSE-PERSONA-RETURN-20261122",
+      "status": "done",
+      "merge_commit": "24fcc18f6"
+    }
+  ],
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-TRADING-PULSE-VISIBLE-UNITS-AND-EVENTS-20261122/evidence.json"
+  ],
+  "acceptance_verification": {
+    "acceptance_1_clean_fill_rate_and_quantity_units": {
+      "passed": true,
+      "summary": "TradingPulsePage renders each verified fill ratio once in human language in both zh-TW and en-US without printing a duplicate raw line ({num}/{den} {unitInfo.raw}). Explicit share/lot/contract units (SHARES/shares/share/股, lots/張, contracts/口) render with their verified localized unit; generic quantity basis tokens such as absolute_order_quantity (or omitted unit) on verified TWSE/TPEX stock symbols (e.g. 2330.TWSE, 0050.TWSE, 2317.TWSE, 6488.TPEX) render as shares/股 using symbol context; and truly unknown symbol/unit combinations render with a neutral localized quantity unit (zh-TW: 單位, en-US: units) instead of leaking raw machine strings. Verifiable 1/1 (100%) and 0/452 (0%) numerators/denominators are preserved, and unknown/unavailable/stale fill rates are never fabricated."
+    },
+    "acceptance_2_notable_events_filtering_and_persona_details_preservation": {
+      "passed": true,
+      "summary": "Only Personas with a verified available trading source, verified 100% fill rate (rate === 1), equal positive fill quantities (numerator === denominator > 0 and matching positive outcome quantities), positive fill count, no pre-broker rejection, no capital shortfall, and no actionable reason code (only null or reason_not_recorded) are excluded from Notable Trading Events (TradingPulseNotableEventsSection) and never rendered as routine green Reason-not-recorded alert cards. Overfills, quantity inconsistencies, unverified/unknown fill evidence with available outcomes, and all other existing event branches remain visible. Verified normal full-fill Personas (青禾 2330 1/1 and 衡岳 0050 1/1) remain in the Persona Trading Details table with their verified metrics, Persona detail links (preserving contextual return state), and latest Trade Journey links, showing noAbnormalEvents in the recent event cell. The historical 澄川 2317 pre-broker risk rejection (0/452 shares, insufficient_cash, submitted_to_broker=false) remains highlighted in Notable Trading Events and navigates to the exact scoped Trade Journey with return roundtrip. Additionally, the shortened monitoring-only notice is shown only when nonempty verified available trading-source evidence is present, all rows have verified available source_status, and normalized row health/degraded checks (including top-level rowHealthDegradedChecks) contain only paper_runtime_monitoring without asserting incomplete or uncomparable P&L is complete."
+    },
+    "acceptance_3_bilingual_regressions_and_ci_discipline": {
+      "passed": true,
+      "summary": "Added bilingual (zh-TW and en-US) regression tests covering the real hosted 1/1 and 0/452 absolute_order_quantity wire shape for verified TWSE/TPEX symbols, neutral units for unknown symbols/units, overfill and unknown-fill-evidence available outcome visibility, and verified trading-source plus normalized row health checks for the shortened monitoring notice while preserving all existing narrow-viewport, PersonaDetail header return, and Trade Journey roundtrip tests. No acceptance scripts, BFF code, deployment scripts, or trading logic were modified."
+    }
+  },
+  "verification_commands": [
+    {
+      "command": "./node_modules/.bin/vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/components/detail/OwnerFacts.test.tsx src/management/pages/PersonaDetail.test.ts",
+      "exit_code": 0,
+      "passed_files": 7,
+      "passed_tests": 168
+    },
+    {
+      "command": "node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed_tests": 77
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit && git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "routine_daily_growth_bytes": 0,
+    "notes": "Frontend UI rendering logic, i18n locale dictionary strings, and unit test coverage only; no recurring jobs, background emitters, or persistent writers added."
+  },
+  "residual_findings": [],
+  "handoff_to_e": {
+    "downstream_task_id": "TRADING-PULSE-HOSTED-ACCEPTANCE-20261122",
+    "delivery_state": "source_branch_ready_for_review_and_dev_merge"
+  }
+}

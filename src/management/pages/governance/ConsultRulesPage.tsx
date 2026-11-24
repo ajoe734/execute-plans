@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowRight, MessagesSquare, Plus, Trash2 } from "lucide-react";
 import { bffV1, managementConsoleReads } from "@/lib/bff-v1";
 import {
+  formatMeetingRosterRule,
   getMeetingCatalogue,
   type MeetingCatalogueData,
   type MeetingsRead,
@@ -317,7 +318,8 @@ export const ConsultRulesPage = () => {
                         Cadence: <code className="text-foreground">{mt.cadence ?? "—"}</code>
                       </div>
                       <div>
-                        Roster Rule: <code className="text-foreground">{mt.roster_rule ?? "—"}</code>
+                        Roster Rule:{" "}
+                        <code className="text-foreground">{formatMeetingRosterRule(mt.roster_rule)}</code>
                       </div>
                       {mt.budget ? (
                         <div className="font-mono">
