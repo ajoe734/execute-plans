@@ -812,6 +812,7 @@ export interface ResearchTaskRun {
   createdAt?: string;
   created_at?: string | null;
   parameters?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   inputRefs?: Record<string, unknown>;
   input_refs?: Record<string, unknown>;
   artifactRefs?: string[];
@@ -887,6 +888,11 @@ export interface ResearchTaskDisplaySummary {
   [key: string]: unknown;
 }
 
+export interface CollectorQueryPlan {
+  week?: string;
+  changes: Record<string, { before: string[]; after: string[] }>;
+}
+
 export interface ResearchTask extends ResearchExperiment {
   taskId: string;
   task_id?: string;
@@ -910,6 +916,7 @@ export interface ResearchTask extends ResearchExperiment {
   is_non_real?: boolean | null;
   name_is_fallback_id?: boolean | null;
   display_summary?: ResearchTaskDisplaySummary | string | null;
+  query_plan?: CollectorQueryPlan;
   constraints?: Record<string, unknown>;
   idempotencyKey?: string | null;
   idempotency_key?: string | null;

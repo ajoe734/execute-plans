@@ -828,7 +828,7 @@ describe("ObjectListPage", () => {
     expect(screen.getByTestId("location")).not.toHaveTextContent("/management/artifacts/undefined");
   });
 
-  it("renders GET /bff/research-tasks rows with name, status, latest run, run count, created by, and updated at; removes duplicate status, risk, metric, value, and owner columns; marks stub/manual runs as non-real; disables research create with workflow explanation in both locales; and navigates to /management/experiments/<task_id>", async () => {
+  it("renders a readable research list, marks test and manual records, and opens the canonical task detail", async () => {
     const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
     mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
 
@@ -947,11 +947,9 @@ describe("ObjectListPage", () => {
     const columnHeaders = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
     expect(columnHeaders).toEqual([
       "Name",
-      "Status",
       "Latest run",
-      "Run count",
-      "Created by",
       "Last updated",
+      "Overview",
     ]);
     expect(columnHeaders).not.toContain("State");
     expect(columnHeaders).not.toContain("Risk");
@@ -961,19 +959,16 @@ describe("ObjectListPage", () => {
 
     // Verify real vs stub/manual run rendering
     const realRow = screen.getByText("VectorBT Factor Validation").closest("tr");
-    expect(realRow).toHaveTextContent("rrun-20261023-002");
-    expect(realRow).toHaveTextContent("vectorbt / real");
-    expect(realRow).not.toHaveTextContent("Non-real execution");
+    expect(realRow).not.toHaveTextContent("rrun-20261023-002");
+    expect(realRow).not.toHaveTextContent("Test or manual record");
 
     const stubRow = screen.getByText("SIC Hypothesis Task").closest("tr");
-    expect(stubRow).toHaveTextContent("rrun-20261024-stub");
-    expect(stubRow).toHaveTextContent("stub / stub");
-    expect(stubRow).toHaveTextContent("Non-real execution (stub / stub)");
+    expect(stubRow).not.toHaveTextContent("rrun-20261024-stub");
+    expect(stubRow).toHaveTextContent("Test or manual record");
 
     const manualRow = screen.getByText("Manual Check Task").closest("tr");
-    expect(manualRow).toHaveTextContent("rrun-20261023-001");
-    expect(manualRow).toHaveTextContent("manual / manual");
-    expect(manualRow).toHaveTextContent("Non-real execution (manual / manual)");
+    expect(manualRow).not.toHaveTextContent("rrun-20261023-001");
+    expect(manualRow).toHaveTextContent("Test or manual record");
 
     // Verify research create button stays disabled with workflow reason and never mentions "no typed durable BFF owner"
     const createBtn = screen.getByRole("button", { name: /^create$/i });
