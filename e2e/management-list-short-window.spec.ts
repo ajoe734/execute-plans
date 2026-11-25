@@ -974,7 +974,9 @@ const RECORDED_SEVEN_CURRENT_PERSONAS: Array<Record<string, unknown>> = [
 ];
 
 function buildRecordedSevenCurrentPersonasCatalog(): Array<Record<string, unknown>> {
-  const nonCurrent = buildHostedPersonas().filter((r) => r.listScope !== "current");
+  const nonCurrent = buildHostedPersonas()
+    .filter((r) => r.listScope !== "current")
+    .map((r) => (r.listScope === "test" ? { ...r, owner: "pantheon-dev-paper-provisioner" } : r));
   return [...RECORDED_SEVEN_CURRENT_PERSONAS, ...nonCurrent];
 }
 
@@ -1049,6 +1051,8 @@ test.describe("FE-PERSONA-LIST-PLAIN-WORDS-20261125 recorded 7 current personas,
               text: (el.textContent || "").trim(),
               title: el.getAttribute("title"),
               full: el.getAttribute("data-full-owner"),
+              clientWidth: el.clientWidth,
+              scrollWidth: el.scrollWidth,
             })),
             symbolItems: symbolItems.map((el) => ({
               text: (el.textContent || "").trim(),
@@ -1117,12 +1121,33 @@ test.describe("FE-PERSONA-LIST-PLAIN-WORDS-20261125 recorded 7 current personas,
           expect(m.owners[3].title).toBe("pantheon-dev-operator-a");
           expect(m.owners[4].title).toBe("pantheon-dev-operator-b");
           expect(m.owners[5].title).toBe("operator-bff");
+          for (const owner of m.owners) {
+            expect(owner.scrollWidth, `persona owner ${owner.text} untruncated`).toBeLessThanOrEqual(owner.clientWidth);
+          }
+          await page.getByRole("button", { name: /^Test \(153\)$/ }).click();
+          const testOwnerMetric = await page.evaluate(() => {
+            const scroller = document.querySelector<HTMLElement>("[data-management-table-scrollbar='native']")!;
+            const el = scroller.querySelector<HTMLElement>('[data-testid="owner-cell"]')!;
+            return {
+              text: (el.textContent || "").trim(),
+              clientWidth: el.clientWidth,
+              scrollWidth: el.scrollWidth,
+              tableClientWidth: scroller.clientWidth,
+              tableScrollWidth: scroller.scrollWidth,
+            };
+          });
+          expect(testOwnerMetric.text).toBe("paper-provisioner");
+          expect(testOwnerMetric.scrollWidth).toBeLessThanOrEqual(testOwnerMetric.clientWidth);
+          expect(testOwnerMetric.tableScrollWidth).toBeLessThanOrEqual(testOwnerMetric.tableClientWidth + 1);
         }
 
         if (route.key === "artifacts") {
           expect(m.rowCount).toBe(5);
           expect(m.owners[0].text).toBe("paper-provisioner");
           expect(m.owners[0].title).toBe("pantheon-dev-paper-provisioner");
+          for (const owner of m.owners) {
+            expect(owner.scrollWidth, `artifact owner ${owner.text} untruncated`).toBeLessThanOrEqual(owner.clientWidth);
+          }
         }
 
         if (route.key === "strategies") {

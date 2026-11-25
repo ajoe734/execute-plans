@@ -134,6 +134,8 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
           ownerFullAttr: ownerCell.getAttribute("data-full-owner"),
           ownerTitle: ownerCell.getAttribute("title"),
           ownerCellHeight: oc.height,
+          ownerClientWidth: ownerCell.clientWidth,
+          ownerScrollWidth: ownerCell.scrollWidth,
           docOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         };
       }, OWNER);
@@ -146,6 +148,7 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
       expect(m.ownerText).toBe("paper-provisioner");
       expect(m.ownerFullAttr).toBe(OWNER);
       expect(m.ownerTitle).toBe(OWNER);
+      expect(m.ownerScrollWidth).toBeLessThanOrEqual(m.ownerClientWidth);
       expect(m.maxRowHeight).toBeLessThanOrEqual(72);
       // The table now fits both widths without horizontal scrolling (it only did at 1600 before).
       expect(m.lastRight).toBeLessThanOrEqual(m.viewportWidth);

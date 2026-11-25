@@ -15,16 +15,16 @@
     "Last updated"
   ],
   "colWidths": [
-    237,
-    86,
-    101,
-    84,
-    93,
-    114,
-    112,
-    113
+    239,
+    80,
+    92,
+    74,
+    91,
+    111,
+    142,
+    110
   ],
-  "nameWidth": 237,
+  "nameWidth": 239,
   "lastRight": 1219,
   "rowHeights": [
     70,
@@ -46,27 +46,37 @@
     {
       "text": "paper-provisioner",
       "title": "pantheon-dev-paper-provisioner",
-      "full": "pantheon-dev-paper-provisioner"
+      "full": "pantheon-dev-paper-provisioner",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "paper-provisioner",
       "title": "pantheon-dev-paper-provisioner",
-      "full": "pantheon-dev-paper-provisioner"
+      "full": "pantheon-dev-paper-provisioner",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "paper-provisioner",
       "title": "pantheon-dev-paper-provisioner",
-      "full": "pantheon-dev-paper-provisioner"
+      "full": "pantheon-dev-paper-provisioner",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "paper-provisioner",
       "title": "pantheon-dev-paper-provisioner",
-      "full": "pantheon-dev-paper-provisioner"
+      "full": "pantheon-dev-paper-provisioner",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "paper-provisioner",
       "title": "pantheon-dev-paper-provisioner",
-      "full": "pantheon-dev-paper-provisioner"
+      "full": "pantheon-dev-paper-provisioner",
+      "clientWidth": 126,
+      "scrollWidth": 126
     }
   ],
   "symbolItems": [],

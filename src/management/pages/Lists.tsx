@@ -949,10 +949,10 @@ export const PERSONA_COLUMN_MIN_WIDTHS = {
   state: 88,
   risk: 72,
   type: 92,
-  strategies: 112,
+  strategies: 104,
   winRate: 76,
-  owner: 96,
-  updated: 104,
+  owner: 142,
+  updated: 96,
 } as const;
 
 /** `null` / missing win rate is "no data", never 0%. */
@@ -996,7 +996,7 @@ function OwnerCell({ owner, noData }: { owner: unknown; noData: string }) {
   }
   return (
     <span
-      className="text-mono text-xs block max-w-[96px] truncate whitespace-nowrap"
+      className="text-mono text-xs block max-w-[144px] truncate whitespace-nowrap"
       title={resolved.full}
       data-full-owner={resolved.full}
       data-testid="owner-cell"
@@ -2186,13 +2186,13 @@ function artifactScopeFromSource(row: unknown): RegistryListScope | undefined {
 
 export const ARTIFACT_COLUMN_MIN_WIDTHS = {
   name: 230,
-  source: 84,
-  kind: 100,
-  version: 84,
-  state: 92,
-  hash: 104,
-  owner: 96,
-  updated: 104,
+  source: 76,
+  kind: 88,
+  version: 68,
+  state: 88,
+  hash: 96,
+  owner: 142,
+  updated: 96,
 } as const;
 
 function WordWithCode({ value, testId }: { value: { text: string; code: string } | undefined; testId: string }) {

@@ -1346,6 +1346,9 @@ describe("FE-PERSONA-LIST-PLAIN-WORDS-20261125 trading-first order, plain-word t
       expect(ownerCell).toHaveTextContent("paper-provisioner");
       expect(ownerCell).toHaveAttribute("title", "pantheon-dev-paper-provisioner");
       expect(ownerCell).toHaveAttribute("data-full-owner", "pantheon-dev-paper-provisioner");
+      expect(ownerCell).toHaveClass("max-w-[144px]");
+      expect(PERSONA_COLUMN_MIN_WIDTHS.owner).toBeGreaterThanOrEqual(140);
+      expect(ARTIFACT_COLUMN_MIN_WIDTHS.owner).toBeGreaterThanOrEqual(140);
       unmount();
 
       vi.spyOn(lists, "strategies").mockResolvedValue({

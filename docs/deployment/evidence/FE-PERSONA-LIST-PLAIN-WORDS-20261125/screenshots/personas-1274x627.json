@@ -19,10 +19,10 @@
     89,
     72,
     120,
-    112,
-    77,
-    103,
-    136
+    104,
+    76,
+    142,
+    105
   ],
   "nameWidth": 230,
   "lastRight": 1219,
@@ -100,37 +100,51 @@
     {
       "text": "admin-test",
       "title": "pantheon-dev-admin-test",
-      "full": "pantheon-dev-admin-test"
+      "full": "pantheon-dev-admin-test",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "admin-test",
       "title": "pantheon-dev-admin-test",
-      "full": "pantheon-dev-admin-test"
+      "full": "pantheon-dev-admin-test",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "admin-test",
       "title": "pantheon-dev-admin-test",
-      "full": "pantheon-dev-admin-test"
+      "full": "pantheon-dev-admin-test",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "operator-a",
       "title": "pantheon-dev-operator-a",
-      "full": "pantheon-dev-operator-a"
+      "full": "pantheon-dev-operator-a",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "operator-b",
       "title": "pantheon-dev-operator-b",
-      "full": "pantheon-dev-operator-b"
+      "full": "pantheon-dev-operator-b",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "operator-bff",
       "title": "operator-bff",
-      "full": "operator-bff"
+      "full": "operator-bff",
+      "clientWidth": 126,
+      "scrollWidth": 126
     },
     {
       "text": "operator-bff",
       "title": "operator-bff",
-      "full": "operator-bff"
+      "full": "operator-bff",
+      "clientWidth": 126,
+      "scrollWidth": 126
     }
   ],
   "symbolItems": [],
