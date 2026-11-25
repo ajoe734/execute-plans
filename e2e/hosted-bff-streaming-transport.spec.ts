@@ -13,6 +13,8 @@ import vm from "node:vm";
 import { build as esbuild } from "esbuild";
 // @ts-expect-error plain ESM recorded route baseline
 import { BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath } from "../scripts/lib/management-routes.mjs";
+// @ts-expect-error plain ESM readability helper
+import { readabilityMarkdown, readabilityResult, summarizeReadability } from "../scripts/lib/management-readability.mjs";
 import { expect, test, chromium, request, type Browser, type CDPSession } from "@playwright/test";
 // @ts-expect-error plain ESM script helper
 import { installPinnedBffBearer, pinnedTargetProblem } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
@@ -406,8 +408,16 @@ test("tenant selection stays consistent across finite and SSE reads", async () =
     const { context, page } = await open({ tenantId });
     await page.evaluate((u) => fetch(u, { headers: { "x-tenant-id": "stale" } }).then((r) => r.text()), `${bffOrigin}/finite`);
     await startSse(page, `${bffOrigin}/sse`);
-    for (const s of bffSeen) expect(s.tenant).toBe(expected);
-    expect(bffSeen.length).toBeGreaterThanOrEqual(2);
+    const nonPreflight = bffSeen.filter((s) => s.method !== "OPTIONS");
+    for (const s of bffSeen) {
+      if (s.method === "OPTIONS") {
+        expect(s.authorization).toBeUndefined();
+        expect(s.tenant).toBeUndefined();
+      } else {
+        expect(s.tenant).toBe(expected);
+      }
+    }
+    expect(nonPreflight.length).toBeGreaterThanOrEqual(2);
     await context.close();
   }
 });
@@ -1654,7 +1664,7 @@ test(`actual 95-route caller handles a new interception after drain through enti
   const newPage = context.newPage.bind(context);
   probeBrowser.newContext = async () => context;
   context.newPage = async () => page;
-  const fixtureProcess = { exitCode: 0, cwd: () => process.cwd() };
+  const fixtureProcess = { exitCode: 0, env: {}, cwd: () => process.cwd() };
   // The original caller performs Node reads after browser closure; this real
   // HTTPS client must likewise outlive the browser context.
   const api = await request.newContext({ ignoreHTTPSErrors: true });
@@ -1666,7 +1676,8 @@ main`, {
     installPinnedBffBearer: async () => transport,
     pinnedTargetProblem: (opts: object) => pinnedTargetProblem({ ...opts, env: env() }),
     FE_BASE: feOrigin, BFF_BASE: bffOrigin, BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath,
-    LOAD_GATE_ONLY: false, LOAD_GATE_MANIFEST: fixtureLoadGate, LOAD_BASELINE_DIR: dir,
+    LOAD_GATE_ONLY: false, READABILITY_ONLY: false, readabilityResult, summarizeReadability, readabilityMarkdown,
+    LOAD_GATE_MANIFEST: fixtureLoadGate, LOAD_BASELINE_DIR: dir,
     OUT_DIR: reportDir, SRC_SCAN_DIR: dir, STRICT_SOURCE_SCAN: true, CLICK_WRITE_CTAS: false,
     ROUTE_TIMEOUT_MS: 5000, SETTLE_TIMEOUT_MS: 4000, BEARER_TOKEN: TOKEN, TENANT_ID: "tenant-local",
     bearerAuthorization: (token: string) => `Bearer ${token}`, RETRYABLE_HTTP_STATUS: new Set(), sleep: () => Promise.resolve(),

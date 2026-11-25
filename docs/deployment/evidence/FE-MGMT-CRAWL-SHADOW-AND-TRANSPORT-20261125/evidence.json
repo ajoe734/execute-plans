@@ -3,13 +3,13 @@
   "task_id": "FE-MGMT-CRAWL-SHADOW-AND-TRANSPORT-20261125",
   "taskId": "FE-MGMT-CRAWL-SHADOW-AND-TRANSPORT-20261125",
   "owner": "Antigravity",
-  "reviewer": "Codex",
+  "reviewer": "Claude",
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-MGMT-CRAWL-SHADOW-AND-TRANSPORT-20261125",
   "base_commit": "291ac31495dd",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T01:35:30Z",
+  "timestamp": "2026-11-25T02:05:30Z",
   "problem_register_binding": {
     "root_cause_classes": ["RC4", "RC6"],
     "work_packages": ["WP6.3", "WP6.5"],
@@ -63,9 +63,14 @@
       "result": "4 test files passed, 96 tests passed (60/60 in accept-management-route-attribution.test.ts)"
     },
     {
-      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts -g \"CORS preflight|original route data check waits for auth/lazy/redirect and rejects unresolved data: ready|actual 95-route caller handles a new interception after drain through entity discovery and detail closure \\(after-drain BFF\\)\"",
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts -g \"tenant selection stays consistent across finite and SSE reads|CORS preflight|original route data check waits for auth/lazy/redirect and rejects unresolved data: ready|actual 95-route caller handles a new interception after drain through entity discovery and detail closure \\(wildcard predecessor\\)\"",
       "exit_code": 0,
-      "result": "4 passed (real Chromium HTTPS transport and full 100-baseline-route caller crawl)"
+      "result": "5 passed (tenant selection with OPTIONS preflight credential omission, CORS preflight lifecycle, route data check, and full 100-baseline-route caller crawl)"
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts --reporter=list",
+      "exit_code": 1,
+      "result": "76 passed, 10 pre-existing baseline failures confirmed 10/10 failing on base 291ac31495dd (actually 15 failing on base 291ac31495dd before our VM sandbox READABILITY_ONLY/BASELINE_ROUTES repair turned 5 of the 8 actual-caller tests green)"
     }
   ],
   "residual_findings": [
@@ -75,9 +80,9 @@
       "finding": "On FE Gate 45500113085, live entity discovery GET /bff/strategies timed out on the hosted BFF (status 0 after 4 attempts). Owned by Pantheon BFF / strategy registry latency track, not the frontend crawl script."
     },
     {
-      "scope": "repaired_in_scoped_test_harness",
+      "scope": "pre_existing_e2e_spec_baseline_failures",
       "class": "RC4",
-      "finding": "In e2e/hosted-bff-streaming-transport.spec.ts, the VM harness for accept-management-hosted-production.mjs main() previously lacked guards for READABILITY_ONLY / process.env?.GITHUB_STEP_SUMMARY and asserted a stale hardcoded baseline route count of 95 after BASELINE_ROUTES grew to 100; repaired in the scoped files."
+      "finding": "Confirmed 10/10 remaining failures in e2e/hosted-bff-streaming-transport.spec.ts also fail on base 291ac31495dd: (a) 6 Request-stage Fetch.requestPaused main-frame navigation tests (lines 713x2, 731, 966, 1148, 1164) and 3 actual-caller positive trace assertions (line 1547 after-drain BFF / pinned origin / canonical id schemas) poll for Network.loadingFailed (c.receipt.canceled / trace 'cancelled:true') after a main-frame navigation while a subrequest is paused at Request stage, which Chromium discards via Invalid InterceptionId without emitting Network.loadingFailed (while installPinnedBffBearer itself settles healthy); and (b) 1 historical git-show test ('exact aa17 probe-route-load-baseline buffers real HTTP200 SSE until context disposal or 30000ms') times out at 30000ms instead of matching context disposal. Additionally, on base 291ac31495dd all 8 actual-caller tests failed immediately with 'ReferenceError: READABILITY_ONLY is not defined' after commit 5ace365c2; supplying READABILITY_ONLY/summarizeReadability/readabilityMarkdown in the test's vm.runInNewContext sandbox and updating hardcoded 95 -> BASELINE_ROUTES.length restored 5/8 actual-caller cases to passing."
     }
   ]
 }

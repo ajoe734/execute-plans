@@ -786,7 +786,7 @@ async function main() {
   page.setDefaultTimeout(ROUTE_TIMEOUT_MS);
   page.setDefaultNavigationTimeout(ROUTE_TIMEOUT_MS);
 
-  if (typeof READABILITY_ONLY !== "undefined" && READABILITY_ONLY) {
+  if (READABILITY_ONLY) {
     const crawled = [];
     for (const route of BASELINE_ROUTES) {
       crawled.push((await crawlRoute(page, { path: route.path, kind: route.kind }, { source: "readability-only", transport })).readability);
@@ -878,7 +878,7 @@ async function main() {
   );
 
   // Advisory only (AGENTS.md Remediation Plan 2026-11-17): never a gate check.
-  const readabilitySummary = typeof summarizeReadability === "function" ? summarizeReadability(allResults.map((r) => r.readability)) : null;
+  const readabilitySummary = summarizeReadability(allResults.map((r) => r.readability));
 
   const gateChecks = [
     { label: "No route crashes, is blank, or fails to navigate.", status: crashRoutes.length === 0 ? "pass" : "fail", note: `count:${crashRoutes.length}` },
@@ -999,7 +999,7 @@ async function main() {
     ``,
     `## Readability (advisory, non-blocking)`,
     ``,
-    typeof readabilityMarkdown === "function" ? readabilityMarkdown(allResults.map((r) => r.readability), readabilitySummary) : "N/A",
+    readabilityMarkdown(allResults.map((r) => r.readability), readabilitySummary),
     ``,
     `## Seed-fallback-armed / mock-success claims`,
     ``,
@@ -1050,7 +1050,7 @@ async function main() {
   const mdPath = path.join(OUT_DIR, `management-hosted-acceptance-${stamp}.md`);
   fs.writeFileSync(mdPath, md, "utf8");
   console.log(md);
-  if (process.env?.GITHUB_STEP_SUMMARY && typeof readabilityMarkdown === "function") {
+  if (process.env.GITHUB_STEP_SUMMARY) {
     try {
       fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### Management readability (advisory)\n\n${readabilityMarkdown(allResults.map((r) => r.readability), readabilitySummary)}\n`);
     } catch { /* advisory */ }
