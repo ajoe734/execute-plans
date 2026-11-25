@@ -5933,6 +5933,12 @@ function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
          (isObject(data) ? asArray<T>(data.items) : null);
 }
 
+/** Adds the BFF `include_system=true` flag (view=history hides infrastructure/test entries without it). */
+function withIncludeSystem(path: string, includeSystem?: boolean): string {
+  if (!includeSystem) return path;
+  return path + (path.includes("?") ? "&" : "?") + "include_system=true";
+}
+
 export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unknown): EvolutionJournalList<T> | null {
   const arr = adaptArrayPassthrough<T>(raw);
   if (!arr) return null;
@@ -7657,7 +7663,11 @@ export const mgmt = {
     ): Promise<EvolutionJournalList<T>> =>
       mgmtRead(
         "mgmt.evolutionJournal.list",
-        { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal },
+        {
+          method: "GET",
+          path: withIncludeSystem(paths.mgmtEvolutionJournal(opts), opts?.includeSystem),
+          signal: opts?.signal,
+        },
         seedFn as () => EvolutionJournalList<T>,
         adaptEvolutionJournalList<T>,
       ),

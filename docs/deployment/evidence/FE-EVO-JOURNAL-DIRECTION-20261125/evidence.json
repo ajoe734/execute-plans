@@ -1,0 +1,37 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-EVO-JOURNAL-DIRECTION-20261125",
+  "title": "Evolution journal and direction pages say in plain words what changed and why nothing qualifies",
+  "owner": "Claude",
+  "reviewer": "Claude2",
+  "review_independence_exception": "Other model families are at terminal quota until 2026-11-27 10:03Z, so the reviewer is from the owner family (recorded per task brief).",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EVO-JOURNAL-DIRECTION-20261125",
+  "register_instance": "RC6",
+  "hosted_verification": "Not done here: no VM/SSH access. Functional evidence only; the operator acceptance task verifies hosted.",
+  "bff_contract_source": "ajoe734/pantheon PR 7832 (BFF-EVO-JOURNAL-POOL-VERSIONS-20261125) BFF_API_CONTRACT.md, merge commit fed055997355c1067bb6b6eb757dd3564bbba7bc",
+  "acceptance_coverage": {
+    "AC1": "EvolutionJournalPage (_core.tsx) renders entry_type=pool_version rows: title '<persona name> · 策略池第 N 版' / '<persona> · strategy pool vN', applied/refused badge, members before/after, computed added/removed/changed lines, recorded reasons; raw id, machine title and summary are only in a collapsed technical details block (pool rows) or a muted secondary line (decision rows); decision rows get a plain title built from entry_type/action/target. include_system toggle (URL include_system=true, sent to the BFF) shows summary.hidden_system_counts (or decision_subject_class_counts when shown).",
+    "AC2": "Header: auto proposals total with threshold + incident_followup + incident_severity + infrastructure + other badges (BFF guarantees they add up; test asserts the sum equals the total); postmortem drafts are a separate line 'drafts, not proposals, not part of the total'; the separate Mutation reviews number is removed; pool version count shows applied + refused = total.",
+    "AC3": "EvolutionList (Lists.tsx) shows MemberBaselinesSection from data.member_baselines grouped by persona with status and a plain sentence per known owner reason code (all codes of services.evolution.approved_baselines plus registry_entry_unreadable / registry_read_unavailable); an unknown code gives a generic sentence plus 'Code: <raw>'; evaluated_at is shown in the viewer time zone with the zone name; criterion codes are secondary text.",
+    "AC4": "Programs recorded by the BFF/owner as test records (subject_class, record_class, classification, data_scope, origin_class, is_test, or origin in test/acceptance/fixture/synthetic/seed/sandbox) are behind a 'Show test records (N)' toggle; no name matching exists; a row with no classification stays visible (tested with the DEV ACCEPTANCE ONLY program shape). LIMITATION: the programs read in the BFF contract carries no classification field today, so the hosted DEV ACCEPTANCE ONLY draft (origin manual) will stay visible until the BFF records one; the page does not guess.",
+    "AC5": "Deep links decision/mutation_review/persona unchanged and tested (pool-version persona link and decision link); denied (401/403) vs unavailable (strategy_pools / 5xx) vs empty are distinct on both pages; locale parity: zh-TW and en-US keys added together and i18nParity test passes; focused tests plus real Chromium screenshots against a fixture BFF are in this directory.",
+    "AC6": "No test deleted or weakened; changed assertions are listed below with reasons."
+  },
+  "changed_assertions": [
+    {"file": "src/management/pages/oversight/EvolutionJournalPage.test.tsx", "change": "Four header/empty text expectations now use the new wording (threshold/infrastructure/other parts, no postmortem draft inside the proposals total); two expectations of the removed Mutation reviews number now assert it is absent.", "reason": "AC2 explicitly removes the repeated mutation review number and moves postmortem drafts out of the proposal total (BFF contract: postmortem_draft is not part of total). Fixture numbers unchanged."},
+    {"file": "src/management/pages/EvolutionProgramsQualification.test.tsx and src/management/pages/ObjectListPage.test.tsx", "change": "qualification-evaluated-at expects the viewer-local formatted time instead of the raw ISO string.", "reason": "AC3 requires the latest evaluation time in the viewer time zone."},
+    {"file": "src/lib/bff-v1/__tests__/management.test.ts", "change": "autoProposalCounts toEqual includes threshold/other/infrastructure = 0.", "reason": "The adapter now carries the BFF's new count parts; absent fields default to 0; all earlier fields unchanged."},
+    {"file": "src/management/pages/ResearchList.test.tsx and src/management/components/persona/PersonaStrategyPoolPanel.test.tsx", "change": "角色任務→Persona 任務, 角色頁面→Persona 頁面, 已嘗試：momentum→已嘗試：動能 (ResearchList only).", "reason": "Residual from FE-RESEARCH-DEMANDS-20261125 named in the task: Persona wording and no raw family code; meaning unchanged."}
+  ],
+  "contract_note": "Test files ResearchList.test.tsx, PersonaStrategyPoolPanel.test.tsx, ObjectListPage.test.tsx and src/lib/bff-v1/__tests__/management.test.ts are outside the declared artifact list but contained assertions that the in-contract locale/Lists/adapter changes necessarily change; they need an artifact contract addition.",
+  "i18n_note": "mgmt.evolution.summaryMutationReviews key is kept (marked no longer shown) because the existing i18nParity test requires it.",
+  "verification": {
+    "typecheck": "npm run typecheck: pass",
+    "vitest_focused": "23 files, 451 tests passed (oversight/, EvolutionProgramsQualification, ResearchList, ObjectListPage, PersonaStrategyPoolPanel, bff-v1 management, i18nParity)",
+    "vitest_full": "292 files: 288 passed; failures fixed afterwards (ObjectListPage, management.test, i18nParity). src/test/persona-strategy-hosted-readonly.test.ts Trading Pulse case fails identically on the clean base (pre-existing, unrelated).",
+    "browser": "Real Chromium via Playwright against a route-mocked fixture BFF; capture script saved as capture-screenshots.spec.ts.txt (copy to e2e/ to rerun). Screenshots: journal-1274x900.png, journal-system-shown-1274x900.png, journal-390w.png, direction-1274x900.png, direction-test-records-shown-1274x900.png (zh-TW)."
+  },
+  "bff_reads": "No new BFF route or writer. The FE adds only the include_system query parameter to the existing evolution-journal read."
+}
