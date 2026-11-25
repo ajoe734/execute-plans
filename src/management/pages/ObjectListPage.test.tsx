@@ -953,8 +953,9 @@ describe("ObjectListPage", () => {
     );
 
     expect(await screen.findByText("VectorBT Factor Validation")).toBeInTheDocument();
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/research-tasks");
+    const researchUrls = fetchSpy.mock.calls.map((call) => String(call[0]));
+    expect(researchUrls.filter((u) => u.includes("/bff/research-tasks"))).toHaveLength(1);
+    expect(researchUrls.filter((u) => u.includes("/api/v1/research/tickets"))).toHaveLength(1);
 
     // Verify exact table column headers and removal of duplicate status, risk, metric, value, and owner columns
     const columnHeaders = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
