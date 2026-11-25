@@ -343,9 +343,7 @@ export async function createPersona(
     raw && typeof raw === "object" && "data" in raw
       ? (raw as { data?: PaperPersonaBundle; meta?: unknown })
       : undefined;
-  const bundle = normalizePersonaDetail(
-    unwrapData<PaperPersonaBundle>(raw),
-  ) as PaperPersonaBundle | undefined;
+  const bundle = normalizePersonaDetail(unwrapData<PaperPersonaBundle>(raw));
   const failedStep =
     resolvePersonaReportedFailedStep(bundle, rawEnvelope?.meta) ?? "bundle_verification";
   if (!bundle || !isCompletePaperPersonaBundle(bundle, rawEnvelope?.meta)) {
@@ -641,7 +639,9 @@ export function normalizePersonaRiskPolicyChange(raw: unknown): PersonaRiskPolic
   };
 }
 
-function normalizePersonaDetail(persona: Persona | undefined): Persona | undefined {
+function normalizePersonaDetail<T extends Persona | PaperPersonaBundle>(
+  persona: T | undefined,
+): T | undefined {
   if (!persona || typeof persona !== "object") return persona;
   const rec = persona as unknown as Record<string, unknown>;
   const rawChange = persona.riskPolicyChange;

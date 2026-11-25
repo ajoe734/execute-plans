@@ -7,7 +7,7 @@
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-PERSONA-ONBOARDING-PAPER-OWNER-20261125",
-  "base_commit": "535556719a11b7cddbc96a792520c2edc8f84f5d",
+  "base_commit": "1f6e3044ae4cd9179bef5372e65b0fca0d753cc8",
   "scoped_artifacts": [
     "src/management/pages/PersonaOnboarding.tsx",
     "src/management/pages/PersonaOnboarding.test.ts",
@@ -51,7 +51,7 @@
       "exit_code": 0
     },
     {
-      "command": "./node_modules/.bin/tsc --noEmit",
+      "command": "npm run typecheck:app && npm run typecheck:agora",
       "exit_code": 0
     },
     {
