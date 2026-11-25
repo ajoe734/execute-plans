@@ -1360,6 +1360,9 @@ test.describe("F07 entity registry", () => {
   }) => {
     const failures = collectPageFailures(page);
     const secondaryPaths = new Set<string>();
+    const allBffRequests: string[] = [];
+    const secondaryBeforePrimaryAnswered: string[] = [];
+    let primaryStrategyAnswered = false;
     const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
 
     await installQuietEventSource(page);
@@ -1372,6 +1375,10 @@ test.describe("F07 entity registry", () => {
       if (request.method() === "OPTIONS") {
         await route.fulfill({ status: 204, headers: corsHeaders(route) });
         return;
+      }
+
+      if (path.startsWith("/bff/")) {
+        allBffRequests.push(`${request.method()} ${path}${url.search}`);
       }
 
       if (path === "/bff/events/stream") {
@@ -1411,6 +1418,14 @@ test.describe("F07 entity registry", () => {
         return;
       }
 
+      if (path === "/bff/management/shell-summary") {
+        await fulfillJson(route, {
+          data: {},
+          meta: { snapshot_at: SNAPSHOT_AT, surfaces: { shell_summary: { status: "ok", source: "fe-int-gate-b06" } } },
+        });
+        return;
+      }
+
       if (path === `/bff/strategies/${RECORDED_A81B_STRATEGY_ID}` && request.method() === "GET") {
         await fulfillJson(route, {
           data: RECORDED_A81B_STRATEGY,
@@ -1421,10 +1436,14 @@ test.describe("F07 entity registry", () => {
             },
           },
         });
+        primaryStrategyAnswered = true;
         return;
       }
 
       if (path.startsWith("/bff/")) {
+        if (!primaryStrategyAnswered) {
+          secondaryBeforePrimaryAnswered.push(path);
+        }
         secondaryPaths.add(path);
         await new Promise<void>((resolve) => {
           const timer = setTimeout(() => {
@@ -1469,7 +1488,12 @@ test.describe("F07 entity registry", () => {
         "data-section-status",
         "loading",
       );
-      expect(secondaryPaths.size).toBeGreaterThan(0);
+      await expect.poll(() => secondaryPaths.size).toBe(1);
+      expect(secondaryBeforePrimaryAnswered).toEqual([]);
+      expect(Array.from(secondaryPaths)).toEqual(["/bff/agora/journal"]);
+      expect(allBffRequests.some((req) => req.includes("/bff/jobs"))).toBe(false);
+      expect(allBffRequests.some((req) => req.includes("/bff/artifacts"))).toBe(false);
+      expect(allBffRequests.some((req) => req.includes("/bff/management/lineage"))).toBe(false);
       expect(failures).toEqual([]);
     } finally {
       for (const timer of pendingTimers) {
