@@ -24,6 +24,145 @@ export type {
   AlphaFactoryPageInfo,
 } from "./dto";
 
+/**
+ * FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125: the board reads the real discovery pipeline
+ * (BFF-ALPHA-FACTORY-PIPELINE-TRUTH-20261125). Open research demands, hypothesis cards and
+ * template searches are pipeline items, not admissions; completed admissions without a
+ * recorded gate pass arrive in `data.document_checked`.
+ */
+export type AlphaFactoryPipelineKind = "research_demand" | "hypothesis_card" | "template_search";
+
+export interface AlphaFactoryPipelineItem {
+  id: string;
+  kind: AlphaFactoryPipelineKind;
+  lane: "discovered" | "scaffolded";
+  demand_id: string | null;
+  persona_id: string | null;
+  display_name: string | null;
+  seed_id: string | null;
+  source_id: string | null;
+  claim: string | null;
+  short_measure: string | null;
+  missing_datasets: string[];
+  tried_families: string[];
+  since: string | null;
+  status: string | null;
+  latest_reason_code: string | null;
+  latest_reason: string | null;
+  attempt_count: number | null;
+  latest_run_id: string | null;
+  latest_at: string | null;
+  outcome: string | null;
+}
+
+/** Admission card plus the owner facts the pipeline-truth BFF adds. */
+export interface AlphaFactoryAdmissionCard extends AlphaFactoryCard {
+  /** Typed reason code of a gate attempt (from `last_error`). */
+  reason_code?: string | null;
+  /** Why a completed admission is only a document check. */
+  document_check_reason?: string | null;
+  /** True only when the owner recorded a passing replication gate. */
+  gate_passed?: boolean;
+}
+
+export const ALPHA_FACTORY_COUNT_KEYS = [
+  "collected_text_records",
+  "dropped_irrelevant",
+  "hypothesis_cards",
+  "templates_evaluated",
+  "templates_registered",
+  "searches",
+  "passes",
+] as const;
+export type AlphaFactoryCountKey = (typeof ALPHA_FACTORY_COUNT_KEYS)[number];
+
+/** A stage count: a value only when its owner answered; otherwise unavailable with its reason, never 0. */
+export type AlphaFactoryCount =
+  | { status: "ok"; value: number; reason: null }
+  | { status: "unavailable"; value: null; reason: string };
+
+export type AlphaFactoryCounts = Record<AlphaFactoryCountKey, AlphaFactoryCount>;
+
+export interface AlphaFactoryPipelineData extends AlphaFactoryData {
+  pipeline: {
+    discovered: AlphaFactoryPipelineItem[];
+    scaffolded: AlphaFactoryPipelineItem[];
+  };
+  document_checked: AlphaFactoryAdmissionCard[];
+  counts: AlphaFactoryCounts;
+}
+
+export interface AlphaFactoryPipelineEnvelope extends AlphaFactoryEnvelope {
+  data: AlphaFactoryPipelineData;
+}
+
+const PIPELINE_KINDS = new Set<string>(["research_demand", "hypothesis_card", "template_search"]);
+
+function pipelineKindOf(record: UnknownRecord | null | undefined): AlphaFactoryPipelineKind | null {
+  const kind = cleanString(record?.kind)?.toLowerCase();
+  return kind && PIPELINE_KINDS.has(kind) ? (kind as AlphaFactoryPipelineKind) : null;
+}
+
+export function normalizeAlphaFactoryPipelineItem(raw: unknown): AlphaFactoryPipelineItem | undefined {
+  const record = asRecord(raw);
+  const kind = pipelineKindOf(record);
+  if (!record || !kind) return undefined;
+  const demandId = cleanString(record.demand_id ?? record.demandId);
+  const seedId = cleanString(record.seed_id ?? record.seedId);
+  const id = cleanString(record.id) ?? demandId ?? seedId;
+  if (!id) return undefined;
+  const lacking = asRecord(record.lacking) ?? {};
+  const latest = asRecord(record.latest_outcome ?? record.latestOutcome) ?? {};
+  const strings = (value: unknown): string[] => nullableStringArray(value) ?? [];
+  const isSearch = kind === "template_search";
+  return {
+    id,
+    kind,
+    lane: isSearch ? "scaffolded" : "discovered",
+    demand_id: demandId,
+    persona_id: cleanString(record.persona_id ?? record.personaId),
+    display_name: cleanString(record.display_name ?? record.displayName),
+    seed_id: seedId,
+    source_id: cleanString(record.source_id ?? record.sourceId),
+    claim: cleanString(record.claim),
+    short_measure: cleanString(lacking.short_measure ?? record.short_measure),
+    missing_datasets: strings(lacking.missing_datasets ?? record.missing_datasets),
+    tried_families: strings(lacking.tried_families ?? record.tried_families),
+    since: cleanString(record.since ?? record.created_at),
+    status: cleanString(record.status ?? latest.status),
+    latest_reason_code: isSearch
+      ? cleanString(record.reason_code)
+      : cleanString(latest.reason_code),
+    latest_reason: isSearch ? cleanString(record.reason) : cleanString(latest.reason),
+    attempt_count: nullableInt(record.attempt_count ?? record.attemptCount),
+    latest_run_id: cleanString(record.latest_run_id ?? record.latestRunId),
+    latest_at: cleanString(record.latest_at ?? record.latestAt),
+    outcome: cleanString(record.outcome),
+  };
+}
+
+function normalizeCount(raw: unknown): AlphaFactoryCount {
+  const record = asRecord(raw);
+  if (!record) return { status: "unavailable", value: null, reason: "not_reported" };
+  const status = cleanString(record.status)?.toLowerCase();
+  const value = record.value;
+  if (status === "ok" && typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return { status: "ok", value: Math.trunc(value), reason: null };
+  }
+  return {
+    status: "unavailable",
+    value: null,
+    reason: cleanString(record.reason) ?? (status === "ok" ? "value_not_reported" : "owner_read_failed"),
+  };
+}
+
+export function normalizeAlphaFactoryCounts(raw: unknown): AlphaFactoryCounts {
+  const record = asRecord(raw) ?? {};
+  return Object.fromEntries(
+    ALPHA_FACTORY_COUNT_KEYS.map((key) => [key, normalizeCount(record[key])]),
+  ) as AlphaFactoryCounts;
+}
+
 export interface AlphaFactoryQuery {
   lane?: AlphaFactoryLaneId | string;
   page?: number;
@@ -106,9 +245,9 @@ function normalizeOptionalRisk(record: UnknownRecord): { hasRisk: boolean; risk:
 export function normalizeAlphaFactoryCard(
   raw: unknown,
   defaultLane: AlphaFactoryLaneId = "scaffolded",
-): AlphaFactoryCard | undefined {
+): AlphaFactoryAdmissionCard | undefined {
   const record = asRecord(raw);
-  if (!record) return undefined;
+  if (!record || pipelineKindOf(record)) return undefined;
 
   const admissionId = cleanString(record.admission_id ?? record.admissionId);
   const strategySpecId = cleanString(record.strategy_spec_id ?? record.strategySpecId);
@@ -124,7 +263,7 @@ export function normalizeAlphaFactoryCard(
   const { hasSharpe, sharpe } = normalizeOptionalSharpe(record);
   const { hasRisk, risk } = normalizeOptionalRisk(record);
 
-  const card: AlphaFactoryCard = {
+  const card: AlphaFactoryAdmissionCard = {
     id,
     admission_id: admissionId,
     tenant_id: cleanString(record.tenant_id ?? record.tenantId),
@@ -189,6 +328,13 @@ export function normalizeAlphaFactoryCard(
   }
   if (Object.keys(discovery).length > 0) card.discovery = discovery;
 
+  const reasonCode = cleanString(record.reason_code ?? record.reasonCode);
+  if (reasonCode) card.reason_code = reasonCode;
+  const documentCheckReason = cleanString(record.document_check_reason ?? record.documentCheckReason);
+  if (documentCheckReason) card.document_check_reason = documentCheckReason;
+  const gate = asRecord(record.gate);
+  if (gate?.passed === true) card.gate_passed = true;
+
   if (hasSharpe) {
     card.sharpe = sharpe;
   }
@@ -199,7 +345,7 @@ export function normalizeAlphaFactoryCard(
   return card;
 }
 
-export const MOCK_REPLICATED: readonly AlphaFactoryCard[] = [
+export const MOCK_DOCUMENT_CHECKED: readonly AlphaFactoryAdmissionCard[] = [
   {
     id: "adm-replicated-2330",
     admission_id: "adm-replicated-2330",
@@ -238,6 +384,7 @@ export const MOCK_REPLICATED: readonly AlphaFactoryCard[] = [
     last_replayed_at: "2026-10-16T02:54:42Z",
     revalidation_count: 1,
     strategy_state: "approved",
+    document_check_reason: "no_passing_gate_result",
   },
   {
     id: "adm-replicated-spy-anchor",
@@ -274,6 +421,7 @@ export const MOCK_REPLICATED: readonly AlphaFactoryCard[] = [
     last_replayed_at: null,
     revalidation_count: 1,
     strategy_state: "approved",
+    document_check_reason: "simulation_or_raw_market_seed",
   },
   {
     id: "adm-replicated-h12-01a11",
@@ -313,6 +461,7 @@ export const MOCK_REPLICATED: readonly AlphaFactoryCard[] = [
     last_replayed_at: "2026-10-24T02:28:22Z",
     revalidation_count: 1,
     strategy_state: "retired",
+    document_check_reason: "retired",
   },
   {
     id: "adm-replicated-h12-claude",
@@ -347,10 +496,11 @@ export const MOCK_REPLICATED: readonly AlphaFactoryCard[] = [
     last_replayed_at: null,
     revalidation_count: 1,
     strategy_state: "retired",
+    document_check_reason: "retired",
   },
 ];
 
-export const MOCK_SCAFFOLDED: readonly AlphaFactoryCard[] = [
+export const MOCK_SCAFFOLDED: readonly AlphaFactoryAdmissionCard[] = [
   {
     id: "adm-scaffolded-2317",
     admission_id: "adm-scaffolded-2317",
@@ -380,6 +530,7 @@ export const MOCK_SCAFFOLDED: readonly AlphaFactoryCard[] = [
     authority_run_ids: [],
     last_revalidation_at: null,
     last_error: "backtest window incomplete",
+    reason_code: "backtest_window_incomplete",
     replay_count: 0,
     last_replayed_at: null,
     revalidation_count: 0,
@@ -421,65 +572,109 @@ export const MOCK_SCAFFOLDED: readonly AlphaFactoryCard[] = [
   },
 ];
 
+/** No candidate has a recorded gate pass on hosted (2026-11-25); the mock says the same. */
+export const MOCK_REPLICATED: readonly AlphaFactoryAdmissionCard[] = [];
+
 export const MOCK_DISCOVERED: readonly AlphaFactoryCard[] = [];
 
-export const MOCK_ALPHA_FACTORY_ENVELOPE: AlphaFactoryEnvelope = {
+export const MOCK_PIPELINE_DISCOVERED: readonly Record<string, unknown>[] = [
+  {
+    id: "rd-mock-momentum-breadth",
+    lane: "discovered",
+    kind: "research_demand",
+    demand_id: "rd-mock-momentum-breadth",
+    persona_id: "persona-mock-momentum",
+    display_name: "Momentum Scout",
+    lacking: {
+      short_measure: "effective_bets",
+      missing_datasets: ["tw_margin_daily"],
+      tried_families: ["time_series"],
+    },
+    since: "2026-11-20T02:00:00Z",
+    status: "open",
+    latest_outcome: {
+      reason_code: "mandate_universe_missing",
+      reason: "template_search_unavailable:ValueError:mandate_universe_missing",
+    },
+  },
+  {
+    id: "rd-mock-value-idle",
+    lane: "discovered",
+    kind: "research_demand",
+    demand_id: "rd-mock-value-idle",
+    persona_id: "persona-mock-value",
+    display_name: null,
+    lacking: { short_measure: "idle_day_share", missing_datasets: [], tried_families: [] },
+    since: "2026-11-22T05:30:00Z",
+    status: "open",
+    latest_outcome: { reason_code: null, reason: null },
+  },
+];
+
+export const MOCK_PIPELINE_SEARCHES: readonly Record<string, unknown>[] = [
+  {
+    id: "template-search:rd-mock-momentum-breadth",
+    lane: "scaffolded",
+    kind: "template_search",
+    demand_id: "rd-mock-momentum-breadth",
+    persona_id: "persona-mock-momentum",
+    display_name: "Momentum Scout",
+    attempt_count: 3,
+    latest_run_id: "rrun-mock-20261124-002",
+    latest_at: "2026-11-24T10:03:00Z",
+    outcome: "failed",
+    reason_code: "mandate_universe_missing",
+    reason: "template_search_unavailable:ValueError:mandate_universe_missing",
+  },
+];
+
+export const MOCK_ALPHA_FACTORY_COUNTS = {
+  collected_text_records: { value: null, status: "unavailable", reason: "no_bounded_owner_read" },
+  dropped_irrelevant: { value: null, status: "unavailable", reason: "no_bounded_owner_read" },
+  hypothesis_cards: { value: null, status: "unavailable", reason: "no_bounded_owner_read" },
+  templates_registered: { value: 182, status: "ok" },
+  templates_evaluated: { value: 0, status: "ok" },
+  searches: { value: 3, status: "ok" },
+  passes: { value: 0, status: "ok" },
+} as const;
+
+const MOCK_SCAFFOLDED_ITEMS: readonly unknown[] = [...MOCK_PIPELINE_SEARCHES, ...MOCK_SCAFFOLDED];
+
+export const MOCK_ALPHA_FACTORY_ENVELOPE = {
   data: {
     id: "alpha-factory",
-    snapshotAt: "2026-11-04T00:00:00Z",
-    snapshot_at: "2026-11-04T00:00:00Z",
-    reason: "no_candidate_source",
-    discovered_reason: "no_candidate_source",
+    snapshotAt: "2026-11-25T00:00:00Z",
+    snapshot_at: "2026-11-25T00:00:00Z",
     lanes: [
-      {
-        id: "discovered",
-        label: "Discovered",
-        reason: "no_candidate_source",
-        items: [...MOCK_DISCOVERED],
-      },
-      {
-        id: "scaffolded",
-        label: "Scaffolded",
-        items: [...MOCK_SCAFFOLDED],
-      },
-      {
-        id: "replicated",
-        label: "Replicated",
-        items: [...MOCK_REPLICATED],
-      },
+      { id: "discovered", label: "Discovered", items: [...MOCK_PIPELINE_DISCOVERED] },
+      { id: "scaffolded", label: "Scaffolded", items: [...MOCK_SCAFFOLDED_ITEMS] },
+      { id: "replicated", label: "Replicated", items: [...MOCK_REPLICATED] },
     ],
-    discovered: [...MOCK_DISCOVERED],
-    scaffolded: [...MOCK_SCAFFOLDED],
+    discovered: [...MOCK_PIPELINE_DISCOVERED],
+    scaffolded: [...MOCK_SCAFFOLDED_ITEMS],
     replicated: [...MOCK_REPLICATED],
-    items: [...MOCK_REPLICATED, ...MOCK_SCAFFOLDED],
+    document_checked: [...MOCK_DOCUMENT_CHECKED],
+    counts: MOCK_ALPHA_FACTORY_COUNTS,
+    items: [...MOCK_PIPELINE_DISCOVERED, ...MOCK_SCAFFOLDED_ITEMS],
   },
-  items: [...MOCK_REPLICATED, ...MOCK_SCAFFOLDED],
+  items: [...MOCK_PIPELINE_DISCOVERED, ...MOCK_SCAFFOLDED_ITEMS],
   page_info: {
     page: 1,
     page_size: 20,
-    total: MOCK_REPLICATED.length + MOCK_SCAFFOLDED.length,
+    total: MOCK_PIPELINE_DISCOVERED.length + MOCK_SCAFFOLDED_ITEMS.length,
     next_page_token: null,
   },
   meta: {
-    snapshot_at: "2026-11-04T00:00:00Z",
+    snapshot_at: "2026-11-25T00:00:00Z",
     surfaces: {
-      alpha_factory: {
-        status: "ok",
-        source: "mock_seed",
-      },
-      alpha_factory_strategy_state: {
-        status: "ok",
-        source: "mock_seed",
-      },
+      alpha_factory: { status: "ok", source: "mock_seed" },
+      alpha_factory_strategy_state: { status: "ok", source: "mock_seed" },
+      alpha_factory_demands: { status: "ok", source: "mock_seed" },
+      alpha_factory_runs: { status: "ok", source: "mock_seed" },
     },
-    filters: {
-      lane: null,
-    },
-    discovered: {
-      reason: "no_candidate_source",
-    },
+    filters: { lane: null },
   },
-};
+} as const;
 
 function isGenericRegistryMockFallback(raw: unknown): boolean {
   if (detectMode() !== "mock") return false;
@@ -510,7 +705,28 @@ function normalizeCardsForLane(
     .filter((card): card is AlphaFactoryCard => Boolean(card) && card.lane === lane);
 }
 
-export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryEnvelope {
+function rawLaneList(
+  data: UnknownRecord,
+  laneRec: UnknownRecord | undefined,
+  key: AlphaFactoryLaneId,
+): unknown[] | null {
+  if (Array.isArray(data[key])) return data[key] as unknown[];
+  if (Array.isArray(laneRec?.items)) return laneRec.items as unknown[];
+  return null;
+}
+
+function normalizePipelineItems(
+  rawList: unknown[] | null,
+  flatRawItems: unknown[],
+  lane: "discovered" | "scaffolded",
+): AlphaFactoryPipelineItem[] {
+  const source = rawList ?? flatRawItems;
+  return source
+    .map((item) => normalizeAlphaFactoryPipelineItem(item))
+    .filter((item): item is AlphaFactoryPipelineItem => Boolean(item) && item.lane === lane);
+}
+
+export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryPipelineEnvelope {
   if (isGenericRegistryMockFallback(raw)) {
     return normalizeAlphaFactoryEnvelope(MOCK_ALPHA_FACTORY_ENVELOPE);
   }
@@ -551,7 +767,8 @@ export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryEnvelop
   const flatNormalized = flatRawItems
     .map((item) => {
       const rec = asRecord(item);
-      if (!rec || !cleanString(rec.lane)) return undefined;
+      const laneName = cleanString(rec?.lane)?.toLowerCase();
+      if (!rec || !laneName || !VALID_LANES.has(laneName as AlphaFactoryLaneId)) return undefined;
       return normalizeAlphaFactoryCard(rec);
     })
     .filter((card): card is AlphaFactoryCard => Boolean(card));
@@ -573,6 +790,25 @@ export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryEnvelop
     : Array.isArray(replicatedLaneRec?.items)
       ? normalizeCardsForLane(replicatedLaneRec.items, "replicated")
       : flatNormalized.filter((card) => card.lane === "replicated");
+
+  const pipelineDiscovered = normalizePipelineItems(
+    rawLaneList(data, discoveredLaneRec, "discovered"),
+    flatRawItems,
+    "discovered",
+  );
+  const pipelineScaffolded = normalizePipelineItems(
+    rawLaneList(data, scaffoldedLaneRec, "scaffolded"),
+    flatRawItems,
+    "scaffolded",
+  );
+  const rawDocumentChecked = Array.isArray(data.document_checked)
+    ? data.document_checked
+    : Array.isArray(data.documentChecked)
+      ? data.documentChecked
+      : [];
+  const documentChecked = rawDocumentChecked
+    .map((item) => normalizeAlphaFactoryCard(item, "replicated"))
+    .filter((card): card is AlphaFactoryAdmissionCard => Boolean(card));
 
   const discoveredMeta = asRecord(meta.discovered);
   const discoveredReason =
@@ -657,6 +893,12 @@ export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryEnvelop
       replicated,
       items: combinedItems,
       ...(Array.isArray(data.templates) ? { templates: data.templates } : {}),
+      pipeline: {
+        discovered: pipelineDiscovered,
+        scaffolded: pipelineScaffolded,
+      },
+      document_checked: documentChecked,
+      counts: normalizeAlphaFactoryCounts(data.counts),
     },
     items: combinedItems,
     page_info: {
@@ -679,7 +921,7 @@ export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryEnvelop
   };
 }
 
-function buildMockEnvelopeForQuery(query?: AlphaFactoryQuery): AlphaFactoryEnvelope {
+function buildMockEnvelopeForQuery(query?: AlphaFactoryQuery): AlphaFactoryPipelineEnvelope {
   const base = normalizeAlphaFactoryEnvelope(MOCK_ALPHA_FACTORY_ENVELOPE);
   const laneFilter = cleanString(query?.lane)?.toLowerCase() as AlphaFactoryLaneId | undefined;
   if (!laneFilter || !VALID_LANES.has(laneFilter)) {
@@ -709,9 +951,9 @@ function buildMockEnvelopeForQuery(query?: AlphaFactoryQuery): AlphaFactoryEnvel
 export async function getAlphaFactory(
   query?: AlphaFactoryQuery,
   opts?: { signal?: AbortSignal },
-): Promise<AlphaFactoryEnvelope> {
+): Promise<AlphaFactoryPipelineEnvelope> {
   try {
-    return await strictLiveRead<AlphaFactoryEnvelope>(
+    return await strictLiveRead<AlphaFactoryPipelineEnvelope>(
       "alphaFactory.get",
       {
         method: "GET",
