@@ -403,20 +403,27 @@ type ListT = (key: string, options?: Record<string, unknown>) => string;
  * owner-backed values: name, state, runtime status (with its plain reason),
  * symbols, the cumulative paper result with its as-of time, drawdown, trades
  * and persona. Alpha, 30-day PnL, Sharpe (always null on this path) and the
- * raw capital-pool id are not shown. The minimum widths sum to 950 px so the
+ * raw capital-pool id are not shown. The minimum widths sum to 900 px so the
  * table fits the 1274 px window beside the 240 px navigation without
  * horizontal scrolling, and the name column keeps at least 220 px.
  */
 export const STRATEGY_COLUMN_MIN_WIDTHS = {
   name: 230,
-  state: 96,
-  runtime: 150,
-  symbols: 84,
-  result: 128,
-  drawdown: 84,
-  trades: 64,
-  persona: 114,
+  state: 88,
+  runtime: 112,
+  symbols: 80,
+  result: 120,
+  drawdown: 92,
+  trades: 76,
+  persona: 100,
 } as const;
+
+/**
+ * Compact cells: 8 px side padding and headers that may wrap. The table card
+ * is 939 px wide in a 1274 px window (240 px navigation), so these sums stay
+ * under 935 px.
+ */
+export const COMPACT_COLUMN_CLASS = "px-2 !whitespace-normal";
 
 function strategyMissingValue(r: Strategy, t: ListT, noData: string): { text: string; code?: string } {
   const reason = strategyMetricsReasonText(r.metricsReason, t);
@@ -457,15 +464,15 @@ function StrategyRuntimeCell({ row, t, noData }: { row: Strategy; t: ListT; noDa
         variant="outline"
         data-testid="strategy-runtime-status"
         data-runtime-status={runtime}
-        className={`text-xs whitespace-nowrap ${strategyRuntimeStatusClass(runtime)}`}
+        className={`text-xs !whitespace-normal text-left ${strategyRuntimeStatusClass(runtime)}`}
       >
         {t(`strategy.runtimeStatus.${runtime}`)}
       </Badge>
       {reasonText && (
         <span
-          className="text-[11px] leading-tight text-muted-foreground"
+          className="line-clamp-2 text-[11px] leading-tight text-muted-foreground"
           data-testid="strategy-runtime-reason"
-          title={reason?.code}
+          title={reason ? `${reason.text} (${reason.code})` : undefined}
         >
           {reasonText}
         </span>
@@ -481,12 +488,13 @@ export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>
       key: "name",
       header: t("common.name"),
       minWidth: w.name,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) => (
         <div className="min-w-0">
           <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>
           {r.id && r.name && r.id !== r.name && (
             <div
-              className="max-w-[220px] truncate font-mono text-xs text-muted-foreground"
+              className="max-w-[200px] truncate font-mono text-xs text-muted-foreground"
               title={r.id}
               data-testid="object-secondary-id"
             >
@@ -500,18 +508,21 @@ export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>
       key: "state",
       header: t("common.state"),
       minWidth: w.state,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) => <span className="inline-flex whitespace-nowrap"><StatusBadge state={r.state} /></span>,
     },
     {
       key: "runtime",
       header: t("strategy.list.column.runtime"),
       minWidth: w.runtime,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) => <StrategyRuntimeCell row={r} t={t} noData={noData} />,
     },
     {
       key: "symbols",
       header: t("strategy.list.column.symbols"),
       minWidth: w.symbols,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) => {
         const symbols = Array.isArray(r.symbols)
           ? r.symbols.map((s) => String(s).trim()).filter(Boolean)
@@ -531,6 +542,7 @@ export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>
       key: "cumulativePnl",
       header: t("strategy.list.column.cumulativeResult"),
       minWidth: w.result,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) => {
         if (!hasNumber(r.pnl)) {
           const missing = strategyMissingValue(r, t, noData);
@@ -566,6 +578,7 @@ export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>
       key: "drawdown",
       header: t("strategy.list.column.drawdown"),
       minWidth: w.drawdown,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) => {
         if (!hasNumber(r.drawdown)) {
           const missing = strategyMissingValue(r, t, noData);
@@ -583,6 +596,7 @@ export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>
       key: "trades",
       header: t("strategy.list.column.trades"),
       minWidth: w.trades,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) =>
         hasNumber(r.totalTrades) ? (
           <span className="text-mono text-xs text-foreground" data-testid="strategy-trades">{r.totalTrades}</span>
@@ -594,6 +608,7 @@ export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>
       key: "persona",
       header: t("strategy.list.column.persona"),
       minWidth: w.persona,
+      className: COMPACT_COLUMN_CLASS,
       cell: (r) => {
         const ids = Array.isArray(r.personaIds) ? r.personaIds.filter((id) => typeof id === "string" && id.trim()) : [];
         if (ids.length === 0) {
@@ -911,14 +926,14 @@ function currentFirstEmptyState(
 const PERSONA_SCOPE_TABS = ["current", "test", "retired", "research", "all"] as const;
 
 export const PERSONA_COLUMN_MIN_WIDTHS = {
-  name: 236,
-  state: 96,
-  risk: 80,
-  type: 100,
-  strategies: 90,
-  winRate: 96,
-  owner: 120,
-  updated: 120,
+  name: 230,
+  state: 88,
+  risk: 72,
+  type: 92,
+  strategies: 112,
+  winRate: 76,
+  owner: 96,
+  updated: 104,
 } as const;
 
 /** `null` / missing win rate is "no data", never 0%. */
@@ -950,25 +965,27 @@ export const PersonasList = () => {
           key: "name",
           header: t("common.name"),
           minWidth: w.name,
+          className: COMPACT_COLUMN_CLASS,
           cell: (r) => (
             <div className="min-w-0">
               <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>
               {r.id && r.name && r.id !== r.name && (
-                <div className="max-w-[220px] truncate font-mono text-xs text-muted-foreground" title={r.id} data-testid="object-secondary-id">
+                <div className="max-w-[200px] truncate font-mono text-xs text-muted-foreground" title={r.id} data-testid="object-secondary-id">
                   {r.id}
                 </div>
               )}
             </div>
           ),
         },
-        { key: "state", header: t("common.state"), minWidth: w.state, cell: (r) => <span className="inline-flex whitespace-nowrap"><StatusBadge state={r.state} /></span> },
-        { key: "risk", header: t("common.risk"), minWidth: w.risk, cell: (r) => <span className="inline-flex whitespace-nowrap"><RiskBadge level={r.risk} /></span> },
-        { key: "arch", header: t("table.type"), minWidth: w.type, cell: (r) => <span className="text-xs [overflow-wrap:anywhere]">{r.archetype || noData}</span> },
-        { key: "rs", header: t("nav.strategies"), minWidth: w.strategies, cell: (r) => <span className="text-mono text-xs">{hasNumber(r.routedStrategies) ? r.routedStrategies : noData}</span> },
+        { key: "state", header: t("common.state"), minWidth: w.state, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="inline-flex whitespace-nowrap"><StatusBadge state={r.state} /></span> },
+        { key: "risk", header: t("common.risk"), minWidth: w.risk, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="inline-flex whitespace-nowrap"><RiskBadge level={r.risk} /></span> },
+        { key: "arch", header: t("table.type"), minWidth: w.type, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="text-xs [overflow-wrap:anywhere]">{r.archetype || noData}</span> },
+        { key: "rs", header: t("registryLists.column.routedStrategies"), minWidth: w.strategies, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="text-mono text-xs">{hasNumber(r.routedStrategies) ? r.routedStrategies : noData}</span> },
         {
           key: "sr",
           header: t("table.winRate"),
           minWidth: w.winRate,
+          className: COMPACT_COLUMN_CLASS,
           cell: (r) => (
             <span
               className={`text-mono text-xs ${hasNumber(r.successRate) ? "" : "text-muted-foreground"}`}
@@ -982,12 +999,14 @@ export const PersonasList = () => {
           key: "owner",
           header: t("common.owner"),
           minWidth: w.owner,
-          cell: (r) => <span className="text-mono text-xs block max-w-[110px] truncate whitespace-nowrap" title={r.owner} data-full-owner={r.owner}>{r.owner}</span>,
+          className: COMPACT_COLUMN_CLASS,
+          cell: (r) => <span className="text-mono text-xs block max-w-[80px] truncate whitespace-nowrap" title={r.owner} data-full-owner={r.owner}>{r.owner}</span>,
         },
         {
           key: "updated",
           header: t("common.updated"),
           minWidth: w.updated,
+          className: COMPACT_COLUMN_CLASS,
           cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</span>,
         },
       ]}
@@ -2060,13 +2079,13 @@ function artifactScopeFromSource(row: unknown): RegistryListScope | undefined {
 
 export const ARTIFACT_COLUMN_MIN_WIDTHS = {
   name: 230,
-  source: 100,
-  kind: 120,
-  version: 64,
-  state: 104,
-  hash: 110,
-  owner: 110,
-  updated: 110,
+  source: 84,
+  kind: 100,
+  version: 84,
+  state: 92,
+  hash: 104,
+  owner: 96,
+  updated: 104,
 } as const;
 
 function WordWithCode({ value, testId }: { value: { text: string; code: string } | undefined; testId: string }) {
@@ -2122,7 +2141,7 @@ export const ArtifactsList = () => {
         {
           key: "name",
           minWidth: w.name,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: t("common.name"),
           cell: (r) => {
             const strategyId = r.strategy_id ?? r.strategyId ?? undefined;
@@ -2166,7 +2185,7 @@ export const ArtifactsList = () => {
               <div className="space-y-0.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <div
-                    className="font-medium line-clamp-2 break-words"
+                    className="text-sm font-medium leading-tight line-clamp-2 break-words"
                     title={primaryTitle}
                     data-testid="artifact-primary-name"
                   >
@@ -2231,7 +2250,7 @@ export const ArtifactsList = () => {
         {
           key: "source",
           minWidth: w.source,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: t("artifact.sourceKind", { defaultValue: t("table.source") }),
           cell: (r) => {
             const source = artifactSourceText(r.source_kind ?? r.sourceKind, t);
@@ -2245,14 +2264,14 @@ export const ArtifactsList = () => {
         {
           key: "kind",
           minWidth: w.kind,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: t("table.kind"),
           cell: (r) => <WordWithCode value={artifactKindText(r.kind, t)} testId="artifact-kind" />,
         },
         {
           key: "ver",
           minWidth: w.version,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: t("table.version"),
           cell: (r) => {
             const version = typeof r.version === "string" ? r.version.trim() : "";
@@ -2267,7 +2286,7 @@ export const ArtifactsList = () => {
           // State and risk share one column so the table fits 1274 px.
           key: "state",
           minWidth: w.state,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: `${t("common.state")} / ${t("common.risk")}`,
           cell: (r) => {
             const state = typeof r.state === "string" ? r.state.trim() : "";
@@ -2286,7 +2305,7 @@ export const ArtifactsList = () => {
         {
           key: "hash",
           minWidth: w.hash,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: t("detail.section.hash", { defaultValue: "Hash" }),
           cell: (r) => {
             const hash = typeof r.hash === "string" ? r.hash.trim() : "";
@@ -2306,12 +2325,12 @@ export const ArtifactsList = () => {
         {
           key: "owner",
           minWidth: w.owner,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: t("common.owner"),
           cell: (r) => {
             const owner = typeof r.owner === "string" ? r.owner.trim() : "";
             return owner ? (
-              <span className="text-mono text-xs block max-w-[96px] truncate whitespace-nowrap" title={owner} data-full-owner={owner}>{owner}</span>
+              <span className="text-mono text-xs block max-w-[80px] truncate whitespace-nowrap" title={owner} data-full-owner={owner}>{owner}</span>
             ) : (
               <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
@@ -2320,7 +2339,7 @@ export const ArtifactsList = () => {
         {
           key: "updated",
           minWidth: w.updated,
-          className: "px-3",
+          className: COMPACT_COLUMN_CLASS,
           header: t("common.updated"),
           cell: (r) => (
             <span className="text-mono text-xs text-muted-foreground">

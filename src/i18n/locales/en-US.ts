@@ -1449,11 +1449,11 @@ export default {
       unknown: "Runtime state unknown",
     },
     runtimeReason: {
-      marketInput: "Market data input stopped, so trading is paused until it recovers.",
-      bindingStatus: "The runtime binding reports {{status}}.",
-      runtime_bindings_unavailable: "Runtime bindings could not be read.",
-      runtime_truth_unavailable: "Runtime state could not be read.",
-      scope_unavailable: "Tenant scope could not be resolved.",
+      marketInput: "Market data input stopped",
+      bindingStatus: "Binding status: {{status}}",
+      runtime_bindings_unavailable: "Runtime bindings unreadable",
+      runtime_truth_unavailable: "Runtime state unreadable",
+      scope_unavailable: "Tenant scope unresolved",
       other: "Recorded reason",
     },
     metricsReason: {
@@ -4429,6 +4429,7 @@ export default {
   },
   // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: current-first registry lists.
   registryLists: {
+    column: { routedStrategies: "Strategies" },
     scope: {
       personaGroupLabel: "Persona scope",
       artifactGroupLabel: "Artifact scope",

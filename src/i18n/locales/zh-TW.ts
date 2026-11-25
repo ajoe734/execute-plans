@@ -1434,11 +1434,11 @@ export default {
       unknown: "執行狀態不明",
     },
     runtimeReason: {
-      marketInput: "行情輸入中斷，交易暫停到行情恢復。",
-      bindingStatus: "執行綁定回報狀態為 {{status}}。",
-      runtime_bindings_unavailable: "無法讀取執行綁定。",
-      runtime_truth_unavailable: "無法讀取執行狀態。",
-      scope_unavailable: "無法確認租戶範圍。",
+      marketInput: "行情輸入中斷",
+      bindingStatus: "綁定狀態：{{status}}",
+      runtime_bindings_unavailable: "無法讀取執行綁定",
+      runtime_truth_unavailable: "無法讀取執行狀態",
+      scope_unavailable: "無法確認租戶範圍",
       other: "已記錄的原因",
     },
     metricsReason: {
@@ -4411,6 +4411,7 @@ export default {
   },
   // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125：清單預設只看現役
   registryLists: {
+    column: { routedStrategies: "策略數" },
     scope: {
       personaGroupLabel: "Persona 範圍",
       artifactGroupLabel: "Artifact 範圍",
