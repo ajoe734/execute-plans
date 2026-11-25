@@ -1,0 +1,75 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PERSONA-ONBOARDING-PAPER-OWNER-20261125",
+  "title": "Persona onboarding 修復頁正確辨識 paper_owner 完整綁定，不再誤報 provisioning 失敗",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-PERSONA-ONBOARDING-PAPER-OWNER-20261125",
+  "base_commit": "1f6e3044ae4cd9179bef5372e65b0fca0d753cc8",
+  "scoped_artifacts": [
+    "src/management/pages/PersonaOnboarding.tsx",
+    "src/management/pages/PersonaOnboarding.test.ts",
+    "src/lib/bff-v1/personas.ts",
+    "src/lib/bff-v1/personas.test.ts",
+    "docs/deployment/evidence/FE-PERSONA-ONBOARDING-PAPER-OWNER-20261125/evidence.json"
+  ],
+  "acceptance_verification": {
+    "1_complete_paper_bundle_validation": {
+      "local_passed": true,
+      "summary": "isCompletePaperBundle in src/management/pages/PersonaOnboarding.tsx and isCompletePaperPersonaBundle / createPersona PaperPersonaBundle validation in src/lib/bff-v1/personas.ts accept paper_running, paper_owner, consultable, and live_owner whenever paper_ledger_id (or paperLedgerId) and runtime_binding_id (or runtimeBindingId) are present and provisioning status is not failed or pending."
+    },
+    "2_direct_onboarding_navigation_without_fabricated_failed_step": {
+      "local_passed": true,
+      "summary": "Navigating directly to /management/personas/:id/onboarding without a failed_step query parameter and without a backend-reported failed step no longer fabricates 'Reported failed step: provisioning'. Complete bundles (including paper_owner) render the 'Paper Persona provisioning complete' ready state with navigation back to /management/personas/:id; incomplete bundles without a reported failed step render an honest incomplete description without fabricating a failed step."
+    },
+    "3_unit_tests": {
+      "local_passed": true,
+      "summary": "Unit tests in src/management/pages/PersonaOnboarding.test.ts and src/lib/bff-v1/personas.test.ts cover the hosted paper_owner shape of persona-6507750312870d03a241 (澄川｜2317 台股 Paper 學習 R2) with complete paper_ledger_id and runtime_binding_id, all four accepted lifecycle states, genuinely incomplete bundles, failed/pending provisioning status rejections, direct onboarding navigation without failed_step, and explicit failed_step query handling."
+    },
+    "4_runtime_budget_and_delivery": {
+      "local_passed": true,
+      "summary": "Pure frontend read/render logic; adds 0 recurring jobs, 0 emitters, and 0 persistent writers. Delivered on branch task/FE-PERSONA-ONBOARDING-PAPER-OWNER-20261125 targeting execute-plans dev for independent cross-family review by Claude."
+    }
+  },
+  "verification_commands": [
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/PersonaOnboarding.test.ts src/lib/bff-v1/personas.test.ts",
+      "exit_code": 0,
+      "passed_files": 2,
+      "passed_tests": 26
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/components/write/createEntity.test.ts src/management/pages/PersonaDetail.test.ts",
+      "exit_code": 0,
+      "passed_files": 2,
+      "passed_tests": 59
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/PersonaOnboarding.tsx src/management/pages/PersonaOnboarding.test.ts src/lib/bff-v1/personas.ts src/lib/bff-v1/personas.test.ts",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "emitters_added": 0,
+    "persistent_writers_added": 0,
+    "routine_daily_growth_bytes": 0,
+    "notes": "Pure frontend read/render logic in PersonaOnboarding.tsx and personas.ts."
+  },
+  "residual_findings": [],
+  "hosted_behavior_claimed": false,
+  "review_protocol": {
+    "required": "Exact PR head targeting execute-plans dev, independent cross-family review by Claude, then supervisor integration MERGE.",
+    "manifest_binding": "Committed at exact PR head and bound via REVIEW_PR/REVIEW_HEAD_SHA/REVIEW_FILE at handoff."
+  }
+}

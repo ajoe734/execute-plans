@@ -214,3 +214,87 @@ export function formatStrategyRuleText(
 ): string {
   return formatStrategyRuleResult(rule, locale).text;
 }
+
+export type StrategyRuleResolvedRole =
+  | "pool_envelope"
+  | "pool_member"
+  | "rollback_baseline"
+  | "trading";
+
+export function resolveStrategyRuleRole(
+  rule: Partial<StrategyRule> | null | undefined,
+  locale: string = "en-US",
+): StrategyRuleResolvedRole {
+  if (rule?.role === "pool_envelope") return "pool_envelope";
+  if (rule?.role === "pool_member") return "pool_member";
+  const formatted = formatStrategyRuleResult(rule, locale);
+  if (rule?.role === "rollback_baseline" || formatted.kind === "rollback_baseline") {
+    return "rollback_baseline";
+  }
+  return "trading";
+}
+
+/**
+ * Deduplicate strategy rules so a pool member listed both at the top level of
+ * `strategy.rules` and inside a `pool_envelope.members` array (or listed twice
+ * in either list) is rendered once while preserving `pool_envelope`,
+ * `pool_member`, `trading`, and `rollback_baseline` rules.
+ */
+export function deduplicateStrategyRules(
+  rules: readonly StrategyRule[] | null | undefined,
+): StrategyRule[] {
+  if (!Array.isArray(rules)) return [];
+
+  const topLevelMembersById = new Map<string, StrategyRule>();
+  for (const rule of rules) {
+    if (rule && rule.role === "pool_member" && typeof rule.registryId === "string" && rule.registryId.trim()) {
+      const id = rule.registryId.trim();
+      if (!topLevelMembersById.has(id)) {
+        topLevelMembersById.set(id, rule);
+      }
+    }
+  }
+
+  const envelopeMemberIds = new Set<string>();
+  const normalizedEnvelopes = new Map<StrategyRule, StrategyRule>();
+  for (const rule of rules) {
+    if (!rule || rule.role !== "pool_envelope") continue;
+    const rawMembers = Array.isArray(rule.members) ? rule.members : [];
+    const dedupedMembers: NonNullable<StrategyRule["members"]> = [];
+    for (const member of rawMembers) {
+      if (!member) continue;
+      const memberId = typeof member.registryId === "string" ? member.registryId.trim() : "";
+      if (memberId) {
+        if (envelopeMemberIds.has(memberId)) continue;
+        envelopeMemberIds.add(memberId);
+      }
+      const fallback = memberId ? topLevelMembersById.get(memberId) : undefined;
+      dedupedMembers.push({
+        ...member,
+        strategyLogic: member.strategyLogic ?? fallback?.strategyLogic,
+        parameters: member.parameters ?? fallback?.parameters,
+      });
+    }
+    normalizedEnvelopes.set(rule, {
+      ...rule,
+      ...(Array.isArray(rule.members) ? { members: dedupedMembers } : {}),
+    });
+  }
+
+  const seenTopLevelIds = new Set<string>();
+  const out: StrategyRule[] = [];
+  for (const rule of rules) {
+    if (!rule) continue;
+    const regId = typeof rule.registryId === "string" ? rule.registryId.trim() : "";
+    if (rule.role === "pool_member" && regId && envelopeMemberIds.has(regId)) {
+      continue;
+    }
+    if (regId) {
+      if (seenTopLevelIds.has(regId)) continue;
+      seenTopLevelIds.add(regId);
+    }
+    out.push(normalizedEnvelopes.get(rule) ?? rule);
+  }
+  return out;
+}
+
