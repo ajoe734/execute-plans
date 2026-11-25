@@ -96,6 +96,7 @@ describe("full production operation assembly", () => {
     expect(app).toContain('<Route path="/management" element={<ManagementLayoutRoute />}>');
     expect(app).toContain('<Route path="cockpit" element={<CockpitRoute />} />');
     expect(app).toContain('<Route path="personas" element={<PersonasListRoute />} />');
+    expect(app).toContain('<Route path="knowledge" element={<KnowledgeInboxRoute />} />');
     expect(app).toContain('<Route path="postmortems" element={<PostmortemLibraryRoute />} />');
     expect(app).toContain('<Route path="/agora" element={<ProtectedRoute><AgoraLayoutRoute /></ProtectedRoute>}>');
     expect(app).not.toMatch(/(?:from|import\()\s*["'][^"']*(?:\/mocks?\/|mock[A-Z_a-z-]*)/i);
