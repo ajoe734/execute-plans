@@ -612,4 +612,112 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
     const specNode = await screen.findByTestId(`lineage-node-reg-strategy-spec-persona-${LIVE_TOKEN}`);
     expect(specNode).toHaveAttribute("data-node-highlight", "true");
   });
+
+  it("resolves Chinese name input and plain id input on submit via the Unicode ASCII property check", async () => {
+    const lineageRequests: string[] = [];
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/bff/strategies")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: LIVE_STRATEGY_ID,
+                strategy_id: LIVE_STRATEGY_ID,
+                name: LIVE_STRATEGY_TITLE,
+                title: LIVE_STRATEGY_TITLE,
+                state: "approved",
+                operationalStatus: "running",
+                personaIds: [LIVE_PERSONA_ID],
+                persona_display_names: { [LIVE_PERSONA_ID]: "衡岳" },
+              },
+              {
+                id: `strategy-persona-${FD}`,
+                strategy_id: `strategy-persona-${FD}`,
+                name: "Baseline Persona Strategy",
+                title: "Baseline Persona Strategy",
+                state: "approved",
+                operationalStatus: "running",
+              },
+            ],
+            page_info: { next_page_token: null, total: 2, page_size: 2 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.startsWith("/bff/personas")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: LIVE_PERSONA_ID,
+                persona_id: LIVE_PERSONA_ID,
+                name: "衡岳",
+                display_name: "衡岳",
+                state: "paper_running",
+                listScope: "current",
+              },
+            ],
+            page_info: { next_page_token: null, total: 1, page_size: 1 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.startsWith("/bff/lineage")) {
+        lineageRequests.push(url);
+        return new Response(JSON.stringify(buildRealBffLineageEnvelope()), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderLineageExplorer("/management/lineage");
+    expect(await screen.findByTestId(`lineage-lookup-option-${LIVE_STRATEGY_ID}`)).toHaveTextContent(LIVE_STRATEGY_TITLE);
+
+    const rootInput = screen.getByTestId("lineage-root-input");
+
+    // Non-ASCII Chinese name query ("衡岳" and partial Chinese name "0050 台股") resolves to the matching candidate id
+    fireEvent.change(rootInput, { target: { value: "衡岳" } });
+    fireEvent.keyDown(rootInput, { key: "Enter", code: "Enter" });
+    await waitFor(() => {
+      expect(lineageRequests).toEqual([`/bff/lineage?root_id=${LIVE_PERSONA_ID}`]);
+    });
+
+    fireEvent.change(rootInput, { target: { value: "0050 台股" } });
+    fireEvent.keyDown(rootInput, { key: "Enter", code: "Enter" });
+    await waitFor(() => {
+      expect(lineageRequests).toEqual([
+        `/bff/lineage?root_id=${LIVE_PERSONA_ID}`,
+        `/bff/lineage?root_id=${LIVE_STRATEGY_ID}`,
+      ]);
+    });
+
+    // Plain ASCII id queries (candidate id and direct artifact id) resolve to the exact plain ids
+    fireEvent.change(rootInput, { target: { value: `strategy-persona-${FD}` } });
+    fireEvent.keyDown(rootInput, { key: "Enter", code: "Enter" });
+    await waitFor(() => {
+      expect(lineageRequests).toEqual([
+        `/bff/lineage?root_id=${LIVE_PERSONA_ID}`,
+        `/bff/lineage?root_id=${LIVE_STRATEGY_ID}`,
+        `/bff/lineage?root_id=strategy-persona-${FD}`,
+      ]);
+    });
+
+    fireEvent.change(rootInput, { target: { value: LIVE_ARTIFACT_ID } });
+    fireEvent.keyDown(rootInput, { key: "Enter", code: "Enter" });
+    await waitFor(() => {
+      expect(lineageRequests).toEqual([
+        `/bff/lineage?root_id=${LIVE_PERSONA_ID}`,
+        `/bff/lineage?root_id=${LIVE_STRATEGY_ID}`,
+        `/bff/lineage?root_id=strategy-persona-${FD}`,
+        `/bff/lineage?root_id=${LIVE_ARTIFACT_ID}`,
+      ]);
+    });
+  });
 });

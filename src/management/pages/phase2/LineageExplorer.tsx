@@ -271,7 +271,7 @@ export const LineageExplorerPage = () => {
       commitRoot(exactName.id, exactName.id);
       return;
     }
-    const hasNonAscii = /[^\x00-\x7f]/.test(raw);
+    const hasNonAscii = /[^\p{ASCII}]/u.test(raw);
     if (filteredCandidates.length === 1 || (hasNonAscii && filteredCandidates.length > 0)) {
       commitRoot(filteredCandidates[0].id, filteredCandidates[0].id);
       return;
