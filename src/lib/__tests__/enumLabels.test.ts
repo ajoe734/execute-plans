@@ -9,6 +9,7 @@ import {
   BFF_INCIDENT_STATUS_VALUES,
   BFF_JOB_STATUS_VALUES,
   BFF_LINEAGE_EDGE_TYPES,
+  BFF_LINEAGE_NODE_TYPES,
   BFF_MEETING_STATUS_VALUES,
   BFF_OUTCOME_VALUES,
   BFF_REASON_CODES,
@@ -21,6 +22,7 @@ import {
   isNanLike,
   isTranslationKeyLike,
   lineageEdgeLabel,
+  lineageNodeTypeLabel,
   normalizeStrategyOperationalStatus,
   notReportedLabel,
   outcomeLabel,
@@ -28,7 +30,9 @@ import {
   reasonCodeDisplay,
   rebalanceWorkflowLabel,
   resolveEnumLabel,
+  resolveLineageNodeLabel,
   riskLabel,
+  shortLineageNodeId,
   statusBadgeClass,
   statusLabel,
   strategyOperationalStatusClass,
@@ -134,6 +138,66 @@ describe("enumLabels shared BFF enum localization helper (FE-MGMT-LABELS-AND-RAW
       expect(isTranslationKeyLike(lineageEdgeLabel(edgeType, tZh))).toBe(false);
       expect(isTranslationKeyLike(lineageEdgeLabel(edgeType, tEn))).toBe(false);
     }
+
+    for (const nodeType of BFF_LINEAGE_NODE_TYPES) {
+      expect((zhTW.enumLabels.lineageNodeTypes as Record<string, string>)[nodeType], `zh-TW lineageNodeType ${nodeType}`).toBeTruthy();
+      expect((enUS.enumLabels.lineageNodeTypes as Record<string, string>)[nodeType], `en-US lineageNodeType ${nodeType}`).toBeTruthy();
+      expect(isTranslationKeyLike(lineageNodeTypeLabel(nodeType, tZh))).toBe(false);
+      expect(isTranslationKeyLike(lineageNodeTypeLabel(nodeType, tEn))).toBe(false);
+    }
+  });
+
+  it("resolves lineage node labels from display_name or falls back to localized plain kind plus short id when name_missing", () => {
+    expect(lineageNodeTypeLabel("Strategy", tZh)).toBe("策略");
+    expect(lineageNodeTypeLabel("CapitalPool", tZh)).toBe("資金池");
+    expect(lineageNodeTypeLabel("CapitalPool", tEn)).toBe("Capital Pool");
+    expect(lineageEdgeLabel("source_dataset", tZh)).toBe("來源資料集");
+    expect(lineageEdgeLabel("source_dataset", tEn)).toBe("Source Dataset");
+
+    expect(
+      resolveLineageNodeLabel(
+        {
+          id: "persona-ee7112a829d38b9135ac",
+          label: "persona-ee7112a829d38b9135ac",
+          type: "Persona",
+          display_name: "衡岳",
+          name_missing: false,
+        },
+        tZh,
+      ),
+    ).toBe("衡岳");
+
+    expect(
+      resolveLineageNodeLabel(
+        {
+          id: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          label: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          type: "Artifact",
+          display_name: null,
+          name_missing: true,
+        },
+        tZh,
+      ),
+    ).toBe("產出物 a81b4fd1-v2");
+
+    expect(
+      resolveLineageNodeLabel(
+        {
+          id: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          label: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          type: "Artifact",
+          display_name: null,
+          name_missing: true,
+        },
+        tEn,
+      ),
+    ).toBe("Artifact a81b4fd1-v2");
+
+    expect(shortLineageNodeId("reg-strategy-spec-persona-baseline-a81b4fd15944698341aa")).toBe("baseline-a81b4fd1");
+    expect(tZh("lineage.empty")).toBe("尚無血緣資料。");
+    expect(tEn("lineage.empty")).toBe("No lineage available.");
+    expect(tZh("lineageExplorer.unavailable")).toBe("血緣服務不可用。");
+    expect(tEn("lineageExplorer.unavailable")).toBe("Lineage surface unavailable.");
   });
 
   it("formats persona fleet, LLM provider auth, and meeting reason codes into plain-language text with secondary code", () => {

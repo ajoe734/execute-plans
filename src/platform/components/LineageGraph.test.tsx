@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 
 import i18n from "@/i18n";
-import { LineageGraph, NODE_PAD_X, NODE_W, fitText, placeEdgeLabels, type LineageEdge, type LineageNode } from "./LineageGraph";
+import { LineageGraph, NODE_PAD_X, NODE_W, estimateTextPx, fitText, placeEdgeLabels, type LineageEdge, type LineageNode } from "./LineageGraph";
 
 // Real shape: rooted graph for strategy-persona-fd1281847a3b1c6a9735 — 10 nodes, 16 edges,
 // labels parent/source_strategy_spec/source_run/persona/capital_pool, ids up to 60 chars.
@@ -144,5 +144,90 @@ describe("LineageGraph edge labels stay in column gaps", () => {
     expect(edgeText?.textContent).toBe("來源策略規格");
     expect(container.textContent).toContain("Artifact · 已核准");
     expect(container.textContent).toContain("Strategy · 已部署");
+  });
+
+  it("renders display_name with id as secondary text, falls back to plain kind plus short id when name_missing, bounds CJK labels, and translates empty state", async () => {
+    const LIVE_TOKEN = "a81b4fd15944698341aa";
+    const LIVE_PERSONA_ID = "persona-ee7112a829d38b9135ac";
+    const LIVE_STRATEGY_ID = `strategy-persona-${LIVE_TOKEN}`;
+    const LIVE_ARTIFACT_ID = `artifact-persona-pool-${LIVE_TOKEN}-v2`;
+    const LIVE_POOL_ID = `pool-persona-paper-${LIVE_TOKEN}`;
+    const LIVE_STRATEGY_TITLE = "衡岳｜0050 台股 Paper 學習 R2";
+
+    await i18n.changeLanguage("zh-TW");
+    const ns: LineageNode[] = [
+      {
+        id: LIVE_PERSONA_ID,
+        label: LIVE_PERSONA_ID,
+        type: "Persona",
+        display_name: "衡岳",
+        name_missing: false,
+      },
+      {
+        id: LIVE_ARTIFACT_ID,
+        label: LIVE_ARTIFACT_ID,
+        type: "Artifact",
+        state: "approved",
+        strategy_id: LIVE_STRATEGY_ID,
+        version: "1.2.0",
+        display_name: LIVE_STRATEGY_TITLE,
+        name_missing: false,
+        highlight: true,
+      },
+      {
+        id: LIVE_POOL_ID,
+        label: LIVE_POOL_ID,
+        type: "CapitalPool",
+        display_name: null,
+        name_missing: true,
+      },
+      {
+        id: `persona-provisioning-forward-${LIVE_TOKEN}`,
+        label: `persona-provisioning-forward-${LIVE_TOKEN}`,
+        type: "Experiment",
+        display_name: `${LIVE_STRATEGY_TITLE} (Experiment)`,
+        name_missing: false,
+      },
+    ];
+    const es: LineageEdge[] = [
+      { from: LIVE_ARTIFACT_ID, to: LIVE_PERSONA_ID, label: "persona" },
+      { from: LIVE_ARTIFACT_ID, to: LIVE_POOL_ID, label: "capital_pool" },
+      { from: `persona-provisioning-forward-${LIVE_TOKEN}`, to: LIVE_ARTIFACT_ID, label: "source_run" },
+    ];
+
+    const { container, unmount } = renderGraph(ns, es);
+    const personaNode = container.querySelector(`[data-testid="lineage-node-${LIVE_PERSONA_ID}"]`)!;
+    expect(personaNode.querySelector("[data-node-label]")?.textContent).toBe("衡岳");
+    expect(personaNode.querySelector("[data-node-secondary-id]")?.getAttribute("data-full-id")).toBe(LIVE_PERSONA_ID);
+
+    const artNode = container.querySelector(`[data-testid="lineage-node-${LIVE_ARTIFACT_ID}"]`)!;
+    expect(artNode.getAttribute("data-node-highlight")).toBe("true");
+    expect(artNode.querySelector("[data-node-label]")?.textContent).toContain("衡岳｜0050");
+
+    const poolNode = container.querySelector(`[data-testid="lineage-node-${LIVE_POOL_ID}"]`)!;
+    expect(poolNode.querySelector("[data-node-label]")?.textContent).toBe("資金池 a81b4fd1");
+    expect(poolNode.querySelector("[data-node-secondary-id]")?.getAttribute("data-full-id")).toBe(LIVE_POOL_ID);
+
+    // Every CJK primary label stays within the node width budget
+    container.querySelectorAll<SVGTextElement>("[data-node-label]").forEach((el) => {
+      expect(NODE_PAD_X + estimateTextPx(el.textContent ?? "", 7.2)).toBeLessThanOrEqual(NODE_W - NODE_PAD_X);
+    });
+    unmount();
+
+    // Empty state translated in zh-TW and en-US
+    const emptyZh = renderGraph([], []);
+    expect(emptyZh.getByTestId("lineage-empty").textContent).toBe("尚無血緣資料。");
+    emptyZh.unmount();
+
+    await i18n.changeLanguage("en-US");
+    const enGraph = renderGraph(ns, es);
+    const enPoolNode = enGraph.container.querySelector(`[data-testid="lineage-node-${LIVE_POOL_ID}"]`)!;
+    expect(enPoolNode.querySelector("[data-node-label]")?.textContent).toBe("Capital Pool a81b4fd1");
+    enGraph.unmount();
+
+    const emptyEn = renderGraph([], []);
+    expect(emptyEn.getByTestId("lineage-empty").textContent).toBe("No lineage available.");
+    emptyEn.unmount();
+    await i18n.changeLanguage("zh-TW");
   });
 });

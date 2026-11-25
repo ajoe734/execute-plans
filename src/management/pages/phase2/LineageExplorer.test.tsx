@@ -2,12 +2,20 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import i18n from "@/i18n";
+import { lineageNodeTypeLabel } from "@/lib/enumLabels";
 import { LineageExplorerPage } from "./LineageExplorer";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { managementConsoleReads } from "@/lib/bff-v1/managementConsoleReads";
 import { __resetV5LiveCacheForTests } from "@/management/pages/v5/useV5Live";
 
 const FD = "fd1281847a3b1c6a9735";
+const LIVE_TOKEN = "a81b4fd15944698341aa";
+const LIVE_PERSONA_ID = "persona-ee7112a829d38b9135ac";
+const LIVE_STRATEGY_ID = `strategy-persona-${LIVE_TOKEN}`;
+const LIVE_ARTIFACT_ID = `artifact-persona-pool-${LIVE_TOKEN}-v2`;
+const LIVE_POOL_ID = `pool-persona-paper-${LIVE_TOKEN}`;
+const LIVE_STRATEGY_TITLE = "衡岳｜0050 台股 Paper 學習 R2";
 
 /**
  * Real BFF /bff/lineage envelope produced from the hosted registry shapes
@@ -116,15 +124,22 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
   });
 
   it("renders nodes and from/to edges from the real BFF registry lineage payload", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(buildRealBffLineageEnvelope()), {
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/bff/lineage")) {
+        return new Response(JSON.stringify(buildRealBffLineageEnvelope()), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      }),
-    );
+      });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    renderLineageExplorer();
+    renderLineageExplorer(`/management/lineage?root=strategy-persona-${FD}`);
 
     expect(await screen.findByTestId(`lineage-node-artifact-persona-paper-${FD}`)).toBeInTheDocument();
     expect(screen.getByTestId(`lineage-node-reg-strategy-spec-persona-baseline-${FD}`)).toBeInTheDocument();
@@ -150,15 +165,22 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
   });
 
   it("filters Strategy, Persona, Artifact, CapitalPool, Experiment, and Dataset nodes and removes incident edges while keeping unknown types visible and labelled", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(buildRealBffLineageEnvelope()), {
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/bff/lineage")) {
+        return new Response(JSON.stringify(buildRealBffLineageEnvelope()), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      }),
-    );
+      });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    renderLineageExplorer();
+    renderLineageExplorer(`/management/lineage?root=strategy-persona-${FD}`);
 
     await screen.findByTestId(`lineage-node-artifact-persona-paper-${FD}`);
 
@@ -203,7 +225,7 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
       expect(screen.getByTestId(`lineage-node-${c.nodeId}`)).toBeInTheDocument();
       expect(screen.getByTestId(c.edgeTestId)).toBeInTheDocument();
 
-      const toggleBtn = screen.getByRole("button", { name: c.type });
+      const toggleBtn = screen.getByRole("button", { name: lineageNodeTypeLabel(c.type, i18n.t) });
       fireEvent.click(toggleBtn);
 
       expect(screen.queryByTestId(`lineage-node-${c.nodeId}`)).not.toBeInTheDocument();
@@ -217,7 +239,7 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
 
     // Turn off all 6 known types — unknown type node (feature_set) remains visible and labelled
     for (const c of cases) {
-      fireEvent.click(screen.getByRole("button", { name: c.type }));
+      fireEvent.click(screen.getByRole("button", { name: lineageNodeTypeLabel(c.type, i18n.t) }));
     }
 
     const unknownNode = screen.getByTestId("lineage-node-feature-05246");
@@ -243,7 +265,7 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
       has_more: false,
     });
 
-    const { unmount } = renderLineageExplorer();
+    const { unmount } = renderLineageExplorer(`/management/lineage?root=artifact-persona-paper-${FD}`);
 
     expect(await screen.findByTestId("lineage-unavailable")).toBeInTheDocument();
     expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
@@ -264,24 +286,26 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
       has_more: false,
     });
 
-    const { unmount: unmountEmpty } = renderLineageExplorer();
+    const { unmount: unmountEmpty } = renderLineageExplorer(`/management/lineage?root=artifact-persona-paper-${FD}`);
     expect(await screen.findByTestId("lineage-empty")).toBeInTheDocument();
     expect(screen.queryByTestId("lineage-unavailable")).not.toBeInTheDocument();
     expect(screen.queryByTestId("lineage-has-more")).not.toBeInTheDocument();
     unmountEmpty();
 
-    // 3. Default graph capped with has_more=true, then entering root_id reloads that root
+    // 3. Capped graph with has_more=true, then submitting a new root_id reloads that root
     __resetV5LiveCacheForTests();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(buildRealBffLineageEnvelope({ hasMore: true })), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
+    let lineageCallCount = 0;
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/bff/lineage")) {
+        lineageCallCount += 1;
+        if (lineageCallCount === 1) {
+          return new Response(JSON.stringify(buildRealBffLineageEnvelope({ hasMore: true })), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(
           JSON.stringify(
             buildRealBffLineageEnvelope({
               hasMore: false,
@@ -292,20 +316,29 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
             status: 200,
             headers: { "Content-Type": "application/json" },
           },
-        ),
-      );
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
     lineageSpy.mockRestore();
     vi.stubGlobal("fetch", fetchMock);
 
-    renderLineageExplorer();
+    renderLineageExplorer(`/management/lineage?root=artifact-persona-paper-${FD}`);
 
     const hasMoreBanner = await screen.findByTestId("lineage-has-more");
     expect(hasMoreBanner).toBeInTheDocument();
     expect(hasMoreBanner).toHaveTextContent(/has_more/i);
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/bff/lineage", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/bff/lineage?root_id=artifact-persona-paper-${FD}`,
+      expect.any(Object),
+    );
 
-    const rootInput = screen.getByPlaceholderText(/Root entity|根節點/i);
+    const rootInput = screen.getByTestId("lineage-root-input");
     fireEvent.change(rootInput, { target: { value: `strategy-persona-${FD}` } });
+    fireEvent.keyDown(rootInput, { key: "Enter", code: "Enter" });
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -316,5 +349,206 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
     await waitFor(() => {
       expect(screen.queryByTestId("lineage-has-more")).not.toBeInTheDocument();
     });
+  });
+
+  it("sends no graph request on unrooted /management/lineage, offers current strategies and personas by name, filters by Chinese name without firing lineage requests while typing, and fetches only on selection or Enter", async () => {
+    const lineageRequests: string[] = [];
+    const liveNodes = [
+      {
+        id: `reg-strategy-spec-persona-baseline-${LIVE_TOKEN}`,
+        label: `reg-strategy-spec-persona-baseline-${LIVE_TOKEN}`,
+        type: "Strategy",
+        state: "draft",
+        strategy_id: LIVE_STRATEGY_ID,
+        version: "1.0.0",
+        display_name: LIVE_STRATEGY_TITLE,
+        name_missing: false,
+      },
+      {
+        id: `reg-strategy-spec-persona-${LIVE_TOKEN}`,
+        label: `reg-strategy-spec-persona-${LIVE_TOKEN}`,
+        type: "Strategy",
+        state: "approved",
+        strategy_id: LIVE_STRATEGY_ID,
+        version: "1.0.1",
+        display_name: LIVE_STRATEGY_TITLE,
+        name_missing: false,
+      },
+      {
+        id: LIVE_ARTIFACT_ID,
+        label: LIVE_ARTIFACT_ID,
+        type: "Artifact",
+        state: "approved",
+        strategy_id: LIVE_STRATEGY_ID,
+        version: "1.2.0",
+        display_name: LIVE_STRATEGY_TITLE,
+        name_missing: false,
+      },
+      {
+        id: LIVE_PERSONA_ID,
+        label: LIVE_PERSONA_ID,
+        type: "Persona",
+        display_name: "衡岳",
+        name_missing: false,
+      },
+      {
+        id: LIVE_POOL_ID,
+        label: LIVE_POOL_ID,
+        type: "CapitalPool",
+        display_name: null,
+        name_missing: true,
+      },
+    ];
+    const liveEdges = [
+      { from: `reg-strategy-spec-persona-baseline-${LIVE_TOKEN}`, to: `reg-strategy-spec-persona-${LIVE_TOKEN}`, label: "parent" },
+      { from: `reg-strategy-spec-persona-${LIVE_TOKEN}`, to: LIVE_ARTIFACT_ID, label: "source_strategy_spec" },
+      { from: LIVE_ARTIFACT_ID, to: LIVE_PERSONA_ID, label: "persona" },
+      { from: LIVE_ARTIFACT_ID, to: LIVE_POOL_ID, label: "capital_pool" },
+    ].map((e) => ({
+      id: `${e.from}|${e.label}|${e.to}`,
+      from: e.from,
+      to: e.to,
+      label: e.label,
+      edge_type: e.label,
+      from_artifact_id: e.from,
+      to_artifact_id: e.to,
+    }));
+
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/bff/strategies")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: LIVE_STRATEGY_ID,
+                strategy_id: LIVE_STRATEGY_ID,
+                name: LIVE_STRATEGY_TITLE,
+                title: LIVE_STRATEGY_TITLE,
+                state: "approved",
+                personaIds: [LIVE_PERSONA_ID],
+                persona_display_names: { [LIVE_PERSONA_ID]: "衡岳" },
+              },
+              {
+                id: `strategy-persona-${FD}`,
+                strategy_id: `strategy-persona-${FD}`,
+                name: "Baseline Persona Strategy",
+                title: "Baseline Persona Strategy",
+                state: "approved",
+              },
+            ],
+            page_info: { next_page_token: null, total: 2, page_size: 2 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.startsWith("/bff/personas")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: LIVE_PERSONA_ID,
+                persona_id: LIVE_PERSONA_ID,
+                name: "衡岳",
+                display_name: "衡岳",
+                state: "paper_running",
+              },
+              {
+                id: "persona-6507750312870d03a241",
+                persona_id: "persona-6507750312870d03a241",
+                name: "湛盧",
+                display_name: "湛盧",
+                state: "paper_running",
+              },
+            ],
+            page_info: { next_page_token: null, total: 2, page_size: 2 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.startsWith("/bff/lineage")) {
+        lineageRequests.push(url);
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: "lineage",
+              nodes: liveNodes,
+              edges: liveEdges,
+              status: "ok",
+              source: "service_client",
+            },
+            items: liveEdges,
+            page_info: { next_page_token: null, total: liveEdges.length, page_size: liveEdges.length, has_more: false },
+            meta: {
+              snapshot_at: "2026-11-25T06:35:00Z",
+              status: "ok",
+              source: "service_client",
+              surfaces: { lineage: { status: "ok", source: "service_client" } },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderLineageExplorer("/management/lineage");
+
+    // 1. Opening /management/lineage sends no graph request and shows the lookup prompt
+    expect(screen.getByTestId("lineage-lookup-prompt")).toBeInTheDocument();
+    expect(lineageRequests).toEqual([]);
+
+    // 2. Current strategies and personas are offered by name
+    expect(await screen.findByTestId(`lineage-lookup-option-${LIVE_STRATEGY_ID}`)).toHaveTextContent(LIVE_STRATEGY_TITLE);
+    expect(screen.getByTestId(`lineage-lookup-option-${LIVE_PERSONA_ID}`)).toHaveTextContent("衡岳");
+    expect(screen.getByTestId("lineage-lookup-option-persona-6507750312870d03a241")).toHaveTextContent("湛盧");
+    expect(lineageRequests).toEqual([]);
+
+    // 3. Typing persona-ee71 character-by-character sends zero lineage requests
+    const rootInput = screen.getByTestId("lineage-root-input");
+    for (let i = 1; i <= "persona-ee71".length; i++) {
+      fireEvent.change(rootInput, { target: { value: "persona-ee71".slice(0, i) } });
+    }
+    expect(lineageRequests).toEqual([]);
+
+    // 4. Typing a Chinese name ("衡岳") filters the options without sending a graph request
+    fireEvent.change(rootInput, { target: { value: "衡岳" } });
+    expect(lineageRequests).toEqual([]);
+    expect(screen.getByTestId(`lineage-lookup-option-${LIVE_PERSONA_ID}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`lineage-lookup-option-${LIVE_STRATEGY_ID}`)).toBeInTheDocument();
+    expect(screen.queryByTestId("lineage-lookup-option-persona-6507750312870d03a241")).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`lineage-lookup-option-strategy-persona-${FD}`)).not.toBeInTheDocument();
+
+    // 5. Clicking the persona option sends one request for persona-ee7112a829d38b9135ac
+    fireEvent.click(screen.getByTestId(`lineage-lookup-option-${LIVE_PERSONA_ID}`));
+    await waitFor(() => {
+      expect(lineageRequests).toEqual([`/bff/lineage?root_id=${LIVE_PERSONA_ID}`]);
+    });
+
+    const personaNode = await screen.findByTestId(`lineage-node-${LIVE_PERSONA_ID}`);
+    expect(personaNode).toHaveAttribute("data-node-highlight", "true");
+    expect(personaNode.querySelector("[data-node-label]")?.textContent).toBe("衡岳");
+    expect(personaNode.querySelector("[data-node-secondary-id]")?.getAttribute("data-full-id")).toBe(LIVE_PERSONA_ID);
+
+    // Fallback when name_missing=true: plain kind + short id
+    const poolNode = screen.getByTestId(`lineage-node-${LIVE_POOL_ID}`);
+    expect(poolNode.querySelector("[data-node-label]")?.textContent).toMatch(/^(資金池|Capital Pool) a81b4fd1$/);
+
+    // 6. Pressing Enter after typing a Chinese name ("衡岳｜0050 台股 Paper 學習 R2") resolves to strategy ID and sends one request
+    fireEvent.change(rootInput, { target: { value: LIVE_STRATEGY_TITLE } });
+    expect(lineageRequests).toHaveLength(1);
+    fireEvent.keyDown(rootInput, { key: "Enter", code: "Enter" });
+    await waitFor(() => {
+      expect(lineageRequests).toEqual([
+        `/bff/lineage?root_id=${LIVE_PERSONA_ID}`,
+        `/bff/lineage?root_id=${LIVE_STRATEGY_ID}`,
+      ]);
+    });
+    const specNode = await screen.findByTestId(`lineage-node-reg-strategy-spec-persona-${LIVE_TOKEN}`);
+    expect(specNode).toHaveAttribute("data-node-highlight", "true");
   });
 });

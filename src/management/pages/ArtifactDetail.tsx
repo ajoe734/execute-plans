@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
-import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { bffV1, managementConsoleReads, runActionSafe, type LineageRead } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import type { Artifact, AuditEvent, Deployment } from "@/lib/bff-v1";
@@ -18,6 +18,17 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { ArtifactDiffPanel } from "@/management/components/detail/ArtifactDiffPanel";
 import { ArtifactRollbackPanel } from "@/management/components/detail/ArtifactRollbackPanel";
+import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
+import { useInspector } from "@/platform/components/RightDrawer";
+
+function isLineageUnavailable(lin: LineageRead | null | undefined): boolean {
+  if (!lin) return true;
+  const status = (lin.meta?.status ?? "").toLowerCase();
+  if (status === "unavailable" || status === "error" || status === "failed") return true;
+  const surfaces = lin.meta?.surfaces as Record<string, { status?: string } | undefined> | undefined;
+  const surfaceStatus = (surfaces?.lineage?.status ?? "").toLowerCase();
+  return surfaceStatus === "unavailable" || surfaceStatus === "error" || surfaceStatus === "failed";
+}
 
 export const ArtifactDetail = () => {
   const { id } = useParams();
@@ -31,11 +42,38 @@ export const ArtifactDetail = () => {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [retireOpen, setRetireOpen] = useState(false);
+  const [lineageState, setLineageState] = useState<{
+    status: "loading" | "ready" | "unavailable";
+    data: LineageRead | null;
+  }>({ status: "loading", data: null });
 
   useEffect(() => {
     if (!id) return;
-    bffV1.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id))).catch(() => {});
-    bffV1.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact.")))).catch(() => {});
+    let cancelled = false;
+    setLineageState({ status: "loading", data: null });
+    bffV1.deployments.list().then((all) => {
+      if (!cancelled) setDeployments(all.filter((d) => d.artifactId === id));
+    }).catch(() => {});
+    bffV1.audit.list().then((au) => {
+      if (!cancelled) setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact.")));
+    }).catch(() => {});
+    managementConsoleReads.lineage(id).then(
+      (lin) => {
+        if (cancelled) return;
+        const unavailable = isLineageUnavailable(lin);
+        setLineageState({
+          status: unavailable ? "unavailable" : "ready",
+          data: unavailable ? null : lin,
+        });
+      },
+      () => {
+        if (cancelled) return;
+        setLineageState({ status: "unavailable", data: null });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -239,20 +277,73 @@ export const ArtifactDetail = () => {
           },
           {
             value: "lineage", label: t("section.lineage"),
-            content: upstreamExperimentOrTaskId ? (
-              <Section>
-                <div
-                  className="flex items-center justify-between p-3 rounded-md bg-muted hover:bg-muted/70 cursor-pointer"
-                  onClick={() => navigate(`/management/research/${upstreamExperimentOrTaskId}`)}
-                >
-                  <div>
-                    <div className="text-xs uppercase text-muted-foreground">{t("artifact.sourceExperiment")}</div>
-                    <div className="text-mono text-sm">{upstreamExperimentOrTaskId}</div>
+            content: (
+              <div
+                data-testid="artifact-lineage-section"
+                data-section-status={lineageState.status}
+                className="space-y-4"
+              >
+                {upstreamExperimentOrTaskId && (
+                  <Section>
+                    <div
+                      className="flex items-center justify-between p-3 rounded-md bg-muted hover:bg-muted/70 cursor-pointer"
+                      onClick={() => navigate(`/management/research/${upstreamExperimentOrTaskId}`)}
+                    >
+                      <div>
+                        <div className="text-xs uppercase text-muted-foreground">{t("artifact.sourceExperiment")}</div>
+                        <div className="text-mono text-sm">{upstreamExperimentOrTaskId}</div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">View →</span>
+                    </div>
+                  </Section>
+                )}
+                {lineageState.status === "loading" ? (
+                  <div
+                    data-testid="artifact-lineage-loading"
+                    className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+                  >
+                    {t("common.loading")}
                   </div>
-                  <span className="text-xs text-muted-foreground">View →</span>
-                </div>
-              </Section>
-            ) : <Section><div className="text-sm text-muted-foreground text-center py-6">{t("common.noUpstreamExperiment")}</div></Section>,
+                ) : lineageState.status === "unavailable" ? (
+                  <div
+                    role="alert"
+                    data-testid="artifact-lineage-unavailable"
+                    className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+                  >
+                    {t("lineageExplorer.unavailable")}
+                  </div>
+                ) : (() => {
+                  const candidateIds = new Set(
+                    [id, a.id, a.registry_id, a.artifact_id]
+                      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+                      .map((v) => v.trim()),
+                  );
+                  const nodes: LineageNode[] = (lineageState.data?.nodes ?? []).map((node) => ({
+                    ...node,
+                    highlight: Boolean(node.highlight) || candidateIds.has(node.id),
+                  }));
+                  const nodeIds = new Set(nodes.map((node) => node.id));
+                  const edges: LineageEdge[] = (lineageState.data?.edges ?? []).filter(
+                    (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
+                  );
+                  return (
+                    <LineageGraph
+                      nodes={nodes}
+                      edges={edges}
+                      onSelect={(n) =>
+                        useInspector.getState().open({
+                          id: n.id,
+                          type: n.type,
+                          name: n.display_name || n.label,
+                          state: n.state,
+                          risk: n.risk,
+                        })
+                      }
+                    />
+                  );
+                })()}
+              </div>
+            ),
           },
           {
             value: "rollback", label: t("artifact.tab.rollback"),

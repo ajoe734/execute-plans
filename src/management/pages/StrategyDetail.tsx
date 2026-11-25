@@ -14,7 +14,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bffWrites } from "@/lib/bff-v1/writes";
-import { bffV1, managementConsoleReads, runActionSafe, type LineageRead } from "@/lib/bff-v1";
+import { bffV1, highlightLineageNodesForRoot, managementConsoleReads, runActionSafe, type LineageRead } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
@@ -1021,17 +1021,17 @@ export const StrategyDetail = () => {
                     {t("strategyDetail.lineageUnavailable")}
                   </div>
                 ) : (() => {
-                  const nodes: LineageNode[] = (lineageState.data?.nodes ?? []).map((node) => ({
-                    ...node,
-                    highlight: node.highlight || node.id === s.id,
-                  }));
+                  const nodes: LineageNode[] = highlightLineageNodesForRoot(
+                    lineageState.data?.nodes ?? [],
+                    s.id,
+                  );
                   const nodeIds = new Set(nodes.map((node) => node.id));
                   const edges: LineageEdge[] = (lineageState.data?.edges ?? []).filter(
                     (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
                   );
                   return (
                     <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
-                      id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,
+                      id: n.id, type: n.type, name: n.display_name || n.label, state: n.state, risk: n.risk,
                     })} />
                   );
                 })()}

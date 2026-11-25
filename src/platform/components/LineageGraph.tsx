@@ -1,8 +1,8 @@
 // Lightweight DAG renderer for lineage — Part 7 §LineageGraph.
 // Auto-layouts nodes by depth (BFS layer) and renders SVG. No external deps.
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { RiskLevel } from "@/lib/bff-v1";
-import { lineageEdgeLabel, statusLabel } from "@/lib/enumLabels";
+import { lineageEdgeLabel, resolveLineageNodeLabel, statusLabel } from "@/lib/enumLabels";
 import { LINEAGE_NODE_LIMITS } from "@/lib/v4/uiBudgets";
 import { useT } from "@/platform/hooks";
 
@@ -13,6 +13,12 @@ export interface LineageNode {
   state?: string;
   risk?: RiskLevel;
   highlight?: boolean;
+  display_name?: string | null;
+  displayName?: string | null;
+  name_missing?: boolean;
+  nameMissing?: boolean;
+  strategy_id?: string | null;
+  version?: string | null;
 }
 export interface LineageEdge {
   from: string;
@@ -35,14 +41,72 @@ const MONO_CHAR_PX = 6.2;    // 10px monospace upper bound
 const EDGE_LABEL_H = 12;
 const EDGE_LABEL_CHAR_PX = 6.2;
 
-/** Truncate with a trailing ellipsis so estimated width fits `maxPx`. */
+function charWidthPx(ch: string, baseCharPx: number): number {
+  const code = ch.codePointAt(0) ?? 0;
+  if (code > 0xff) {
+    return Math.max(baseCharPx * 1.8, 12.8);
+  }
+  return baseCharPx;
+}
+
+export function estimateTextPx(text: string, baseCharPx: number): number {
+  let total = 0;
+  for (const ch of text) {
+    total += charWidthPx(ch, baseCharPx);
+  }
+  return total;
+}
+
+/** Truncate with a trailing (or middle) ellipsis so estimated width fits `maxPx`. */
 export function fitText(text: string, maxPx: number, charPx: number, middle = false): string {
-  const max = Math.max(4, Math.floor(maxPx / charPx));
-  if (text.length <= max) return text;
-  if (!middle) return text.slice(0, max - 1) + "…";
-  const head = Math.ceil((max - 1) * 0.6);
-  const tail = max - 1 - head;
-  return text.slice(0, head) + "…" + text.slice(text.length - tail);
+  const chars = Array.from(text);
+  const hasWide = chars.some((ch) => (ch.codePointAt(0) ?? 0) > 0xff);
+  if (!hasWide) {
+    const max = Math.max(4, Math.floor(maxPx / charPx));
+    if (text.length <= max) return text;
+    if (!middle) return text.slice(0, max - 1) + "…";
+    const head = Math.ceil((max - 1) * 0.6);
+    const tail = max - 1 - head;
+    return text.slice(0, head) + "…" + text.slice(text.length - tail);
+  }
+
+  if (estimateTextPx(text, charPx) <= maxPx) return text;
+  const budget = Math.max(charPx * 3, maxPx - charPx * 1.5);
+  if (!middle) {
+    let used = 0;
+    let out = "";
+    for (const ch of chars) {
+      const w = charWidthPx(ch, charPx);
+      if (used + w > budget && out.length >= 2) break;
+      out += ch;
+      used += w;
+    }
+    return out + "…";
+  }
+
+  const headBudget = budget * 0.6;
+  const tailBudget = budget - headBudget;
+  let headUsed = 0;
+  let headStr = "";
+  let headIdx = 0;
+  while (headIdx < chars.length) {
+    const w = charWidthPx(chars[headIdx], charPx);
+    if (headUsed + w > headBudget && headStr.length >= 2) break;
+    headStr += chars[headIdx];
+    headUsed += w;
+    headIdx += 1;
+  }
+  let tailUsed = 0;
+  let tailStr = "";
+  let tailIdx = chars.length - 1;
+  while (tailIdx > headIdx) {
+    const w = charWidthPx(chars[tailIdx], charPx);
+    if (tailUsed + w > tailBudget && tailStr.length >= 1) break;
+    tailStr = chars[tailIdx] + tailStr;
+    tailUsed += w;
+    tailIdx -= 1;
+  }
+  return headStr + "…" + tailStr;
 }
 
 /** Place edge labels at curve midpoints, nudging vertically until no two overlap. */
@@ -52,7 +116,7 @@ export function placeEdgeLabels(
   const placed: { x: number; y: number; w: number }[] = [];
   const out = new Map<number, { x: number; y: number }>();
   for (const it of items) {
-    const w = it.label.length * EDGE_LABEL_CHAR_PX;
+    const w = estimateTextPx(it.label, EDGE_LABEL_CHAR_PX);
     let y = it.cy - 4;
     for (let step = 0; step < 200; step++) {
       const hit = placed.some((q) => Math.abs(q.x - it.cx) < (q.w + w) / 2 + 2 && Math.abs(q.y - y) < EDGE_LABEL_H);
@@ -80,8 +144,8 @@ const riskFill: Record<RiskLevel, string> = {
 
 function layout(nodes: LineageNode[], edges: LineageEdge[]) {
   // Column gap must hold the widest edge label so labels never sit under nodes.
-  const maxLabelPx = edges.reduce((m, e) => Math.max(m, (e.label?.length ?? 0) * EDGE_LABEL_CHAR_PX), 0);
-  const colGap = Math.max(COL_GAP, Math.ceil(maxLabelPx) + 24);
+  const maxLabelPx = edges.reduce((m, e) => Math.max(m, estimateTextPx(e.label ?? "", EDGE_LABEL_CHAR_PX)), 0);
+  const colGap = Math.max(COL_GAP, Math.ceil(maxLabelPx) + 28);
   // Compute depth = longest path from a root to this node.
   const incoming = new Map<string, number>();
   nodes.forEach((n) => incoming.set(n.id, 0));
@@ -102,20 +166,29 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
   });
 
   const maxDepth = Math.max(nodes.length, 1);
-  while (queue.length) {
-    const u = queue.shift()!;
-    const du = depth.get(u) ?? 0;
-    if (du >= maxDepth) continue;
-    for (const v of adj.get(u) ?? []) {
-      if (!incoming.has(v)) continue;
-      if (du + 1 > (depth.get(v) ?? -1)) {
-        depth.set(v, du + 1);
-        queue.push(v);
+  const drainQueue = () => {
+    while (queue.length) {
+      const u = queue.shift()!;
+      const du = depth.get(u) ?? 0;
+      if (du >= maxDepth) continue;
+      for (const v of adj.get(u) ?? []) {
+        if (!incoming.has(v)) continue;
+        if (du + 1 > (depth.get(v) ?? -1)) {
+          depth.set(v, du + 1);
+          queue.push(v);
+        }
       }
     }
-  }
-  // Fallback for cycles / disconnected
-  nodes.forEach((n) => { if (!depth.has(n.id)) depth.set(n.id, 0); });
+  };
+  drainQueue();
+  // Fallback for cycles / disconnected components: seed unvisited nodes and propagate layers
+  nodes.forEach((n) => {
+    if (!depth.has(n.id)) {
+      depth.set(n.id, 0);
+      queue.push(n.id);
+      drainQueue();
+    }
+  });
 
   // Group by depth
   const layers = new Map<number, LineageNode[]>();
@@ -142,6 +215,7 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
 
 export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Props) => {
   const t = useT();
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const displayEdges = useMemo(
     () =>
       edges.map((e) => ({
@@ -154,6 +228,27 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
   const { positions, width, height, colGap } = useMemo(() => layout(nodes, displayEdges), [nodes, displayEdges]);
   const h = Math.max(minH, height);
   const textMaxPx = NODE_W - 2 * NODE_PAD_X;
+
+  useEffect(() => {
+    const centerHighlighted = () => {
+      const el = containerRef.current;
+      if (!el || el.clientWidth <= 0) return;
+      const highlighted = nodes.find((n) => n.highlight);
+      if (!highlighted) return;
+      const pos = positions.get(highlighted.id);
+      if (!pos) return;
+      const winW = typeof window !== "undefined" && window.innerWidth > 0 ? window.innerWidth : el.clientWidth;
+      const visibleW = Math.min(el.clientWidth, Math.max(NODE_W, winW - 48));
+      if (pos.x + NODE_W > visibleW) {
+        el.scrollLeft = Math.max(0, Math.round(pos.x - (visibleW - NODE_W) / 2));
+      } else {
+        el.scrollLeft = 0;
+      }
+    };
+    centerHighlighted();
+    window.addEventListener("resize", centerHighlighted);
+    return () => window.removeEventListener("resize", centerHighlighted);
+  }, [nodes, positions]);
 
   const labelPos = useMemo(() => {
     const items: { key: number; cx: number; cy: number; label: string }[] = [];
@@ -178,7 +273,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
         data-testid="lineage-empty"
         className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
       >
-        No lineage available.
+        {t("lineage.empty", { defaultValue: "No lineage available." })}
       </div>
     );
   }
@@ -188,7 +283,12 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
   const overServer = nodes.length > LINEAGE_NODE_LIMITS.serverLayoutThreshold;
 
   return (
-    <div data-testid="lineage-graph" className="rounded-md border border-border bg-muted/20 overflow-auto">
+    <div
+      ref={containerRef}
+      data-testid="lineage-graph"
+      style={{ maxWidth: "calc(100vw - 2rem)" }}
+      className="rounded-md border border-border bg-muted/20 overflow-auto"
+    >
       {(overClient || overServer) && (
         <div
           role="status"
@@ -250,6 +350,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
           const fill = n.risk ? (riskFill[n.risk] ?? "hsl(var(--card))") : "hsl(var(--card))";
           const typeLabel = n.type || "unknown";
           const displayState = n.state ? statusLabel(n.state, t) : "";
+          const primaryLabel = resolveLineageNodeLabel(n, t);
           return (
             <g key={n.id} transform={`translate(${p.x},${p.y})`}
                data-testid={`lineage-node-${n.id}`}
@@ -257,22 +358,24 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
                data-node-type={typeLabel}
                data-node-state={n.state ?? ""}
                data-node-risk={n.risk ?? ""}
+               data-node-highlight={n.highlight ? "true" : "false"}
+               data-node-display-name={primaryLabel}
                className={onSelect ? "cursor-pointer" : ""}
                onClick={() => onSelect?.(n)}>
               <rect width={NODE_W} height={NODE_H} rx={6}
                 fill={fill}
                 stroke={n.highlight ? "hsl(var(--primary))" : "hsl(var(--border))"}
                 strokeWidth={n.highlight ? 1.6 : 1} />
-              <title>{`${n.label}\n${n.id}`}</title>
               <text x={NODE_PAD_X} y={18} fontSize="10" className="fill-muted-foreground"
                 style={{ fontFamily: "ui-monospace, monospace" }}>{fitText(`${typeLabel}${displayState ? ` · ${displayState}` : ""}`, textMaxPx, MONO_CHAR_PX)}</text>
               <text x={NODE_PAD_X} y={36} fontSize="12" className="fill-foreground" fontWeight={500}
                 data-node-label>
-                {fitText(n.label, textMaxPx, LABEL_CHAR_PX)}
+                {fitText(primaryLabel, textMaxPx, LABEL_CHAR_PX)}
               </text>
               <text x={NODE_PAD_X} y={50} fontSize="10" className="fill-muted-foreground"
                 data-node-secondary-id data-full-id={n.id}
                 style={{ fontFamily: "ui-monospace, monospace" }}>{fitText(n.id, textMaxPx, MONO_CHAR_PX, true)}</text>
+              <title>{`${primaryLabel}\n${n.id}`}</title>
             </g>
           );
         })}
