@@ -96,3 +96,80 @@ export function filterEvolutionJournalRowsForFocus<T extends EvolutionJournalEnt
 
   return { rows: scoped, matched };
 }
+
+// ---------------------------------------------------------------------------
+// FE-EVO-JOURNAL-DIRECTION-20261125 presentation helpers (pure, no i18n here)
+// ---------------------------------------------------------------------------
+
+export interface PoolMemberRef {
+  artifact_ref: string;
+  stage?: string | null;
+  risk_weight?: number | null;
+}
+
+export type PoolMemberChange =
+  | { kind: "added"; member: PoolMemberRef }
+  | { kind: "removed"; member: PoolMemberRef }
+  | { kind: "changed"; ref: string; from: PoolMemberRef; to: PoolMemberRef };
+
+export function normalizePoolMembers(raw: unknown): PoolMemberRef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PoolMemberRef[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const ref = typeof rec.artifact_ref === "string" ? rec.artifact_ref.trim() : "";
+    if (!ref) continue;
+    out.push({
+      artifact_ref: ref,
+      stage: typeof rec.stage === "string" ? rec.stage : null,
+      risk_weight: typeof rec.risk_weight === "number" && Number.isFinite(rec.risk_weight) ? rec.risk_weight : null,
+    });
+  }
+  return out;
+}
+
+/** Before/after diff computed only from the member lists the BFF returned. */
+export function diffPoolMembers(before: PoolMemberRef[], after: PoolMemberRef[]): PoolMemberChange[] {
+  const b = new Map(before.map((m) => [m.artifact_ref, m]));
+  const a = new Map(after.map((m) => [m.artifact_ref, m]));
+  const changes: PoolMemberChange[] = [];
+  for (const m of after) {
+    const prev = b.get(m.artifact_ref);
+    if (!prev) changes.push({ kind: "added", member: m });
+    else if (prev.stage !== m.stage || prev.risk_weight !== m.risk_weight) {
+      changes.push({ kind: "changed", ref: m.artifact_ref, from: prev, to: m });
+    }
+  }
+  for (const m of before) if (!a.has(m.artifact_ref)) changes.push({ kind: "removed", member: m });
+  return changes;
+}
+
+/** Last known token of an owner reason code such as `registry_entry_unreadable:TimeoutError`. */
+export function splitReasonCode(code: string | null | undefined): { head: string; raw: string } | null {
+  const raw = code?.trim();
+  if (!raw) return null;
+  return { head: raw.split(":")[0].trim(), raw };
+}
+
+const TEST_CLASS_VALUES = new Set(["test", "acceptance", "fixture", "synthetic", "seed", "sandbox"]);
+
+function classToken(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+/**
+ * True only when the BFF / owner RECORDED the row as a test record, via a
+ * classification or origin field. Never decided from the row name. A row with
+ * no such field is not a test record (stays visible).
+ */
+export function isRecordedTestRecord(row: unknown): boolean {
+  if (!row || typeof row !== "object") return false;
+  const rec = row as Record<string, unknown>;
+  const meta = rec.metadata && typeof rec.metadata === "object" ? (rec.metadata as Record<string, unknown>) : {};
+  for (const key of ["subject_class", "record_class", "classification", "data_scope", "origin_class"]) {
+    if (TEST_CLASS_VALUES.has(classToken(rec[key])) || TEST_CLASS_VALUES.has(classToken(meta[key]))) return true;
+  }
+  if (rec.is_test === true || rec.isTest === true || meta.is_test === true) return true;
+  return TEST_CLASS_VALUES.has(classToken(rec.origin)) || TEST_CLASS_VALUES.has(classToken(rec.originKind));
+}

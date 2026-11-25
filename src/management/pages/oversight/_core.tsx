@@ -110,7 +110,9 @@ import {
   type PersonaFleetResearchItem,
 } from "./personaFleetLinks";
 import {
+  diffPoolMembers,
   filterEvolutionJournalRowsForFocus,
+  normalizePoolMembers,
   normalizeEvolutionFocusToken,
   normalizeEvolutionJournalView,
   type EvolutionJournalView,
@@ -3944,6 +3946,18 @@ interface EvolutionEntry {
   // EVOCHAIN-007 producer marker: seed-derived entries carry `origin: "seed"`
   // so the FE can badge them as fixture data instead of live evolution output.
   origin?: string;
+  // BFF-EVO-JOURNAL-POOL-VERSIONS-20261125: entry_type "pool_version" rows and
+  // the recorded subject class of decision rows.
+  persona_name?: string;
+  pool_version?: number;
+  action?: string;
+  decision_status?: string;
+  refused?: boolean;
+  membership_changed?: boolean;
+  reasons?: unknown;
+  members_before?: unknown;
+  members_after?: unknown;
+  subject_class?: string;
 }
 
 const FORMAL_EVOLUTION_ENTRY_TYPES = new Set(["evolution_decision", "mutation_review"]);
@@ -4017,6 +4031,16 @@ function fallbackEvolutionEntryFromFleet(
   };
 }
 
+const PLAIN_TITLE_ENTRY_TYPES = new Set(["evolution_decision", "mutation_review", "postmortem", "rollback", "freeze_order"]);
+
+function evolutionReasonList(raw: unknown): string[] {
+  if (typeof raw === "string") return raw.trim() ? [raw.trim()] : [];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => (typeof item === "string" ? item.trim() : item && typeof item === "object" ? String((item as { text?: unknown; reason?: unknown; message?: unknown }).text ?? (item as { reason?: unknown }).reason ?? (item as { message?: unknown }).message ?? "").trim() : ""))
+    .filter(Boolean);
+}
+
 const verdictTone = (v?: string) =>
   v === "improved" || v === "accepted" || v === "approved"
     ? "bg-status-success/15 text-status-success border-status-success/30"
@@ -4035,10 +4059,11 @@ export const EvolutionJournalPage = () => {
     true,
   );
 
+  const includeSystem = activeView === "history" && searchParams.get("include_system") === "true";
   const serverMutationReview = normalizeEvolutionFocusToken(searchParams.get("mutation_review"), true);
   const serverDecision = serverMutationReview ? "" : normalizeEvolutionFocusToken(searchParams.get("decision"), true);
 
-  const scopeKey = `${activeView}|${personaFocus}|${serverMutationReview}|${serverDecision}`;
+  const scopeKey = `${activeView}|${personaFocus}|${serverMutationReview}|${serverDecision}|${includeSystem}`;
   const [pager, setPager] = useState<{ scopeKey: string; tokens: string[] }>({ scopeKey, tokens: [""] });
   if (pager.scopeKey !== scopeKey) setPager({ scopeKey, tokens: [""] });
   const tokens = pager.scopeKey === scopeKey ? pager.tokens : [""];
@@ -4053,9 +4078,10 @@ export const EvolutionJournalPage = () => {
         persona: personaFocus,
         mutationReview: serverMutationReview,
         decision: serverDecision,
+        includeSystem,
         pageToken,
       }),
-    [activeView, personaFocus, serverMutationReview, serverDecision, pageToken ?? ""],
+    [includeSystem ? `${activeView}+system` : activeView, personaFocus, serverMutationReview, serverDecision, pageToken ?? ""],
     { cacheKey: "oversight.evolutionJournal.list" },
   );
   const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], {
@@ -4071,6 +4097,9 @@ export const EvolutionJournalPage = () => {
   const autoProposalCounts: ManagementEvolutionJournalAutoProposalCounts = useMemo(
     () =>
       adaptedList?.autoProposalCounts ?? {
+        threshold: 0,
+        other: 0,
+        infrastructure: 0,
         incident_followup: 0,
         incident_severity: 0,
         postmortem_draft: 0,
@@ -4107,12 +4136,14 @@ export const EvolutionJournalPage = () => {
   const hasDegradedSurfaces = degradedSurfaces.length > 0;
   const hasHealthyJournalSource = useMemo(() => {
     const surfaces = journalMeta?.surfaces;
-    const hasOkSource = ["evolution_decisions", "postmortems", "mutation_review", "rollbacks", "freeze_orders"].some(
+    const hasOkSource = ["evolution_decisions", "postmortems", "mutation_review", "rollbacks", "freeze_orders", "strategy_pools"].some(
       (key) => String(surfaces?.[key]?.status ?? "").trim().toLowerCase() === "ok",
     );
     return hasOkSource || rows.length > 0 || autoProposalCounts.total > 0;
   }, [autoProposalCounts.total, journalMeta, rows.length]);
   const isPartialRead = !error && hasDegradedSurfaces && hasHealthyJournalSource;
+  const errorStatus = (error as { status?: unknown } | null)?.status;
+  const isDenied = Boolean(error) && (errorStatus === 401 || errorStatus === 403);
   const isReadFailed =
     Boolean(error) ||
     (!loading && data === undefined && !isFleetSummary) ||
@@ -4143,6 +4174,9 @@ export const EvolutionJournalPage = () => {
     "evolution_decisions",
     autoProposalCounts.incident_severity,
   );
+  const thresholdDisplay = formatJournalSurfaceCount("evolution_decisions", autoProposalCounts.threshold);
+  const infrastructureDisplay = formatJournalSurfaceCount("evolution_decisions", autoProposalCounts.infrastructure);
+  const otherDisplay = formatJournalSurfaceCount("evolution_decisions", autoProposalCounts.other);
   const postmortemDraftDisplay = formatJournalSurfaceCount(
     "postmortems",
     autoProposalCounts.postmortem_draft,
@@ -4152,6 +4186,28 @@ export const EvolutionJournalPage = () => {
     : isJournalSurfaceDegraded("postmortems")
       ? formatJournalSurfaceCount("postmortems", null)
       : String(autoProposalCounts.total);
+
+  const hiddenSystemCounts = summary?.hidden_system_counts ?? null;
+  const hiddenSystemTotal = hiddenSystemCounts
+    ? Object.values(hiddenSystemCounts).reduce((sum, n) => sum + n, 0)
+    : null;
+  const shownSystemTotal = summary?.decision_subject_class_counts
+    ? (summary.decision_subject_class_counts.infrastructure ?? 0) + (summary.decision_subject_class_counts.test ?? 0)
+    : null;
+  const systemToggleCount = includeSystem ? shownSystemTotal : hiddenSystemTotal;
+  const systemToggleParts = (includeSystem ? summary?.decision_subject_class_counts : hiddenSystemCounts)
+    ? Object.entries((includeSystem ? summary?.decision_subject_class_counts : hiddenSystemCounts) ?? {})
+        .filter(([key, n]) => n > 0 && (!includeSystem || key === "infrastructure" || key === "test"))
+        .map(([key, n]) => `${t(`mgmt.evolution.systemToggle.classes.${key}`, { defaultValue: key })} ${n}`)
+        .join("、")
+    : "";
+  const toggleSystem = () => {
+    const next = new URLSearchParams(searchParams);
+    if (includeSystem) next.delete("include_system");
+    else next.set("include_system", "true");
+    setSearchParams(next);
+  };
+  const strategyPoolsDegraded = isJournalSurfaceDegraded("strategy_pools");
 
   const switchView = (nextView: EvolutionJournalView) => {
     const next = new URLSearchParams(searchParams);
@@ -4220,9 +4276,11 @@ export const EvolutionJournalPage = () => {
               <div className="text-foreground">
                 {t("mgmt.evolution.autoProposalsSummaryFmt", {
                   total: autoProposalTotalDisplay,
+                  threshold: thresholdDisplay,
                   incidentFollowup: incidentFollowupDisplay,
                   incidentSeverity: incidentSeverityDisplay,
-                  postmortemDraft: postmortemDraftDisplay,
+                  infrastructure: infrastructureDisplay,
+                  other: otherDisplay,
                 })}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -4235,9 +4293,21 @@ export const EvolutionJournalPage = () => {
                 <Badge variant="outline" data-testid="auto-proposal-incident-severity">
                   {t("mgmt.evolution.incidentSeverity")}: {incidentSeverityDisplay}
                 </Badge>
-                <Badge variant="outline" data-testid="auto-proposal-postmortem-draft">
-                  {t("mgmt.evolution.postmortemDraft")}: {postmortemDraftDisplay}
+                <Badge variant="outline" data-testid="auto-proposal-threshold">
+                  {t("mgmt.evolution.autoProposalThreshold")}: {thresholdDisplay}
                 </Badge>
+                <Badge variant="outline" data-testid="auto-proposal-infrastructure">
+                  {t("mgmt.evolution.autoProposalInfrastructure")}: {infrastructureDisplay}
+                </Badge>
+                <Badge variant="outline" data-testid="auto-proposal-other">
+                  {t("mgmt.evolution.autoProposalOther")}: {otherDisplay}
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground" data-testid="auto-proposal-parts-hint">
+                {t("mgmt.evolution.autoProposalsPartsHint")}
+              </div>
+              <div className="text-xs text-muted-foreground" data-testid="auto-proposal-postmortem-draft">
+                {t("mgmt.evolution.postmortemDraftNote", { count: postmortemDraftDisplay })}
               </div>
             </div>
             <Button
@@ -4283,14 +4353,22 @@ export const EvolutionJournalPage = () => {
             </div>
             {summary && (
               <div className="flex flex-wrap items-center gap-2">
-                <span data-testid="evolution-summary-decisions">
+                <span data-testid="evolution-summary-decisions" title={t("mgmt.evolution.summaryDecisionsNote")}>
                   {t("mgmt.evolution.summaryDecisions")}:{" "}
                   {formatJournalSurfaceCount("evolution_decisions", summary.decision_count)}
                 </span>
-                <span data-testid="evolution-summary-mutation-reviews">
-                  {t("mgmt.evolution.summaryMutationReviews")}:{" "}
-                  {formatJournalSurfaceCount("mutation_review", summary.mutation_review_count)}
-                </span>
+                {summary.pool_version_count !== null && (
+                  <span data-testid="evolution-summary-pool-versions">
+                    {t("mgmt.evolution.summaryPoolVersions")}:{" "}
+                    {isJournalSurfaceDegraded("strategy_pools")
+                      ? formatJournalSurfaceCount("strategy_pools", null)
+                      : t("mgmt.evolution.summaryPoolVersionsFmt", {
+                          total: summary.pool_version_count,
+                          refused: summary.refused_pool_version_count ?? 0,
+                          applied: summary.pool_version_count - (summary.refused_pool_version_count ?? 0),
+                        })}
+                  </span>
+                )}
                 <span data-testid="evolution-summary-postmortems">
                   {t("mgmt.evolution.summaryPostmortems")}:{" "}
                   {formatJournalSurfaceCount("postmortems", summary.postmortem_count)}
@@ -4306,6 +4384,28 @@ export const EvolutionJournalPage = () => {
               </div>
             )}
           </div>
+          {activeView === "history" && (
+            <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="evolution-system-toggle-row">
+              <Button
+                size="sm"
+                variant={includeSystem ? "default" : "outline"}
+                aria-pressed={includeSystem}
+                data-testid="evolution-system-toggle"
+                onClick={toggleSystem}
+              >
+                {includeSystem ? t("mgmt.evolution.systemToggle.hide") : t("mgmt.evolution.systemToggle.show")}
+              </Button>
+              <span data-testid="evolution-system-hidden-count">
+                {systemToggleCount === null
+                  ? t("mgmt.evolution.systemToggle.hiddenUnknown")
+                  : includeSystem
+                    ? t("mgmt.evolution.systemToggle.shownBadge") + (systemToggleParts ? `（${systemToggleParts}）` : "")
+                    : systemToggleCount === 0
+                      ? t("mgmt.evolution.systemToggle.hiddenNone")
+                      : t("mgmt.evolution.systemToggle.hiddenFmt", { count: systemToggleCount, parts: systemToggleParts })}
+              </span>
+            </div>
+          )}
         </Card>
       )}
       {hasFocus && (
@@ -4328,7 +4428,13 @@ export const EvolutionJournalPage = () => {
           {t("common.loading", { defaultValue: "Loading..." })}
         </Card>
       )}
-      {(isReadFailed || hasDegradedSurfaces) && (
+      {isDenied && (
+        <Card className="border-status-warning/30 bg-status-warning/10 p-4 text-sm space-y-1" role="alert" data-testid="evolution-journal-denied">
+          <div className="font-semibold text-foreground">{t("mgmt.evolution.deniedTitle")}</div>
+          <p className="text-muted-foreground">{t("mgmt.evolution.deniedBody")}</p>
+        </Card>
+      )}
+      {(isReadFailed || hasDegradedSurfaces) && !isDenied && (
         <Card
           className="border-status-failed/30 bg-status-failed/10 p-4 text-sm space-y-2"
           role="alert"
@@ -4341,6 +4447,11 @@ export const EvolutionJournalPage = () => {
           <p className="text-muted-foreground">
             {isReadFailed ? t("mgmt.evolution.degradedBody") : t("mgmt.evolution.partialReadBody")}
           </p>
+          {strategyPoolsDegraded && (
+            <p className="text-muted-foreground" data-testid="evolution-strategy-pools-unavailable">
+              {t("mgmt.evolution.strategyPoolsUnavailable")}
+            </p>
+          )}
           {degradedSurfaces.length > 0 && (
             <div className="text-xs text-muted-foreground">
               {degradedSurfaces.map(([key, surface]) => `${key}: ${surface.status}`).join(" · ")}
@@ -4354,16 +4465,18 @@ export const EvolutionJournalPage = () => {
           </div>
         </Card>
       )}
-      {!loading && !isReadFailed && !hasDegradedSurfaces && visibleRows.length === 0 && (
+      {!loading && !isReadFailed && !hasDegradedSurfaces && !isDenied && visibleRows.length === 0 && (
         activeView === "history" && !hasFocus ? (
           <Card className="p-4 text-sm space-y-2" data-testid="evolution-history-empty">
             <div className="font-medium text-foreground">{t("mgmt.evolution.emptyHistoryTitle")}</div>
             <p className="text-muted-foreground">
               {t("mgmt.evolution.emptyHistoryWithProposalsFmt", {
                 total: autoProposalCounts.total,
+                threshold: autoProposalCounts.threshold,
                 incidentFollowup: autoProposalCounts.incident_followup,
                 incidentSeverity: autoProposalCounts.incident_severity,
-                postmortemDraft: autoProposalCounts.postmortem_draft,
+                infrastructure: autoProposalCounts.infrastructure,
+                other: autoProposalCounts.other,
               })}
             </p>
           </Card>
@@ -4421,10 +4534,119 @@ export const EvolutionJournalPage = () => {
         const evidenceClassLabel = evidenceClass
           ? t(`mgmt.evolution.evidenceClasses.${evidenceClass}`, { defaultValue: evidenceClass })
           : undefined;
+        if (entryType === "pool_version") {
+          const before = normalizePoolMembers(e.members_before);
+          const after = normalizePoolMembers(e.members_after);
+          const changes = diffPoolMembers(before, after);
+          const refused = e.refused === true || String(e.decision_status ?? e.status ?? "").toLowerCase() === "refused";
+          const decisionStatus = String(e.decision_status ?? e.status ?? "").toLowerCase();
+          const applied = !refused && decisionStatus === "applied";
+          const personaName = e.persona_name?.trim() || e.persona_id || e.personaId || t("mgmt.evolution.poolVersion.personaUnknown");
+          const isInitial = String(e.action ?? "").toLowerCase() === "initial";
+          const reasons = evolutionReasonList(e.reasons);
+          const memberText = (m: { artifact_ref: string; stage?: string | null; risk_weight?: number | null }) =>
+            t("mgmt.evolution.poolVersion.memberFmt", {
+              ref: m.artifact_ref,
+              stage: m.stage ?? "—",
+              weight: typeof m.risk_weight === "number" ? m.risk_weight : "—",
+            });
+          const actionLabel = e.action
+            ? t(`mgmt.evolution.poolVersion.actions.${e.action}`, { defaultValue: e.action })
+            : undefined;
+          return (
+            <Card key={e.id} className="p-4 space-y-2" data-testid={`evolution-pool-version-${e.id}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-medium text-foreground" data-testid="evolution-pool-version-title">
+                  {t(isInitial ? "mgmt.evolution.poolVersion.initialTitleFmt" : "mgmt.evolution.poolVersion.titleFmt", {
+                    persona: personaName,
+                    version: e.pool_version ?? "—",
+                  })}
+                </div>
+                <Badge
+                  variant="outline"
+                  data-testid="evolution-pool-version-status"
+                  className={refused ? verdictTone("rejected") : applied ? verdictTone("accepted") : verdictTone(undefined)}
+                >
+                  {refused
+                    ? t("mgmt.evolution.poolVersion.refused")
+                    : applied
+                      ? t("mgmt.evolution.poolVersion.applied")
+                      : t("mgmt.evolution.poolVersion.statusUnknown")}
+                </Badge>
+              </div>
+              <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                <div className="min-w-0" data-testid="evolution-pool-version-before">
+                  <dt className="text-muted-foreground">{t("mgmt.evolution.poolVersion.before")}</dt>
+                  <dd className="text-foreground [overflow-wrap:anywhere]">
+                    {before.length === 0
+                      ? t("mgmt.evolution.poolVersion.noMembers")
+                      : before.map((m) => <div key={m.artifact_ref}>{memberText(m)}</div>)}
+                  </dd>
+                </div>
+                <div className="min-w-0" data-testid="evolution-pool-version-after">
+                  <dt className="text-muted-foreground">{t("mgmt.evolution.poolVersion.after")}</dt>
+                  <dd className="text-foreground [overflow-wrap:anywhere]">
+                    {after.length === 0
+                      ? t("mgmt.evolution.poolVersion.noMembers")
+                      : after.map((m) => <div key={m.artifact_ref}>{memberText(m)}</div>)}
+                  </dd>
+                </div>
+              </dl>
+              <ul className="space-y-0.5 text-xs text-foreground" data-testid="evolution-pool-version-diff">
+                {refused ? (
+                  <li>{t("mgmt.evolution.poolVersion.refusedNoChange")}</li>
+                ) : changes.length === 0 ? (
+                  <li>{t("mgmt.evolution.poolVersion.noChange")}</li>
+                ) : (
+                  changes.map((c) => (
+                    <li key={`${c.kind}:${c.kind === "changed" ? c.ref : c.member.artifact_ref}`}>
+                      {c.kind === "added"
+                        ? t("mgmt.evolution.poolVersion.added", { ref: c.member.artifact_ref, stage: c.member.stage ?? "—", weight: c.member.risk_weight ?? "—" })
+                        : c.kind === "removed"
+                          ? t("mgmt.evolution.poolVersion.removed", { ref: c.member.artifact_ref })
+                          : t("mgmt.evolution.poolVersion.changed", {
+                              ref: c.ref,
+                              from: `${c.from.stage ?? "—"} / ${c.from.risk_weight ?? "—"}`,
+                              to: `${c.to.stage ?? "—"} / ${c.to.risk_weight ?? "—"}`,
+                            })}
+                    </li>
+                  ))
+                )}
+              </ul>
+              <div className="text-xs" data-testid="evolution-pool-version-reason">
+                <span className="text-muted-foreground">{t("mgmt.evolution.poolVersion.reasonLabel")}: </span>
+                {reasons.length === 0 ? (
+                  <span className="text-muted-foreground">{t("mgmt.evolution.poolVersion.reasonNone")}</span>
+                ) : (
+                  <span className="text-foreground">{reasons.join("；")}</span>
+                )}
+              </div>
+              <details className="text-xs text-muted-foreground" data-testid="evolution-pool-version-technical">
+                <summary className="cursor-pointer">{t("mgmt.evolution.poolVersion.technical")}</summary>
+                <div className="mt-1 space-y-0.5 [overflow-wrap:anywhere]">
+                  <div className="font-mono">{e.id}</div>
+                  {e.persona_id && <div className="font-mono">{e.persona_id}</div>}
+                  {actionLabel && <div>{t("mgmt.evolution.poolVersion.action")}: {actionLabel}</div>}
+                  {headline && <div>{headline}</div>}
+                  {e.summary && <div>{e.summary}</div>}
+                  {when && <div>{t("mgmt.evolution.landed")}: {when}</div>}
+                </div>
+              </details>
+            </Card>
+          );
+        }
+        const subjectClass = e.subject_class && e.subject_class !== "strategy" ? e.subject_class : undefined;
+        const plainTitle =
+          entryType && PLAIN_TITLE_ENTRY_TYPES.has(entryType)
+            ? t(`mgmt.evolution.plainTitle.${entryType}`, {
+                action: action ?? t("mgmt.evolution.plainTitle.actionUnknown"),
+                target: e.persona_name?.trim() || (target ? [cleanTargetType, cleanTargetId].filter(Boolean).join(":") : undefined) || t("mgmt.evolution.plainTitle.targetUnknown"),
+              })
+            : undefined;
         return (
           <Card key={e.id} className="p-4 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-medium text-foreground">{headline}</div>
+              <div className="text-sm font-medium text-foreground">{plainTitle ?? headline}</div>
               <div className="flex shrink-0 flex-wrap items-center gap-1">
                 {evidenceClass && (
                   <Badge
@@ -4441,6 +4663,13 @@ export const EvolutionJournalPage = () => {
                     {evidenceClassLabel} ({evidenceClass})
                   </Badge>
                 )}
+                {subjectClass && (
+                  <Badge variant="outline" data-testid={`evolution-subject-class-${subjectClass}`}>
+                    {t("mgmt.evolution.subjectClassBadge", {
+                      label: t(`mgmt.evolution.systemToggle.classes.${subjectClass}`, { defaultValue: subjectClass }),
+                    })}
+                  </Badge>
+                )}
                 {isFixture && (
                   <Badge
                     variant="outline"
@@ -4455,6 +4684,12 @@ export const EvolutionJournalPage = () => {
                 )}
               </div>
             </div>
+            {plainTitle && headline && headline !== plainTitle && (
+              <div className="text-xs text-muted-foreground [overflow-wrap:anywhere]" data-testid="evolution-machine-title" title={t("mgmt.evolution.machineDetail")}>{headline}</div>
+            )}
+            {subjectClass === "unclassified" && (
+              <div className="text-xs text-muted-foreground">{t("mgmt.evolution.unclassifiedNote")}</div>
+            )}
             <div className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{e.id}</div>
             {e.summary && <p className="text-sm text-muted-foreground">{e.summary}</p>}
             <dl className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">

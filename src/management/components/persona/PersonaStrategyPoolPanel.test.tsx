@@ -178,7 +178,7 @@ describe("PersonaStrategyPoolPanel", () => {
     expect(row.textContent).toContain("缺少：足夠的獨立押注");
     expect(row.textContent).toContain("已嘗試：momentum");
     expect(row.textContent).toContain("到期");
-    expect(screen.getByTestId("pool-demand-outcome").textContent).toContain("角色任務沒有可交易標的範圍");
+    expect(screen.getByTestId("pool-demand-outcome").textContent).toContain("Persona 任務沒有可交易標的範圍");
     expect(row.textContent).not.toContain("ValueError");
   });
 });

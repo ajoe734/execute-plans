@@ -1631,8 +1631,9 @@ describe("ObjectListPage", () => {
       expect(screen.getByTestId("qualification-policy-version")).toHaveTextContent(
         "evolution-qualification.v1",
       );
+      // FE-EVO-JOURNAL-DIRECTION-20261125: shown in the viewer time zone instead of raw ISO text.
       expect(screen.getByTestId("qualification-evaluated-at")).toHaveTextContent(
-        "2026-11-05T00:00:00Z",
+        new Date("2026-11-05T00:00:00Z").toLocaleString(),
       );
       expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("649");
       expect(screen.getByTestId("qualification-qualified-count")).toHaveTextContent("0");

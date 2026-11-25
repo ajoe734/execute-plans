@@ -655,6 +655,27 @@ export interface EvolutionQualificationDecisionItem {
   criteria: EvolutionQualificationCriterionRow[];
 }
 
+export interface EvolutionMemberBaseline {
+  persona_id: string;
+  persona_name: string | null;
+  artifact_ref: string;
+  stage: string | null;
+  risk_weight: number | null;
+  pool_version: number | null;
+  /** `approved`, `no_approved_baseline`, `unavailable` (or an unknown owner status, passed through). */
+  status: string;
+  /** Owner reason code passed through verbatim; never hard coded by the FE. */
+  reason: string | null;
+}
+
+export interface EvolutionMemberBaselinesSurface {
+  status: string;
+  reason: string | null;
+  approved: number | null;
+  not_approved: number | null;
+  unavailable: number | null;
+}
+
 export interface EvolutionQualificationReport {
   tenant_id?: string | null;
   sweep_id?: string | null;
@@ -666,6 +687,9 @@ export interface EvolutionQualificationReport {
   counts_by_first_failing_criterion: Record<string, number>;
   failure_reason?: string | null;
   items: EvolutionQualificationDecisionItem[];
+  /** Absent when the BFF predates BFF-EVO-JOURNAL-POOL-VERSIONS (not the same as an empty list). */
+  member_baselines?: EvolutionMemberBaseline[] | null;
+  member_baselines_surface?: EvolutionMemberBaselinesSurface | null;
   total: number;
   limit: number;
   offset: number;
@@ -711,6 +735,13 @@ export interface EvolutionProgram extends BaseObject {
   revision?: number;
   status?: EvolutionProgramStatus | string;
   origin?: "manual" | "auto_qualified" | "automatic" | (string & {});
+  /** Recorded classification (optional; absent means the BFF gave none). */
+  subject_class?: string;
+  record_class?: string;
+  classification?: string;
+  data_scope?: string;
+  origin_class?: string;
+  is_test?: boolean;
   originKind?: "automatic" | "manual";
   source_decision_ids?: string[];
   sourceDecisionIds?: string[];

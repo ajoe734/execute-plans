@@ -18,6 +18,7 @@ import {
   type StrategyListQueryOptions,
 } from "@/lib/bff-v1";
 import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
+import { isRecordedTestRecord, splitReasonCode } from "./oversight/evolutionJournalFocus";
 import {
   normalizeStrategyOperationalStatus,
   rebalanceWorkflowLabel,
@@ -1066,21 +1067,190 @@ export const DeploymentsList = () => {
   );
 };
 
+type QualificationReadState = "ok" | "none" | "denied" | "unavailable";
+
+function baselineStatusKey(status: string): string {
+  return status === "approved"
+    ? "statusApproved"
+    : status === "no_approved_baseline"
+      ? "statusNoBaseline"
+      : status === "unavailable"
+        ? "statusUnavailable"
+        : "statusUnknown";
+}
+
+const KNOWN_BASELINE_REASON_HEADS = new Set([
+  "registry_entry_missing", "registry_entry_is_not_member_artifact", "artifact_not_approved", "checksum_mismatch",
+  "artifact_checksum_mismatch", "wrong_tenant", "strategy_artifact_missing", "backtest_run_missing",
+  "backtest_run_not_in_lineage", "out_of_sample_metrics_missing", "baseline_computed_under_decision_close_fill",
+  "validated_universe_missing", "universe_not_validated", "gate_return_basis_unknown", "order_quantity_missing",
+  "gate_verdict_not_recorded", "gate_not_passed", "gate_proof_missing", "gate_proof_differs_from_summary",
+  "gate_binding_not_owner_verified", "gate_binding_not_producer_verified", "gate_binding_differs_from_summary",
+  "gate_round_trips_missing", "registry_entry_unreadable", "registry_read_unavailable",
+]);
+
+/** Plain sentence for an owner baseline reason; unknown codes get a generic sentence plus the raw code. */
+export function baselineReasonText(
+  reason: string | null | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): { text: string; raw: string | null } | null {
+  const code = splitReasonCode(reason);
+  if (!code) return null;
+  if (!KNOWN_BASELINE_REASON_HEADS.has(code.head)) {
+    return { text: t("evolution.qualification.memberBaselines.reasonUnknown"), raw: code.raw };
+  }
+  return {
+    text: t(`evolution.qualification.memberBaselines.reasons.${code.head}`),
+    raw: code.raw !== code.head ? code.raw : null,
+  };
+}
+
+export function MemberBaselinesSection({
+  report,
+  readState,
+}: {
+  report: EvolutionQualificationReport | null;
+  readState: QualificationReadState;
+}) {
+  const t = useT();
+  const prefix = "evolution.qualification.memberBaselines";
+  const surface = report?.member_baselines_surface ?? null;
+  const rows = report?.member_baselines ?? null;
+  let body: JSX.Element;
+  if (readState === "denied") {
+    body = <div className="text-sm text-status-warning" data-testid="member-baselines-denied">{t(`${prefix}.denied`)}</div>;
+  } else if (readState === "unavailable" || surface?.status === "unavailable") {
+    body = (
+      <div className="text-sm text-status-warning" data-testid="member-baselines-unavailable">
+        {t(`${prefix}.unavailable`)}
+        {surface?.reason && <span className="ml-1 font-mono text-xs">{t(`${prefix}.unavailableReason`, { reason: surface.reason })}</span>}
+      </div>
+    );
+  } else if (!report || rows === null || rows === undefined) {
+    body = <div className="text-sm text-muted-foreground" data-testid="member-baselines-not-provided">{t(`${prefix}.notProvided`)}</div>;
+  } else if (rows.length === 0) {
+    body = <div className="text-sm text-muted-foreground" data-testid="member-baselines-empty">{t(`${prefix}.empty`)}</div>;
+  } else {
+    const byPersona = new Map<string, { name: string; rows: typeof rows }>();
+    for (const row of rows) {
+      const group = byPersona.get(row.persona_id) ?? { name: row.persona_name || row.persona_id, rows: [] };
+      group.rows.push(row);
+      byPersona.set(row.persona_id, group);
+    }
+    body = (
+      <div className="space-y-3">
+        {surface && surface.approved !== null && (
+          <div className="text-xs text-muted-foreground" data-testid="member-baselines-summary">
+            {t(`${prefix}.summaryFmt`, {
+              approved: surface.approved ?? 0,
+              notApproved: surface.not_approved ?? 0,
+              unavailable: surface.unavailable ?? 0,
+            })}
+          </div>
+        )}
+        {surface?.status === "degraded" && surface.reason && (
+          <div className="text-xs text-status-warning" data-testid="member-baselines-degraded">
+            {t(`${prefix}.unavailableReason`, { reason: surface.reason })}
+          </div>
+        )}
+        {[...byPersona.entries()].map(([personaId, group]) => (
+          <div key={personaId} data-testid={`member-baselines-persona-${personaId}`}>
+            <div className="text-sm font-medium">
+              <Link className="underline" to={"/management/personas/" + encodeURIComponent(personaId)}>{group.name}</Link>
+            </div>
+            <ul className="mt-1 space-y-1.5">
+              {group.rows.map((row) => {
+                const reason = baselineReasonText(row.reason, t);
+                return (
+                  <li key={`${row.artifact_ref}:${row.pool_version ?? ""}`} className="text-xs" data-testid="member-baseline-row">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-foreground [overflow-wrap:anywhere]">{row.artifact_ref}</span>
+                      <span className="text-muted-foreground">
+                        {t(`${prefix}.stageWeightFmt`, { stage: row.stage ?? "—", weight: row.risk_weight ?? "—" })}
+                        {row.pool_version !== null && <> · {t(`${prefix}.poolVersionFmt`, { version: row.pool_version })}</>}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        data-testid="member-baseline-status"
+                        className={row.status === "approved" ? "border-status-success/30 text-status-success" : "border-status-warning/40 text-status-warning"}
+                      >
+                        {t(`${prefix}.${baselineStatusKey(row.status)}`)}
+                      </Badge>
+                    </div>
+                    {row.status !== "approved" && (
+                      <div className="mt-0.5 text-muted-foreground" data-testid="member-baseline-reason">
+                        {reason ? reason.text : t(`${prefix}.reasonNone`)}
+                        {reason?.raw && (
+                          <span className="ml-1 font-mono" data-testid="member-baseline-raw">{t(`${prefix}.rawCode`, { code: reason.raw })}</span>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <section className="space-y-1.5" data-testid="member-baselines" aria-label={t(`${prefix}.title`)}>
+      <h3 className="text-xs font-medium text-muted-foreground">{t(`${prefix}.title`)}</h3>
+      <p className="text-xs text-muted-foreground">{t(`${prefix}.intro`)}</p>
+      {body}
+    </section>
+  );
+}
+
 export const EvolutionList = () => {
   const t = useT();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const showTestRecords = searchParams.get("include_test") === "true";
   const [qualification, setQualification] = useState<EvolutionQualificationReport | null>(null);
+  const [qualificationState, setQualificationState] = useState<QualificationReadState>("none");
+  const [hiddenTestCount, setHiddenTestCount] = useState(0);
 
   const loadEvolutionPrograms = useCallback(async () => {
-    const [envelope, qualReport] = await Promise.all([
+    const [envelope, qual] = await Promise.all([
       asEntityLoader<EvolutionProgram>(lists.evolution)(),
-      mgmt.evolutionQualification.getLiveOnly().catch(() => undefined),
+      mgmt.evolutionQualification
+        .getLiveOnly()
+        .then((report): { report: EvolutionQualificationReport | undefined; state: QualificationReadState } => ({
+          report,
+          state: report ? "ok" : "none",
+        }))
+        .catch((err: unknown): { report: undefined; state: QualificationReadState } => {
+          const status = (err as { status?: unknown } | null)?.status;
+          return { report: undefined, state: status === 401 || status === 403 ? "denied" : "unavailable" };
+        }),
     ]);
-    setQualification(qualReport ?? null);
-    return envelope;
-  }, []);
+    setQualification(qual.report ?? null);
+    setQualificationState(qual.state);
+    const testRows = envelope.items.filter((row) => isRecordedTestRecord(row));
+    setHiddenTestCount(testRows.length);
+    if (showTestRecords || testRows.length === 0) return envelope;
+    return { ...envelope, items: envelope.items.filter((row) => !isRecordedTestRecord(row)) };
+  }, [showTestRecords]);
 
+  const toggleTestRecords = () => {
+    const next = new URLSearchParams(searchParams);
+    if (showTestRecords) next.delete("include_test");
+    else next.set("include_test", "true");
+    setSearchParams(next);
+  };
+
+  const viewerZone = (() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch {
+      return "";
+    }
+  })();
   const policyVersion = qualification?.policy_version || "—";
-  const evaluatedAtDisplay = qualification?.evaluated_at || t("evolution.qualification.notEvaluatedYet");
+  const evaluatedAtDisplay = qualification?.evaluated_at
+    ? t("evolution.qualification.evaluatedAtFmt", { date: safeDateTime(qualification.evaluated_at), zone: viewerZone || "local" })
+    : t("evolution.qualification.notEvaluatedYet");
   const evaluatedCount = qualification?.evaluated ?? 0;
   const qualifiedCount = qualification?.qualified ?? 0;
   const failingCounts = qualification?.counts_by_first_failing_criterion ?? {};
@@ -1117,7 +1287,18 @@ export const EvolutionList = () => {
     <ObjectListPage<EvolutionProgram>
       title={t("nav.evolution")}
       loader={loadEvolutionPrograms}
+      reloadKey={"include_test:" + showTestRecords}
       basePath="/management/evolution"
+      topControls={() =>
+        hiddenTestCount > 0 || showTestRecords ? (
+          <div className="mb-3 flex justify-end">
+            <Button type="button" size="sm" variant="outline" aria-pressed={showTestRecords}
+              data-testid="evolution-toggle-test-records" onClick={toggleTestRecords}>
+              {showTestRecords ? t("evolution.qualification.testRecords.hide") : t("evolution.qualification.testRecords.show", { count: hiddenTestCount })}
+            </Button>
+          </div>
+        ) : null
+      }
       liveKinds={["Evolution", "Promotion"]}
       createBehavior={{ kind: "drawer", entity: "evolutionProgram" }}
       alwaysRenderSummary
@@ -1141,6 +1322,19 @@ export const EvolutionList = () => {
               </span>
             </div>
           </div>
+
+          {qualificationState === "denied" && (
+            <div className="rounded-md border border-status-warning/40 bg-status-warning/10 p-2.5 text-xs" role="alert" data-testid="qualification-denied">
+              <div className="font-semibold text-foreground">{t("evolution.qualification.deniedTitle")}</div>
+              <div className="text-muted-foreground">{t("evolution.qualification.deniedBody")}</div>
+            </div>
+          )}
+          {qualificationState === "unavailable" && (
+            <div className="rounded-md border border-status-warning/40 bg-status-warning/10 p-2.5 text-xs" role="alert" data-testid="qualification-unavailable">
+              <div className="font-semibold text-foreground">{t("evolution.qualification.unavailableTitle")}</div>
+              <div className="text-muted-foreground">{t("evolution.qualification.unavailableBody")}</div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="rounded-md border border-border/60 bg-muted/20 p-2.5">
@@ -1178,7 +1372,10 @@ export const EvolutionList = () => {
                     className="flex items-center justify-between rounded border border-border/50 px-2.5 py-1.5 text-xs"
                   >
                     <span className="text-foreground">
-                      {label} <span className="text-mono text-muted-foreground">({criterion})</span>
+                      {label}
+                      <span className="block text-mono text-[10px] text-muted-foreground" data-testid={`qualification-criterion-code-${criterion}`}>
+                        {t("evolution.qualification.criterionCodeFmt", { code: criterion })}
+                      </span>
                     </span>
                     <span className="text-mono font-semibold" data-testid={`qualification-criterion-count-${criterion}`}>
                       {count}
@@ -1188,6 +1385,8 @@ export const EvolutionList = () => {
               })}
             </div>
           </div>
+
+          <MemberBaselinesSection report={qualification} readState={qualificationState} />
 
           {visibleRows.length === 0 && (
             <div
@@ -1204,7 +1403,16 @@ export const EvolutionList = () => {
         {
           key: "name",
           header: t("evolution.columns.name"),
-          cell: (r) => <div className="font-medium text-foreground">{r.name}</div>,
+          cell: (r) => (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-medium text-foreground">{r.name}</span>
+              {isRecordedTestRecord(r) && (
+                <Badge variant="outline" className="text-xs" data-testid={`evolution-test-record-${r.id}`}>
+                  {t("evolution.qualification.testRecords.badge")}
+                </Badge>
+              )}
+            </div>
+          ),
         },
         {
           key: "status",
@@ -1331,7 +1539,7 @@ export function ResearchDemandsSection({ surface, rows }: { surface: ResearchDem
                   {demandPersonaName(d, t)} · {t("research.demand.lacking", { measure: demandMeasureText(d.short_measure, t) })}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {d.tried_families.length > 0 ? t("research.demand.tried", { families: d.tried_families.join("、") }) : t("research.demand.triedNone")}
+                  {d.tried_families.length > 0 ? t("research.demand.tried", { families: d.tried_families.map((f) => t(`research.demand.families.${f}`, { defaultValue: f })).join("、") }) : t("research.demand.triedNone")}
                   {d.missing_datasets.length > 0 && <> · {t("research.demand.missingData", { datasets: d.missing_datasets.join("、") })}</>}
                 </div>
                 <div className="text-xs text-muted-foreground">
