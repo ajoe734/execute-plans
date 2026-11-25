@@ -1,6 +1,6 @@
 // Management research list over the real BFF envelope shape.
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -147,5 +147,131 @@ describe("ResearchList (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () => {
     expect(urls.some((url) => url.searchParams.get("view") === "collector_checks" && !url.searchParams.has("page_token"))).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "研究評估" }));
     expect(await screen.findByText("快速評估")).toBeInTheDocument();
+  });
+
+  describe("open demands, search rows and meeting tickets (FE-RESEARCH-DEMANDS-20261125)", () => {
+    const PERSONA_A = "persona-ee7112a829d38b9135ac";
+    const DEMAND_A = "rd-975bb89106f1c696a680";
+    const demandRow = (over: Record<string, unknown> = {}) => ({
+      demand_id: DEMAND_A, persona_id: PERSONA_A, persona_display_name: "Momentum Persona A",
+      short_measure: "effective_bets", tried_families: ["momentum"], missing_datasets: [],
+      mandate: "meeting_research_demand", created_at: "2026-11-25T05:00:00Z", expires_at: "2026-12-02T05:00:00Z",
+      status: "open", evidence_ref: "pool-health:" + PERSONA_A,
+      last_template_search_reason: "template_search_unavailable:ValueError:mandate_universe_missing",
+      last_discovery_reason: "no_external_match", ...over,
+    });
+    const searchTask = (code: string | null) => ({
+      id: "rtask-tmpl-1", task_id: "rtask-tmpl-1", status: "failed",
+      title: "Search registered templates for " + DEMAND_A, name: "Search registered templates for " + DEMAND_A,
+      created_by: "persona-pool-cycle", updated_at: "2026-11-25T05:11:00Z", run_count: 2,
+      latest_run: { run_id: "r2", status: "failed", adapter: "template_demand_gate", dispatch_mode: "replication_gate" },
+      demand: { demand_id: DEMAND_A, persona_id: PERSONA_A, attempt_count: 2, last_reason_code: code, short_measure: "effective_bets", status: "open" },
+    });
+    const ticket = {
+      ticket_id: "rt-20261125-001", title: "Find diversifying template", owner_id: "persona-ee7112a829d38b9135ac",
+      owner_display_name: "Momentum Persona A", due_at: "2026-11-30T00:00:00Z", status: "open",
+      origin_meeting_id: "mtg-77",
+    };
+    const mockBff = (opts: { demands?: unknown; surface?: unknown; code?: string | null; tickets?: "ok" | "denied" | "empty" }) => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = new URL(String(input instanceof Request ? input.url : input), "https://bff.example.test");
+        const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
+        if (url.pathname.endsWith("/research/tickets")) {
+          if (opts.tickets === "denied") return json({ error: { code: "PERMISSION_DENIED", message: "forbidden" } }, 403);
+          return json({ items: opts.tickets === "empty" ? [] : [ticket] });
+        }
+        return json({
+          items: [searchTask(opts.code === undefined ? "template_search_unavailable:ValueError:mandate_universe_missing" : opts.code)],
+          open_demands: opts.demands ?? [demandRow()],
+          meta: { hidden_non_real_count: 3, surfaces: { research_demands: opts.surface ?? { status: "ok" } } },
+        });
+      });
+    };
+
+    it("lists open demands first with persona, lack, tried, expiry, outcome and links", async () => {
+      mockBff({});
+      renderResearch();
+      const row = await screen.findByTestId("research-demand-row");
+      expect(row).toHaveTextContent("Momentum Persona A");
+      expect(row).toHaveTextContent("缺少：足夠的獨立押注");
+      expect(row).toHaveTextContent("已嘗試：momentum");
+      expect(row).toHaveTextContent("到期");
+      expect(row).toHaveTextContent("已搜尋 2 次");
+      expect(screen.getByTestId("research-demand-outcome")).toHaveTextContent("角色任務沒有可交易標的範圍");
+      expect(within(row).getByRole("link", { name: "角色頁面" })).toHaveAttribute("href", "/management/personas/" + PERSONA_A);
+      expect(within(row).getByRole("link", { name: "搜尋任務" })).toHaveAttribute("href", "/management/experiments/rtask-tmpl-1");
+      expect(screen.getByTestId("research-demands").compareDocumentPosition(screen.getByTestId("research-toggle-non-real-button")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("titles the search row by persona and lacking measure and shows attempts and the plain failure reason", async () => {
+      mockBff({});
+      renderResearch();
+      const title = await screen.findByTestId("research-row-title");
+      expect(title).toHaveTextContent("為 Momentum Persona A 搜尋範本 · 缺少足夠的獨立押注");
+      expect(title).not.toHaveTextContent("rd-975bb");
+      const outcome = screen.getByTestId("research-search-outcome");
+      expect(outcome).toHaveTextContent("已搜尋 2 次");
+      expect(outcome).toHaveTextContent("角色任務沒有可交易標的範圍");
+      expect(screen.getByTestId("research-toggle-non-real-button")).toHaveTextContent("3");
+    });
+
+    it("renders the English reason and shows the raw code only for an unknown reason", async () => {
+      await i18n.changeLanguage("en-US");
+      mockBff({ code: "template_search_unavailable:RuntimeError:boom" });
+      renderResearch();
+      const outcome = await screen.findByTestId("research-search-outcome");
+      expect(outcome).toHaveTextContent("The template search service failed.");
+      expect(screen.getByTestId("research-reason-raw")).toHaveTextContent("template_search_unavailable:RuntimeError:boom");
+      cleanup();
+      mockBff({ code: "weird_new_code" });
+      renderResearch();
+      expect(await screen.findByText("Failure reason not recognised")).toBeInTheDocument();
+      expect(screen.getByTestId("research-reason-raw")).toHaveTextContent("weird_new_code");
+    });
+
+    it("shows unavailable, not zero, when the demand owner is unavailable", async () => {
+      mockBff({ demands: [], surface: { status: "unavailable", reason: "owner_read_failed:RuntimeError" } });
+      renderResearch();
+      expect(await screen.findByTestId("research-demands-unavailable")).toHaveTextContent("不代表沒有需求");
+      expect(screen.queryByTestId("research-demands-empty")).not.toBeInTheDocument();
+    });
+
+    it("shows an explicit empty state when the owner answered with no open demands", async () => {
+      mockBff({ demands: [] });
+      renderResearch();
+      expect(await screen.findByTestId("research-demands-empty")).toBeInTheDocument();
+    });
+
+    it("hides the demand section when the BFF does not return the field", async () => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = String(input instanceof Request ? input.url : input);
+        return new Response(JSON.stringify(url.includes("/research/tickets") ? { items: [] } : body(false)), { headers: { "Content-Type": "application/json" } });
+      });
+      renderResearch();
+      expect(await screen.findByTestId("research-row-title")).toBeInTheDocument();
+      expect(screen.queryByTestId("research-demands")).not.toBeInTheDocument();
+    });
+
+    it("lists meeting research tickets with owner, due, state and meeting link", async () => {
+      mockBff({ tickets: "ok" });
+      renderResearch();
+      const row = await screen.findByTestId("research-ticket-row");
+      expect(row).toHaveTextContent("Find diversifying template");
+      expect(row).toHaveTextContent("負責人：Momentum Persona A");
+      expect(within(row).getByRole("link", { name: "開啟會議" })).toHaveAttribute("href", "/management/meetings/mtg-77?action=rt-20261125-001");
+    });
+
+    it("shows a denied state, not an empty list, when tickets are forbidden", async () => {
+      mockBff({ tickets: "denied" });
+      renderResearch();
+      expect(await screen.findByTestId("research-tickets-denied")).toHaveTextContent("沒有檢視會議研究工單的權限");
+      expect(screen.queryByTestId("research-tickets-empty")).not.toBeInTheDocument();
+    });
+
+    it("shows empty only when the ticket read succeeded with no rows", async () => {
+      mockBff({ tickets: "empty" });
+      renderResearch();
+      expect(await screen.findByTestId("research-tickets-empty")).toBeInTheDocument();
+    });
   });
 });

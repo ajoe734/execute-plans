@@ -1526,7 +1526,7 @@ export const ResearchList = () => {
                 {nonReal && <Badge variant="outline">{t("research.list.testOrManualRecord")}</Badge>}
                 {!isCollectorView && isTemplateSearchTask(r) && r.demand && (
                   <div className="basis-full text-xs text-muted-foreground" data-testid="research-search-outcome">
-                    {r.demand.attempt_count != null && <span className="mr-2">{t("research.demand.attempts", { count: r.demand.attempt_count })}</span>}
+                    {r.demand.attempt_count != null && <span className="mr-2">{t("research.demand.attempts", { count: r.demand.attempt_count })} ·</span>}
                     {r.status === "failed" || r.latest_run?.status === "failed" ? <ReasonText code={r.demand.last_reason_code} /> : null}
                   </div>
                 )}

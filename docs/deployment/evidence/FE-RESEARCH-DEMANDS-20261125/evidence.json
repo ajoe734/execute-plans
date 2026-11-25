@@ -1,0 +1,26 @@
+{
+  "task": "FE-RESEARCH-DEMANDS-20261125",
+  "root_cause_class": "RC6",
+  "register_instance": "RC6",
+  "review_independence_exception": "other model families at terminal quota until 2026-11-27 10:03Z; reviewer is from the owner family",
+  "functional_evidence_only": "no VM/SSH access; hosted verification belongs to the operator acceptance task",
+  "contract_source": "BFF-RESEARCH-DEMAND-READ-20261125 (merged fdf48a6b): BFF_API_CONTRACT.md lines 942-943 and test_research_tasks_read.py recorded rows (rd-975bb89106f1c696a680 / rd-796e24e24bf2055d3c42, personas persona-ee7112a829d38b9135ac / persona-6507750312870d03a241)",
+  "acceptance": {
+    "1": "ResearchDemandsSection renders first in topControls of ResearchList: persona name, lack in plain words, tried families, since, expiry, latest outcome, persona link, search-task link; surface unavailable shows an unavailable text, never zero (ResearchList.test.tsx)",
+    "2": "researchTitle titles a template-search row by persona and lacking measure; demandReasonText maps known codes to zh-TW/en-US, raw code only as secondary text for generic/unknown; attempt_count shown",
+    "3": "MeetingResearchTicketsSection reads /api/v1/research/tickets (existing read, no new route); owner, due, state, meeting link; 401/403 renders a denied state, not empty",
+    "4": "non-real toggle and BFF hidden_non_real_count untouched; collector view hides both new sections",
+    "5": "PersonaStrategyPoolPanel shows lack/tried/expiry/outcome; tests cover empty, denied (403), unavailable, failed search; screenshots research-demands-zh-TW.png and research-demands-en-US.png produced by capture.mjs (real Chromium against a fixture BFF with the recorded row shapes)",
+    "6": "no test deleted or weakened; see changed_assertions"
+  },
+  "tests": {
+    "command": "vitest run src/management/pages/ResearchList.test.tsx src/management/components/persona src/management/pages/ResearchDetail.test.tsx",
+    "result": "5 files, 43 tests passed; tsc -p tsconfig.app.json clean; eslint 0 errors; src/i18n parity tests passed"
+  },
+  "changed_assertions": [],
+  "blocker": {
+    "file": "src/management/pages/ObjectListPage.test.tsx",
+    "test": "ObjectListPage > renders a readable research list, marks test and manual records, and opens the canonical task detail",
+    "reason": "asserts fetch called exactly once; the research page now also performs the required meeting-ticket read (acceptance 3), so fetch is called twice. The file is outside the scoped artifacts, so it was not edited. Needed change (justified): replace toHaveBeenCalledTimes(1) + calls[0] with filtering calls to /bff/research-tasks (expect exactly 1) and /api/v1/research/tickets (expect 1)."
+  }
+}
