@@ -7,9 +7,9 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125",
-  "base_commit": "535556719a11b7cddbc96a792520c2edc8f84f5d",
+  "base_commit": "1f6e3044ae4cd9179bef5372e65b0fca0d753cc8",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T08:30:00Z",
+  "timestamp": "2026-11-25T09:11:00Z",
   "problem_register_binding": {
     "root_cause_classes": ["RC6"],
     "summary": "AuditPage and normalizeAuditFields previously dropped occurred_at/created_at timestamps from /bff/audit and /bff/audit/events, leaving r.ts undefined on /management/audit."
@@ -34,14 +34,19 @@
   },
   "verification": [
     {
-      "command": "npm run typecheck:app",
+      "command": "npm run typecheck:app && npm run typecheck:agora",
       "exit_code": 0,
-      "result": "tsc -p tsconfig.app.json --noEmit passed with 0 errors"
+      "result": "tsc -p tsconfig.app.json --noEmit and tsc -p tsconfig.agora.json --noEmit passed with 0 errors"
     },
     {
-      "command": "npx vitest run src/lib/bff-v1/__tests__/approval-readback.test.ts src/management/pages/Operations.test.tsx src/test/governance-owner-readonly-detail.test.tsx",
+      "command": "PANTHEON_CONTRACT_ROOT=\"$PANTHEON_COMMAND_ROOT\" npm run test:contract",
       "exit_code": 0,
-      "result": "3 test files passed, 103 tests passed (35 in approval-readback.test.ts, 53 in Operations.test.tsx, 15 in governance-owner-readonly-detail.test.tsx)"
+      "result": "Agora bundle aligned (49 schemas, 99 routes, 75 sha256 entries) and 11 contract-drift tests passed"
+    },
+    {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/approval-readback.test.ts src/management/pages/Operations.test.tsx src/test/governance-owner-readonly-detail.test.tsx src/management/pages/ResearchDetail.test.tsx",
+      "exit_code": 0,
+      "result": "4 test files passed, 115 tests passed (35 in approval-readback.test.ts, 53 in Operations.test.tsx, 15 in governance-owner-readonly-detail.test.tsx, 12 in ResearchDetail.test.tsx)"
     }
   ],
   "residual_findings": [
