@@ -108,7 +108,7 @@ Built UIs with no backend at all. Keep the page; build the endpoint.
 | `/management/workflows` | WorkflowTemplates | `GET /bff/workflows` (+ templates CRUD) |
 | `/management/hooks` | HookCronManager | `GET /bff/hooks` (cron/hook registry) |
 | `/management/lineage` | LineageExplorer | `GET /bff/lineage` (data/artifact lineage graph) |
-| `/management/knowledge` | KnowledgeInbox | `GET /bff/knowledge` (knowledge inbox) |
+| `/management/knowledge` | KnowledgeInbox | `GET /bff/knowledge` (removed from sidebar and command palette in `FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125` until all backing knowledge sources are connected; route `/management/knowledge` remains open and lists each unconnected or failed source from `meta.surfaces`) |
 | `/management/alpha-factory` | AlphaFactoryBoard | `GET /bff/alpha-factory` (idea→strategy board) |
 | `/management/data-sources` | DataSourceManagement | `GET /bff/management/data-sources` |
 | `/management/governance/permissions` | PermissionMatrix | `GET /bff/management/permissions` |

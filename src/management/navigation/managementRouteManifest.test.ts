@@ -19,6 +19,13 @@ describe("MGMT-PERF-IA-001 canonical route manifest", () => {
     expect(new Set(labelKeys).size).toBe(labelKeys.length);
   });
 
+  it("excludes Knowledge Inbox from sidebar and command palette static entries until sources are connected (FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125)", () => {
+    const items = MANAGEMENT_SIDEBAR_GROUPS.flatMap((g) => g.items);
+    expect(items.some((i) => i.id === "knowledge")).toBe(false);
+    expect(items.some((i) => i.to === "/management/knowledge")).toBe(false);
+    expect(items.some((i) => i.labelKey === "nav.knowledge")).toBe(false);
+  });
+
   it("never renders a canonical center twice across the sidebar", () => {
     const centerIds = Object.keys(CANONICAL_CENTERS);
     const toValues = MANAGEMENT_SIDEBAR_GROUPS.flatMap((g) => g.items.map((i) => i.to));
