@@ -3,7 +3,7 @@
 // pool strategy and for a strat-tw-official synthetic stub (is_synthetic_or_stub).
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import i18n from "@/i18n";
@@ -233,5 +233,150 @@ describe("StrategyDetail overview (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () =
     });
     expect(screen.getByText(RECORDED_A81B_STRATEGY.name)).toBeInTheDocument();
     expect(screen.getByTestId("strategy-rules-summary")).toBeInTheDocument();
+  });
+
+  it("sends only the primary strategy read first, starts overview secondary reads only after it answers, omits jobs and tab reads on overview, and loads tab sections when opened", async () => {
+    const callOrder: string[] = [];
+    let resolveStrategy!: (value: Strategy) => void;
+    const strategyPromise = new Promise<Strategy>((resolve) => {
+      resolveStrategy = resolve;
+    });
+
+    vi.spyOn(bffV1.strategies, "get").mockImplementation(() => {
+      callOrder.push("strategies.get");
+      return strategyPromise;
+    });
+    const jobsSpy = vi.spyOn(bffV1.jobs, "list").mockImplementation(async () => {
+      callOrder.push("jobs.list");
+      return [];
+    });
+    const artifactsSpy = vi.spyOn(bffV1.artifacts, "list").mockImplementation(async () => {
+      callOrder.push("artifacts.list");
+      return [];
+    });
+    const lineageSpy = vi.spyOn(managementConsoleReads, "lineage").mockImplementation(async () => {
+      callOrder.push("lineage");
+      return {
+        nodes: [],
+        edges: [],
+        meta: { status: "ok", source: "service_client", surfaces: {} },
+        page_info: { total: 0, page_size: 0, has_more: false },
+        has_more: false,
+      };
+    });
+    const researchSpy = vi.spyOn(bffV1.research, "list").mockImplementation(async () => {
+      callOrder.push("research.list");
+      return [];
+    });
+    const alertsSpy = vi.spyOn(bffV1.alerts, "list").mockImplementation(async () => {
+      callOrder.push("alerts.list");
+      return [];
+    });
+    const incidentsSpy = vi.spyOn(bffV1.incidents, "list").mockImplementation(async () => {
+      callOrder.push("incidents.list");
+      return [];
+    });
+    const evolutionSpy = vi.spyOn(bffV1.evolution, "list").mockImplementation(async () => {
+      callOrder.push("evolution.list");
+      return [];
+    });
+    const approvalsSpy = vi.spyOn(bffV1.approvals, "list").mockImplementation(async () => {
+      callOrder.push("approvals.list");
+      return [];
+    });
+    const auditSpy = vi.spyOn(bffV1.audit, "list").mockImplementation(async () => {
+      callOrder.push("audit.list");
+      return [];
+    });
+    vi.spyOn(bffV1.watchers, "forSubject").mockImplementation(async () => {
+      callOrder.push("watchers.forSubject");
+      return [];
+    });
+    vi.spyOn(bffV1.decisionJournal, "forSubject").mockImplementation(async () => {
+      callOrder.push("decisionJournal.forSubject");
+      return [];
+    });
+
+    renderPage(RECORDED_A81B_STRATEGY.id);
+
+    // While primary strategy read is pending, no secondary read has been sent
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(callOrder).toEqual(["strategies.get"]);
+
+    // Resolve primary strategy read; overview renders and only then do overview secondary reads start
+    await act(async () => {
+      resolveStrategy(RECORDED_A81B_STRATEGY);
+    });
+    expect(await screen.findByText(RECORDED_A81B_STRATEGY.name)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(callOrder).toEqual([
+        "strategies.get",
+        "watchers.forSubject",
+        "decisionJournal.forSubject",
+      ]);
+    });
+
+    // Jobs list, full artifact list, lineage, and all tab-only reads are NOT sent on overview
+    expect(jobsSpy).not.toHaveBeenCalled();
+    expect(artifactsSpy).not.toHaveBeenCalled();
+    expect(lineageSpy).not.toHaveBeenCalled();
+    expect(researchSpy).not.toHaveBeenCalled();
+    expect(alertsSpy).not.toHaveBeenCalled();
+    expect(incidentsSpy).not.toHaveBeenCalled();
+    expect(evolutionSpy).not.toHaveBeenCalled();
+    expect(approvalsSpy).not.toHaveBeenCalled();
+    expect(auditSpy).not.toHaveBeenCalled();
+
+    // Tab labels do not display zero counts from unrequested secondary reads
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab.textContent ?? "").not.toMatch(/\(\s*0\s*\)/);
+    }
+
+    // Opening a tab triggers its read lazily and keeps its own loading/unavailable state
+    let resolveResearch!: (value: never[]) => void;
+    researchSpy.mockImplementationOnce(() => {
+      callOrder.push("research.list");
+      return new Promise((resolve) => {
+        resolveResearch = resolve;
+      });
+    });
+    const expTab = screen.getByRole("tab", { name: /研究項目|Experiments/i });
+    fireEvent.pointerDown(expTab);
+    fireEvent.mouseDown(expTab);
+    fireEvent.pointerUp(expTab);
+    fireEvent.mouseUp(expTab);
+    fireEvent.click(expTab);
+
+    expect(await screen.findByTestId("strategy-experiments-section")).toHaveAttribute(
+      "data-section-status",
+      "loading",
+    );
+    expect(researchSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveResearch([]);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("strategy-experiments-section")).toHaveAttribute(
+        "data-section-status",
+        "ready",
+      );
+    });
+
+    // Opening Artifacts tab loads lineage and artifacts only on open
+    const artTab = screen.getByRole("tab", { name: /^(Artifacts|Artifact)/i });
+    fireEvent.pointerDown(artTab);
+    fireEvent.mouseDown(artTab);
+    fireEvent.pointerUp(artTab);
+    fireEvent.mouseUp(artTab);
+    fireEvent.click(artTab);
+
+    await waitFor(() => {
+      expect(lineageSpy).toHaveBeenCalledWith(RECORDED_A81B_STRATEGY.id);
+      expect(artifactsSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(jobsSpy).not.toHaveBeenCalled();
   });
 });
