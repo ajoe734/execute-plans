@@ -1,7 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ObjectListPage } from "./ObjectListPage";
-import { collectorCheckStatus, isNonRealRun, researchTitle } from "./researchPresentation";
+import { collectorCheckStatus, demandMeasureText, demandPersonaName, demandReasonText, isNonRealRun, isTemplateSearchTask, researchTitle } from "./researchPresentation";
 import { ServerPager, freshServerPageCursor, useServerPageCursor } from "@/platform/components/ServerPager";
 import {
   bffFetch,
@@ -12,6 +12,7 @@ import {
   normalizeBaseObjectFields,
   normalizeLiveListResponse,
   listResearchTasksEnvelope,
+  listMeetingResearchTickets,
   EVOLUTION_QUALIFICATION_CRITERIA,
   type EvolutionQualificationReport,
   type StrategyListQueryOptions,
@@ -26,7 +27,7 @@ import {
 import { useT } from "@/platform/hooks";
 import { formulaVersion, formulaWeightSummary } from "./RankingFormulaDetail";
 import { safeDateTime } from "@/lib/utils";
-import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, Artifact, ListEnvelope, RiskLevel } from "@/lib/bff-v1";
+import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, ResearchDemand, ResearchDemandsSurface, ResearchTicketsRead, Artifact, ListEnvelope, RiskLevel } from "@/lib/bff-v1";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Button } from "@/components/ui/button";
@@ -1291,6 +1292,111 @@ export function extractHiddenNonRealCount(meta: unknown): number | undefined {
   return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
 }
 
+function ReasonText({ code, testId }: { code: string | null | undefined; testId?: string }) {
+  const t = useT();
+  const reason = demandReasonText(code, t);
+  if (!reason) return null;
+  return (
+    <span data-testid={testId}>
+      {reason.text}
+      {reason.raw && <span className="ml-1 text-xs text-muted-foreground font-mono" data-testid="research-reason-raw">{t("research.demand.rawCode", { code: reason.raw })}</span>}
+    </span>
+  );
+}
+
+export function ResearchDemandsSection({ surface, rows }: { surface: ResearchDemandsSurface | null; rows: ResearchTask[] }) {
+  const t = useT();
+  if (!surface) return null;
+  return (
+    <section className="mb-4 rounded-md border p-3 space-y-2" data-testid="research-demands" aria-label={t("research.demand.title")}>
+      <div>
+        <h3 className="text-sm font-medium">{t("research.demand.title")}</h3>
+        <p className="text-xs text-muted-foreground">{t("research.demand.intro")}</p>
+      </div>
+      {surface.state === "unavailable" ? (
+        <div className="text-sm text-amber-700" data-testid="research-demands-unavailable">
+          {t("research.demand.unavailable")}
+          {surface.reason && <span className="ml-1 text-xs font-mono">{t("research.demand.unavailableReason", { reason: surface.reason })}</span>}
+        </div>
+      ) : surface.demands.length === 0 ? (
+        <div className="text-sm text-muted-foreground" data-testid="research-demands-empty">{t("research.demand.empty")}</div>
+      ) : (
+        <ul className="space-y-2">
+          {surface.demands.map((d) => {
+            const search = rows.find((r) => r.demand?.demand_id === d.demand_id);
+            const outcome = d.last_template_search_reason ?? d.last_discovery_reason ?? search?.demand?.last_reason_code;
+            return (
+              <li key={d.demand_id} className="text-sm space-y-0.5" data-testid="research-demand-row">
+                <div className="font-medium">
+                  {demandPersonaName(d, t)} · {t("research.demand.lacking", { measure: demandMeasureText(d.short_measure, t) })}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {d.tried_families.length > 0 ? t("research.demand.tried", { families: d.tried_families.join("、") }) : t("research.demand.triedNone")}
+                  {d.missing_datasets.length > 0 && <> · {t("research.demand.missingData", { datasets: d.missing_datasets.join("、") })}</>}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {d.created_at ? t("research.demand.since", { date: safeDateTime(d.created_at) }) : null}
+                  {" · "}
+                  {d.expires_at ? t("research.demand.expires", { date: safeDateTime(d.expires_at) }) : t("research.demand.expiresUnknown")}
+                  {search?.demand?.attempt_count != null && <> · {t("research.demand.attempts", { count: search.demand.attempt_count })}</>}
+                </div>
+                <div className="text-xs" data-testid="research-demand-outcome">
+                  {outcome
+                    ? <>{t("research.demand.outcome", { reason: "" })}<ReasonText code={outcome} /></>
+                    : t("research.demand.outcomeNone")}
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {d.persona_id && (
+                    <Link className="underline" to={"/management/personas/" + encodeURIComponent(d.persona_id)}>{t("research.demand.persona")}</Link>
+                  )}
+                  {search
+                    ? <Link className="underline" to={"/management/experiments/" + encodeURIComponent(search.id)}>{t("research.demand.searchTask")}</Link>
+                    : <span className="text-muted-foreground">{t("research.demand.noSearchTask")}</span>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function MeetingResearchTicketsSection({ read }: { read: ResearchTicketsRead | null }) {
+  const t = useT();
+  if (!read) return null;
+  return (
+    <section className="mb-4 rounded-md border p-3 space-y-2" data-testid="research-tickets" aria-label={t("research.tickets.title")}>
+      <h3 className="text-sm font-medium">{t("research.tickets.title")}</h3>
+      {read.state === "denied" ? (
+        <div className="text-sm text-amber-700" data-testid="research-tickets-denied">{t("research.tickets.denied")}</div>
+      ) : read.state === "unavailable" ? (
+        <div className="text-sm text-amber-700" data-testid="research-tickets-unavailable">{t("research.tickets.unavailable", { reason: read.reason })}</div>
+      ) : read.tickets.length === 0 ? (
+        <div className="text-sm text-muted-foreground" data-testid="research-tickets-empty">{t("research.tickets.empty")}</div>
+      ) : (
+        <ul className="space-y-1">
+          {read.tickets.map((tk) => (
+            <li key={tk.action_id} className="text-sm" data-testid="research-ticket-row">
+              <span className="font-medium">{tk.title ?? tk.deliverable ?? tk.action_id}</span>
+              <span className="text-xs text-muted-foreground">
+                {" · "}{tk.owner_label ? t("research.tickets.owner", { owner: tk.owner_label }) : t("research.tickets.ownerUnknown")}
+                {" · "}{tk.due_at ? t("research.tickets.due", { date: safeDateTime(tk.due_at) }) : t("research.tickets.dueUnknown")}
+                {" · "}{t(`meetingsCenter.detail.followThrough.state.${tk.state}`, { defaultValue: tk.state })}
+              </span>
+              {tk.origin_meeting_id && (
+                <Link className="ml-2 text-xs underline" to={"/management/meetings/" + encodeURIComponent(tk.origin_meeting_id) + "?action=" + encodeURIComponent(tk.action_id)}>
+                  {t("research.tickets.meeting")}
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export const ResearchList = () => {
   const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1300,10 +1406,23 @@ export const ResearchList = () => {
   const filterKey = view + ":" + includeNonReal;
   const [pageCursor, setPageCursor] = useServerPageCursor(filterKey);
   const pageToken = pageCursor.currentToken;
+  const [demandsSurface, setDemandsSurface] = useState<ResearchDemandsSurface | null>(null);
+  const [ticketsRead, setTicketsRead] = useState<ResearchTicketsRead | null>(null);
   const loader = useCallback(
-    () => listResearchTasksEnvelope({ view, includeNonReal, pageToken }),
+    () => listResearchTasksEnvelope({ view, includeNonReal, pageToken }).then((env) => {
+      const meta = env.meta as { research_demands_read?: ResearchDemandsSurface } | undefined;
+      setDemandsSurface(view === "research" ? meta?.research_demands_read ?? null : null);
+      return env;
+    }),
     [view, includeNonReal, pageToken],
   );
+  useEffect(() => {
+    if (isCollectorView) { setTicketsRead(null); return; }
+    let live = true;
+    void listMeetingResearchTickets().then((read) => { if (live) setTicketsRead(read); });
+    return () => { live = false; };
+  }, [isCollectorView]);
+  const demandList: ResearchDemand[] = demandsSurface?.state === "ok" ? demandsSurface.demands : [];
 
   const selectView = (collector: boolean) => {
     const next = new URLSearchParams(searchParams);
@@ -1340,6 +1459,9 @@ export const ResearchList = () => {
       topControls={(ctx) => {
         const hiddenCount = extractHiddenNonRealCount(ctx.meta) ?? 0;
         return (
+          <>
+          {!isCollectorView && <ResearchDemandsSection surface={demandsSurface} rows={ctx.visibleRows} />}
+          {!isCollectorView && <MeetingResearchTicketsSection read={ticketsRead} />}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2" role="group" aria-label={t("research.list.views")}>
               <Button size="sm" variant={isCollectorView ? "outline" : "default"} aria-pressed={!isCollectorView} onClick={() => selectView(false)}>
@@ -1356,6 +1478,7 @@ export const ResearchList = () => {
               </Button>
             )}
           </div>
+          </>
         );
       }}
       bottomControls={(ctx) => {
@@ -1376,7 +1499,7 @@ export const ResearchList = () => {
             const showMissingSubject = !isCollectorView && !hasSubject && (r.taskType ?? r.task_type) === "rapid_eval";
             return (
               <div data-testid="research-row-title" className="space-y-0.5">
-                <div className="font-medium">{researchTitle(r, t)}</div>
+                <div className="font-medium">{researchTitle(r, t, demandList)}</div>
                 {showMissingSubject && <div className="text-xs text-muted-foreground">{t("research.list.subjectNotRecorded")}</div>}
               </div>
             );
@@ -1401,6 +1524,12 @@ export const ResearchList = () => {
                   <span className="text-xs text-muted-foreground" data-testid="research-runner-unrecorded">{t("research.runnerUnrecorded")}</span>
                 )}
                 {nonReal && <Badge variant="outline">{t("research.list.testOrManualRecord")}</Badge>}
+                {!isCollectorView && isTemplateSearchTask(r) && r.demand && (
+                  <div className="basis-full text-xs text-muted-foreground" data-testid="research-search-outcome">
+                    {r.demand.attempt_count != null && <span className="mr-2">{t("research.demand.attempts", { count: r.demand.attempt_count })} ·</span>}
+                    {r.status === "failed" || r.latest_run?.status === "failed" ? <ReasonText code={r.demand.last_reason_code} /> : null}
+                  </div>
+                )}
               </div>
             );
           },
