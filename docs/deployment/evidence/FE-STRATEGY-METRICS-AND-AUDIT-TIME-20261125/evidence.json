@@ -7,9 +7,9 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125",
-  "base_commit": "1f6e3044ae4cd9179bef5372e65b0fca0d753cc8",
+  "base_commit": "90d91dd85874bca7ae2fe5ed113875c617a6ab4f",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T09:11:00Z",
+  "timestamp": "2026-11-25T09:15:00Z",
   "problem_register_binding": {
     "root_cause_classes": ["RC6"],
     "summary": "AuditPage and normalizeAuditFields previously dropped occurred_at/created_at timestamps from /bff/audit and /bff/audit/events, leaving r.ts undefined on /management/audit."
