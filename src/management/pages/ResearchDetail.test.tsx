@@ -126,7 +126,9 @@ describe("ResearchDetail", () => {
     renderDetail();
 
     await waitFor(() => expect(screen.getByText("Management research context")).toBeInTheDocument());
-    expect(screen.getByText("TW-Index-Arbitrage")).toBeInTheDocument();
+    // The section heading renders from research.get; the Persona row comes from the
+    // separate personaFleet.get read, so wait for that row before the sync assertions.
+    expect(await screen.findByText("TW-Index-Arbitrage")).toBeInTheDocument();
     expect(screen.getByText("persona-20260528-5937dea1")).toBeInTheDocument();
     expect(screen.getByText("MGMT-QLIB-006")).toBeInTheDocument();
     expect(screen.getByText("qlib / vectorbt / statsmodels")).toBeInTheDocument();
