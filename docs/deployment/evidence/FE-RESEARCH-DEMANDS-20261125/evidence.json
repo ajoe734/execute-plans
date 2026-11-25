@@ -15,12 +15,14 @@
   },
   "tests": {
     "command": "vitest run src/management/pages/ResearchList.test.tsx src/management/components/persona src/management/pages/ResearchDetail.test.tsx",
-    "result": "5 files, 43 tests passed; tsc -p tsconfig.app.json clean; eslint 0 errors; src/i18n parity tests passed"
+    "result": "5 files, 43 tests passed; tsc -p tsconfig.app.json clean; eslint 0 errors; src/i18n parity tests passed; ObjectListPage.test.tsx 29 passed"
   },
-  "changed_assertions": [],
-  "blocker": {
-    "file": "src/management/pages/ObjectListPage.test.tsx",
-    "test": "ObjectListPage > renders a readable research list, marks test and manual records, and opens the canonical task detail",
-    "reason": "asserts fetch called exactly once; the research page now also performs the required meeting-ticket read (acceptance 3), so fetch is called twice. The file is outside the scoped artifacts, so it was not edited. Needed change (justified): replace toHaveBeenCalledTimes(1) + calls[0] with filtering calls to /bff/research-tasks (expect exactly 1) and /api/v1/research/tickets (expect 1)."
-  }
+  "changed_assertions": [
+    {
+      "file": "src/management/pages/ObjectListPage.test.tsx",
+      "test": "ObjectListPage > renders a readable research list, marks test and manual records, and opens the canonical task detail",
+      "change": "toHaveBeenCalledTimes(1)+calls[0] replaced by filtering fetch calls: exactly 1 to /bff/research-tasks and 1 to /api/v1/research/tickets",
+      "justification": "Page now also reads meeting tickets (acceptance 3); no assertion removed or weakened, endpoint check made stricter per endpoint."
+    }
+  ]
 }
