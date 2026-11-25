@@ -8,9 +8,9 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-STRATEGY-DETAIL-PRIMARY-FIRST-20261125",
-  "base_commit": "62ed222ba",
-  "status": "blocked_artifact_contract",
-  "timestamp": "2026-11-25T14:09:45Z",
+  "base_commit": "62ed222ba6bba5bf963290ab9df7450f9e494ecc",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T14:39:00Z",
   "problem_register_binding": {
     "root_cause_class": "RC6",
     "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
@@ -19,6 +19,7 @@
   "modified_surfaces": [
     "src/management/pages/StrategyDetail.tsx",
     "src/management/pages/StrategyDetail.test.tsx",
+    "src/management/__tests__/fullOperationAssembly.test.tsx",
     "e2e/06-entity-registry.spec.ts",
     "docs/deployment/evidence/FE-STRATEGY-DETAIL-PRIMARY-FIRST-20261125/evidence.json"
   ],
@@ -33,8 +34,8 @@
     "AC2_jobs_and_artifacts_omitted_on_overview_and_no_zero_tab_counts": {
       "passed": true,
       "details": [
-        "The unused bffV1.jobs.list() read is removed from StrategyDetail, and neither bffV1.artifacts.list() nor managementConsoleReads.lineage(entityId) is sent on the overview tab.",
-        "Opening the Artifacts tab loads lineage and artifacts on open and filters to this strategy's lineage artifact IDs; tab labels do not show zero counts from unrequested reads."
+        "The bffV1.jobs.list() read had no consumer on StrategyDetail since commit dafaa23e1 (the page shows no jobs section), so the read is removed.",
+        "Neither bffV1.artifacts.list() nor managementConsoleReads.lineage(entityId) is sent on the overview tab. Opening the Artifacts tab loads lineage and artifacts on open and filters to this strategy's lineage artifact IDs; tab labels do not show zero counts from unrequested reads."
       ]
     },
     "AC3_refresh_keeps_shown_data_and_404_unavailable_unchanged": {
@@ -52,11 +53,11 @@
         "Locale parity passes across all 17 tests in src/lib/v5/management/__tests__/i18nParity.test.ts."
       ]
     },
-    "AC5_no_weakened_tests_and_artifact_contract_blocker": {
-      "passed": false,
+    "AC5_no_weakened_tests_and_justified_assertions": {
+      "passed": true,
       "details": [
-        "No existing test was weakened or deleted in the scoped test suites (42/42 tests pass across the 7 scoped StrategyDetail test files).",
-        "However, src/management/__tests__/fullOperationAssembly.test.tsx:152-158 (which runs in Branch CI Gate's full `npm run test` step) renders StrategyDetail on the overview tab without opening any other tab and asserts `expect(screen.getByRole('alert')).toHaveTextContent('Some strategy data could not be loaded')` for `it.each(['jobs', 'audit', 'approvals', 'alerts', 'incidents', 'artifacts', 'research', 'evolution'])`. Because AC1 and AC2 forbid sending jobs, artifacts, and tab-only reads on the overview tab, that test must open the corresponding tab (and drop 'jobs' from the overview failure list, with justification in evidence per AC5), but `execute-plans:src/management/__tests__/fullOperationAssembly.test.tsx` is missing from the task's `artifacts` contract."
+        "No existing test was weakened or deleted across the 7 scoped StrategyDetail test files (42/42 tests pass) or fullOperationAssembly.test.tsx (16/16 tests pass).",
+        "Justification for changed assertion in src/management/__tests__/fullOperationAssembly.test.tsx lines 152-171: StrategyDetail has had no jobs consumer or jobs section since commit dafaa23e1, and AC1/AC2 require omitting jobs on StrategyDetail and loading tab-only sections only when their tab is opened. Accordingly, fullOperationAssembly.test.tsx keeps all seven tab-backed sources (audit -> audit, approvals -> governance, alerts -> risk, incidents -> incidents, artifacts -> artifacts, research -> experiments, evolution -> evolution) and asserts the failure alert after opening their tab, and asserts for jobs that bffV1.jobs.list is not called."
       ]
     }
   },
@@ -93,9 +94,9 @@
       "result": "passed (0 errors)"
     },
     {
-      "command": "./node_modules/.bin/vitest run src/management/pages/StrategyDetail.test.tsx src/management/pages/StrategyDetail.spec.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/StrategyDetail.discovery.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "command": "./node_modules/.bin/vitest run src/management/__tests__/fullOperationAssembly.test.tsx src/management/pages/StrategyDetail.test.tsx src/management/pages/StrategyDetail.spec.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/StrategyDetail.discovery.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
       "exit_code": 0,
-      "result": "8 test files passed, 59 tests passed"
+      "result": "9 test files passed, 75 tests passed"
     },
     {
       "command": "./node_modules/.bin/playwright test e2e/06-entity-registry.spec.ts --grep \"renders StrategyDetail header and recorded pool rules within 2 s\" && ./node_modules/.bin/playwright test e2e/13-agora.spec.ts",
