@@ -161,7 +161,7 @@ describe("management reads after retiring dead Agora clients", () => {
     vi.mocked(bffV1[client].list as () => Promise<unknown[]>).mockRejectedValueOnce(new Error("Unavailable"));
     renderStrategy();
     expect(await screen.findByText("Surviving strategy")).toBeInTheDocument();
-    expect(screen.getByText("Journal still available")).toBeInTheDocument();
+    expect(await screen.findByText("Journal still available")).toBeInTheDocument();
     const trigger = document.querySelector<HTMLElement>(`[role="tab"][id$="-trigger-${tabValue}"]`);
     expect(trigger).not.toBeNull();
     fireEvent.mouseDown(trigger!, { button: 0, ctrlKey: false });
@@ -171,7 +171,7 @@ describe("management reads after retiring dead Agora clients", () => {
   it("does not call bffV1.jobs.list when rendering strategy detail", async () => {
     renderStrategy();
     expect(await screen.findByText("Surviving strategy")).toBeInTheDocument();
-    expect(screen.getByText("Journal still available")).toBeInTheDocument();
+    expect(await screen.findByText("Journal still available")).toBeInTheDocument();
     expect(bffV1.jobs.list).not.toHaveBeenCalled();
   });
 
@@ -179,7 +179,7 @@ describe("management reads after retiring dead Agora clients", () => {
     vi.mocked(bffV1[client].forSubject).mockRejectedValueOnce(new Error("Unavailable"));
     renderStrategy();
     expect(await screen.findByText("Surviving strategy")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Some strategy data could not be loaded");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Some strategy data could not be loaded");
   });
 
   it("ends loading with an explicit error when the strategy read fails", async () => {

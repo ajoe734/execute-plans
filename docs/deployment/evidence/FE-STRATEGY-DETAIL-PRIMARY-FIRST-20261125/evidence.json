@@ -10,7 +10,7 @@
   "branch": "task/FE-STRATEGY-DETAIL-PRIMARY-FIRST-20261125",
   "base_commit": "62ed222ba6bba5bf963290ab9df7450f9e494ecc",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T14:39:00Z",
+  "timestamp": "2026-11-25T15:20:00Z",
   "problem_register_binding": {
     "root_cause_class": "RC6",
     "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
@@ -57,7 +57,7 @@
       "passed": true,
       "details": [
         "No existing test was weakened or deleted across the 7 scoped StrategyDetail test files (42/42 tests pass) or fullOperationAssembly.test.tsx (16/16 tests pass).",
-        "Justification for changed assertion in src/management/__tests__/fullOperationAssembly.test.tsx lines 152-171: StrategyDetail has had no jobs consumer or jobs section since commit dafaa23e1, and AC1/AC2 require omitting jobs on StrategyDetail and loading tab-only sections only when their tab is opened. Accordingly, fullOperationAssembly.test.tsx keeps all seven tab-backed sources (audit -> audit, approvals -> governance, alerts -> risk, incidents -> incidents, artifacts -> artifacts, research -> experiments, evolution -> evolution) and asserts the failure alert after opening their tab, and asserts for jobs that bffV1.jobs.list is not called."
+        "Justification for changed assertions in src/management/__tests__/fullOperationAssembly.test.tsx lines 152-183: StrategyDetail has had no jobs consumer or jobs section since commit dafaa23e1, and AC1/AC2 require omitting jobs on StrategyDetail, starting overview secondary reads after the primary strategy read renders, and loading tab-only sections only when their tab is opened. Accordingly, fullOperationAssembly.test.tsx awaits findByText('Journal still available') / findByRole('alert') after the primary 'Surviving strategy' read renders, keeps all seven tab-backed sources (audit -> audit, approvals -> governance, alerts -> risk, incidents -> incidents, artifacts -> artifacts, research -> experiments, evolution -> evolution) and asserts the failure alert after opening their tab, and asserts for jobs that bffV1.jobs.list is not called."
       ]
     }
   },
@@ -109,5 +109,13 @@
     "recurring_jobs": 0,
     "added_tables_files_caches": 0
   },
-  "residual_findings": []
+  "residual_findings": [
+    {
+      "file": "src/management/pages/ResearchDetail.test.tsx",
+      "lines": "128-129",
+      "introduced_by": "63745a0cb (FE-RESEARCH-OPERATOR-READABILITY-20261122)",
+      "symptom": "Intermittent Vitest race in ResearchDetail.test.tsx ('renders Persona Fleet research context for OODA Orient detail links'): Unable to find an element with the text: TW-Index-Arbitrage (observed in Branch CI Gate push run 45636946512 job 139291866740 while pull_request run 45636963349 job 139292206959 passed).",
+      "cause": "ResearchDetail.tsx defers mgmt.personaFleet.get() to useEffect([id, isResearch]) after the primary bffV1.research.get(id) read renders 'Management research context'. Line 128 awaits waitFor(() => expect(screen.getByText('Management research context')).toBeInTheDocument()) and line 129 synchronously asserts expect(screen.getByText('TW-Index-Arbitrage')).toBeInTheDocument() before setFleetRows is guaranteed to have flushed under high CPU load."
+    }
+  ]
 }
