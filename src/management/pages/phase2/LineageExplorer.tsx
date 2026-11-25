@@ -45,6 +45,64 @@ function isLineageEdgeLike(record: Record<string, unknown>): boolean {
   );
 }
 
+function isRetiredStateToken(value: unknown): boolean {
+  const token = asNonEmptyString(value)?.toLowerCase();
+  return token === "retired" || token === "archived" || token === "deprecated";
+}
+
+function isCurrentStrategyRow(rec: Record<string, unknown>): boolean {
+  const listScope = asNonEmptyString(rec.listScope ?? rec.list_scope)?.toLowerCase();
+  if (listScope && listScope !== "current" && listScope !== "unknown") {
+    return false;
+  }
+  const state = asNonEmptyString(
+    rec.state ?? rec.status ?? rec.lifecycle_state ?? rec.lifecycleState,
+  )?.toLowerCase();
+  if (state === "draft" || isRetiredStateToken(state)) {
+    return false;
+  }
+  const opStatus = asNonEmptyString(
+    rec.operationalStatus ?? rec.operational_status,
+  )?.toLowerCase();
+  if (isRetiredStateToken(opStatus)) {
+    return false;
+  }
+  const personaStates = Array.isArray(rec.personaStates)
+    ? rec.personaStates
+    : Array.isArray(rec.persona_states)
+      ? rec.persona_states
+      : null;
+  if (personaStates && personaStates.length > 0) {
+    const allRetired = personaStates.every((entry) => {
+      if (!entry || typeof entry !== "object") return false;
+      const pRec = entry as Record<string, unknown>;
+      return isRetiredStateToken(pRec.state ?? pRec.status);
+    });
+    if (allRetired) return false;
+  }
+  return true;
+}
+
+function isCurrentPersonaRow(rec: Record<string, unknown>): boolean {
+  if (rec.archived === true) return false;
+  const listScope = asNonEmptyString(rec.listScope ?? rec.list_scope)?.toLowerCase();
+  if (listScope && listScope !== "unknown") {
+    if (listScope !== "current") return false;
+  }
+  const state = asNonEmptyString(
+    rec.state ??
+      rec.status ??
+      rec.lifecycle_state ??
+      rec.lifecycleState ??
+      rec.lifecycleStatus ??
+      rec.lifecycle_status,
+  )?.toLowerCase();
+  if (isRetiredStateToken(state)) {
+    return false;
+  }
+  return true;
+}
+
 export const LineageExplorerPage = () => {
   const t = useT();
   const navigate = useNavigate();
@@ -53,6 +111,7 @@ export const LineageExplorerPage = () => {
   const [activeRootId, setActiveRootId] = useState<string>(initialRoot);
   const [queryInput, setQueryInput] = useState<string>(initialRoot);
   const [isTypingQuery, setIsTypingQuery] = useState<boolean>(false);
+  const [isPickerExpanded, setIsPickerExpanded] = useState<boolean>(false);
   const [candidates, setCandidates] = useState<LineageLookupCandidate[]>([]);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<LineageNode | null>(null);
@@ -66,6 +125,7 @@ export const LineageExplorerPage = () => {
       setActiveRootId(nextRoot);
       setQueryInput(nextRoot);
       setIsTypingQuery(false);
+      setIsPickerExpanded(false);
       setSelected(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,12 +134,13 @@ export const LineageExplorerPage = () => {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      bffV1.strategies.listNonDraft().catch(() => []),
+      bffV1.strategies.listNonDraft({ hideRetiredPersonas: true }).catch(() => []),
       bffV1.personas.list().catch(() => []),
     ]).then(([strategyRows, personaRows]) => {
       if (cancelled) return;
       const byId = new Map<string, LineageLookupCandidate>();
       const personaNamesFromStrategies = new Map<string, string>();
+      const excludedPersonaIds = new Set<string>();
 
       for (const raw of Array.isArray(strategyRows) ? strategyRows : []) {
         if (!raw || typeof raw !== "object") continue;
@@ -87,6 +148,7 @@ export const LineageExplorerPage = () => {
         if (isLineageEdgeLike(rec)) continue;
         const id = asNonEmptyString(rec.id ?? rec.strategy_id ?? rec.strategyId);
         if (!id) continue;
+        if (!isCurrentStrategyRow(rec)) continue;
         const name =
           asNonEmptyString(rec.display_name ?? rec.displayName ?? rec.title ?? rec.name) ?? id;
         const personaNameMap =
@@ -116,6 +178,10 @@ export const LineageExplorerPage = () => {
         if (isLineageEdgeLike(rec)) continue;
         const id = asNonEmptyString(rec.id ?? rec.persona_id ?? rec.personaId);
         if (!id) continue;
+        if (!isCurrentPersonaRow(rec)) {
+          excludedPersonaIds.add(id);
+          continue;
+        }
         const name =
           asNonEmptyString(
             rec.display_name ??
@@ -134,7 +200,7 @@ export const LineageExplorerPage = () => {
       }
 
       for (const [pid, pname] of personaNamesFromStrategies.entries()) {
-        if (!byId.has(pid)) {
+        if (!byId.has(pid) && !excludedPersonaIds.has(pid)) {
           byId.set(pid, {
             id: pid,
             name: pname,
@@ -176,6 +242,7 @@ export const LineageExplorerPage = () => {
     setActiveRootId(trimmed);
     setQueryInput(displayInput ?? trimmed);
     setIsTypingQuery(false);
+    setIsPickerExpanded(false);
     setSelected(null);
     const p = new URLSearchParams(params);
     if (trimmed) {
@@ -243,6 +310,21 @@ export const LineageExplorerPage = () => {
     return { nodes: filtered, edges: e.filter((edge) => ids.has(edge.from) && ids.has(edge.to)) };
   }, [data, activeRootId, filter, enabled, t]);
 
+  const selectedCandidate = useMemo(
+    () => (activeRootId ? candidates.find((c) => c.id === activeRootId) ?? null : null),
+    [candidates, activeRootId],
+  );
+  const highlightedNode = useMemo(() => {
+    if (!activeRootId || !data?.nodes) return null;
+    const allHighlighted = highlightLineageNodesForRoot(data.nodes, activeRootId);
+    return allHighlighted.find((n) => n.highlight) ?? null;
+  }, [data, activeRootId]);
+  const isCandidatesCollapsed = Boolean(activeRootId) && !isTypingQuery && !isPickerExpanded;
+  const chosenKind = selectedCandidate?.kind ?? highlightedNode?.type;
+  const chosenName =
+    selectedCandidate?.name ??
+    (highlightedNode ? resolveLineageNodeLabel(highlightedNode, t) : activeRootId);
+
   const selectedResolved = selected ? resolveEntity(selected.id) : null;
 
   return (
@@ -261,6 +343,7 @@ export const LineageExplorerPage = () => {
                   onChange={(e) => {
                     setQueryInput(e.target.value);
                     setIsTypingQuery(true);
+                    setIsPickerExpanded(true);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -306,54 +389,92 @@ export const LineageExplorerPage = () => {
               </div>
             </div>
           </div>
-          {candidates.length > 0 && (
+          {(candidates.length > 0 || isCandidatesCollapsed) && (
             <div className="space-y-1.5 pt-1" data-testid="lineage-lookup-candidates">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                {t("lineageExplorer.candidatesLabel")}
-              </div>
-              {filteredCandidates.length > 0 ? (
+              {isCandidatesCollapsed ? (
                 <div
-                  role="listbox"
-                  aria-label={t("lineageExplorer.candidatesLabel")}
-                  data-testid="lineage-lookup-options"
-                  className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto"
+                  data-testid="lineage-lookup-selected"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs"
                 >
-                  {filteredCandidates.map((item) => {
-                    const isSelected = activeRootId === item.id;
-                    return (
-                      <button
-                        key={`${item.kind}:${item.id}`}
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        data-testid={`lineage-lookup-option-${item.id}`}
-                        data-candidate-id={item.id}
-                        data-candidate-kind={item.kind}
-                        onClick={() => commitRoot(item.id, item.id)}
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-left text-xs transition-colors ${
-                          isSelected
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border bg-background hover:bg-muted/60 text-foreground"
-                        }`}
-                      >
-                        <Badge variant="outline" className="shrink-0 whitespace-nowrap text-[10px] px-1.5 py-0">
-                          {lineageNodeTypeLabel(item.kind, t)}
-                        </Badge>
-                        <span className="font-medium" data-testid={`lineage-candidate-name-${item.id}`}>
-                          {item.name}
-                        </span>
-                        <span className="text-mono text-[11px] text-muted-foreground break-all">{item.id}</span>
-                      </button>
-                    );
-                  })}
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {t("lineageExplorer.selectedObjectLabel")}
+                    </span>
+                    {chosenKind && (
+                      <Badge variant="outline" className="shrink-0 whitespace-nowrap text-[10px] px-1.5 py-0">
+                        {lineageNodeTypeLabel(chosenKind, t)}
+                      </Badge>
+                    )}
+                    <span className="font-medium text-foreground" data-testid="lineage-selected-name">
+                      {chosenName}
+                    </span>
+                    {chosenName !== activeRootId && (
+                      <span className="text-mono text-[11px] text-muted-foreground break-all" data-testid="lineage-selected-id">
+                        {activeRootId}
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    data-testid="lineage-lookup-change"
+                    className="h-7 px-2.5 text-xs"
+                    onClick={() => setIsPickerExpanded(true)}
+                  >
+                    {t("lineageExplorer.changeObject")}
+                  </Button>
                 </div>
               ) : (
-                <div
-                  data-testid="lineage-lookup-no-candidates"
-                  className="text-xs text-muted-foreground"
-                >
-                  {t("lineageExplorer.noCandidates", { query: queryInput.trim() })}
-                </div>
+                <>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {t("lineageExplorer.candidatesLabel")}
+                  </div>
+                  {filteredCandidates.length > 0 ? (
+                    <div
+                      role="listbox"
+                      aria-label={t("lineageExplorer.candidatesLabel")}
+                      data-testid="lineage-lookup-options"
+                      className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto"
+                    >
+                      {filteredCandidates.map((item) => {
+                        const isSelected = activeRootId === item.id;
+                        return (
+                          <button
+                            key={`${item.kind}:${item.id}`}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            data-testid={`lineage-lookup-option-${item.id}`}
+                            data-candidate-id={item.id}
+                            data-candidate-kind={item.kind}
+                            onClick={() => commitRoot(item.id, item.id)}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-left text-xs transition-colors ${
+                              isSelected
+                                ? "border-primary bg-primary/10 text-foreground"
+                                : "border-border bg-background hover:bg-muted/60 text-foreground"
+                            }`}
+                          >
+                            <Badge variant="outline" className="shrink-0 whitespace-nowrap text-[10px] px-1.5 py-0">
+                              {lineageNodeTypeLabel(item.kind, t)}
+                            </Badge>
+                            <span className="font-medium" data-testid={`lineage-candidate-name-${item.id}`}>
+                              {item.name}
+                            </span>
+                            <span className="text-mono text-[11px] text-muted-foreground break-all">{item.id}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div
+                      data-testid="lineage-lookup-no-candidates"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("lineageExplorer.noCandidates", { query: queryInput.trim() })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

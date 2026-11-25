@@ -3939,6 +3939,8 @@ export default {
     rootPh: "Search strategy or persona by name or enter root ID, press Enter",
     lookupAction: "Look up",
     candidatesLabel: "Current Strategies & Personas",
+    selectedObjectLabel: "Selected Object",
+    changeObject: "Change",
     noCandidates: "No matching strategies or personas for \"{{query}}\"; press Enter to query by ID directly.",
     selectPrompt: "Select a strategy or persona above, or enter an object name or ID and press Enter to view its lineage graph.",
     filter: "Filter",

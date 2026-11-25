@@ -2,7 +2,7 @@
 // Auto-layouts nodes by depth (BFS layer) and renders SVG. No external deps.
 import { useEffect, useMemo, useRef } from "react";
 import type { RiskLevel } from "@/lib/bff-v1";
-import { lineageEdgeLabel, resolveLineageNodeLabel, statusLabel } from "@/lib/enumLabels";
+import { lineageEdgeLabel, lineageNodeTypeLabel, resolveLineageNodeLabel, statusLabel } from "@/lib/enumLabels";
 import { LINEAGE_NODE_LIMITS } from "@/lib/v4/uiBudgets";
 import { useT } from "@/platform/hooks";
 
@@ -233,6 +233,13 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
     const centerHighlighted = () => {
       const el = containerRef.current;
       if (!el || el.clientWidth <= 0) return;
+      let parent = el.parentElement;
+      while (parent) {
+        if (parent.scrollLeft > 0) {
+          parent.scrollLeft = 0;
+        }
+        parent = parent.parentElement;
+      }
       const highlighted = nodes.find((n) => n.highlight);
       if (!highlighted) return;
       const pos = positions.get(highlighted.id);
@@ -348,14 +355,15 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
         {nodes.map((n) => {
           const p = positions.get(n.id); if (!p) return null;
           const fill = n.risk ? (riskFill[n.risk] ?? "hsl(var(--card))") : "hsl(var(--card))";
-          const typeLabel = n.type || "unknown";
+          const rawType = n.type || "unknown";
+          const typeLabel = n.type ? lineageNodeTypeLabel(n.type, t) : "unknown";
           const displayState = n.state ? statusLabel(n.state, t) : "";
           const primaryLabel = resolveLineageNodeLabel(n, t);
           return (
             <g key={n.id} transform={`translate(${p.x},${p.y})`}
                data-testid={`lineage-node-${n.id}`}
                data-node-id={n.id}
-               data-node-type={typeLabel}
+               data-node-type={rawType}
                data-node-state={n.state ?? ""}
                data-node-risk={n.risk ?? ""}
                data-node-highlight={n.highlight ? "true" : "false"}
@@ -367,6 +375,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
                 stroke={n.highlight ? "hsl(var(--primary))" : "hsl(var(--border))"}
                 strokeWidth={n.highlight ? 1.6 : 1} />
               <text x={NODE_PAD_X} y={18} fontSize="10" className="fill-muted-foreground"
+                data-node-type-header
                 style={{ fontFamily: "ui-monospace, monospace" }}>{fitText(`${typeLabel}${displayState ? ` · ${displayState}` : ""}`, textMaxPx, MONO_CHAR_PX)}</text>
               <text x={NODE_PAD_X} y={36} fontSize="12" className="fill-foreground" fontWeight={500}
                 data-node-label>

@@ -447,8 +447,17 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
               operationalStatus: "running",
               updatedAt: "2026-11-25T06:35:00Z",
             },
+            {
+              id: "strategy-retired-001",
+              strategy_id: "strategy-retired-001",
+              name: "退役策略 A",
+              title: "退役策略 A",
+              state: "retired",
+              operationalStatus: "retired",
+              updatedAt: "2026-11-25T06:35:00Z",
+            },
           ],
-          page_info: { next_page_token: null, total: 1, page_size: 20 },
+          page_info: { next_page_token: null, total: 2, page_size: 20 },
           meta: { status: "ok", source: "service_client" },
         });
         return;
@@ -485,6 +494,7 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
               name: "衡岳",
               display_name: "衡岳",
               state: "paper_running",
+              listScope: "current",
               risk: "low",
               owner: "operator",
               updatedAt: "2026-11-25T06:35:00Z",
@@ -495,12 +505,35 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
               name: "湛盧",
               display_name: "湛盧",
               state: "paper_running",
+              listScope: "current",
+              risk: "low",
+              owner: "operator",
+              updatedAt: "2026-11-25T06:35:00Z",
+            },
+            {
+              id: "persona-retired-001",
+              persona_id: "persona-retired-001",
+              name: "退役舊角",
+              display_name: "退役舊角",
+              state: "retired",
+              listScope: "retired",
+              risk: "low",
+              owner: "operator",
+              updatedAt: "2026-11-25T06:35:00Z",
+            },
+            {
+              id: "persona-test-001",
+              persona_id: "persona-test-001",
+              name: "測試探針",
+              display_name: "測試探針",
+              state: "paper_running",
+              listScope: "test",
               risk: "low",
               owner: "operator",
               updatedAt: "2026-11-25T06:35:00Z",
             },
           ],
-          page_info: { next_page_token: null, total: 2, page_size: 20 },
+          page_info: { next_page_token: null, total: 4, page_size: 20 },
           meta: { status: "ok", source: "service_client" },
         });
         return;
@@ -631,12 +664,15 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       expect(report.overlappingEdges, `${contextLabel} edge labels overlapping nodes`).toEqual([]);
     };
 
-    // 1. Desktop 1274x627: unrooted /management/lineage sends no lineage request, offers strategies & personas by name, filters by Chinese name, fetches on selection
+    // 1. Desktop 1274x627: unrooted /management/lineage sends no lineage request, offers current strategies & personas by name, filters by Chinese name, fetches on selection, and collapses candidate listbox
     await page.setViewportSize({ width: 1274, height: 627 });
     await page.goto(frontendUrl("/management/lineage"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.getByTestId("lineage-lookup-prompt")).toBeVisible();
     await expect(page.getByTestId(`lineage-lookup-option-${LIVE_STRATEGY_ID}`)).toBeVisible();
     await expect(page.getByTestId(`lineage-lookup-option-${LIVE_PERSONA_ID}`)).toBeVisible();
+    await expect(page.getByTestId("lineage-lookup-option-strategy-retired-001")).toHaveCount(0);
+    await expect(page.getByTestId("lineage-lookup-option-persona-retired-001")).toHaveCount(0);
+    await expect(page.getByTestId("lineage-lookup-option-persona-test-001")).toHaveCount(0);
     expect(lineageCalls).toEqual([]);
 
     const rootInput = page.getByTestId("lineage-root-input");
@@ -649,7 +685,14 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     await expect.poll(() => lineageCalls.length).toBe(1);
     expect(lineageCalls[0]).toBe(`/bff/lineage?root_id=${LIVE_STRATEGY_ID}`);
 
+    await expect(page.getByTestId("lineage-lookup-options")).toHaveCount(0);
+    await expect(page.getByTestId("lineage-lookup-selected")).toBeVisible();
+    await expect(page.getByTestId("lineage-lookup-change")).toBeVisible();
     await expect(page.getByTestId(`lineage-node-${spec}`)).toHaveAttribute("data-node-highlight", "true");
+    await expect(page.getByTestId(`lineage-node-${spec}`)).toHaveAttribute("data-node-type", "Strategy");
+    await expect(page.getByTestId(`lineage-node-${spec}`).locator("[data-node-type-header]")).toHaveText(
+      /^(策略|Strategy) · (已核准|Approved)$/,
+    );
     await assertGraphGeometry("lineage-page-1274x627");
     await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/lineage-page-1274x627.png` });
 

@@ -3921,6 +3921,8 @@ export default {
     rootPh: "輸入策略、Persona 名稱或物件編號，按 Enter 查詢",
     lookupAction: "查詢",
     candidatesLabel: "現有策略與 Persona",
+    selectedObjectLabel: "目前查詢物件",
+    changeObject: "更換物件",
     noCandidates: "找不到符合「{{query}}」的策略或 Persona；可按 Enter 直接以編號查詢。",
     selectPrompt: "請從上方選擇策略或 Persona，或輸入物件名稱／編號後按 Enter 查詢血緣圖。",
     filter: "篩選",

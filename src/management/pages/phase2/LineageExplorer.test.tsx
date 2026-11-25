@@ -245,7 +245,7 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
     const unknownNode = screen.getByTestId("lineage-node-feature-05246");
     expect(unknownNode).toBeInTheDocument();
     expect(unknownNode).toHaveAttribute("data-node-type", "feature_set");
-    expect(unknownNode).toHaveTextContent(/feature_set · (草稿|Draft)/i);
+    expect(unknownNode).toHaveTextContent(/(特徵集|Feature Set) · (草稿|Draft)/i);
     expect(unknownNode).toHaveTextContent("feature-05246");
   });
 
@@ -414,9 +414,11 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
       to_artifact_id: e.to,
     }));
 
+    const strategyRequests: string[] = [];
     const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.startsWith("/bff/strategies")) {
+        strategyRequests.push(url);
         return new Response(
           JSON.stringify({
             data: [
@@ -426,6 +428,7 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
                 name: LIVE_STRATEGY_TITLE,
                 title: LIVE_STRATEGY_TITLE,
                 state: "approved",
+                operationalStatus: "running",
                 personaIds: [LIVE_PERSONA_ID],
                 persona_display_names: { [LIVE_PERSONA_ID]: "衡岳" },
               },
@@ -435,9 +438,27 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
                 name: "Baseline Persona Strategy",
                 title: "Baseline Persona Strategy",
                 state: "approved",
+                operationalStatus: "running",
+              },
+              {
+                id: "strategy-retired-001",
+                strategy_id: "strategy-retired-001",
+                name: "退役策略 A",
+                title: "退役策略 A",
+                state: "retired",
+                operationalStatus: "retired",
+              },
+              {
+                id: "strategy-retired-persona-002",
+                strategy_id: "strategy-retired-persona-002",
+                name: "退役 Persona 策略 B",
+                title: "退役 Persona 策略 B",
+                state: "approved",
+                operationalStatus: "retired",
+                persona_display_names: { "persona-retired-scope": "退役舊角" },
               },
             ],
-            page_info: { next_page_token: null, total: 2, page_size: 2 },
+            page_info: { next_page_token: null, total: 4, page_size: 4 },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -452,6 +473,7 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
                 name: "衡岳",
                 display_name: "衡岳",
                 state: "paper_running",
+                listScope: "current",
               },
               {
                 id: "persona-6507750312870d03a241",
@@ -460,8 +482,31 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
                 display_name: "湛盧",
                 state: "paper_running",
               },
+              {
+                id: "persona-retired-scope",
+                persona_id: "persona-retired-scope",
+                name: "退役舊角",
+                display_name: "退役舊角",
+                state: "retired",
+                listScope: "retired",
+              },
+              {
+                id: "persona-test-probe",
+                persona_id: "persona-test-probe",
+                name: "測試探針",
+                display_name: "測試探針",
+                state: "paper_running",
+                listScope: "test",
+              },
+              {
+                id: "persona-retired-legacy",
+                persona_id: "persona-retired-legacy",
+                name: "舊版退役角",
+                display_name: "舊版退役角",
+                state: "retired",
+              },
             ],
-            page_info: { next_page_token: null, total: 2, page_size: 2 },
+            page_info: { next_page_token: null, total: 5, page_size: 5 },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -502,10 +547,17 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
     expect(screen.getByTestId("lineage-lookup-prompt")).toBeInTheDocument();
     expect(lineageRequests).toEqual([]);
 
-    // 2. Current strategies and personas are offered by name
+    // 2. Current strategies and personas are offered by name; retired/test strategies and personas are excluded
     expect(await screen.findByTestId(`lineage-lookup-option-${LIVE_STRATEGY_ID}`)).toHaveTextContent(LIVE_STRATEGY_TITLE);
+    expect(strategyRequests[0]).toContain("exclude_state=draft");
+    expect(strategyRequests[0]).toContain("hide_retired_personas=true");
     expect(screen.getByTestId(`lineage-lookup-option-${LIVE_PERSONA_ID}`)).toHaveTextContent("衡岳");
     expect(screen.getByTestId("lineage-lookup-option-persona-6507750312870d03a241")).toHaveTextContent("湛盧");
+    expect(screen.queryByTestId("lineage-lookup-option-strategy-retired-001")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("lineage-lookup-option-strategy-retired-persona-002")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("lineage-lookup-option-persona-retired-scope")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("lineage-lookup-option-persona-test-probe")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("lineage-lookup-option-persona-retired-legacy")).not.toBeInTheDocument();
     expect(lineageRequests).toEqual([]);
 
     // 3. Typing persona-ee71 character-by-character sends zero lineage requests
@@ -523,11 +575,20 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
     expect(screen.queryByTestId("lineage-lookup-option-persona-6507750312870d03a241")).not.toBeInTheDocument();
     expect(screen.queryByTestId(`lineage-lookup-option-strategy-persona-${FD}`)).not.toBeInTheDocument();
 
-    // 5. Clicking the persona option sends one request for persona-ee7112a829d38b9135ac
+    // 5. Clicking the persona option sends one request for persona-ee7112a829d38b9135ac and collapses the candidate listbox
     fireEvent.click(screen.getByTestId(`lineage-lookup-option-${LIVE_PERSONA_ID}`));
     await waitFor(() => {
       expect(lineageRequests).toEqual([`/bff/lineage?root_id=${LIVE_PERSONA_ID}`]);
     });
+    expect(screen.queryByTestId("lineage-lookup-options")).not.toBeInTheDocument();
+    expect(screen.getByTestId("lineage-lookup-selected")).toBeInTheDocument();
+    expect(screen.getByTestId("lineage-selected-name")).toHaveTextContent("衡岳");
+    expect(screen.getByTestId("lineage-selected-id")).toHaveTextContent(LIVE_PERSONA_ID);
+
+    // Clicking the change button re-opens the candidate listbox
+    fireEvent.click(screen.getByTestId("lineage-lookup-change"));
+    expect(screen.getByTestId("lineage-lookup-options")).toBeInTheDocument();
+    expect(screen.getByTestId(`lineage-lookup-option-${LIVE_STRATEGY_ID}`)).toBeInTheDocument();
 
     const personaNode = await screen.findByTestId(`lineage-node-${LIVE_PERSONA_ID}`);
     expect(personaNode).toHaveAttribute("data-node-highlight", "true");

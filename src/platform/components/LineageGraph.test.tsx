@@ -128,7 +128,7 @@ describe("LineageGraph edge labels stay in column gaps", () => {
     }
   });
 
-  it("localizes lineage edge types and node states via enumLabels", async () => {
+  it("localizes lineage edge types, node types, and node states via enumLabels while keeping raw type in data-node-type", async () => {
     await i18n.changeLanguage("zh-TW");
     const ns: LineageNode[] = [
       { id: "a", label: "Spec A", type: "Artifact", state: "approved" },
@@ -142,11 +142,13 @@ describe("LineageGraph edge labels stay in column gaps", () => {
     );
     const edgeText = container.querySelector("[data-edge-label-text]");
     expect(edgeText?.textContent).toBe("來源策略規格");
-    expect(container.textContent).toContain("Artifact · 已核准");
-    expect(container.textContent).toContain("Strategy · 已部署");
+    expect(container.querySelector('[data-testid="lineage-node-a"]')?.getAttribute("data-node-type")).toBe("Artifact");
+    expect(container.querySelector('[data-testid="lineage-node-b"]')?.getAttribute("data-node-type")).toBe("Strategy");
+    expect(container.textContent).toContain("產出物 · 已核准");
+    expect(container.textContent).toContain("策略 · 已部署");
   });
 
-  it("renders display_name with id as secondary text, falls back to plain kind plus short id when name_missing, bounds CJK labels, and translates empty state", async () => {
+  it("renders display_name with id as secondary text, falls back to plain kind plus short id when name_missing, translates node type headers, bounds CJK labels, and translates empty state", async () => {
     const LIVE_TOKEN = "a81b4fd15944698341aa";
     const LIVE_PERSONA_ID = "persona-ee7112a829d38b9135ac";
     const LIVE_STRATEGY_ID = `strategy-persona-${LIVE_TOKEN}`;
@@ -202,11 +204,19 @@ describe("LineageGraph edge labels stay in column gaps", () => {
 
     const artNode = container.querySelector(`[data-testid="lineage-node-${LIVE_ARTIFACT_ID}"]`)!;
     expect(artNode.getAttribute("data-node-highlight")).toBe("true");
+    expect(artNode.getAttribute("data-node-type")).toBe("Artifact");
+    expect(artNode.querySelector("[data-node-type-header]")?.textContent).toBe("產出物 · 已核准");
     expect(artNode.querySelector("[data-node-label]")?.textContent).toContain("衡岳｜0050");
 
     const poolNode = container.querySelector(`[data-testid="lineage-node-${LIVE_POOL_ID}"]`)!;
+    expect(poolNode.getAttribute("data-node-type")).toBe("CapitalPool");
+    expect(poolNode.querySelector("[data-node-type-header]")?.textContent).toBe("資金池");
     expect(poolNode.querySelector("[data-node-label]")?.textContent).toBe("資金池 a81b4fd1");
     expect(poolNode.querySelector("[data-node-secondary-id]")?.getAttribute("data-full-id")).toBe(LIVE_POOL_ID);
+
+    const expNode = container.querySelector(`[data-testid="lineage-node-persona-provisioning-forward-${LIVE_TOKEN}"]`)!;
+    expect(expNode.getAttribute("data-node-type")).toBe("Experiment");
+    expect(expNode.querySelector("[data-node-type-header]")?.textContent).toBe("實驗");
 
     // Every CJK primary label stays within the node width budget
     container.querySelectorAll<SVGTextElement>("[data-node-label]").forEach((el) => {
@@ -222,6 +232,8 @@ describe("LineageGraph edge labels stay in column gaps", () => {
     await i18n.changeLanguage("en-US");
     const enGraph = renderGraph(ns, es);
     const enPoolNode = enGraph.container.querySelector(`[data-testid="lineage-node-${LIVE_POOL_ID}"]`)!;
+    expect(enPoolNode.getAttribute("data-node-type")).toBe("CapitalPool");
+    expect(enPoolNode.querySelector("[data-node-type-header]")?.textContent).toBe("Capital Pool");
     expect(enPoolNode.querySelector("[data-node-label]")?.textContent).toBe("Capital Pool a81b4fd1");
     enGraph.unmount();
 
