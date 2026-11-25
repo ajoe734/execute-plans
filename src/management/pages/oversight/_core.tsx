@@ -5064,7 +5064,7 @@ const EvidenceAuditPanel = ({ events }: { events: ManagementEvidenceAuditEvent[]
 type EvidenceScope = "cited" | "ingested";
 
 const EVIDENCE_PAGE_SIZE = 20;
-const CITED_BY_VISIBLE = 3;
+const CITED_BY_VISIBLE = 2;
 
 function evidenceScopeFromParams(params: URLSearchParams): EvidenceScope {
   return params.get("scope")?.trim().toLowerCase() === "ingested" ? "ingested" : "cited";
@@ -5293,12 +5293,18 @@ const CitedByList = ({ row }: { row: ManagementCitedEvidenceRow }) => {
   const visible = row.citedBy.slice(0, CITED_BY_VISIBLE);
   const hidden = Math.max(row.citationCount, row.citedBy.length) - visible.length;
   return (
-    <ul className="space-y-2" data-testid="evidence-cited-by">
+    <ul className="space-y-1" data-testid="evidence-cited-by">
       {visible.map((citation, index) => {
         const text = citationText(t, citation);
+        const entity = citedEntityLabel(t, citation.entityType);
+        const when = citation.time ? evidenceTimestamp(citation.time) : "";
         return (
-          <li key={`${citation.entityType}-${citation.entityRef}-${index}`} className="text-xs">
-            <span className="mr-1 text-muted-foreground">{citedEntityLabel(t, citation.entityType)}:</span>
+          <li
+            key={`${citation.entityType}-${citation.entityRef}-${index}`}
+            className="max-w-[460px] truncate text-xs"
+            title={[`${entity}: ${text}`, when].filter(Boolean).join(" · ")}
+          >
+            <span className="mr-1 text-muted-foreground">{entity}:</span>
             {citation.routeHref ? (
               <Link to={citation.routeHref} className="font-medium text-primary underline-offset-4 hover:underline">
                 {text}
@@ -5406,12 +5412,12 @@ const EvidenceCitedList = () => {
         <ManagementTableScroll
           className={EVIDENCE_TABLE_SCROLL_CLASS}
           testId="evidence-explorer-table-scroll"
-          minScrollWidth={1040}
+          minScrollWidth={1180}
           showPinnedScrollbar={false}
           contentClassName="pb-4"
           viewportClassName={EVIDENCE_TABLE_VIEWPORT_CLASS}
         >
-          <table className="w-full min-w-[1040px] text-sm" data-testid="evidence-cited-table">
+          <table className="w-full min-w-[1180px] text-sm" data-testid="evidence-cited-table">
             <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">{t("mgmt.evidence.cited.reference")}</th>
@@ -5433,7 +5439,7 @@ const EvidenceCitedList = () => {
                       <span className="break-words font-medium text-foreground">{row.label}</span>
                     )}
                     {!row.nameMissing && (
-                      <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{row.refId}</div>
+                      <div className="mt-1 max-w-[320px] truncate font-mono text-xs text-muted-foreground" title={row.refId}>{row.refId}</div>
                     )}
                     {row.nameMissing && (
                       <div className="mt-1 text-xs text-muted-foreground">{t("mgmt.evidence.cited.nameMissing")}</div>
@@ -5442,10 +5448,10 @@ const EvidenceCitedList = () => {
                       <Badge variant="outline" className="mt-2">{t("mgmt.evidence.redacted")}</Badge>
                     )}
                   </td>
-                  <td className="px-3 py-3" data-testid="evidence-cited-kind">{citedKindLabel(t, row.refKind)}</td>
-                  <td className="px-3 py-3" data-testid="evidence-cited-source-class">{citedSourceClassLabel(t, row.sourceClass)}</td>
+                  <td className="whitespace-nowrap px-3 py-3" data-testid="evidence-cited-kind">{citedKindLabel(t, row.refKind)}</td>
+                  <td className="whitespace-nowrap px-3 py-3" data-testid="evidence-cited-source-class">{citedSourceClassLabel(t, row.sourceClass)}</td>
                   <td className="px-3 py-3"><CitedByList row={row} /></td>
-                  <td className="px-3 py-3 text-muted-foreground" title={row.lastCitedAt ?? undefined}>{evidenceTimestamp(row.lastCitedAt)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" title={row.lastCitedAt ?? undefined}>{evidenceTimestamp(row.lastCitedAt)}</td>
                 </tr>
               ))}
               {rows.length === 0 && !loading && (
@@ -5863,7 +5869,7 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
           <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.packetContent")}</h2>
           <dl className="mt-4 grid gap-4 md:grid-cols-2">
             <EvidenceField label={t("mgmt.evidence.sourceType")} value={evidenceLabel(sourceType)} />
-            <EvidenceField label={t("mgmt.evidence.sourceClass")} value={evidenceLabel(detail.sourceClass)} />
+            <EvidenceField label={t("mgmt.evidence.sourceClass")} value={citedSourceClassLabel(t, detail.sourceClass ?? null)} />
             <EvidenceField label={t("mgmt.evidence.captured")} value={evidenceTimestamp(detail.sourceDocument.capturedAt ?? detail.sourceDocument.captured_at)} />
             <EvidenceField label={t("mgmt.evidence.capturedBy")} value={detail.sourceDocument.capturedBy ?? detail.sourceDocument.captured_by ?? "—"} />
             <EvidenceField label={t("mgmt.evidence.linkType")} value={evidenceLabel(detail.linkType)} />

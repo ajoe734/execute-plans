@@ -1,0 +1,259 @@
+{
+  "task_id": "FE-EVIDENCE-CITED-20261125",
+  "title": "Evidence page lists what decisions cite and every detail opens readable",
+  "owner": "Claude",
+  "reviewer": "Antigravity",
+  "register_class": "RC6",
+  "delivery_repository": "ajoe734/execute-plans",
+  "base_branch": "dev",
+  "delivery_state": "implemented_blocked_on_artifact_contract",
+  "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好) names the seven registry pages; the feature freeze does not apply to this scope.",
+  "hosted_verification_note": "No VM or SSH access of any kind. No operator keys read. Functional evidence only (unit tests, real-Chromium Playwright with a fixture BFF serving the BFF contract shapes and the hosted reference ids). Hosted verification belongs to the operator acceptance task.",
+  "bff_contract": {
+    "source": "ajoe734/pantheon PR #7867 (BFF-EVIDENCE-CITED-LIST-20261125), merge 381f1ea8896a0261f6a79009672068abbcb700a2",
+    "files_read": [
+      "services/control-plane/bff/BFF_API_CONTRACT.md (Cited evidence list section)",
+      "services/control-plane/bff/management_read_models/cited_evidence.py (compose_cited_evidence, _parse_string_ref, _route_for, _SOURCE_CLASS)",
+      "services/control-plane/bff/management_read_models/router.py (scope query, /bff/management/evidence/{ref_id})",
+      "services/control-plane/bff/management_read_models/service.py (get_evidence_item, evidence_detail_unavailable_payload, _management_evidence_public_item)",
+      "services/control-plane/bff/research/discovery_projection.py (SOURCE_RECORD_HREF_TEMPLATE)"
+    ],
+    "row_shapes_used": "Hosted ids from the BFF evidence/test: artifact-persona-paper-a81b4fd15944698341aa, facts:registry_entry:<artifact>, facts:strategy_pool:persona-ee7112a829d38b9135ac@4, evidence:search_excerpt:ko-evi-1217cd1c8ccc7274-94a73ebc0814 resolved to evi-1217cd1c8ccc7274, lessons:memory_committee_shared:mem-shared-0002 (name_missing), meeting mtg-6edaff7d0ff76275, per-source status block with ok/partial/denied/failed."
+  },
+  "acceptance_coverage": {
+    "1": {
+      "status": "met",
+      "what": "Default list (/management/evidence) requests GET /bff/management/evidence?scope=cited (mgmt.evidence.citedLiveOnly). Each row shows the plain label (or the ref id plus 'No name is recorded' when name_missing), the kind (ref_kind translated), the source class (translated), who cites it (entity type + recorded title, or a translated phrase built from parts, linked to route_href, with time) and last cited time. Sources that are not ok are named in a notice with a plain status (only partly read / could not be read / you do not have access / too many records) and the total reads 'At least N (incomplete)'. When every source fails the total is Unavailable, never 0. A scope switch (Cited by decisions / All ingested items) and the three data source page links open /management/evidence?scope=ingested, which requests scope=ingested. A server that predates scope=cited is shown as 'not supported yet' with a link to the ingested list instead of misreading the ingested envelope as cited rows.",
+      "proof": [
+        "EvidenceExplorerPage.test.tsx: 'requests scope=cited by default and lists each reference ...', 'names a source that could not be read and marks the total incomplete', 'shows unavailable instead of zero when every source fails', 'stays usable when the server predates scope=cited ...', 'switches to the ingested list with scope=ingested and back', 'keeps locale parity for every cited-list key in zh-TW'",
+        "management.test.ts: 'requests scope=cited with paging and adapts rows, citations and per-source status', 'sends scope=ingested only for the ingested list', 'reports an older server that ignores scope as unsupported', 'keeps total null and status unavailable when every source failed'",
+        "e2e/evidence-short-window.spec.ts: asserts the browser request carried scope=cited (cited page) and scope=ingested (ingested page); 'cited list names a source that could not be read and marks the total incomplete'",
+        "DataSourceControlCenter.tsx:1050, DataSourceDetailDrawer.tsx:369, DataSourceInstancesTable.tsx:383 -> /management/evidence?scope=ingested"
+      ]
+    },
+    "2": {
+      "status": "met",
+      "what": "Detail shows title, source type, source class, captured time, captured by, excerpt (plain readable text, not a JSON code block) and an 'Open original source' external link when the recorded source_ref is http(s) (storage refs never become links). Works for a cited item (row link /management/evidence/evi-...) and an ingested item (management_href ?ref_id=...). 404 renders 'Evidence not found'; a 503/transport error or the BFF unavailable payload (evidence_ref_detail.status unavailable, all fields null) renders 'Evidence detail unavailable' with the reason. The adapter never reads a list envelope (data.id management-evidence) as an item and maps placeholder values (unknown, management-evidence) to a dash.",
+      "proof": [
+        "EvidenceExplorerPage.test.tsx: 'shows title, source, captured time, excerpt and external link for a cited item (row link)' and '... ingested item (management_href)', 'never reads the list envelope id management-evidence as an item', 'renders the BFF unavailable detail payload as unavailable, not as content', existing 'detail not found handling' (path and ref_id forms) unchanged and passing",
+        "management.test.ts: 'reads the item route answer for detail and never the list envelope id'",
+        "e2e/evidence-short-window.spec.ts: 'a cited row opens a readable detail ...' clicks the cited row in Chromium, checks heading, excerpt, external href, that main text contains neither management-evidence nor unknown, then a missing id shows evidence-detail-not-found"
+      ]
+    },
+    "3": {
+      "status": "met",
+      "what": "Removed: Traceable, Needs attention and Open ops metric cards; the Verified badge in rows (and the Verified metric card and detail Verified/Last verified fields, which showed the same credibility.verified flag); the Actionability and Operation columns (the BFF public item carries neither field so they only ever showed defaults); the detail operation panel (Mark stale, Request evidence, Create task, Assign reviewer, Resolve) and its client src/lib/bff-v1/evidenceOperations.ts with its index export. retiredCommands.test.ts no longer lists EvidenceRefAction (21 emitted commands) and gains a source scan proving no production file emits it. Subtitle now says in plain words: 'Evidence that meetings, approvals, evolution proposals, research and persona decisions actually cite, and who cites each one. Raw ingested items are under All ingested items and on Data Sources.' (zh-TW equivalent).",
+      "proof": [
+        "EvidenceExplorerPage.test.tsx: metric card tests now expect one Total card; 'offers no EvidenceRefAction operation from detail because the command has no backend'",
+        "retiredCommands.test.ts: 'proves no production source emits the removed EvidenceRefAction command'",
+        "fullOperationAssembly.test.tsx: public export list without ./evidenceOperations plus explicit not.toContain"
+      ]
+    },
+    "4": {
+      "status": "partially_met_blocked",
+      "what": "Every inbound link was traced; results below in inbound_links. query and source-record links are resolved; journey_id and research-note links cannot open an item and their removal needs files outside the artifact contract."
+    },
+    "5": {
+      "status": "met",
+      "what": "Evidence (both scopes) and Persona Fleet sections scroll vertically (overflow-y-auto) instead of overflow-hidden; the table card keeps min-h 400 px (evidence, pager inside) / 384 px (fleet) and the table scroller min-h 320 px. e2e/evidence-short-window.spec.ts runs with --hide-scrollbars removed (measured scrollbar width 15 px) at 1274x627 and 1920x1000. Locale parity: every new key exists in en-US and zh-TW (i18nParity.test.ts passes in the full run). Screenshots in screenshots/.",
+      "measurements_1274x627": {
+        "evidence-cited": {
+          "sectionClientHeight": 571,
+          "sectionScrollHeight": 742,
+          "scrollerClientHeight": 322,
+          "scrollerHeight": 337,
+          "fullRowsAfterOnePageScroll": 3,
+          "theadStickyDelta": 0
+        },
+        "evidence-ingested": {
+          "sectionClientHeight": 571,
+          "sectionScrollHeight": 742,
+          "scrollerClientHeight": 322,
+          "scrollerHeight": 337,
+          "fullRowsAfterOnePageScroll": 3,
+          "theadStickyDelta": 0
+        },
+        "persona-fleet": {
+          "sectionClientHeight": 571,
+          "sectionScrollHeight": 669,
+          "scrollerClientHeight": 367,
+          "scrollerHeight": 382,
+          "fullRowsAfterOnePageScroll": 3,
+          "theadStickyDelta": 0
+        }
+      },
+      "measurements_1920x1000": {
+        "evidence-cited": {
+          "sectionClientHeight": 944,
+          "sectionScrollHeight": 944,
+          "scrollerClientHeight": 539
+        },
+        "evidence-ingested": {
+          "sectionClientHeight": 944,
+          "sectionScrollHeight": 944,
+          "scrollerClientHeight": 539
+        },
+        "persona-fleet": {
+          "sectionClientHeight": 944,
+          "sectionScrollHeight": 944,
+          "scrollerClientHeight": 686
+        }
+      },
+      "before": "Hosted 2026-11-25 06:35Z-07:16Z on BFF adc027da9: evidence table viewport 23 px at 1274x627, no row visible."
+    }
+  },
+  "inbound_links": [
+    {
+      "link": "/management/evidence?query=<evidence ref>",
+      "from": [
+        "src/management/pages/oversight/QuarterlyRanking.tsx:667",
+        "src/management/pages/oversight/PersonaLeague.tsx:604"
+      ],
+      "result": "opens the right item",
+      "how": "EvidenceExplorerPage reads ?query= (and ?ref_id=) through evidenceInboundTarget, mirroring the BFF reference parser: facts:registry_entry:<a>, facts:member_virtual_book:<a> and bare artifact-* redirect to /management/strategies/<a>; facts:strategy_pool:<p>@<v> to /management/personas/<p>; evidence:search_excerpt:<id> and evi-/evitem-/evref- ids open the item detail; anything else is looked up as an item and answers found / not found / unavailable honestly. Previously ?query= was ignored and the unfiltered list showed."
+    },
+    {
+      "link": "/management/evidence?ref_id=<id> (BFF management_href)",
+      "from": [
+        "BFF _management_evidence_public_item",
+        "src/lib/bff-v1/management.ts default fixture"
+      ],
+      "result": "opens the right item",
+      "how": "unchanged route, now through evidenceInboundTarget; detail adapter reads the flat item answer."
+    },
+    {
+      "link": "/management/evidence/<source_record_id>",
+      "from": [
+        "src/management/components/discovery/DiscoveryPanels.tsx RecordLink (BFF discovery_projection SOURCE_RECORD_HREF_TEMPLATE)"
+      ],
+      "result": "removed for ids the item route cannot find",
+      "how": "discoveryRecordHref links only evi-/evitem-/evref- ids; source-ingestion record ids (e.g. src-paper-001) render as text."
+    },
+    {
+      "link": "/management/evidence (data source pages)",
+      "from": [
+        "DataSourceControlCenter.tsx:1050",
+        "DataSourceDetailDrawer.tsx:369",
+        "DataSourceInstancesTable.tsx:383"
+      ],
+      "result": "opens the ingested list",
+      "how": "now /management/evidence?scope=ingested"
+    },
+    {
+      "link": "/management/evidence?journey_id=<journey>",
+      "from": [
+        "src/management/pages/trade-journeys/TradeJourneysPage.tsx:845"
+      ],
+      "result": "BLOCKED: cannot open an item and cannot be removed inside the artifact contract",
+      "how": "Evidence library items carry no trade journey link (BFF trade_journeys.py journey evidence is the journey's own reconciliation/gate records, shown on the journey page). The receiving page no longer claims 'Viewing evidence linked from trade journey X'; it states the list is not filtered by the journey and links back. Removing the link needs TradeJourneysPage.tsx, which is not in the artifact contract."
+    },
+    {
+      "link": "/management/evidence?ref_id=note-* (research notes)",
+      "from": [
+        "src/lib/bff-v1/meetings.ts:1130 and :1135 resolveMeetingActionEvidenceHref",
+        "used by MeetingActionCards.tsx EvidenceLink and management.ts research ticket evidence_refs"
+      ],
+      "result": "BLOCKED: item route cannot find research notes; removal breaks assertions in tests outside the contract",
+      "how": "BFF contract: research note references have no page (route_href null). Returning null for research_note/note-* in meetings.ts makes MeetingActionCards render plain text, but src/management/pages/meetings/MeetingActionCards.test.tsx:136 and :232 and src/management/pages/meetings/meetings.test.tsx:2104 assert the old /management/evidence?ref_id=note-* href; they are not in the artifact contract and must not be weakened silently. meetings.ts is therefore left unchanged."
+    },
+    {
+      "link": "/management/evidence (bare list)",
+      "from": [
+        "Ep5CanaryReadiness.tsx:22",
+        "PersonaTradeJournalTab.tsx:367",
+        "performanceAttribution.ts:495"
+      ],
+      "result": "opens the cited list (default)",
+      "how": "no parameters; unchanged"
+    }
+  ],
+  "changed_assertions_justification": [
+    {
+      "file": "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+      "change": "List tests render /management/evidence?scope=ingested instead of /management/evidence",
+      "reason": "Acceptance 1 makes the cited list the default; the same ingested assertions are kept on the ingested scope."
+    },
+    {
+      "file": "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+      "change": "'renders evidence operations rows...': Actionability/Operation column headers, 'unresolved source', 'resolved link unavailable', 'needs evidence', 'reviewer: ops-reviewer' now expected absent",
+      "reason": "Acceptance 3 removes the operation surface; the BFF public item (service.py _management_evidence_public_item) has no actionability/operation fields so those cells only showed defaults."
+    },
+    {
+      "file": "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+      "change": "Layout test: min-h-0 -> min-h-[320px] on scroll and viewport, plus section overflow-y-auto and card min-h-[400px]; now parameterised over cited and ingested",
+      "reason": "Acceptance 5: min-h-0 under an overflow-hidden section produced the 23 px viewport at 1274x627."
+    },
+    {
+      "file": "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+      "change": "Detail test: Operation heading, Mark stale/Create task buttons, 'needs evidence' and 'resolved link unavailable' badges now expected absent; chain/relationships/tasks/audit assertions kept",
+      "reason": "Acceptance 3 removes the operation panel; header actionability/operation badges belonged to it."
+    },
+    {
+      "file": "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+      "change": "'submits EvidenceRefAction operations from detail' replaced by 'offers no EvidenceRefAction operation from detail because the command has no backend'",
+      "reason": "Acceptance 3 removes the operation panel and its client; the test now proves absence of every former action."
+    },
+    {
+      "file": "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+      "change": "Metric card tests: 5 cards -> 1 card (Total); Traceable/Needs attention/Verified/Open ops expected absent in en-US and zh-TW",
+      "reason": "Acceptance 3 removes the metrics that never had data; Verified counted the same flag as the removed badge. Unavailable/zero/no-data honesty assertions kept on the Total card."
+    },
+    {
+      "file": "src/management/pages/oversight/PersonaFleetPage.test.tsx",
+      "change": "min-h-0 -> min-h-[320px] (scroll, viewport), card min-h-[384px], section overflow-y-auto",
+      "reason": "Acceptance 5, same root cause as Evidence."
+    },
+    {
+      "file": "src/lib/bff-v1/__tests__/retiredCommands.test.ts",
+      "change": "EvidenceRefAction removed from FRONTEND_EMITTED_COMMANDS (22 -> 21) and a production source scan added",
+      "reason": "Acceptance 3: 'the retired command list test is updated'; the client that emitted it is deleted."
+    },
+    {
+      "file": "src/management/__tests__/fullOperationAssembly.test.tsx",
+      "change": "./evidenceOperations removed from the exact public export list and an explicit not.toContain added",
+      "reason": "The module is deleted (acceptance 3)."
+    },
+    {
+      "file": "src/management/components/discovery/DiscoveryPanels.test.tsx",
+      "change": "citation link for src-paper-001 now expected absent (text kept); new tests link evi-/evref- ids",
+      "reason": "Acceptance 4: the item route cannot find source record ids."
+    }
+  ],
+  "tests_run": {
+    "typecheck": "npx tsc -p tsconfig.app.json --noEmit: exit 0",
+    "eslint_changed_files": "0 errors, 3 react-refresh/only-export-components warnings (one pre-existing at _core.tsx:1424; new exports evidenceInboundTarget and discoveryRecordHref are used by tests)",
+    "vitest_full": "npx vitest run --maxWorkers=2: 292 files, 3547 tests passed, exit 0",
+    "vitest_targeted": "EvidenceExplorerPage.test.tsx 28 passed; DiscoveryPanels, retiredCommands, fullOperationAssembly, PersonaFleetPage, management.test.ts all passed; src/test/agora-retired-probes.test.ts 19 passed (validator 3000 cases incl. new evidence-cited read route)",
+    "playwright_new": "npx playwright test e2e/evidence-short-window.spec.ts: 8 passed (real scrollbars, 1274x627 and 1920x1000)",
+    "playwright_updated_specs": "e2e/19-route-split, 22-management-evidence-load, 23-management-shell-fanout: 6 failed, 1 skipped in this local harness; the unmodified origin/dev versions of the same three specs fail identically (6 failures) on the same login screen ('Pantheon session verification failed / Failed to fetch') before the evidence route renders, so the failure is pre-existing harness auth, not this change. Their evidence fixtures now answer scope=cited with the cited shape."
+  },
+  "screenshots": [
+    "screenshots/evidence-cited-1274x627-top.png",
+    "screenshots/evidence-cited-1274x627-scrolled.png",
+    "screenshots/evidence-cited-incomplete-1274x627.png",
+    "screenshots/evidence-ingested-1274x627-top.png",
+    "screenshots/evidence-ingested-1274x627-scrolled.png",
+    "screenshots/persona-fleet-1274x627-top.png",
+    "screenshots/persona-fleet-1274x627-scrolled.png",
+    "screenshots/evidence-detail-cited-1274x627.png",
+    "screenshots/evidence-detail-not-found-1274x627.png",
+    "screenshots/evidence-cited-1920x1000-top.png",
+    "screenshots/evidence-ingested-1920x1000-top.png",
+    "screenshots/persona-fleet-1920x1000-top.png"
+  ],
+  "blocker": {
+    "reason": "Acceptance 4 needs two link sources removed whose files are outside the artifact contract.",
+    "files_needed": [
+      "src/management/pages/trade-journeys/TradeJourneysPage.tsx (remove the ?journey_id= Evidence Explorer link at line 845)",
+      "src/management/pages/meetings/MeetingActionCards.test.tsx (lines 136 and 232 assert /management/evidence?ref_id=note-*)",
+      "src/management/pages/meetings/meetings.test.tsx (line 2104 asserts /management/evidence?ref_id=note-fee-2026)"
+    ],
+    "planned_change_once_added": "TradeJourneysPage: drop the link (journey evidence stays on the journey page). meetings.ts resolveMeetingActionEvidenceHref: research_note / note-* -> null so MeetingActionCards renders text; update the three assertions to expect text without a link, justified here."
+  },
+  "residual_findings": [
+    "src/management/pages/oversight/PersonaIntentTraces.tsx:385 links /management/evidence/<ref> for refs such as case-file-* and ev-cycle-*; case files are not evidence items, so the item route likely answers not found. Outside this task's named link classes and artifact contract.",
+    "e2e/19, 22, 23 cannot reach the app in the local harness (login fails before routing) on dev as well; they need the contained loopback auth used by newer specs.",
+    "Locale keys for reason/reviewer/reviewerFmt/actionability/operation remain because other code may still reference them; only keys used solely by removed code were deleted.",
+    "Persona Fleet and Evidence show 3 full rows after one page scroll at 1274x627 (table area 322-367 px); tall cited rows are capped to two visible citations with full text in the title tooltip."
+  ]
+}
