@@ -43,11 +43,17 @@ export function adaptPersonaHealth(
     (a) => a.relatedTarget === persona.id && (a.severity === "high" || a.severity === "critical"),
   ).length * 25;
 
+  // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: `successRate` is now `null` when
+  // no win rate was recorded. The health score keeps its previous input (a
+  // null rate already multiplied to 0 here), so health does not move; the
+  // list and detail pages show "no data" for the rate itself.
+  const recordedRate =
+    typeof persona.successRate === "number" && Number.isFinite(persona.successRate) ? persona.successRate : 0;
   const inputs = {
-    performance: Math.round(persona.successRate * 100),
+    performance: Math.round(recordedRate * 100),
     risk: riskScore(persona),
     executionQuality: 80,
-    decisionQuality: Math.round(persona.successRate * 100),
+    decisionQuality: Math.round(recordedRate * 100),
     policyCompliance: 90,
     sentinelPenalty: Math.min(100, sentinelPenalty),
   };

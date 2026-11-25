@@ -7,6 +7,7 @@ import { resolvePersonaForDetail } from "./personaDetailData";
 import {
   PersonaDetail,
   personaHumanInboxUrl,
+  personaWinRateDisplay,
   personaWorkshopEntryUrl,
   resolvePersonaTradingPulseReturnHref,
   TRADING_PULSE_RETURN_HREF,
@@ -100,6 +101,14 @@ describe("PersonaDetail", () => {
       name: "Detail Persona",
     });
     expect(getPersona).toHaveBeenCalledWith("ps_detail");
+  });
+
+  it("shows a null win rate as no data and never as 0% (FE-REGISTRY-LISTS-CURRENT-FIRST-20261125)", () => {
+    expect(personaWinRateDisplay(null, "No data")).toBe("No data");
+    expect(personaWinRateDisplay(undefined, "No data")).toBe("No data");
+    expect(personaWinRateDisplay(Number.NaN, "No data")).toBe("No data");
+    expect(personaWinRateDisplay(0, "No data")).toBe("0%");
+    expect(personaWinRateDisplay(0.62, "No data")).toBe("62%");
   });
 
   it("builds a persona-scoped Human Inbox entry URL", () => {

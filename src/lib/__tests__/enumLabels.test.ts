@@ -36,6 +36,21 @@ import {
   statusBadgeClass,
   statusLabel,
   strategyOperationalStatusClass,
+  STRATEGY_RUNTIME_STATUSES,
+  REGISTRY_LIST_SCOPES,
+  KNOWN_PERSONA_ARCHETYPES,
+  artifactKindText,
+  artifactSourceText,
+  normalizeRegistryListScope,
+  normalizeStrategyRuntimeStatus,
+  personaArchetypeText,
+  shortOwnerText,
+  strategyDeploymentLabel,
+  strategyLifecycleLabel,
+  strategyMetricsReasonText,
+  strategyReviewLabel,
+  strategyRuntimeReasonText,
+  strategyRuntimeStatusClass,
 } from "../enumLabels";
 
 const tZh = i18n.getFixedT("zh-TW");
@@ -253,5 +268,221 @@ describe("enumLabels shared BFF enum localization helper (FE-MGMT-LABELS-AND-RAW
     expect(normalizeStrategyOperationalStatus("RUNNING")).toBe("running");
     expect(strategyOperationalStatusClass("running")).toContain("text-status-success");
     expect(statusBadgeClass("resolved")).toContain("text-accent");
+  });
+});
+
+describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 runtime status, metric reason, list scope and artifact words", () => {
+  it("normalizes runtimeStatus and never invents one when the field is absent", () => {
+    expect(normalizeStrategyRuntimeStatus(undefined)).toBeUndefined();
+    expect(normalizeStrategyRuntimeStatus(null)).toBeUndefined();
+    expect(normalizeStrategyRuntimeStatus("")).toBeUndefined();
+    for (const status of STRATEGY_RUNTIME_STATUSES) {
+      expect(normalizeStrategyRuntimeStatus(status.toUpperCase())).toBe(status);
+      expect(tEn(`strategy.runtimeStatus.${status}`)).not.toContain("strategy.runtimeStatus");
+      expect(tZh(`strategy.runtimeStatus.${status}`)).not.toContain("strategy.runtimeStatus");
+    }
+    // An unrecognised value is "unknown", never running.
+    expect(normalizeStrategyRuntimeStatus("idle")).toBe("unknown");
+    expect(strategyRuntimeStatusClass("running")).toContain("text-status-success");
+    expect(strategyRuntimeStatusClass("paused_market_input")).toContain("text-status-warning");
+  });
+
+  it("turns recorded reasons into plain sentences in both locales and keeps the raw code", () => {
+    expect(strategyRuntimeReasonText(null, tEn)).toBeUndefined();
+    const market = strategyRuntimeReasonText("market_input_stale", tEn);
+    expect(market).toEqual({ text: "Market data input stopped", code: "market_input_stale" });
+    expect(strategyRuntimeReasonText("market_input_stale", tZh)?.text).toContain("行情輸入中斷");
+    expect(strategyRuntimeReasonText("binding_status_failed", tEn)?.text).toBe("Binding status: failed");
+    expect(strategyRuntimeReasonText("something_new", tEn)).toEqual({ text: "Recorded reason", code: "something_new" });
+
+    expect(strategyMetricsReasonText(null, tEn)).toBeUndefined();
+    expect(strategyMetricsReasonText("no_fills", tEn)).toEqual({ text: "No fills yet", code: "no_fills" });
+    expect(strategyMetricsReasonText("no_fills", tZh)?.text).toBe("尚無成交");
+    expect(strategyMetricsReasonText("marks_unavailable", tEn)?.text).toBe("Market prices unavailable");
+    expect(strategyMetricsReasonText("brand_new_reason", tEn)).toEqual({ text: "Not recorded", code: "brand_new_reason" });
+  });
+
+  it("reads listScope / list_scope and treats anything else as unknown", () => {
+    expect(normalizeRegistryListScope({ listScope: "test" })).toBe("test");
+    expect(normalizeRegistryListScope({ list_scope: "Retired" })).toBe("retired");
+    expect(normalizeRegistryListScope({ list_scope: "unbound" })).toBe("unbound");
+    expect(normalizeRegistryListScope({ list_scope: "unknown" })).toBe("unknown");
+    expect(normalizeRegistryListScope({ listScope: "zzz" })).toBe("unknown");
+    expect(normalizeRegistryListScope({})).toBe("unknown");
+    expect(normalizeRegistryListScope(null)).toBe("unknown");
+    expect(REGISTRY_LIST_SCOPES).toContain("research");
+  });
+
+  it("gives artifact kind and source as words with the code kept for the tooltip", () => {
+    expect(artifactKindText("execution_bundle", tEn)).toEqual({ text: "Execution bundle", code: "execution_bundle" });
+    expect(artifactKindText("execution_bundle", tZh)?.text).toBe("執行包");
+    expect(artifactKindText("factor_eval_report", tEn)?.text).toBe("Factor evaluation report");
+    expect(artifactKindText("some_new_kind", tEn)).toEqual({ text: "Some new kind", code: "some_new_kind" });
+    expect(artifactKindText("", tEn)).toBeUndefined();
+    expect(artifactKindText(null, tEn)).toBeUndefined();
+    expect(artifactSourceText("registry", tEn)).toEqual({ text: "Registry bundle", code: "registry" });
+    expect(artifactSourceText("research_run_output", tZh)).toEqual({ text: "研究產出", code: "research_run_output" });
+    expect(artifactSourceText("other_source", tEn)).toEqual({ text: "Other source", code: "other_source" });
+    expect(artifactSourceText(undefined, tEn)).toBeUndefined();
+  });
+
+  it("has zh-TW and en-US parity for every new registry-list text and no developer wording in create texts", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    const pick = (locale: any) => ({
+      registryLists: locale.registryLists,
+      runtimeStatus: locale.strategy.runtimeStatus,
+      runtimeReason: locale.strategy.runtimeReason,
+      metricsReason: locale.strategy.metricsReason,
+      kindLabel: locale.artifact.kindLabel,
+      listColumn: locale.strategy.list.column,
+      listExtras: {
+        asOf: locale.strategy.list.asOf,
+        personaIdsTooltip: locale.strategy.list.personaIdsTooltip,
+        noPersona: locale.strategy.list.noPersona,
+        draftNotice: locale.strategy.list.draftNotice,
+        hiddenTestBreakdown: locale.strategy.list.hiddenTestBreakdown,
+      },
+    });
+    expect(keysOf(pick(zhTW)).sort()).toEqual(keysOf(pick(enUS)).sort());
+    const developerWording = /typed durable|BFF owner|generic CRUD|OpenClaw|SOUL|archetype field|slug/i;
+    for (const locale of [enUS, zhTW] as any[]) {
+      const texts = [
+        locale.entityCreate.footerNote,
+        locale.entityCreate.hint.mandate,
+        locale.entityCreate.hint.archetype,
+        locale.entityCreate.hint.alpha,
+        locale.entityCreate.field.alpha,
+        locale.entityCreate.error.slugFormat,
+        locale.registryLists.create.paperPersona,
+        locale.registryLists.create.disabledNoOwner,
+      ];
+      for (const text of texts) expect(text).not.toMatch(developerWording);
+    }
+  });
+
+  it("FE-PERSONA-LIST-PLAIN-WORDS-20261125: maps recorded persona archetype codes to zh-TW and en-US words with code tooltip, keeps unknown codes as-is, flags sentences, and strips shared pantheon-dev- owner prefix", () => {
+    expect(KNOWN_PERSONA_ARCHETYPES).toEqual(["momentum", "generalist", "agora_servant"]);
+    expect(personaArchetypeText("momentum", tEn)).toEqual({
+      text: "Momentum",
+      tooltip: "momentum",
+      code: "momentum",
+      isSentence: false,
+      isKnown: true,
+    });
+    expect(personaArchetypeText("momentum", tZh)?.text).toBe("動能");
+    expect(personaArchetypeText("generalist", tEn)?.text).toBe("Generalist");
+    expect(personaArchetypeText("generalist", tZh)?.text).toBe("通用");
+    expect(personaArchetypeText("agora_servant", tEn)).toEqual({
+      text: "Agora servant",
+      tooltip: "agora_servant",
+      code: "agora_servant",
+      isSentence: false,
+      isKnown: true,
+    });
+    expect(personaArchetypeText("agora_servant", tZh)?.text).toBe("交易僕人");
+
+    // Unknown code is shown as it is (never humanized).
+    expect(personaArchetypeText("mean_reversion", tEn)).toEqual({
+      text: "mean_reversion",
+      tooltip: "mean_reversion",
+      code: "mean_reversion",
+      isSentence: false,
+      isKnown: false,
+    });
+    expect(personaArchetypeText("mean_reversion", tZh)?.text).toBe("mean_reversion");
+
+    // Recorded Risk Officer and Red Team sentences.
+    const riskSentence =
+      "Independent risk reviewer. Never trades. Reviews trial admission, envelope publication and every harness patch; may veto.";
+    expect(personaArchetypeText(riskSentence, tEn)).toEqual({
+      text: riskSentence,
+      tooltip: riskSentence,
+      isSentence: true,
+      isKnown: false,
+    });
+    expect(personaArchetypeText("", tEn)).toBeUndefined();
+    expect(personaArchetypeText(null, tEn)).toBeUndefined();
+
+    // Owner prefix stripping.
+    expect(shortOwnerText("pantheon-dev-admin-test")).toEqual({
+      text: "admin-test",
+      full: "pantheon-dev-admin-test",
+    });
+    expect(shortOwnerText("pantheon-dev-operator-a")).toEqual({
+      text: "operator-a",
+      full: "pantheon-dev-operator-a",
+    });
+    expect(shortOwnerText("pantheon-dev-operator-b")).toEqual({
+      text: "operator-b",
+      full: "pantheon-dev-operator-b",
+    });
+    expect(shortOwnerText("pantheon-dev-paper-provisioner")).toEqual({
+      text: "paper-provisioner",
+      full: "pantheon-dev-paper-provisioner",
+    });
+    expect(shortOwnerText("operator-bff")).toEqual({
+      text: "operator-bff",
+      full: "operator-bff",
+    });
+    expect(shortOwnerText("")).toBeUndefined();
+    expect(shortOwnerText(null)).toBeUndefined();
+  });
+});
+
+describe("FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125 strategy triple state, transition action labels and locale parity", () => {
+  it("translates lifecycle, review and deployment values and says when a strategy runs through its persona pool instead of deployment none", () => {
+    expect(strategyLifecycleLabel("approved", tZh)).toBe("已核准");
+    expect(strategyLifecycleLabel("approved", tEn)).toBe("Approved");
+    expect(strategyLifecycleLabel("paper", tZh)).toBe("模擬交易");
+    expect(strategyLifecycleLabel("paper", tEn)).toBe("Paper trading");
+
+    expect(strategyReviewLabel("approved", tZh)).toBe("已核准");
+    expect(strategyReviewLabel("approved", tEn)).toBe("Approved");
+    expect(strategyReviewLabel("none", tZh)).toBe("尚未送審");
+    expect(strategyReviewLabel("none", tEn)).toBe("Not in review");
+
+    expect(strategyDeploymentLabel("none", tZh, { runsThroughPersonaPool: true })).toBe("透過 Persona 策略池執行");
+    expect(strategyDeploymentLabel("none", tEn, { runsThroughPersonaPool: true })).toBe("Runs through persona pool");
+    expect(strategyDeploymentLabel("none", tZh, { runsThroughPersonaPool: false })).toBe("尚未部署");
+    expect(strategyDeploymentLabel("none", tEn, { runsThroughPersonaPool: false })).toBe("Not deployed");
+    expect(strategyDeploymentLabel("paper_running", tZh)).toBe("模擬交易執行中");
+    expect(strategyDeploymentLabel("paper_running", tEn)).toBe("Paper trading active");
+  });
+
+  it("translates every strategy transition action into plain words without arrow text", () => {
+    const actions = [
+      "scaffold_spec",
+      "run_replication",
+      "submit_review",
+      "promote_paper",
+      "promote_live",
+      "mark_degraded",
+      "replace_strategy",
+      "retire_live",
+      "rollback_to_paper",
+      "archive",
+    ] as const;
+
+    for (const action of actions) {
+      const zh = actionLabel(action, tZh);
+      const en = actionLabel(action, tEn);
+      expect(zh).toBeTruthy();
+      expect(en).toBeTruthy();
+      expect(zh).not.toBe(action);
+      expect(en).not.toBe(action);
+      expect(zh).not.toContain("→");
+      expect(en).not.toContain("→");
+    }
+  });
+
+  it("maintains 1:1 zh-TW and en-US key parity across strategyDetail", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.strategyDetail).sort()).toEqual(keysOf(enUS.strategyDetail).sort());
   });
 });

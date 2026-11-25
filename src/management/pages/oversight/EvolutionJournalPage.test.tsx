@@ -3,6 +3,7 @@ import { I18nextProvider } from "react-i18next";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import i18n from "@/i18n";
 import { EvolutionJournalPage } from "./_core";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
@@ -1552,5 +1553,111 @@ describe("EvolutionJournalPage pool versions and system toggle (FE-EVO-JOURNAL-D
     feed(envelope([appliedV2, { ...appliedV2, id: "pool_version:per-z:2", persona_id: "per-z", persona_name: "Zed" }]));
     renderJournal("/management/evolution-journal?persona=per-a");
     expect(screen.getAllByTestId("evolution-pool-version-title")).toHaveLength(1);
+  });
+
+  // FE-EVO-JOURNAL-VERSION-GUARD-20261126: before BFF-EVO-JOURNAL-VERSION-STRING-20261126
+  // the aggregate emitted `target.version` as a JSON number (pool_version rows always:
+  // `target={"type": "persona", "id": persona_id, "version": number}`; decision rows when the
+  // stored target_version is an int). The page called `.toLowerCase()` on it and the whole
+  // page fell into the error boundary. Rows below are the BFF base-item + pool_version shapes.
+  it("renders decision and pool_version rows with a numeric, null or missing target.version without hitting the error boundary", async () => {
+    const decisionNumericVersion = {
+      id: "evolution_decision:evo-num-1",
+      journal_id: "evolution_decision:evo-num-1",
+      entryType: "evolution_decision",
+      entry_type: "evolution_decision",
+      source_id: "evo-num-1",
+      title: "Freeze decision · evo-num-1",
+      summary: "Governed freeze proposal for plan-num-1",
+      status: "approved",
+      risk_level: "medium",
+      action_type: "freeze",
+      target: { type: "candidate_artifact", id: "plan-num-1-execution-artifact", version: 3 },
+      created_at: "2026-11-24T03:00:00Z",
+      updated_at: "2026-11-24T03:00:00Z",
+      occurred_at: "2026-11-24T03:00:00Z",
+      route: "/management/evolution-journal?decision=evo-num-1",
+      bff_detail_path: null,
+      evidence_class: "incident_severity",
+      subject_class: "strategy",
+    };
+    const decisionNullVersion = {
+      ...decisionNumericVersion,
+      id: "evolution_decision:evo-null-1",
+      journal_id: "evolution_decision:evo-null-1",
+      source_id: "evo-null-1",
+      title: "Freeze decision · evo-null-1",
+      target: { type: "candidate_artifact", id: "plan-null-1-execution-artifact", version: null },
+    };
+    const decisionMissingVersion = {
+      ...decisionNumericVersion,
+      id: "evolution_decision:evo-miss-1",
+      journal_id: "evolution_decision:evo-miss-1",
+      source_id: "evo-miss-1",
+      title: "Freeze decision · evo-miss-1",
+      target: { type: "candidate_artifact", id: "plan-miss-1-execution-artifact" },
+    };
+    const poolNumericVersion = {
+      id: "pool_version:per-a:v2",
+      journal_id: "pool_version:per-a:v2",
+      entryType: "pool_version",
+      entry_type: "pool_version",
+      source_id: "per-a:v2",
+      title: "Alpha Persona pool v2: add_member applied",
+      summary: "Applied add_member; pool membership changed.",
+      status: "applied",
+      risk_level: null,
+      action_type: "add_member",
+      target: { type: "persona", id: "per-a", version: 2 },
+      created_at: "2026-11-24T01:00:00Z",
+      updated_at: "2026-11-24T01:00:00Z",
+      occurred_at: "2026-11-24T01:00:00Z",
+      route: "/management/evolution-journal?persona=per-a",
+      bff_detail_path: null,
+      subject_class: "strategy",
+      persona_id: "per-a",
+      persona_name: "Alpha Persona",
+      pool_version: 2,
+      action: "add_member",
+      decision_status: "applied",
+      refused: false,
+      membership_changed: true,
+      reasons: ["Sharpe gate passed on paper"],
+      members_before: [{ artifact_ref: "strat-a@1", stage: "trial", risk_weight: 1 }],
+      members_after: [
+        { artifact_ref: "strat-a@1", stage: "trial", risk_weight: 0.5 },
+        { artifact_ref: "strat-b@1", stage: "trial", risk_weight: 0.5 },
+      ],
+      record: { persona_id: "per-a", pool_version: 2, digest: "sha256:pool-v2" },
+    };
+    feed(envelope([poolNumericVersion, decisionNumericVersion, decisionNullVersion, decisionMissingVersion]));
+    await i18n.changeLanguage("en-US");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(
+        <ErrorBoundary scope="EvolutionJournal">
+          <I18nextProvider i18n={i18n}>
+            <MemoryRouter initialEntries={["/management/evolution-journal"]}>
+              <Routes>
+                <Route path="/management/evolution-journal" element={<EvolutionJournalPage />} />
+              </Routes>
+            </MemoryRouter>
+          </I18nextProvider>
+        </ErrorBoundary>,
+      );
+      expect(screen.queryByText(/畫面渲染失敗/)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      // Decision with numeric version renders the version as text.
+      expect(screen.getByText("candidate_artifact:plan-num-1-execution-artifact (3)")).toBeInTheDocument();
+      // Null and missing versions render the target without a version suffix.
+      expect(screen.getByText("candidate_artifact:plan-null-1-execution-artifact")).toBeInTheDocument();
+      expect(screen.getByText("candidate_artifact:plan-miss-1-execution-artifact")).toBeInTheDocument();
+      // pool_version row with numeric target.version renders its card.
+      const pool = screen.getByTestId("evolution-pool-version-pool_version:per-a:v2");
+      expect(within(pool).getByTestId("evolution-pool-version-title")).toHaveTextContent("Alpha Persona · strategy pool v2");
+      expect(pool).toHaveTextContent("Applied");
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

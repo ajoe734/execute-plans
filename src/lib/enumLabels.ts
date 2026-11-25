@@ -293,6 +293,13 @@ export const BFF_ACTION_VALUES = [
   "buy",
   "sell",
   "hold",
+  "scaffold_spec",
+  "run_replication",
+  "submit_review",
+  "mark_degraded",
+  "replace_strategy",
+  "retire_live",
+  "rollback_to_paper",
 ] as const;
 
 export const BFF_RISK_VALUES = [
@@ -877,6 +884,13 @@ const EN_FALLBACK_ACTIONS: Record<string, string> = {
   buy: "Buy",
   sell: "Sell",
   hold: "Hold",
+  scaffold_spec: "Scaffold Specification",
+  run_replication: "Run Replication",
+  submit_review: "Submit for Review",
+  mark_degraded: "Mark as Degraded",
+  replace_strategy: "Replace Strategy",
+  retire_live: "Retire Live Strategy",
+  rollback_to_paper: "Roll Back to Paper",
 };
 
 const EN_FALLBACK_RISK: Record<string, string> = {
@@ -1585,6 +1599,296 @@ export function strategyOperationalStatusClass(
   if (status === "unknown") return "border-status-warning/40 text-status-warning";
   if (status === "idle") return "border-border text-foreground";
   return "border-muted text-muted-foreground";
+}
+
+// --- FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 --------------------------------
+// Runtime status (BFF-STRATEGY-METRICS-RUNTIME-20261125 `runtimeStatus`), the
+// recorded metric reason (`metricsReason`), registry list scope (`listScope` /
+// `list_scope`, BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125) and artifact kind /
+// source words. Every helper returns `undefined` when the field is absent so
+// pages stay usable against an older BFF that does not send it.
+
+export const STRATEGY_RUNTIME_STATUSES = [
+  "running",
+  "paused_market_input",
+  "paused_operator",
+  "none",
+  "unknown",
+] as const;
+export type StrategyRuntimeStatus = (typeof STRATEGY_RUNTIME_STATUSES)[number];
+
+export function normalizeStrategyRuntimeStatus(value: unknown): StrategyRuntimeStatus | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  return (STRATEGY_RUNTIME_STATUSES as readonly string[]).includes(trimmed)
+    ? (trimmed as StrategyRuntimeStatus)
+    : "unknown";
+}
+
+export function strategyRuntimeStatusClass(status: StrategyRuntimeStatus): string {
+  if (status === "running") return "border-status-success/40 text-status-success";
+  if (status === "paused_market_input" || status === "paused_operator") {
+    return "border-status-warning/40 text-status-warning";
+  }
+  if (status === "unknown") return "border-status-warning/40 text-status-warning";
+  return "border-muted text-muted-foreground";
+}
+
+const KNOWN_RUNTIME_REASON_KEYS = new Set([
+  "runtime_bindings_unavailable",
+  "runtime_truth_unavailable",
+  "scope_unavailable",
+]);
+
+/**
+ * Plain sentence for `runtimeStatusReason`. The raw code is returned next to
+ * the sentence so the cell can keep it as a tooltip; it is never the only text.
+ */
+export function strategyRuntimeReasonText(
+  reason: unknown,
+  t: TranslateFn,
+): { text: string; code: string } | undefined {
+  if (typeof reason !== "string" || !reason.trim()) return undefined;
+  const code = reason.trim();
+  const lower = code.toLowerCase();
+  if (lower.startsWith("market_input_")) {
+    return { text: t("strategy.runtimeReason.marketInput"), code };
+  }
+  if (lower.startsWith("binding_status_")) {
+    return {
+      text: t("strategy.runtimeReason.bindingStatus", { status: lower.slice("binding_status_".length) }),
+      code,
+    };
+  }
+  if (KNOWN_RUNTIME_REASON_KEYS.has(lower)) {
+    return { text: t(`strategy.runtimeReason.${lower}`), code };
+  }
+  return { text: t("strategy.runtimeReason.other"), code };
+}
+
+const KNOWN_METRICS_REASONS = new Set([
+  "no_fills",
+  "marks_unavailable",
+  "no_admitted_binding",
+  "not_observed",
+  "stale",
+  "runtime_bindings_unavailable",
+  "runtime_truth_unavailable",
+  "scope_unavailable",
+]);
+
+/** Plain words for a recorded `metricsReason` such as `no_fills`. */
+export function strategyMetricsReasonText(
+  reason: unknown,
+  t: TranslateFn,
+): { text: string; code: string } | undefined {
+  if (typeof reason !== "string" || !reason.trim()) return undefined;
+  const code = reason.trim();
+  const lower = code.toLowerCase();
+  if (KNOWN_METRICS_REASONS.has(lower)) {
+    return { text: t(`strategy.metricsReason.${lower}`), code };
+  }
+  return { text: t("strategy.metricsReason.other"), code };
+}
+
+export const REGISTRY_LIST_SCOPES = ["current", "test", "retired", "research", "unbound", "unknown"] as const;
+export type RegistryListScope = (typeof REGISTRY_LIST_SCOPES)[number];
+
+/**
+ * Reads `listScope` / `list_scope`. A missing or unrecognised value is
+ * `unknown`: the list keeps such rows on the default (current) view so nothing
+ * disappears when the BFF field is absent or the persona directory was down.
+ */
+export function normalizeRegistryListScope(row: unknown): RegistryListScope {
+  if (!row || typeof row !== "object") return "unknown";
+  const record = row as { listScope?: unknown; list_scope?: unknown };
+  const raw = record.listScope ?? record.list_scope;
+  if (typeof raw !== "string") return "unknown";
+  const lower = raw.trim().toLowerCase();
+  return (REGISTRY_LIST_SCOPES as readonly string[]).includes(lower)
+    ? (lower as RegistryListScope)
+    : "unknown";
+}
+
+const KNOWN_ARTIFACT_KINDS = new Set([
+  "execution_bundle",
+  "strategy_spec",
+  "factor_eval_report",
+  "backtest_report",
+  "model",
+  "dataset",
+  "report",
+  "container",
+]);
+
+function humanizeCode(code: string): string {
+  const words = code.replace(/[_\-.]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : code;
+}
+
+/** Artifact `kind` as words; the raw code is kept for the tooltip. */
+export function artifactKindText(kind: unknown, t: TranslateFn): { text: string; code: string } | undefined {
+  if (typeof kind !== "string" || !kind.trim()) return undefined;
+  const code = kind.trim();
+  const lower = code.toLowerCase();
+  if (KNOWN_ARTIFACT_KINDS.has(lower)) {
+    return { text: t(`artifact.kindLabel.${lower}`), code };
+  }
+  return { text: humanizeCode(code), code };
+}
+
+/** Artifact `source_kind` as words; the raw code is kept for the tooltip. */
+export function artifactSourceText(source: unknown, t: TranslateFn): { text: string; code: string } | undefined {
+  if (typeof source !== "string" || !source.trim()) return undefined;
+  const code = source.trim();
+  const lower = code.toLowerCase();
+  if (lower === "registry") return { text: t("artifact.sources.registry"), code };
+  if (lower === "research_run_output" || lower === "research") {
+    return { text: t("artifact.sources.research_run_output"), code };
+  }
+  return { text: humanizeCode(code), code };
+}
+
+export const KNOWN_PERSONA_ARCHETYPES = ["momentum", "generalist", "agora_servant"] as const;
+export type KnownPersonaArchetype = (typeof KNOWN_PERSONA_ARCHETYPES)[number];
+
+export interface PersonaArchetypeDisplay {
+  text: string;
+  tooltip: string;
+  code?: string;
+  isSentence: boolean;
+  isKnown: boolean;
+}
+
+/**
+ * FE-PERSONA-LIST-PLAIN-WORDS-20261125 — Recorded persona archetype codes
+ * (`momentum`, `generalist`, `agora_servant`) are shown as localized words with
+ * the raw code as tooltip; an unknown code is shown as it is; a value that is a
+ * sentence and not a code is flagged `isSentence: true` so the cell renders one
+ * line cut with an ellipsis and the full text as tooltip.
+ */
+export function personaArchetypeText(
+  archetype: unknown,
+  t: TranslateFn,
+): PersonaArchetypeDisplay | undefined {
+  if (typeof archetype !== "string" || !archetype.trim()) return undefined;
+  const raw = archetype.trim();
+  const lower = raw.toLowerCase();
+  if ((KNOWN_PERSONA_ARCHETYPES as readonly string[]).includes(lower)) {
+    return {
+      text: t(`registryLists.personaType.${lower}`),
+      tooltip: raw,
+      code: raw,
+      isSentence: false,
+      isKnown: true,
+    };
+  }
+  if (/\s/.test(raw)) {
+    return {
+      text: raw,
+      tooltip: raw,
+      isSentence: true,
+      isKnown: false,
+    };
+  }
+  return {
+    text: raw,
+    tooltip: raw,
+    code: raw,
+    isSentence: false,
+    isKnown: false,
+  };
+}
+
+export interface OwnerCellDisplay {
+  text: string;
+  full: string;
+}
+
+const SHARED_OWNER_PREFIX = /^pantheon-(?:dev|staging|prod)-(.+)$/i;
+
+/**
+ * FE-PERSONA-LIST-PLAIN-WORDS-20261125 — Shows the part of an owner ID that
+ * tells owners apart (without the shared `pantheon-dev-` prefix) while keeping
+ * the full ID for the tooltip.
+ */
+export function shortOwnerText(owner: unknown): OwnerCellDisplay | undefined {
+  if (typeof owner !== "string" || !owner.trim()) return undefined;
+  const full = owner.trim();
+  const match = SHARED_OWNER_PREFIX.exec(full);
+  const text = match && match[1].trim() ? match[1].trim() : full;
+  return { text, full };
+}
+
+const KNOWN_STRATEGY_LIFECYCLE_VALUES = new Set([
+  "discovered",
+  "scaffolded",
+  "replicated",
+  "approved",
+  "paper",
+  "live",
+  "degraded",
+  "replaced",
+  "retired",
+  "archived",
+]);
+
+export function strategyLifecycleLabel(
+  lifecycle: string | undefined | null,
+  t: TranslateFn,
+): string {
+  const raw = typeof lifecycle === "string" ? lifecycle.trim().toLowerCase() : "";
+  if (!raw) return "—";
+  if (KNOWN_STRATEGY_LIFECYCLE_VALUES.has(raw)) {
+    return t(`strategyDetail.tripleState.lifecycleValues.${raw}`);
+  }
+  return statusLabel(raw, t);
+}
+
+const KNOWN_STRATEGY_REVIEW_VALUES = new Set([
+  "none",
+  "pending",
+  "changes_requested",
+  "approved",
+]);
+
+export function strategyReviewLabel(
+  review: string | undefined | null,
+  t: TranslateFn,
+): string {
+  const raw = typeof review === "string" ? review.trim().toLowerCase() : "";
+  if (!raw) return t("strategyDetail.tripleState.reviewValues.none");
+  if (KNOWN_STRATEGY_REVIEW_VALUES.has(raw)) {
+    return t(`strategyDetail.tripleState.reviewValues.${raw}`);
+  }
+  return statusLabel(raw, t);
+}
+
+export function strategyDeploymentLabel(
+  deployment: string | undefined | null,
+  t: TranslateFn,
+  options?: { runsThroughPersonaPool?: boolean },
+): string {
+  const raw = typeof deployment === "string" ? deployment.trim().toLowerCase() : "";
+  if (!raw || raw === "none" || raw === "not_deployed") {
+    return options?.runsThroughPersonaPool
+      ? t("strategyDetail.tripleState.deploymentValues.persona_pool")
+      : t("strategyDetail.tripleState.deploymentValues.none");
+  }
+  if (raw === "paper_running" || raw === "paper_active") {
+    return t("strategyDetail.tripleState.deploymentValues.paper_running");
+  }
+  if (raw === "live_running") {
+    return t("strategyDetail.tripleState.deploymentValues.live_running");
+  }
+  if (raw === "stopped") {
+    return t("strategyDetail.tripleState.deploymentValues.stopped");
+  }
+  if (raw === "rollback_required") {
+    return t("strategyDetail.tripleState.deploymentValues.rollback_required");
+  }
+  return statusLabel(raw, t);
 }
 
 // --- BFF-owned display names & localized incident summaries (RC6 WP6.1/6.2) ---

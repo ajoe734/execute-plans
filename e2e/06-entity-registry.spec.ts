@@ -19,6 +19,7 @@
  *     without a staging dependency.
  */
 
+import { mkdirSync } from "node:fs";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   RECORDED_A81B_STRATEGY,
@@ -807,11 +808,19 @@ function listEnvelope(registry: RegistryFixture): JsonRecord {
       totalCountExact: true,
       ...(registry.key === "strategies"
         ? {
+            // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the raw state_counts also counts hidden
+            // test/stub rows and is never printed; the draft banner reads visible_state_counts.
             state_counts: {
+              draft: 7421,
+              review: 1,
+              approved: 170,
+              retired: 1556,
+            },
+            visible_state_counts: {
               draft: 3217,
               review: 1,
               approved: 140,
-              retired: 1556,
+              retired: 2,
             },
             operational_counts: {
               running: 1,
@@ -1205,6 +1214,7 @@ test.describe("F07 entity registry", () => {
         );
         await expect(page.getByTestId("strategy-symbols")).toHaveText("2330.TW");
         await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("3217");
+        await expect(page.getByTestId("strategy-hidden-drafts-banner")).not.toContainText("7421");
         await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("134");
       }
       if (registry.key === "evolution-programs") {
@@ -1468,6 +1478,7 @@ test.describe("F07 entity registry", () => {
     await installContainedLoopbackAuthAuthority(page);
 
     try {
+      await page.setViewportSize({ width: 1274, height: 627 });
       const startedAt = Date.now();
       await page.goto(frontendUrl(`/management/strategies/${RECORDED_A81B_STRATEGY_ID}`), {
         waitUntil: "domcontentloaded",
@@ -1481,7 +1492,18 @@ test.describe("F07 entity registry", () => {
       expect(headerVisibleMs, "StrategyDetail header must render within 2 s while secondary reads take 15 s").toBeLessThan(2_000);
 
       await expect(page.getByTestId("strategy-rules-summary")).toBeVisible();
-      await expect(page.getByTestId("strategy-rule-combination")).toContainText("clipped_weighted_sum_v1");
+      await expect(page.getByTestId("strategy-rule-combination")).toContainText(
+        "依成員風險權重加權合計訊號，並裁切於風險上限內",
+      );
+      await expect(page.getByTestId("strategy-rule-combination")).not.toContainText(
+        "clipped_weighted_sum_v1",
+      );
+      await expect(page.getByTestId("strategy-rule-risk-limits")).toContainText(
+        "多空抵銷後的淨部位上限為 100%（1 倍）",
+      );
+      await expect(page.getByTestId("strategy-rule-risk-limits")).not.toContainText(
+        "max_net_strength=1",
+      );
       await expect(
         page.getByTestId("strategy-rule-member-artifact-persona-paper-a81b4fd15944698341aa"),
       ).toHaveCount(1);
@@ -1491,6 +1513,30 @@ test.describe("F07 entity registry", () => {
       await expect(
         page.getByTestId("strategy-rule-artifact-persona-paper-baseline-a81b4fd15944698341aa"),
       ).toBeVisible();
+      await expect(page.getByTestId("strategy-triple-state-card")).toContainText(
+        "策略狀態（生命週期 × 審查 × 部署）",
+      );
+      await expect(page.getByTestId("strategy-triple-invariant")).toHaveText("狀態一致");
+      await expect(page.getByTestId("strategy-triple-deployment")).toHaveText(
+        "透過 Persona 策略池執行",
+      );
+      await expect(page.getByTestId("strategy-performance-block")).toContainText("-9.99");
+      await expect(page.getByTestId("strategy-trades")).toHaveText("2");
+      await expect(page.getByTestId("strategy-runtime-status")).toContainText("執行中");
+      await expect(page.getByRole("button", { name: "升級至模擬" })).toBeDisabled();
+
+      const visibleText = await bodyText(page);
+      expect(visibleText).not.toMatch(
+        /clipped_weighted_sum_v1|max_net_strength=1|gross_weight_limit=1|promote_paper|STRATEGY STATE|invariant ok/i,
+      );
+
+      const evidenceDir = "docs/deployment/evidence/FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125";
+      mkdirSync(evidenceDir, { recursive: true });
+      await page.screenshot({
+        path: `${evidenceDir}/strategy-detail-overview-1274x627.png`,
+        fullPage: false,
+      });
+
       await expect(page.getByTestId("strategy-journal-section")).toHaveAttribute(
         "data-section-status",
         "loading",

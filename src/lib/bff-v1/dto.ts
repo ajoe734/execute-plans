@@ -419,9 +419,23 @@ export interface Strategy extends BaseObject {
   sharpe: number | null;
   drawdown: number | null;
   totalTrades?: number | null;
+  total_trades?: number | null;
   metricsAsOf?: string | null;
+  metrics_as_of?: string | null;
   metricsResolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
+  metrics_resolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
   metricsPersonaId?: string | null;
+  /** BFF-STRATEGY-METRICS-RUNTIME-20261125: recorded reason a metric is null (e.g. `no_fills`). */
+  metricsReason?: string | null;
+  metrics_reason?: string | null;
+  /**
+   * BFF-STRATEGY-METRICS-RUNTIME-20261125: runtime state read from the
+   * RuntimeBinding owner. Absent on older BFFs; `unknown` when the read failed.
+   */
+  runtimeStatus?: "running" | "paused_market_input" | "paused_operator" | "none" | "unknown" | string | null;
+  runtime_status?: "running" | "paused_market_input" | "paused_operator" | "none" | "unknown" | string | null;
+  runtimeStatusReason?: string | null;
+  runtime_status_reason?: string | null;
 }
 
 export type PaperRiskTier = "low" | "medium" | "high";
@@ -446,7 +460,13 @@ export interface PersonaRiskPolicyChange {
 export interface Persona extends BaseObject {
   archetype: string;
   routedStrategies: number;
-  successRate: number;
+  /**
+   * BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125: `null` when no win rate was
+   * recorded (the BFF no longer fills in 0.0). Render "no data", never 0%.
+   */
+  successRate: number | null;
+  /** BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125 list scope; absent on older BFFs. */
+  listScope?: "current" | "test" | "retired" | "research" | string | null;
   lifecycleStatus?: PersonaStatus | "research_only" | "consultable" | "paper_owner" | "live_owner" | "frozen" | string;
   capitalMode?: "paper" | "canary" | "live" | string | null;
   deploymentStage?: "research" | "paper" | "canary" | "live" | string | null;
@@ -1088,6 +1108,12 @@ export interface Artifact extends BaseObject {
   hash: string;
   source_kind?: ArtifactSourceKind;
   sourceKind?: ArtifactSourceKind;
+  /**
+   * BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125: `current` / `test` / `retired` /
+   * `unbound` for Registry rows, `research` for research run outputs, and
+   * `unknown` when the persona directory could not be read. Absent on older BFFs.
+   */
+  list_scope?: "current" | "test" | "retired" | "unbound" | "research" | "unknown" | string | null;
   registry_id?: string | null;
   artifact_id?: string | null;
   artifact_type?: string | null;

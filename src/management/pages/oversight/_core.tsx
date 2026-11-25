@@ -106,8 +106,10 @@ import {
   type PersonaFleetResearchItem,
 } from "./personaFleetLinks";
 import {
+  cleanJournalFieldText,
   diffPoolMembers,
   filterEvolutionJournalRowsForFocus,
+  journalFieldText,
   normalizePoolMembers,
   normalizeEvolutionFocusToken,
   normalizeEvolutionJournalView,
@@ -3938,7 +3940,7 @@ interface EvolutionEntry {
   persona_id?: string;
   personaId?: string;
   route?: string;
-  target?: { type?: string; id?: string; version?: string } | null;
+  target?: { type?: string | number | null; id?: string | number | null; version?: string | number | null } | null;
   decision?: Record<string, unknown> | null;
   mutation_review?: Record<string, unknown> | null;
   record?: { evidence_refs?: unknown; [key: string]: unknown } | null;
@@ -4494,18 +4496,19 @@ export const EvolutionJournalPage = () => {
         // The live aggregate and the legacy mock have different field sets;
         // normalize defensively so neither shape throws (real entries have no
         // numeric before/after — calling .toFixed on those crashed the page).
-        const rawHeadline = e.title ?? e.mutation ?? e.id;
-        const headline = rawHeadline && !["nan", "undefined", "null"].includes(rawHeadline.toLowerCase()) ? rawHeadline : "";
+        // FE-EVO-JOURNAL-VERSION-GUARD-20261126: the BFF may send any of these
+        // as a number or null (a numeric target.version crashed the page), so
+        // read them as text before any string method.
+        const headline = cleanJournalFieldText(e.title ?? e.mutation ?? e.id);
 
-        const rawStatus = e.status ?? e.verdict;
-        const status = rawStatus && !["nan", "undefined", "null"].includes(rawStatus.toLowerCase()) ? rawStatus : undefined;
+        const status = cleanJournalFieldText(e.status ?? e.verdict) || undefined;
 
-        const action = e.action_type && !["nan", "undefined", "null"].includes(e.action_type.toLowerCase()) ? e.action_type : undefined;
-        const risk = e.risk_level && !["nan", "undefined", "null"].includes(e.risk_level.toLowerCase()) ? e.risk_level : undefined;
+        const action = cleanJournalFieldText(e.action_type) || undefined;
+        const risk = cleanJournalFieldText(e.risk_level) || undefined;
 
-        const cleanTargetType = e.target?.type && !["nan", "undefined", "null"].includes(e.target.type.toLowerCase()) ? e.target.type : "";
-        const cleanTargetId = e.target?.id && !["nan", "undefined", "null"].includes(e.target.id.toLowerCase()) ? e.target.id : "";
-        const cleanTargetVersion = e.target?.version && !["nan", "undefined", "null"].includes(e.target.version.toLowerCase()) ? e.target.version : "";
+        const cleanTargetType = cleanJournalFieldText(e.target?.type);
+        const cleanTargetId = cleanJournalFieldText(e.target?.id);
+        const cleanTargetVersion = cleanJournalFieldText(e.target?.version);
         const target = e.target && cleanTargetId
           ? [cleanTargetType, cleanTargetId].filter(Boolean).join(":") +
             (cleanTargetVersion ? ` (${cleanTargetVersion})` : "")
@@ -4541,7 +4544,7 @@ export const EvolutionJournalPage = () => {
           const refused = e.refused === true || String(e.decision_status ?? e.status ?? "").toLowerCase() === "refused";
           const decisionStatus = String(e.decision_status ?? e.status ?? "").toLowerCase();
           const applied = !refused && decisionStatus === "applied";
-          const personaName = e.persona_name?.trim() || e.persona_id || e.personaId || t("mgmt.evolution.poolVersion.personaUnknown");
+          const personaName = journalFieldText(e.persona_name).trim() || e.persona_id || e.personaId || t("mgmt.evolution.poolVersion.personaUnknown");
           const isInitial = String(e.action ?? "").toLowerCase() === "initial";
           const reasons = evolutionReasonList(e.reasons);
           const memberText = (m: { artifact_ref: string; stage?: string | null; risk_weight?: number | null }) =>
@@ -4640,7 +4643,7 @@ export const EvolutionJournalPage = () => {
           entryType && PLAIN_TITLE_ENTRY_TYPES.has(entryType)
             ? t(`mgmt.evolution.plainTitle.${entryType}`, {
                 action: action ?? t("mgmt.evolution.plainTitle.actionUnknown"),
-                target: e.persona_name?.trim() || (target ? [cleanTargetType, cleanTargetId].filter(Boolean).join(":") : undefined) || t("mgmt.evolution.plainTitle.targetUnknown"),
+                target: journalFieldText(e.persona_name).trim() || (target ? [cleanTargetType, cleanTargetId].filter(Boolean).join(":") : undefined) || t("mgmt.evolution.plainTitle.targetUnknown"),
               })
             : undefined;
         return (

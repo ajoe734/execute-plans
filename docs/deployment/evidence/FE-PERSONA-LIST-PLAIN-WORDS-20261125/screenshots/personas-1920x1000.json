@@ -1,0 +1,159 @@
+{
+  "rowCount": 7,
+  "viewportWidth": 1920,
+  "clientWidth": 1600,
+  "scrollWidth": 1600,
+  "docOverflow": 0,
+  "headers": [
+    "Name",
+    "State",
+    "Risk",
+    "Type",
+    "Strategies",
+    "Win rate",
+    "Owner",
+    "Last updated"
+  ],
+  "colWidths": [
+    361,
+    140,
+    113,
+    189,
+    163,
+    123,
+    223,
+    286
+  ],
+  "nameWidth": 361,
+  "lastRight": 1880,
+  "rowHeights": [
+    53,
+    53,
+    53,
+    53,
+    53,
+    53,
+    53
+  ],
+  "maxRowHeight": 53,
+  "rowNames": [
+    "衡岳｜2330 台股 Paper 學習 R2persona-ee7112a829d38b9135ac",
+    "青禾｜2330 台股 Paper 學習 R2persona-2448c7053e33ea48da47",
+    "澄川｜2330 台股 Paper 學習 R2persona-6507750312870d03a241",
+    "Agora Servantpersona-agora-servant-operator-a",
+    "Agora Servantpersona-agora-servant-operator-b",
+    "Risk Officerpersona-risk-officer",
+    "Red Teampersona-red-team"
+  ],
+  "types": [
+    {
+      "text": "Momentum",
+      "title": "momentum",
+      "kind": "code",
+      "height": 14,
+      "clientRectCount": 1
+    },
+    {
+      "text": "Momentum",
+      "title": "momentum",
+      "kind": "code",
+      "height": 14,
+      "clientRectCount": 1
+    },
+    {
+      "text": "Momentum",
+      "title": "momentum",
+      "kind": "code",
+      "height": 14,
+      "clientRectCount": 1
+    },
+    {
+      "text": "Agora servant",
+      "title": "agora_servant",
+      "kind": "code",
+      "height": 14,
+      "clientRectCount": 1
+    },
+    {
+      "text": "Agora servant",
+      "title": "agora_servant",
+      "kind": "code",
+      "height": 14,
+      "clientRectCount": 1
+    },
+    {
+      "text": "Independent risk reviewer. Never trades. Reviews trial admission, envelope publication and every harness patch; may veto.",
+      "title": "Independent risk reviewer. Never trades. Reviews trial admission, envelope publication and every harness patch; may veto.",
+      "kind": "sentence",
+      "height": 16,
+      "clientRectCount": 1
+    },
+    {
+      "text": "Adversarial reviewer. Never trades. Attacks patches that touch guardrails or the consult policy.",
+      "title": "Adversarial reviewer. Never trades. Attacks patches that touch guardrails or the consult policy.",
+      "kind": "sentence",
+      "height": 16,
+      "clientRectCount": 1
+    }
+  ],
+  "owners": [
+    {
+      "text": "admin-test",
+      "title": "pantheon-dev-admin-test",
+      "full": "pantheon-dev-admin-test",
+      "clientWidth": 144,
+      "scrollWidth": 144
+    },
+    {
+      "text": "admin-test",
+      "title": "pantheon-dev-admin-test",
+      "full": "pantheon-dev-admin-test",
+      "clientWidth": 144,
+      "scrollWidth": 144
+    },
+    {
+      "text": "admin-test",
+      "title": "pantheon-dev-admin-test",
+      "full": "pantheon-dev-admin-test",
+      "clientWidth": 144,
+      "scrollWidth": 144
+    },
+    {
+      "text": "operator-a",
+      "title": "pantheon-dev-operator-a",
+      "full": "pantheon-dev-operator-a",
+      "clientWidth": 144,
+      "scrollWidth": 144
+    },
+    {
+      "text": "operator-b",
+      "title": "pantheon-dev-operator-b",
+      "full": "pantheon-dev-operator-b",
+      "clientWidth": 144,
+      "scrollWidth": 144
+    },
+    {
+      "text": "operator-bff",
+      "title": "operator-bff",
+      "full": "operator-bff",
+      "clientWidth": 144,
+      "scrollWidth": 144
+    },
+    {
+      "text": "operator-bff",
+      "title": "operator-bff",
+      "full": "operator-bff",
+      "clientWidth": 144,
+      "scrollWidth": 144
+    }
+  ],
+  "symbolItems": [],
+  "scopeButtons": [
+    "Current (7)",
+    "Test (153)",
+    "Retired (17)",
+    "Research (4)",
+    "All (181)"
+  ],
+  "stateButtons": []
+}
