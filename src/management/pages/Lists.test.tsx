@@ -586,7 +586,17 @@ describe("extractHiddenNonRealCount", () => {
 // strategies with pnl -9.988691250022384 / -186.89087499999732 / null (no_fills).
 // ---------------------------------------------------------------------------
 import i18n from "@/i18n";
-import { personaWinRateText, countUnknownScopeRows, classifyCurrentFirstScope, buildStrategyColumns, STRATEGY_COLUMN_MIN_WIDTHS, PERSONA_COLUMN_MIN_WIDTHS, ARTIFACT_COLUMN_MIN_WIDTHS } from "./Lists";
+import {
+  personaWinRateText,
+  countUnknownScopeRows,
+  classifyCurrentFirstScope,
+  buildStrategyColumns,
+  orderPersonasByRoutedStrategies,
+  hasPersonaRoutedStrategies,
+  STRATEGY_COLUMN_MIN_WIDTHS,
+  PERSONA_COLUMN_MIN_WIDTHS,
+  ARTIFACT_COLUMN_MIN_WIDTHS,
+} from "./Lists";
 
 async function withLanguage<T>(lng: "en-US" | "zh-TW", fn: () => Promise<T>): Promise<T> {
   await i18n.changeLanguage(lng);
@@ -995,6 +1005,394 @@ describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 artifact list opens on curren
       await waitFor(() => expect(screen.getByRole("button", { name: "Current (12)" })).toBeInTheDocument());
       expect(screen.getAllByRole("row").slice(1)).toHaveLength(12);
       expect(screen.getByTestId("list-unknown-scope-notice")).toHaveAttribute("data-unknown-scope-count", "12");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FE-PERSONA-LIST-PLAIN-WORDS-20261125
+// Recorded current rows 2026-11-25 20:38Z on BFF b3f93d448:
+// 1. Agora Servant; agora_servant; pantheon-dev-operator-a; 0
+// 2. Agora Servant; agora_servant; pantheon-dev-operator-b; 0
+// 3-5. The three trading personas; momentum; pantheon-dev-admin-test; 1 each
+// 6. Risk Officer; sentence archetype; operator-bff; 0
+// 7. Red Team; sentence archetype; operator-bff; 0
+// ---------------------------------------------------------------------------
+describe("FE-PERSONA-LIST-PLAIN-WORDS-20261125 trading-first order, plain-word type, short owner and unsplit symbols", () => {
+  const RISK_OFFICER_SENTENCE =
+    "Independent risk reviewer. Never trades. Reviews trial admission, envelope publication and every harness patch; may veto.";
+  const RED_TEAM_SENTENCE =
+    "Adversarial reviewer. Never trades. Attacks patches that touch guardrails or the consult policy.";
+
+  const RECORDED_SEVEN_CURRENT_PERSONAS: Persona[] = [
+    {
+      id: "persona-agora-servant-operator-a",
+      name: "Agora Servant",
+      owner: "pantheon-dev-operator-a",
+      updatedAt: "2026-11-25T20:38:00Z",
+      state: "approved",
+      risk: "low",
+      archetype: "agora_servant",
+      routedStrategies: 0,
+      successRate: null,
+      listScope: "current",
+    },
+    {
+      id: "persona-agora-servant-operator-b",
+      name: "Agora Servant",
+      owner: "pantheon-dev-operator-b",
+      updatedAt: "2026-11-25T20:38:00Z",
+      state: "approved",
+      risk: "low",
+      archetype: "agora_servant",
+      routedStrategies: 0,
+      successRate: null,
+      listScope: "current",
+    },
+    {
+      id: "persona-ee7112a829d38b9135ac",
+      name: "衡岳｜2330 台股 Paper 學習 R2",
+      owner: "pantheon-dev-admin-test",
+      updatedAt: "2026-11-23T23:34:52Z",
+      state: "approved",
+      risk: "low",
+      archetype: "momentum",
+      routedStrategies: 1,
+      successRate: null,
+      listScope: "current",
+    },
+    {
+      id: "persona-2448c7053e33ea48da47",
+      name: "青禾｜2330 台股 Paper 學習 R2",
+      owner: "pantheon-dev-admin-test",
+      updatedAt: "2026-11-23T10:05:12Z",
+      state: "approved",
+      risk: "low",
+      archetype: "momentum",
+      routedStrategies: 1,
+      successRate: null,
+      listScope: "current",
+    },
+    {
+      id: "persona-6507750312870d03a241",
+      name: "澄川｜2330 台股 Paper 學習 R2",
+      owner: "pantheon-dev-admin-test",
+      updatedAt: "2026-11-23T10:04:18Z",
+      state: "approved",
+      risk: "low",
+      archetype: "momentum",
+      routedStrategies: 1,
+      successRate: null,
+      listScope: "current",
+    },
+    {
+      id: "persona-risk-officer",
+      name: "Risk Officer",
+      owner: "operator-bff",
+      updatedAt: "2026-11-25T20:38:00Z",
+      state: "draft",
+      risk: "low",
+      archetype: RISK_OFFICER_SENTENCE,
+      routedStrategies: 0,
+      successRate: null,
+      listScope: "current",
+    },
+    {
+      id: "persona-red-team",
+      name: "Red Team",
+      owner: "operator-bff",
+      updatedAt: "2026-11-25T20:38:00Z",
+      state: "draft",
+      risk: "low",
+      archetype: RED_TEAM_SENTENCE,
+      routedStrategies: 0,
+      successRate: null,
+      listScope: "current",
+    },
+  ] as unknown as Persona[];
+
+  const OTHER_SCOPE_PERSONAS: Persona[] = [
+    {
+      id: "persona-test-0",
+      name: "Test Idle Persona",
+      owner: "pantheon-dev-paper-provisioner",
+      updatedAt: "2026-10-20T08:40:59Z",
+      state: "failed",
+      risk: "low",
+      archetype: "generalist",
+      routedStrategies: 0,
+      successRate: null,
+      listScope: "test",
+    },
+    {
+      id: "persona-test-1",
+      name: "Test Trading Persona",
+      owner: "pantheon-dev-paper-provisioner",
+      updatedAt: "2026-10-20T08:40:59Z",
+      state: "approved",
+      risk: "low",
+      archetype: "momentum",
+      routedStrategies: 1,
+      successRate: null,
+      listScope: "test",
+    },
+    {
+      id: "persona-research-0",
+      name: "Research No Strategy",
+      owner: "pantheon-dev-operator-a",
+      updatedAt: "2026-10-20T08:40:59Z",
+      state: "approved",
+      risk: "low",
+      archetype: "mean_reversion",
+      routedStrategies: 0,
+      successRate: null,
+      listScope: "research",
+    },
+    {
+      id: "persona-research-1",
+      name: "Research With Strategy",
+      owner: "pantheon-dev-operator-b",
+      updatedAt: "2026-10-20T08:40:59Z",
+      state: "approved",
+      risk: "low",
+      archetype: "generalist",
+      routedStrategies: 2,
+      successRate: null,
+      listScope: "research",
+    },
+  ] as unknown as Persona[];
+
+  it("AC1-AC3: lists personas with >=1 routed strategies first on every scope tab while keeping counts and relative order unchanged, translates recorded types with code tooltip, truncates sentences on one line with full tooltip, and shows distinguishing owner without pantheon-dev- prefix", async () => {
+    const allRows = [...RECORDED_SEVEN_CURRENT_PERSONAS, ...OTHER_SCOPE_PERSONAS];
+    expect(hasPersonaRoutedStrategies(RECORDED_SEVEN_CURRENT_PERSONAS[0])).toBe(false);
+    expect(hasPersonaRoutedStrategies(RECORDED_SEVEN_CURRENT_PERSONAS[2])).toBe(true);
+    expect(orderPersonasByRoutedStrategies(RECORDED_SEVEN_CURRENT_PERSONAS).map((r) => r.id)).toEqual([
+      "persona-ee7112a829d38b9135ac",
+      "persona-2448c7053e33ea48da47",
+      "persona-6507750312870d03a241",
+      "persona-agora-servant-operator-a",
+      "persona-agora-servant-operator-b",
+      "persona-risk-officer",
+      "persona-red-team",
+    ]);
+
+    await withLanguage("en-US", async () => {
+      vi.spyOn(lists, "personas").mockResolvedValue({
+        items: allRows,
+        cursor: {},
+        pageSize: allRows.length,
+        estimatedTotal: allRows.length,
+        totalCountExact: true,
+      });
+
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/personas"]}>
+          <PersonasList />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Current (7)" })).toHaveAttribute("aria-pressed", "true"));
+      expect(screen.getByRole("button", { name: "Test (2)" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Retired (0)" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Research (2)" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "All (11)" })).toBeInTheDocument();
+
+      // Current tab: the three trading personas (routedStrategies = 1) come first in their original order,
+      // followed by Agora Servant (operator-a), Agora Servant (operator-b), Risk Officer, Red Team.
+      const currentRows = screen.getAllByRole("row").slice(1);
+      expect(currentRows).toHaveLength(7);
+      expect(currentRows[0]).toHaveTextContent("衡岳｜2330 台股 Paper 學習 R2");
+      expect(currentRows[1]).toHaveTextContent("青禾｜2330 台股 Paper 學習 R2");
+      expect(currentRows[2]).toHaveTextContent("澄川｜2330 台股 Paper 學習 R2");
+      expect(currentRows[3]).toHaveTextContent("persona-agora-servant-operator-a");
+      expect(currentRows[4]).toHaveTextContent("persona-agora-servant-operator-b");
+      expect(currentRows[5]).toHaveTextContent("Risk Officer");
+      expect(currentRows[6]).toHaveTextContent("Red Team");
+
+      // AC2: Type column in en-US
+      const typeCells = screen.getAllByTestId("persona-type");
+      expect(typeCells).toHaveLength(7);
+      for (const idx of [0, 1, 2]) {
+        expect(typeCells[idx]).toHaveTextContent("Momentum");
+        expect(typeCells[idx]).toHaveAttribute("title", "momentum");
+        expect(typeCells[idx]).toHaveAttribute("data-persona-type-kind", "code");
+      }
+      for (const idx of [3, 4]) {
+        expect(typeCells[idx]).toHaveTextContent("Agora servant");
+        expect(typeCells[idx]).toHaveAttribute("title", "agora_servant");
+        expect(typeCells[idx]).toHaveAttribute("data-persona-type-kind", "code");
+      }
+      expect(typeCells[5]).toHaveTextContent(RISK_OFFICER_SENTENCE);
+      expect(typeCells[5]).toHaveAttribute("title", RISK_OFFICER_SENTENCE);
+      expect(typeCells[5]).toHaveAttribute("data-persona-type-kind", "sentence");
+      expect(typeCells[5]).toHaveClass("truncate", "whitespace-nowrap");
+      expect(typeCells[6]).toHaveTextContent(RED_TEAM_SENTENCE);
+      expect(typeCells[6]).toHaveAttribute("title", RED_TEAM_SENTENCE);
+      expect(typeCells[6]).toHaveAttribute("data-persona-type-kind", "sentence");
+      expect(typeCells[6]).toHaveClass("truncate", "whitespace-nowrap");
+
+      // AC3: Owner column shows distinguishing suffix and full id as tooltip
+      const ownerCells = screen.getAllByTestId("owner-cell");
+      expect(ownerCells.map((el) => el.textContent)).toEqual([
+        "admin-test",
+        "admin-test",
+        "admin-test",
+        "operator-a",
+        "operator-b",
+        "operator-bff",
+        "operator-bff",
+      ]);
+      expect(ownerCells[0]).toHaveAttribute("title", "pantheon-dev-admin-test");
+      expect(ownerCells[0]).toHaveAttribute("data-full-owner", "pantheon-dev-admin-test");
+      expect(ownerCells[3]).toHaveAttribute("title", "pantheon-dev-operator-a");
+      expect(ownerCells[4]).toHaveAttribute("title", "pantheon-dev-operator-b");
+      expect(ownerCells[5]).toHaveAttribute("title", "operator-bff");
+
+      // AC1: Scope tabs preserve the same trading-first rule and counts
+      fireEvent.click(screen.getByRole("button", { name: "Test (2)" }));
+      const testRows = screen.getAllByRole("row").slice(1);
+      expect(testRows).toHaveLength(2);
+      expect(testRows[0]).toHaveTextContent("Test Trading Persona");
+      expect(testRows[1]).toHaveTextContent("Test Idle Persona");
+      expect(screen.getAllByTestId("owner-cell")[0]).toHaveTextContent("paper-provisioner");
+      expect(screen.getAllByTestId("owner-cell")[0]).toHaveAttribute("title", "pantheon-dev-paper-provisioner");
+
+      fireEvent.click(screen.getByRole("button", { name: "Research (2)" }));
+      const researchRows = screen.getAllByRole("row").slice(1);
+      expect(researchRows).toHaveLength(2);
+      expect(researchRows[0]).toHaveTextContent("Research With Strategy");
+      expect(researchRows[1]).toHaveTextContent("Research No Strategy");
+      const researchTypes = screen.getAllByTestId("persona-type");
+      expect(researchTypes[0]).toHaveTextContent("Generalist");
+      expect(researchTypes[0]).toHaveAttribute("title", "generalist");
+      // Unknown code is shown as it is
+      expect(researchTypes[1]).toHaveTextContent("mean_reversion");
+      expect(researchTypes[1]).toHaveAttribute("data-persona-type-kind", "unknown");
+
+      fireEvent.click(screen.getByRole("button", { name: "All (11)" }));
+      const allTabRows = screen.getAllByRole("row").slice(1);
+      expect(allTabRows).toHaveLength(11);
+      // All 5 personas with >=1 routedStrategies come before the 6 with 0 routedStrategies
+      expect(allTabRows.slice(0, 5).map((r) => r.textContent)).toEqual([
+        expect.stringContaining("衡岳｜2330 台股 Paper 學習 R2"),
+        expect.stringContaining("青禾｜2330 台股 Paper 學習 R2"),
+        expect.stringContaining("澄川｜2330 台股 Paper 學習 R2"),
+        expect.stringContaining("Test Trading Persona"),
+        expect.stringContaining("Research With Strategy"),
+      ]);
+      unmount();
+    });
+
+    // AC2: Verify zh-TW translations for momentum, generalist, agora_servant
+    await withLanguage("zh-TW", async () => {
+      vi.spyOn(lists, "personas").mockResolvedValue({
+        items: allRows,
+        cursor: {},
+        pageSize: allRows.length,
+        estimatedTotal: allRows.length,
+        totalCountExact: true,
+      });
+
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/personas?list_scope=all"]}>
+          <PersonasList />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => expect(screen.getAllByTestId("persona-type").length).toBe(11));
+      const zhTypes = screen.getAllByTestId("persona-type");
+      expect(zhTypes[0]).toHaveTextContent("動能");
+      expect(zhTypes[0]).toHaveAttribute("title", "momentum");
+      expect(zhTypes[4]).toHaveTextContent("通用");
+      expect(zhTypes[4]).toHaveAttribute("title", "generalist");
+      expect(zhTypes[5]).toHaveTextContent("交易僕人");
+      expect(zhTypes[5]).toHaveAttribute("title", "agora_servant");
+      expect(zhTypes[10]).toHaveTextContent("mean_reversion");
+      unmount();
+    });
+  });
+
+  it("AC3 & AC4: shows short owner on ArtifactsList with full tooltip, and never breaks inside 2330.TWSE while wrapping between multiple symbols in StrategiesList", async () => {
+    await withLanguage("en-US", async () => {
+      vi.spyOn(lists, "artifacts").mockResolvedValue({
+        items: [
+          {
+            id: "artifact-persona-paper-a81b4fd15944698341aa",
+            name: "strategy-persona-a81b4fd15944698341aa",
+            kind: "execution_bundle",
+            version: "1.0.0",
+            state: "approved",
+            risk: "low",
+            hash: "sha256:38fb8f49000000000000000000000000000000000000000000000000002e008e",
+            owner: "pantheon-dev-paper-provisioner",
+            updatedAt: "2026-11-23T23:34:52Z",
+            source_kind: "registry",
+            list_scope: "current",
+          } as unknown as Artifact,
+        ],
+        cursor: {},
+        pageSize: 1,
+        estimatedTotal: 1,
+        totalCountExact: true,
+      });
+
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/artifacts"]}>
+          <ArtifactsList />
+        </MemoryRouter>,
+      );
+
+      const ownerCell = await screen.findByTestId("owner-cell");
+      expect(ownerCell).toHaveTextContent("paper-provisioner");
+      expect(ownerCell).toHaveAttribute("title", "pantheon-dev-paper-provisioner");
+      expect(ownerCell).toHaveAttribute("data-full-owner", "pantheon-dev-paper-provisioner");
+      unmount();
+
+      vi.spyOn(lists, "strategies").mockResolvedValue({
+        items: [
+          {
+            ...LIVE_STRATEGIES[0],
+            symbols: ["2330.TWSE"],
+          },
+          {
+            ...LIVE_STRATEGIES[1],
+            symbols: ["2330.TWSE", "2317.TWSE", "2454.TWSE"],
+          },
+        ] as unknown as Strategy[],
+        cursor: {},
+        pageSize: 2,
+        estimatedTotal: 2,
+        totalCountExact: true,
+        meta: {
+          visible_state_counts: { draft: 4205, approved: 14, retired: 2 },
+          page_info: { page_size: 20, total: 2, next_page_token: null },
+        },
+      });
+
+      render(
+        <MemoryRouter initialEntries={["/management/strategies"]}>
+          <StrategiesList />
+        </MemoryRouter>,
+      );
+
+      const symbolCells = await screen.findAllByTestId("strategy-symbols");
+      expect(symbolCells).toHaveLength(2);
+      expect(symbolCells[0]).toHaveClass("inline-flex", "flex-wrap");
+      const firstRowItems = symbolCells[0].querySelectorAll('[data-testid="strategy-symbol-item"]');
+      expect(firstRowItems).toHaveLength(1);
+      expect(firstRowItems[0]).toHaveTextContent("2330.TWSE");
+      expect(firstRowItems[0]).toHaveClass("whitespace-nowrap");
+
+      const secondRowItems = symbolCells[1].querySelectorAll('[data-testid="strategy-symbol-item"]');
+      expect(secondRowItems).toHaveLength(3);
+      expect(Array.from(secondRowItems).map((el) => el.textContent?.trim())).toEqual([
+        "2330.TWSE,",
+        "2317.TWSE,",
+        "2454.TWSE",
+      ]);
+      for (const item of Array.from(secondRowItems)) {
+        expect(item).toHaveClass("whitespace-nowrap");
+      }
     });
   });
 });

@@ -130,6 +130,7 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
           colWidths: ths.map((th) => Math.round(th.getBoundingClientRect().width)),
           lastRight: last.right,
           maxRowHeight: Math.max(...rows.map((r) => r.getBoundingClientRect().height)),
+          ownerText: (ownerCell.textContent || "").trim(),
           ownerFullAttr: ownerCell.getAttribute("data-full-owner"),
           ownerTitle: ownerCell.getAttribute("title"),
           ownerCellHeight: oc.height,
@@ -142,6 +143,7 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
       // Size column removed and state/risk share one column: 8 columns (was 10).
       expect(m.headers).toHaveLength(8);
       expect(m.colWidths[0]).toBeGreaterThanOrEqual(220);
+      expect(m.ownerText).toBe("paper-provisioner");
       expect(m.ownerFullAttr).toBe(OWNER);
       expect(m.ownerTitle).toBe(OWNER);
       expect(m.maxRowHeight).toBeLessThanOrEqual(72);

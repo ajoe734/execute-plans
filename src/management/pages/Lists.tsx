@@ -25,8 +25,10 @@ import {
   normalizeRegistryListScope,
   normalizeStrategyOperationalStatus,
   normalizeStrategyRuntimeStatus,
+  personaArchetypeText,
   rebalanceWorkflowLabel,
   resolveBffSubjectDisplay,
+  shortOwnerText,
   strategyMetricsReasonText,
   strategyOperationalStatusClass,
   strategyRuntimeReasonText,
@@ -527,13 +529,30 @@ export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>
         const symbols = Array.isArray(r.symbols)
           ? r.symbols.map((s) => String(s).trim()).filter(Boolean)
           : [];
-        const symbolsText = symbols.join(", ");
+        if (symbols.length === 0) {
+          return (
+            <span
+              data-testid="strategy-symbols"
+              className="text-mono text-xs whitespace-nowrap text-muted-foreground"
+            >
+              {noData}
+            </span>
+          );
+        }
         return (
           <span
             data-testid="strategy-symbols"
-            className={`text-mono text-xs [overflow-wrap:anywhere] ${symbolsText ? "text-foreground" : "text-muted-foreground"}`}
+            className="inline-flex flex-wrap gap-x-1.5 gap-y-0.5 text-mono text-xs text-foreground"
           >
-            {symbolsText || noData}
+            {symbols.map((symbol, index) => (
+              <span
+                key={`${symbol}-${index}`}
+                data-testid="strategy-symbol-item"
+                className="whitespace-nowrap"
+              >
+                {index < symbols.length - 1 ? `${symbol}, ` : symbol}
+              </span>
+            ))}
           </span>
         );
       },
@@ -941,14 +960,68 @@ export function personaWinRateText(value: unknown, noData: string): string {
   return hasNumber(value) ? pct(value) : noData;
 }
 
+export function hasPersonaRoutedStrategies(row: unknown): boolean {
+  if (!row || typeof row !== "object") return false;
+  const record = row as { routedStrategies?: unknown; routed_strategies?: unknown };
+  const count = hasNumber(record.routedStrategies)
+    ? record.routedStrategies
+    : hasNumber(record.routed_strategies)
+      ? record.routed_strategies
+      : 0;
+  return count >= 1;
+}
+
+/**
+ * FE-PERSONA-LIST-PLAIN-WORDS-20261125 — Personas with one or more routed
+ * strategies are listed before the others while keeping relative order
+ * otherwise unchanged.
+ */
+export function orderPersonasByRoutedStrategies<T>(rows: readonly T[]): T[] {
+  const withStrategies: T[] = [];
+  const others: T[] = [];
+  for (const row of rows) {
+    if (hasPersonaRoutedStrategies(row)) {
+      withStrategies.push(row);
+    } else {
+      others.push(row);
+    }
+  }
+  return [...withStrategies, ...others];
+}
+
+function OwnerCell({ owner, noData }: { owner: unknown; noData: string }) {
+  const resolved = shortOwnerText(owner);
+  if (!resolved) {
+    return <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>;
+  }
+  return (
+    <span
+      className="text-mono text-xs block max-w-[96px] truncate whitespace-nowrap"
+      title={resolved.full}
+      data-full-owner={resolved.full}
+      data-testid="owner-cell"
+    >
+      {resolved.text}
+    </span>
+  );
+}
+
 export const PersonasList = () => {
   const t = useT();
   const noData = t("common.noData");
   const w = PERSONA_COLUMN_MIN_WIDTHS;
+  const loadPersonas = useCallback(
+    () =>
+      asEntityLoader<Persona>(lists.personas)().then((env) => ({
+        ...env,
+        items: orderPersonasByRoutedStrategies(env.items),
+      })),
+    [],
+  );
   return (
     <ObjectListPage<Persona>
       title={t("nav.personas")}
-      loader={asEntityLoader<Persona>(lists.personas)}
+      loader={loadPersonas}
       basePath="/management/personas" liveKinds={["Persona"]}
       createBehavior={{ kind: "drawer", entity: "persona" }}
       scopeConfig={{
@@ -979,7 +1052,41 @@ export const PersonasList = () => {
         },
         { key: "state", header: t("common.state"), minWidth: w.state, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="inline-flex whitespace-nowrap"><StatusBadge state={r.state} /></span> },
         { key: "risk", header: t("common.risk"), minWidth: w.risk, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="inline-flex whitespace-nowrap"><RiskBadge level={r.risk} /></span> },
-        { key: "arch", header: t("table.type"), minWidth: w.type, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="text-xs [overflow-wrap:anywhere]">{r.archetype || noData}</span> },
+        {
+          key: "arch",
+          header: t("table.type"),
+          minWidth: w.type,
+          className: COMPACT_COLUMN_CLASS,
+          cell: (r) => {
+            const display = personaArchetypeText(r.archetype, t);
+            if (!display) {
+              return <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>;
+            }
+            if (display.isSentence) {
+              return (
+                <span
+                  className="block max-w-[104px] truncate whitespace-nowrap text-xs cursor-help"
+                  title={display.tooltip}
+                  data-testid="persona-type"
+                  data-persona-type-kind="sentence"
+                >
+                  {display.text}
+                </span>
+              );
+            }
+            return (
+              <span
+                className={`text-xs whitespace-nowrap ${display.isKnown ? "cursor-help" : ""}`}
+                title={display.tooltip}
+                data-testid="persona-type"
+                data-persona-type-kind={display.isKnown ? "code" : "unknown"}
+                data-code={display.code}
+              >
+                {display.text}
+              </span>
+            );
+          },
+        },
         { key: "rs", header: t("registryLists.column.routedStrategies"), minWidth: w.strategies, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="text-mono text-xs">{hasNumber(r.routedStrategies) ? r.routedStrategies : noData}</span> },
         {
           key: "sr",
@@ -1000,7 +1107,7 @@ export const PersonasList = () => {
           header: t("common.owner"),
           minWidth: w.owner,
           className: COMPACT_COLUMN_CLASS,
-          cell: (r) => <span className="text-mono text-xs block max-w-[80px] truncate whitespace-nowrap" title={r.owner} data-full-owner={r.owner}>{r.owner}</span>,
+          cell: (r) => <OwnerCell owner={r.owner} noData={noData} />,
         },
         {
           key: "updated",
@@ -2327,14 +2434,7 @@ export const ArtifactsList = () => {
           minWidth: w.owner,
           className: COMPACT_COLUMN_CLASS,
           header: t("common.owner"),
-          cell: (r) => {
-            const owner = typeof r.owner === "string" ? r.owner.trim() : "";
-            return owner ? (
-              <span className="text-mono text-xs block max-w-[80px] truncate whitespace-nowrap" title={owner} data-full-owner={owner}>{owner}</span>
-            ) : (
-              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
-            );
-          },
+          cell: (r) => <OwnerCell owner={r.owner} noData={noData} />,
         },
         {
           key: "updated",
