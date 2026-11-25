@@ -4753,6 +4753,11 @@ export default {
   // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: current-first registry lists.
   registryLists: {
     column: { routedStrategies: "Strategies" },
+    personaType: {
+      momentum: "Momentum",
+      generalist: "Generalist",
+      agora_servant: "Agora servant",
+    },
     scope: {
       personaGroupLabel: "Persona scope",
       artifactGroupLabel: "Artifact scope",

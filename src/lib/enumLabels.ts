@@ -1750,6 +1750,77 @@ export function artifactSourceText(source: unknown, t: TranslateFn): { text: str
   return { text: humanizeCode(code), code };
 }
 
+export const KNOWN_PERSONA_ARCHETYPES = ["momentum", "generalist", "agora_servant"] as const;
+export type KnownPersonaArchetype = (typeof KNOWN_PERSONA_ARCHETYPES)[number];
+
+export interface PersonaArchetypeDisplay {
+  text: string;
+  tooltip: string;
+  code?: string;
+  isSentence: boolean;
+  isKnown: boolean;
+}
+
+/**
+ * FE-PERSONA-LIST-PLAIN-WORDS-20261125 — Recorded persona archetype codes
+ * (`momentum`, `generalist`, `agora_servant`) are shown as localized words with
+ * the raw code as tooltip; an unknown code is shown as it is; a value that is a
+ * sentence and not a code is flagged `isSentence: true` so the cell renders one
+ * line cut with an ellipsis and the full text as tooltip.
+ */
+export function personaArchetypeText(
+  archetype: unknown,
+  t: TranslateFn,
+): PersonaArchetypeDisplay | undefined {
+  if (typeof archetype !== "string" || !archetype.trim()) return undefined;
+  const raw = archetype.trim();
+  const lower = raw.toLowerCase();
+  if ((KNOWN_PERSONA_ARCHETYPES as readonly string[]).includes(lower)) {
+    return {
+      text: t(`registryLists.personaType.${lower}`),
+      tooltip: raw,
+      code: raw,
+      isSentence: false,
+      isKnown: true,
+    };
+  }
+  if (/\s/.test(raw)) {
+    return {
+      text: raw,
+      tooltip: raw,
+      isSentence: true,
+      isKnown: false,
+    };
+  }
+  return {
+    text: raw,
+    tooltip: raw,
+    code: raw,
+    isSentence: false,
+    isKnown: false,
+  };
+}
+
+export interface OwnerCellDisplay {
+  text: string;
+  full: string;
+}
+
+const SHARED_OWNER_PREFIX = /^pantheon-(?:dev|staging|prod)-(.+)$/i;
+
+/**
+ * FE-PERSONA-LIST-PLAIN-WORDS-20261125 — Shows the part of an owner ID that
+ * tells owners apart (without the shared `pantheon-dev-` prefix) while keeping
+ * the full ID for the tooltip.
+ */
+export function shortOwnerText(owner: unknown): OwnerCellDisplay | undefined {
+  if (typeof owner !== "string" || !owner.trim()) return undefined;
+  const full = owner.trim();
+  const match = SHARED_OWNER_PREFIX.exec(full);
+  const text = match && match[1].trim() ? match[1].trim() : full;
+  return { text, full };
+}
+
 const KNOWN_STRATEGY_LIFECYCLE_VALUES = new Set([
   "discovered",
   "scaffolded",

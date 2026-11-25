@@ -4734,6 +4734,11 @@ export default {
   // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125：清單預設只看現役
   registryLists: {
     column: { routedStrategies: "策略數" },
+    personaType: {
+      momentum: "動能",
+      generalist: "通用",
+      agora_servant: "交易僕人",
+    },
     scope: {
       personaGroupLabel: "Persona 範圍",
       artifactGroupLabel: "Artifact 範圍",
