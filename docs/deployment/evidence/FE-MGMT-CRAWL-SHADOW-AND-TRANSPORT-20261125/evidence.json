@@ -1,0 +1,83 @@
+{
+  "schema_version": "pantheon.management-hosted-acceptance.shadow-and-transport-evidence.v1",
+  "task_id": "FE-MGMT-CRAWL-SHADOW-AND-TRANSPORT-20261125",
+  "taskId": "FE-MGMT-CRAWL-SHADOW-AND-TRANSPORT-20261125",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-MGMT-CRAWL-SHADOW-AND-TRANSPORT-20261125",
+  "base_commit": "291ac31495dd",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T01:35:30Z",
+  "problem_register_binding": {
+    "root_cause_classes": ["RC4", "RC6"],
+    "work_packages": ["WP6.3", "WP6.5"],
+    "linked_tasks": [
+      "MGMT-GATE-FULL-PASS-HOSTED-ACCEPTANCE-20261114",
+      "AGORA-SHADOW-ATTRIBUTION-HOSTED-ACCEPTANCE-20261116"
+    ],
+    "gate_run_evidence": "FE-BFF Integration Gate 45500113085 (execute-plans 291ac31495dd + pantheon adc027da93ae): 108/110 crawled routes passed; only /management/performance?tab=shadow, /management/performance?tab=shadow&decision=dec_001, and OPTIONS /bff/jobs preflight navigation abort failed in the harness."
+  },
+  "modified_surfaces": [
+    "scripts/accept-management-hosted-production.mjs",
+    "scripts/lib/pinned-browser-bff-bearer.mjs",
+    "src/test/accept-management-route-attribution.test.ts",
+    "e2e/hosted-bff-streaming-transport.spec.ts",
+    "docs/deployment/evidence/FE-MGMT-CRAWL-SHADOW-AND-TRANSPORT-20261125/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_shadow_button_and_zero_read_prompt": {
+      "passed": true,
+      "details": [
+        "In scripts/accept-management-hosted-production.mjs, page.evaluate strips interactive controls (button, [role='button'], input, select, textarea) when building loadingText, and LOADING_TEXT_PATTERN requires progressive loading indicators ('Loading...', '載入中…', '正在載入…', '資料載入中…', '載入…') rather than bare imperative '載入', while preserving snapshot.busy ([data-testid='route-chunk-loading'], [aria-busy='true'], [data-state='loading']).",
+        "/management/performance?tab=shadow without a decision query parameter recognizes rendered [data-testid='shadow-prompt'] via resolveNoDataReadReason() with an explicit documented noDataReadReason, while /management/performance (other tabs) and /management/performance?tab=shadow&decision=<id> continue to require completed route data reads."
+      ]
+    },
+    "AC2_cors_preflight_bearer_omission_and_causal_navigation_attribution": {
+      "passed": true,
+      "details": [
+        "In scripts/lib/pinned-browser-bff-bearer.mjs, Fetch.requestPaused strips any pre-existing authorization/x-tenant-id headers and does not inject Authorization or X-Tenant-Id onto OPTIONS preflight requests.",
+        "Network.requestWillBeSent binds causal frame/loader/navigation context for CORS preflight requests (event.type === 'Preflight', initiator.type === 'preflight', or OPTIONS without frameId/loaderId) from the parent request (network.get(event.initiator?.requestId) / requestMeta) or active mainFrameId/loaders map.",
+        "Navigation, same-document navigation, and frame-detach cancellations excuse OPTIONS net::ERR_ABORTED under the exact same causal commit rules as parent requests, while genuinely denied CORS preflights (PUT /cors-denied) and live non-navigating aborts still fail assertHealthy()."
+      ]
+    },
+    "AC3_runtime_budget_and_validation": {
+      "passed": true,
+      "runtime_budget": {
+        "persistent_product_writers": 0,
+        "recurring_jobs": 0,
+        "added_tables_files_caches": 0
+      }
+    }
+  },
+  "validation": [
+    {
+      "command": "node --check scripts/accept-management-hosted-production.mjs && node --check scripts/lib/pinned-browser-bff-bearer.mjs",
+      "exit_code": 0,
+      "result": "passed"
+    },
+    {
+      "command": "npx vitest run src/test/accept-management-route-attribution.test.ts src/test/accept-management-honest-not-found.test.ts src/test/strict-browser-auth-source-contract.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts",
+      "exit_code": 0,
+      "result": "4 test files passed, 96 tests passed (60/60 in accept-management-route-attribution.test.ts)"
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 npx playwright test e2e/hosted-bff-streaming-transport.spec.ts -g \"CORS preflight|original route data check waits for auth/lazy/redirect and rejects unresolved data: ready|actual 95-route caller handles a new interception after drain through entity discovery and detail closure \\(after-drain BFF\\)\"",
+      "exit_code": 0,
+      "result": "4 passed (real Chromium HTTPS transport and full 100-baseline-route caller crawl)"
+    }
+  ],
+  "residual_findings": [
+    {
+      "scope": "outside_execute_plans_harness",
+      "class": "RC6 WP6.3/WP6.5",
+      "finding": "On FE Gate 45500113085, live entity discovery GET /bff/strategies timed out on the hosted BFF (status 0 after 4 attempts). Owned by Pantheon BFF / strategy registry latency track, not the frontend crawl script."
+    },
+    {
+      "scope": "repaired_in_scoped_test_harness",
+      "class": "RC4",
+      "finding": "In e2e/hosted-bff-streaming-transport.spec.ts, the VM harness for accept-management-hosted-production.mjs main() previously lacked guards for READABILITY_ONLY / process.env?.GITHUB_STEP_SUMMARY and asserted a stale hardcoded baseline route count of 95 after BASELINE_ROUTES grew to 100; repaired in the scoped files."
+    }
+  ]
+}

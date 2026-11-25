@@ -382,6 +382,329 @@ describe("explicit no-data route policy", () => {
     expect(result.dataCheck.pass).toBe(false);
     expect(result.dataCheck.reasons).toContain("api_data_failure");
   });
+
+  it("recognizes /management/performance?tab=shadow without decision as an explicit shadow-prompt zero-read state while requiring data on other tabs and decision queries", async () => {
+    const shadowPromptPage = (path: string, shadowPrompt = true) => {
+      const frame = {};
+      const content = "績效中心\n影子對照\n載入\n輸入決定編號以並排比較四個版本。";
+      return Object.assign(new EventEmitter(), {
+        mainFrame: () => frame,
+        waitForTimeout: async () => {},
+        evaluate: async () => ({
+          path: path.split("?")[0], finalUrl: path, body: content, content,
+          loadingText: "績效中心\n影子對照\n輸入決定編號以並排比較四個版本。",
+          shadowPrompt, busy: false, login: false,
+          buttons: 1, enabledButtons: 1, disabledButtons: 0,
+        }),
+      });
+    };
+
+    // 1. /management/performance?tab=shadow with [data-testid="shadow-prompt"] and submit button "載入" passes with zero reads:
+    const promptPath = "/management/performance?tab=shadow";
+    const page1 = shadowPromptPage(promptPath, true);
+    const promptResult = await harness().crawlRoute(page1, { path: promptPath, kind: "detail-or-alias" }, {
+      source: "baseline-or-live-nav",
+      transport: { navigate: async () => { commit(page1 as ReturnType<typeof pageFor>, promptPath); return null; } },
+    });
+    expect(promptResult.status).toBe("ok");
+    expect(promptResult.dataCheck.pass).toBe(true);
+    expect(promptResult.dataCheck.reasons).toEqual([]);
+    expect(promptResult.dataCheck.noDataReadReason).toMatch(/shadow-prompt/);
+
+    // 2. Without [data-testid="shadow-prompt"], /management/performance?tab=shadow still requires completed route data:
+    const pageNoPrompt = shadowPromptPage(promptPath, false);
+    const noPromptResult = await harness().crawlRoute(pageNoPrompt, { path: promptPath, kind: "detail-or-alias" }, {
+      source: "baseline-or-live-nav",
+      transport: { navigate: async () => { commit(pageNoPrompt as ReturnType<typeof pageFor>, promptPath); return null; } },
+    });
+    expect(noPromptResult.status).toBe("datafail");
+    expect(noPromptResult.dataCheck.reasons).toContain("no_completed_route_data");
+    expect(noPromptResult.dataCheck.noDataReadReason).toBeNull();
+
+    // 3. /management/performance (other tabs) and /management/performance?tab=shadow&decision=dec_001 still require route data reads:
+    for (const requiredPath of [
+      "/management/performance",
+      "/management/performance?tab=attribution",
+      "/management/performance?tab=shadow&decision=dec_001",
+    ]) {
+      const p = shadowPromptPage(requiredPath, true);
+      const res = await harness().crawlRoute(p, { path: requiredPath, kind: "detail-or-alias" }, {
+        source: "baseline-or-live-nav",
+        transport: { navigate: async () => { commit(p as ReturnType<typeof pageFor>, requiredPath); return null; } },
+      });
+      expect(res.status, requiredPath).toBe("datafail");
+      expect(res.dataCheck.reasons, requiredPath).toContain("no_completed_route_data");
+      expect(res.dataCheck.noDataReadReason, requiredPath).toBeNull();
+    }
+  });
+
+  it("does not trigger loading_unresolved on interactive submit button label '載入' while preserving genuine busy and progressive loading checks (real Chromium)", async () => {
+    const listen = (server: ReturnType<typeof createServer>) =>
+      new Promise<number>((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port)));
+    const cors = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
+    const bffServer = createServer((req, res) => {
+      if (req.url === "/bff/management/attribution/shadow/dec_001") {
+        res.writeHead(404, cors);
+        res.end(JSON.stringify({ error: { code: "RESOURCE_NOT_FOUND", details: { reason: "decision_not_found" } } }));
+        return;
+      }
+      res.writeHead(200, cors);
+      res.end('{"items":[]}');
+    });
+    const bffOrigin = `http://127.0.0.1:${await listen(bffServer)}`;
+    let progressiveLoadingMode: "none" | "aria-busy" | "copy" = "none";
+    const feServer = createServer((req, res) => {
+      const url = new URL(req.url || "/", "http://127.0.0.1");
+      const decision = (url.searchParams.get("decision") || "").trim();
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      if (!decision) {
+        res.end(`<!doctype html><main>
+          <section data-testid="shadow-comparison">
+            <h2>影子對照</h2>
+            <form style="display:flex"><input aria-label="決定編號" value="" /><button type="submit">載入</button></form>
+            <div data-testid="shadow-prompt">輸入決定編號以並排比較四個版本。</div>
+          </section>
+        </main>`);
+        return;
+      }
+      if (progressiveLoadingMode === "aria-busy") {
+        res.end(`<!doctype html><main>
+          <section data-testid="shadow-comparison">
+            <h2>影子對照</h2>
+            <form style="display:flex"><input aria-label="決定編號" value="${decision}" /><button type="submit">載入</button></form>
+            <p data-testid="shadow-loading" aria-busy="true">Loading…</p>
+          </section>
+        </main>`);
+        return;
+      }
+      if (progressiveLoadingMode === "copy") {
+        res.end(`<!doctype html><main>
+          <section data-testid="shadow-comparison">
+            <h2>績效中心 — 影子對照</h2>
+            <form style="display:flex"><input aria-label="決定編號" value="${decision}" /><button type="submit">載入</button></form>
+            <p>載入中…</p>
+          </section>
+        </main>`);
+        return;
+      }
+      res.end(`<!doctype html><main>
+        <section data-testid="shadow-comparison">
+          <h2>影子對照</h2>
+          <form style="display:flex"><input aria-label="決定編號" value="${decision}" /><button type="submit">載入</button></form>
+          <div id="shadow-body" data-testid="shadow-loading" aria-busy="true">載入中…</div>
+        </section>
+      </main><script>
+        fetch("${bffOrigin}/bff/management/attribution/shadow/${encodeURIComponent(decision)}").then((r) => {
+          const el = document.getElementById("shadow-body");
+          el.removeAttribute("aria-busy");
+          el.setAttribute("data-testid", "shadow-not-found");
+          el.textContent = "Decision ${decision} was not found. reason: decision_not_found";
+        });
+      </script>`);
+    });
+    const fe = `http://127.0.0.1:${await listen(feServer)}`;
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      const navTransport = {
+        navigate: async (_p: unknown, target: string) => {
+          await page.goto(target, { waitUntil: "commit" });
+          await page.waitForLoadState("domcontentloaded");
+          return null;
+        },
+      };
+
+      // Prompt state without decision id passes with explicit noDataReadReason and no loading_unresolved:
+      const promptRes = await harness(fe, "1500", bffOrigin).crawlRoute(
+        page,
+        { path: "/management/performance?tab=shadow", kind: "detail-or-alias" },
+        { source: "baseline-or-live-nav", transport: navTransport },
+      );
+      expect(promptRes.status, JSON.stringify(promptRes.dataCheck)).toBe("ok");
+      expect(promptRes.dataCheck.pass).toBe(true);
+      expect(promptRes.dataCheck.reasons).toEqual([]);
+      expect(promptRes.dataCheck.noDataReadReason).toContain("shadow-prompt");
+      expect(promptRes.controls.enabledButtons).toBe(1);
+
+      // Decision dec_001 settles honest 404 and passes despite the enabled submit button "載入":
+      const decRes = await harness(fe, "1500", bffOrigin).crawlRoute(
+        page,
+        { path: "/management/performance?tab=shadow&decision=dec_001", kind: "detail-or-alias" },
+        { source: "baseline-or-live-nav", transport: navTransport },
+      );
+      expect(decRes.status, JSON.stringify(decRes.dataCheck)).toBe("ok");
+      expect(decRes.dataCheck.pass).toBe(true);
+      expect(decRes.dataCheck.reasons).toEqual([]);
+      expect(decRes.dataCheck.noDataReadReason).toBeNull();
+      expect(decRes.dataCheck.reads).toContainEqual(expect.objectContaining({
+        path: "/bff/management/attribution/shadow/dec_001",
+        status: 404,
+        complete: true,
+      }));
+
+      // Genuine aria-busy="true" still fails loading_unresolved:
+      progressiveLoadingMode = "aria-busy";
+      const busyRes = await harness(fe, "400", bffOrigin).crawlRoute(
+        page,
+        { path: "/management/performance?tab=shadow&decision=dec_001", kind: "detail-or-alias" },
+        { source: "baseline-or-live-nav", transport: navTransport },
+      );
+      expect(busyRes.status).toBe("datafail");
+      expect(busyRes.dataCheck.reasons).toContain("loading_unresolved");
+
+      // Genuine progressive loading copy ("載入中…") still fails loading_unresolved:
+      progressiveLoadingMode = "copy";
+      const copyRes = await harness(fe, "400", bffOrigin).crawlRoute(
+        page,
+        { path: "/management/performance?tab=shadow&decision=dec_001", kind: "detail-or-alias" },
+        { source: "baseline-or-live-nav", transport: navTransport },
+      );
+      expect(copyRes.status).toBe("datafail");
+      expect(copyRes.dataCheck.reasons).toContain("loading_unresolved");
+    } finally {
+      await browser.close();
+      bffServer.closeAllConnections();
+      feServer.closeAllConnections();
+      bffServer.close();
+      feServer.close();
+    }
+  }, 25_000);
+
+  it("omits Authorization/X-Tenant-Id on OPTIONS preflights and binds causal frame/loader context from parent request or active frame", async () => {
+    const { installPinnedBffBearer } = (await import("../../scripts/lib/pinned-browser-bff-bearer.mjs")) as {
+      installPinnedBffBearer: (context: unknown, opts: Record<string, unknown>) => Promise<{
+        errors: string[];
+        settle: () => Promise<void>;
+        assertHealthy: () => void;
+      }>;
+    };
+    const continued: Array<{ requestId: string; headers: Array<{ name: string; value: string }> }> = [];
+    const session = Object.assign(new EventEmitter(), {
+      send: async (method: string, params?: any) => {
+        if (method === "Page.getFrameTree") {
+          return { frameTree: { frame: { id: "main-frame", loaderId: "loader-1" } } };
+        }
+        if (method === "Performance.getMetrics") {
+          return { metrics: [{ name: "Timestamp", value: 100 }] };
+        }
+        if (method === "Fetch.continueRequest") {
+          continued.push(params);
+        }
+        return {};
+      },
+    });
+    const page = Object.assign(new EventEmitter(), { isClosed: () => false });
+    const context = Object.assign(new EventEmitter(), {
+      pages: () => [page],
+      newCDPSession: async () => session,
+    });
+    const transport = await installPinnedBffBearer(context, {
+      token: "unit-secret-token",
+      tenantId: "tenant-unit",
+      feBase: "http://127.0.0.1:4173",
+      bffBase: bff,
+    });
+
+    // 1. Parent request followed by preflight (event.type === "Preflight", initiator.type === "preflight", no frameId/loaderId):
+    session.emit("Network.requestWillBeSent", {
+      requestId: "parent-1",
+      frameId: "main-frame",
+      loaderId: "loader-1",
+      type: "Fetch",
+      timestamp: 10,
+      request: { url: `${bff}/bff/jobs`, method: "GET" },
+    });
+    session.emit("Network.requestWillBeSent", {
+      requestId: "preflight-1",
+      type: "Preflight",
+      initiator: { type: "preflight", requestId: "parent-1" },
+      timestamp: 11,
+      request: { url: `${bff}/bff/jobs`, method: "OPTIONS" },
+    });
+    session.emit("Fetch.requestPaused", {
+      requestId: "intercept-preflight-1",
+      networkId: "preflight-1",
+      request: {
+        url: `${bff}/bff/jobs`,
+        method: "OPTIONS",
+        headers: {
+          Authorization: "Bearer stale",
+          "X-Tenant-Id": "stale-tenant",
+          "Access-Control-Request-Method": "GET",
+        },
+      },
+    });
+
+    // 2. Standalone OPTIONS preflight without frameId or initiator.requestId (falls back to mainFrameId / active loader):
+    session.emit("Network.requestWillBeSent", {
+      requestId: "preflight-2",
+      timestamp: 12,
+      request: { url: `${bff}/bff/alerts`, method: "OPTIONS" },
+    });
+    session.emit("Fetch.requestPaused", {
+      requestId: "intercept-preflight-2",
+      networkId: "preflight-2",
+      request: {
+        url: `${bff}/bff/alerts`,
+        method: "OPTIONS",
+        headers: { "Access-Control-Request-Method": "GET" },
+      },
+    });
+
+    // 3. Normal GET request still receives Authorization and X-Tenant-Id:
+    session.emit("Fetch.requestPaused", {
+      requestId: "intercept-get-1",
+      networkId: "parent-1",
+      request: {
+        url: `${bff}/bff/jobs`,
+        method: "GET",
+        headers: { Accept: "application/json" },
+      },
+    });
+
+    await transport.settle();
+    const preflightHeaders1 = Object.fromEntries(
+      continued.find((c) => c.requestId === "intercept-preflight-1")!.headers.map((h) => [h.name.toLowerCase(), h.value]),
+    );
+    expect(preflightHeaders1.authorization).toBeUndefined();
+    expect(preflightHeaders1["x-tenant-id"]).toBeUndefined();
+    expect(preflightHeaders1["access-control-request-method"]).toBe("GET");
+
+    const getHeaders1 = Object.fromEntries(
+      continued.find((c) => c.requestId === "intercept-get-1")!.headers.map((h) => [h.name.toLowerCase(), h.value]),
+    );
+    expect(getHeaders1.authorization).toBe("Bearer unit-secret-token");
+    expect(getHeaders1["x-tenant-id"]).toBe("tenant-unit");
+
+    // 4. Replacing navigation starts at ts=20 and cancels both preflights at ts=25, then commits:
+    session.emit("Network.requestWillBeSent", {
+      requestId: "doc-2",
+      frameId: "main-frame",
+      loaderId: "loader-2",
+      type: "Document",
+      timestamp: 20,
+      request: { url: "http://127.0.0.1:4173/management/risk", method: "GET" },
+    });
+    session.emit("Network.loadingFailed", {
+      requestId: "preflight-1",
+      canceled: true,
+      timestamp: 25,
+      errorText: "net::ERR_ABORTED",
+    });
+    session.emit("Network.loadingFailed", {
+      requestId: "preflight-2",
+      canceled: true,
+      timestamp: 26,
+      errorText: "net::ERR_ABORTED",
+    });
+    session.emit("Page.frameNavigated", {
+      frame: { id: "main-frame", loaderId: "loader-2" },
+    });
+
+    await transport.settle();
+    expect(transport.errors).toEqual([]);
+    transport.assertHealthy();
+  });
 });
 
 describe("manifest-derived canonical paths", () => {
