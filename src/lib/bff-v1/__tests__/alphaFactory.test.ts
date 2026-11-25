@@ -378,10 +378,14 @@ describe("alphaFactory BFF v1 client", () => {
     liveStatus._reset({ mode: "mock", effective: "mock", baseUrl: "" });
 
     const envelope = await getAlphaFactory();
-    expect(envelope.data.replicated).toEqual(MOCK_ALPHA_FACTORY_ENVELOPE.data.replicated);
-    expect(envelope.data.scaffolded).toEqual(MOCK_ALPHA_FACTORY_ENVELOPE.data.scaffolded);
-    expect(envelope.data.discovered).toEqual(MOCK_ALPHA_FACTORY_ENVELOPE.data.discovered);
-    expect(envelope.data.discovered_reason).toBe("no_candidate_source");
+    const expected = normalizeAlphaFactoryEnvelope(MOCK_ALPHA_FACTORY_ENVELOPE);
+    expect(envelope.data.replicated).toEqual([]);
+    expect(envelope.data.scaffolded).toEqual(expected.data.scaffolded);
+    expect(envelope.data.pipeline).toEqual(expected.data.pipeline);
+    expect(envelope.data.document_checked).toHaveLength(4);
+    expect(envelope.data.counts.passes).toEqual({ status: "ok", value: 0, reason: null });
+    // The hardcoded no_candidate_source reason is gone (BFF-ALPHA-FACTORY-PIPELINE-TRUTH-20261125).
+    expect(envelope.data.discovered_reason).toBeNull();
   });
 
   it("only includes sharpe or risk on a card when explicitly supplied by the BFF", () => {
@@ -402,5 +406,82 @@ describe("alphaFactory BFF v1 client", () => {
     );
     expect(withSuppliedValues?.sharpe).toBe(1.42);
     expect(withSuppliedValues?.risk).toBe("low");
+  });
+
+  it("normalizes the pipeline-truth contract: demands and searches are pipeline items, not admissions", () => {
+    const envelope = normalizeAlphaFactoryEnvelope({
+      data: {
+        discovered: [
+          {
+            id: "dem-1",
+            lane: "discovered",
+            kind: "research_demand",
+            demand_id: "dem-1",
+            persona_id: "p-1",
+            display_name: "Persona One",
+            lacking: { short_measure: "gross_utilisation", missing_datasets: ["d1"], tried_families: ["time_series"] },
+            since: "2026-11-20T00:00:00Z",
+            status: "open",
+            latest_outcome: { reason_code: "survivorship_limited", reason: "survivorship_limited: 2317" },
+          },
+        ],
+        scaffolded: [
+          {
+            id: "template-search:dem-1",
+            lane: "scaffolded",
+            kind: "template_search",
+            demand_id: "dem-1",
+            persona_id: "p-1",
+            attempt_count: 2,
+            latest_run_id: "run-9",
+            latest_at: "2026-11-24T10:03:00Z",
+            outcome: "failed",
+            reason_code: "below_threshold",
+            reason: "below_threshold: sharpe 0.2",
+          },
+          { id: "adm-2", lane: "scaffolded", strategy_id: "s-2", queue_status: "failed", last_error: "x", reason_code: "dataset_unavailable" },
+        ],
+        replicated: [{ id: "adm-3", lane: "replicated", strategy_id: "s-3", gate: { passed: true } }],
+        document_checked: [{ id: "adm-4", lane: "document_checked", strategy_id: "s-4", document_check_reason: "test_scope" }],
+        counts: {
+          collected_text_records: { value: null, status: "unavailable", reason: "no_bounded_owner_read" },
+          templates_registered: { value: 182, status: "ok" },
+          templates_evaluated: { value: 0, status: "ok" },
+        },
+      },
+      items: [
+        { id: "dem-1", lane: "discovered", kind: "research_demand" },
+        { id: "adm-4", lane: "document_checked", strategy_id: "s-4" },
+      ],
+    });
+
+    expect(envelope.data.discovered).toEqual([]);
+    expect(envelope.data.pipeline.discovered).toEqual([
+      expect.objectContaining({
+        id: "dem-1",
+        kind: "research_demand",
+        persona_id: "p-1",
+        display_name: "Persona One",
+        short_measure: "gross_utilisation",
+        missing_datasets: ["d1"],
+        tried_families: ["time_series"],
+        latest_reason_code: "survivorship_limited",
+      }),
+    ]);
+    expect(envelope.data.pipeline.scaffolded).toEqual([
+      expect.objectContaining({ kind: "template_search", attempt_count: 2, outcome: "failed", latest_reason_code: "below_threshold" }),
+    ]);
+    expect(envelope.data.scaffolded.map((c) => [c.id, c.reason_code])).toEqual([["adm-2", "dataset_unavailable"]]);
+    expect(envelope.data.replicated.map((c) => [c.id, c.gate_passed])).toEqual([["adm-3", true]]);
+    expect(envelope.data.document_checked.map((c) => [c.id, c.document_check_reason])).toEqual([["adm-4", "test_scope"]]);
+    // A flat document_checked item is never treated as a lane card, and pipeline items never become admissions.
+    expect(envelope.items.map((c) => c.id).sort()).toEqual(["adm-2", "adm-3"]);
+    expect(envelope.data.counts.collected_text_records).toEqual({
+      status: "unavailable",
+      value: null,
+      reason: "no_bounded_owner_read",
+    });
+    expect(envelope.data.counts.templates_registered).toEqual({ status: "ok", value: 182, reason: null });
+    expect(envelope.data.counts.searches).toEqual({ status: "unavailable", value: null, reason: "not_reported" });
   });
 });

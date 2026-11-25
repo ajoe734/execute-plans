@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
 import type { Strategy } from "@/lib/bff-v1";
+import { normalizeAlphaFactoryEnvelope } from "@/lib/bff-v1/alphaFactory";
 import {
   buildAlphaFactoryBuckets,
   classifyAlphaFactorySource,
   MOCK_ALPHA_FACTORY_ENVELOPE,
-  MOCK_REPLICATED,
+  MOCK_DOCUMENT_CHECKED,
   MOCK_SCAFFOLDED,
 } from "./alphaFactoryData";
+
+const passedCard = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  admission_id: id,
+  lane: "replicated",
+  strategy_id: `strat-${id}`,
+  status: "admitted",
+  queue_status: "completed",
+  gate: { passed: true, source: "owner_run_gate" },
+  ...extra,
+});
 
 const t = (key: string) => key;
 
@@ -38,34 +50,107 @@ describe("buildAlphaFactoryBuckets", () => {
     expect(buckets.replicated).toHaveLength(0);
   });
 
-  it("keeps fixture candidates available in configured mock mode with the unified AlphaFactoryCard shape", () => {
+  it("keeps the sample pipeline in configured mock mode: demands, a failed search, attempts, no pass", () => {
     const buckets = buildAlphaFactoryBuckets(undefined, {
       includeMockFixtures: true,
       includeReplicated: true,
       t,
     });
 
-    expect(buckets.discovered).toHaveLength(0);
-    expect(buckets.discoveredReason).toBe("no_candidate_source");
+    expect(buckets.discovered.map((item) => item.kind)).toEqual(["research_demand", "research_demand"]);
+    expect(buckets.discovered[0]).toMatchObject({
+      demand_id: "rd-mock-momentum-breadth",
+      display_name: "Momentum Scout",
+      short_measure: "effective_bets",
+      missing_datasets: ["tw_margin_daily"],
+      latest_reason_code: "mandate_universe_missing",
+    });
+    expect(buckets.searches).toHaveLength(1);
+    expect(buckets.searches[0]).toMatchObject({
+      kind: "template_search",
+      attempt_count: 3,
+      outcome: "failed",
+      latest_reason_code: "mandate_universe_missing",
+    });
     expect(buckets.scaffolded).toEqual(MOCK_SCAFFOLDED);
-    expect(buckets.replicated).toEqual(MOCK_REPLICATED);
-    expect(buckets.replicated).toHaveLength(4);
-    expect(buckets.replicated[0]).toMatchObject({
-      strategy_id: "strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
-      authority_task_id: "rtask-20261015-002",
-      queue_status: "completed",
-      attempt_count: 0,
-      replay_count: 1,
-      last_replayed_at: "2026-10-16T02:54:42Z",
-      revalidation_count: 1,
-      strategy_state: "approved",
+    expect(buckets.replicated).toHaveLength(0);
+    expect(buckets.documentChecked).toEqual(MOCK_DOCUMENT_CHECKED);
+    expect(buckets.documentChecked.map((c) => c.document_check_reason)).toEqual([
+      "no_passing_gate_result",
+      "simulation_or_raw_market_seed",
+      "retired",
+      "retired",
+    ]);
+    expect(buckets.counts.collected_text_records).toEqual({
+      status: "unavailable",
+      value: null,
+      reason: "no_bounded_owner_read",
     });
-    expect(buckets.replicated[2]).toMatchObject({
-      strategy_id: "strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
-      replay_count: 1,
-      last_replayed_at: "2026-10-24T02:28:22Z",
-      strategy_state: "retired",
-    });
+    expect(buckets.counts.passes).toEqual({ status: "ok", value: 0, reason: null });
+    expect(buckets.reads).toEqual({ demands: { status: "ok" }, runs: { status: "ok" } });
+  });
+
+  it("keeps pipeline items, document-checked records and counts when an envelope is normalized twice", () => {
+    const once = normalizeAlphaFactoryEnvelope(MOCK_ALPHA_FACTORY_ENVELOPE);
+    const twice = buildAlphaFactoryBuckets(once, { includeReplicated: true, t });
+    expect(twice.discovered).toEqual(once.data.pipeline.discovered);
+    expect(twice.searches).toEqual(once.data.pipeline.scaffolded);
+    expect(twice.documentChecked).toEqual(once.data.document_checked);
+    expect(twice.counts).toEqual(once.data.counts);
+    expect(twice.discovered[0].latest_reason_code).toBe("mandate_universe_missing");
+  });
+
+  it("marks lanes unavailable from their owner surfaces and counts unavailable when missing, never 0", () => {
+    const buckets = buildAlphaFactoryBuckets(
+      {
+        data: { discovered: [], scaffolded: [], replicated: [] },
+        meta: {
+          surfaces: {
+            alpha_factory: { status: "ok", source: "research_orchestrator" },
+            alpha_factory_demands: { status: "unavailable", reason: "demand_scope_mismatch" },
+            alpha_factory_runs: { status: "unavailable", message: "runs read timed out" },
+          },
+        },
+      },
+      { includeReplicated: true, t },
+    );
+    expect(buckets.reads.demands).toEqual({ status: "unavailable", reason: "demand_scope_mismatch" });
+    expect(buckets.reads.runs).toEqual({ status: "unavailable", reason: "runs read timed out" });
+    for (const count of Object.values(buckets.counts)) {
+      expect(count).toEqual({ status: "unavailable", value: null, reason: "not_reported" });
+    }
+  });
+
+  it("never counts a failed owner read as 0 even if a value slips through", () => {
+    const buckets = buildAlphaFactoryBuckets(
+      {
+        data: {
+          counts: {
+            searches: { value: 0, status: "unavailable", reason: "owner_read_failed" },
+            passes: { value: null, status: "ok" },
+          },
+        },
+      },
+      { includeReplicated: true, t },
+    );
+    expect(buckets.counts.searches).toEqual({ status: "unavailable", value: null, reason: "owner_read_failed" });
+    expect(buckets.counts.passes).toEqual({ status: "unavailable", value: null, reason: "value_not_reported" });
+  });
+
+  it("keeps document-checked records out of the passed column and only a gate pass in it", () => {
+    const buckets = buildAlphaFactoryBuckets(
+      {
+        data: {
+          replicated: [passedCard("adm-pass")],
+          document_checked: [{ ...passedCard("adm-doc"), lane: "document_checked", gate: undefined, document_check_reason: "test_scope" }],
+        },
+      },
+      { includeReplicated: true, t },
+    );
+    expect(buckets.replicated.map((c) => c.id)).toEqual(["adm-pass"]);
+    expect(buckets.replicated[0].gate_passed).toBe(true);
+    expect(buckets.documentChecked.map((c) => c.id)).toEqual(["adm-doc"]);
+    expect(buckets.documentChecked[0].document_check_reason).toBe("test_scope");
   });
 
   it("never places a strategy list row without a replication record onto the board", () => {
@@ -80,23 +165,17 @@ describe("buildAlphaFactoryBuckets", () => {
     expect(buckets.replicated).toHaveLength(0);
   });
 
-  it("preserves null sharpe on replicated records when supplied and omits sharpe when not supplied", () => {
-    const withoutSharpe = buildAlphaFactoryBuckets(MOCK_ALPHA_FACTORY_ENVELOPE, {
+  it("preserves null sharpe on passed records when supplied and omits sharpe when not supplied", () => {
+    const withoutSharpe = buildAlphaFactoryBuckets({ data: { replicated: [passedCard("a")] } }, {
       includeMockFixtures: false,
       includeReplicated: true,
       t,
     });
-    expect(withoutSharpe.replicated).toHaveLength(MOCK_REPLICATED.length);
+    expect(withoutSharpe.replicated).toHaveLength(1);
     expect(withoutSharpe.replicated[0].sharpe).toBeUndefined();
 
     const withNullSharpe = buildAlphaFactoryBuckets(
-      {
-        ...MOCK_ALPHA_FACTORY_ENVELOPE,
-        data: {
-          ...MOCK_ALPHA_FACTORY_ENVELOPE.data,
-          replicated: [{ ...MOCK_REPLICATED[0], sharpe: null }],
-        },
-      },
+      { data: { replicated: [passedCard("a", { sharpe: null })] } },
       {
         includeMockFixtures: false,
         includeReplicated: true,
