@@ -1,0 +1,119 @@
+{
+  "task_id": "FE-RESEARCH-DETAIL-FLEET-WAIT-20261125",
+  "class": "RC1 required check that fails under CI load",
+  "owner": "Claude",
+  "reviewer": "Claude2",
+  "review_independence_exception": "Other model families are at terminal quota until 2026-11-27 10:03Z, so the reviewer (Claude2) is from the owner family. Recorded per task instruction.",
+  "operator_scope_approval": "Operator approval 2026-11-25 06:2xZ in conversation 5724fc3b names this page scope, so the feature freeze does not apply.",
+  "ci_failures_addressed": [
+    "PR 1085 run 45572912863, Component merge gate job 139066434966",
+    "PR 1094 push run 45636946512 job 139291866740 (2026-11-25T15:03:49Z); pull_request run 45636963349 for the same head passed"
+  ],
+  "root_cause": "ResearchDetail renders the 'Management research context' section as soon as research.get resolves. The Persona row (TW-Index-Arbitrage etc.) comes from a separate effect that calls mgmt.personaFleet.get() after the experiment is known. The test awaited only the section heading and then asserted the Persona fields synchronously, so under scheduling delay the fleet rows had not yet been set and getByText('TW-Index-Arbitrage') threw.",
+  "change": {
+    "files_changed": [
+      "src/management/pages/ResearchDetail.test.tsx"
+    ],
+    "product_files_changed": [],
+    "diff_summary": "After the existing heading waitFor, the first Persona assertion became `expect(await screen.findByText(\"TW-Index-Arbitrage\")).toBeInTheDocument()`; the remaining seven synchronous assertions are unchanged and now run after the fleet row is rendered.",
+    "assertions_removed": 0,
+    "assertions_weakened": 0,
+    "changed_assertion_justification": "getByText -> await findByText for the same text and the same toBeInTheDocument matcher: strictly the same condition, only evaluated once the separate fleet read has landed. Default findBy timeout (1000 ms) is used; no sleep, no per-test or global timeout raised.",
+    "row_shape": "Unchanged real ManagementPersonaFleetRow fixture fleetRow() (personaId persona-20260528-5937dea1, personaName TW-Index-Arbitrage, researchStatus + currentResearchProjects for exp-mgmt-qlib-006); no toy rows."
+  },
+  "other_tests_audit": [
+    {
+      "test": "renders active experiment with Cancel action ...",
+      "result": "no fix: awaited Cancel button and asserted Rerun absence both derive from research.get (allowedActions)."
+    },
+    {
+      "test": "renders terminal experiment with Retry and Archive actions and renders lineage",
+      "result": "no fix: Rerun/Archive buttons and lineage section all derive from the research.get experiment."
+    },
+    {
+      "test": "dispatches promote and propagates backend rejection ...",
+      "result": "no fix: single awaited assertion."
+    },
+    {
+      "test": "renders objective and every run from GET /bff/research-tasks/{task_id} ...",
+      "result": "no fix: objective and run cards render from the same research.get payload."
+    },
+    {
+      "test": "links saved run outputs and shows only recorded parameters",
+      "result": "no fix: awaits 'View output 1', which is produced by the same artifacts.get check result as 'Some result files could not be opened.'; parameters come from research.get."
+    },
+    {
+      "test": "shows recorded candidate evaluation values ...",
+      "result": "no fix: values and the no-files text come from research.get; artifacts.get is asserted not called."
+    },
+    {
+      "test": "shows a weekly collector change ...",
+      "result": "no fix: collector view renders from research.get only; fleet read asserted not called."
+    },
+    {
+      "test": "shows the existing not-found state ...",
+      "result": "no fix: both texts come from the same not-found render."
+    },
+    {
+      "test": "SkillSandboxStudio cancellation tests (2)",
+      "result": "no fix: fake-timer driven with explicit act/advance; not the heading-then-dependent pattern."
+    },
+    {
+      "test": "renders 未綁定 / 未回報 instead of nan for an unbound stub task",
+      "result": "no fix: awaits the section heading and asserts unbound/not-reported placeholders; with personaFleet.get resolving [] the rendered text is identical before and after the fleet read (fleetRows initial state is []), so the assertions do not depend on the second read."
+    }
+  ],
+  "verification": {
+    "environment": "local worktree, Node + vitest from package-lock (npm ci), 12 cores; no VM or SSH used",
+    "baseline_single_run": "npx vitest run src/management/pages/ResearchDetail.test.tsx -> 12 passed",
+    "injected_delay": {
+      "method": "Temporary probe copies of the test file (not committed) with mocks.personaFleetGet replaced by a 150 ms delayed resolve of [fleetRow()]; run with -t 'renders Persona Fleet research context', 30 runs each.",
+      "old_test_HEAD_62ed222ba": {
+        "runs": 30,
+        "passed": 0,
+        "failed": 30,
+        "error": "TestingLibraryElementError: Unable to find an element with the text: TW-Index-Arbitrage"
+      },
+      "new_test": {
+        "runs": 30,
+        "passed": 30,
+        "failed": 0
+      }
+    },
+    "cpu_contention": {
+      "method": "24 busy-loop spinners (2x nproc) for the duration of each batch, load average 26-43; full test file run per iteration with `npx vitest run <file>` (per-run duration 19-57 s).",
+      "new_test": {
+        "runs": 30,
+        "passed": 30,
+        "failed": 0
+      },
+      "old_test_HEAD_62ed222ba": {
+        "runs": 15,
+        "passed": 11,
+        "failed": 4,
+        "failing_test": "ResearchDetail > renders Persona Fleet research context for OODA Orient detail links (only failure in each failing run, 11 other tests passed)"
+      }
+    },
+    "hosted_verification": "Not performed here; deferred to the operator acceptance task per task rules.",
+    "rerun_after_dev_merge_2026_11_25": {
+      "merged_dev_head": "755a3dab2",
+      "merge_commit": "ef1a50c31",
+      "diff_vs_dev": "only src/management/pages/ResearchDetail.test.tsx (+1/-1 assertion line) and this evidence file; nothing else changed",
+      "baseline_single_run": "npx vitest run src/management/pages/ResearchDetail.test.tsx -> 12 passed",
+      "injected_delay_150ms": {
+        "new_test": {
+          "runs": 30,
+          "passed": 30,
+          "failed": 0
+        },
+        "old_test_62ed222ba": {
+          "runs": 30,
+          "passed": 0,
+          "failed": 30,
+          "error": "Unable to find an element with the text: TW-Index-Arbitrage"
+        }
+      },
+      "note": "dev lint error in src/management/pages/phase2/LineageExplorer.tsx is unrelated and owned by another task; not touched."
+    }
+  }
+}
