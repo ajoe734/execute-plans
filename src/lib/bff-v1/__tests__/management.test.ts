@@ -227,6 +227,10 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out[0].id).toBe("evolution_decision:evo-sweep-agent-000b205c0ef9-0000");
     expect(out[0].evidence_class).toBe("incident_followup");
     expect(out.autoProposalCounts).toEqual({
+      // FE-EVO-JOURNAL-DIRECTION-20261125: the adapter also carries threshold/other/infrastructure (absent in this fixture -> 0).
+      threshold: 0,
+      other: 0,
+      infrastructure: 0,
       incident_followup: 1,
       incident_severity: 1,
       postmortem_draft: 2,

@@ -1212,7 +1212,14 @@ test.describe("F07 entity registry", () => {
         await expect(page.getByTestId("qualification-policy-version")).toHaveText(
           "evolution-qualification.v1",
         );
-        await expect(page.getByTestId("qualification-evaluated-at")).toHaveText(SNAPSHOT_AT);
+        // FE-EVO-JOURNAL-DIRECTION-20261125: evaluated_at renders in the viewer time zone, not as raw ISO text.
+        const expectedEvaluatedAt = await page.evaluate(
+          (iso) => new Date(iso).toLocaleString(),
+          SNAPSHOT_AT,
+        );
+        const evaluatedAtLocator = page.getByTestId("qualification-evaluated-at");
+        await expect(evaluatedAtLocator).toContainText(expectedEvaluatedAt);
+        await expect(evaluatedAtLocator).not.toContainText(SNAPSHOT_AT);
         await expect(page.getByTestId("qualification-evaluated-count")).toHaveText("6");
         await expect(page.getByTestId("qualification-qualified-count")).toHaveText("1");
         await expect(page.getByTestId("qualification-drafted-count")).toHaveText("1");
