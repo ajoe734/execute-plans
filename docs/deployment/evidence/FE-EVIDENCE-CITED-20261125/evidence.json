@@ -297,5 +297,24 @@
       "tsc": "npx tsc --noEmit: exit 0"
     },
     "pending": "FE-EVO-JOURNAL-VERSION-GUARD-20261126 must merge into dev first; then origin/dev is merged here and lint plus focused tests rerun."
+  },
+  "dev_merge_24a9ecc82_names_links": {
+    "date": "2026-11-25",
+    "merged": "origin/dev 24a9ecc82 (includes FE-EVO-JOURNAL-VERSION-GUARD-20261126, execute-plans #1101); merge was clean, pre-review fixes of 9ffc0e4f4 kept",
+    "bff_names_links": "BFF-EVIDENCE-CITED-NAMES-LINKS-20261125 (#7878): label_parts {artifact_id, strategy_id}; approval parts.target_display_name",
+    "changes": [
+      "_core.tsx citedRowHref: a row whose label_parts carries artifact_id opens /management/artifacts/<artifact_id> (strategy page does not resolve artifact ids); otherwise the BFF route_href",
+      "_core.tsx approval citation: secondary text and the titled fallback use parts.target_display_name when present, else target_id"
+    ],
+    "tests_added": [
+      "EvidenceExplorerPage.test.tsx 'opens an artifact named in label_parts on its artifact page and names an approval target by target_display_name'"
+    ],
+    "changed_assertions": "none; no existing test weakened or deleted",
+    "verification_on_merged_head": {
+      "npm run lint": "exit 0 (0 errors, 134 pre-existing warnings)",
+      "npm run typecheck (tsc -p tsconfig.app.json --noEmit)": "exit 0",
+      "vitest focused": "EvidenceExplorerPage, PersonaFleetPage, management, retiredCommands, fullOperationAssembly, DiscoveryPanels: 6 files, 188 passed, exit 0",
+      "playwright": "npx playwright test e2e/evidence-short-window.spec.ts --project=chromium: 10 passed, exit 0 (scrollbar 15 px; cited fit mainWidth 1034 tableWidth 939); screenshots regenerated"
+    }
   }
 }

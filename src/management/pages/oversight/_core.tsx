@@ -5300,7 +5300,18 @@ function approvalCitationName(t: EvidenceT, citation: ManagementCitedEvidenceCit
           defaultValue: t("mgmt.evidence.cited.by.approvalTypeFmt", { type: humanizeEvidenceToken(type) }),
         })
       : t("mgmt.evidence.cited.by.approvalTypeFmt", { type });
-  return { text, secondary: citedPart(p, "target_id") || citation.entityRef || null };
+  return { text, secondary: citedPart(p, "target_display_name") || citedPart(p, "target_id") || citation.entityRef || null };
+}
+
+/**
+ * Where a cited reference opens. An artifact named in the label parts
+ * (BFF-EVIDENCE-CITED-NAMES-LINKS-20261125) opens its artifact page, because
+ * the strategy page does not resolve artifact ids; otherwise the BFF route.
+ */
+export function citedRowHref(row: Pick<ManagementCitedEvidenceRow, "routeHref" | "labelParts">): string | null {
+  const artifactId = citedPart(row.labelParts, "artifact_id");
+  if (artifactId) return `/management/artifacts/${encodeURIComponent(artifactId)}`;
+  return row.routeHref;
 }
 
 /** Plain words for who cites a reference; the BFF sends recorded titles and parts, never sentences. */
@@ -5323,7 +5334,7 @@ function citationText(t: (key: string, opts?: Record<string, unknown>) => string
     case "meeting_proposal":
       return t("mgmt.evidence.cited.by.meetingProposalFmt", { meeting: citedPart(p, "meeting_id") || ref });
     case "approval":
-      return t("mgmt.evidence.cited.by.approvalFmt", { target: citedPart(p, "target_id") || ref });
+      return t("mgmt.evidence.cited.by.approvalFmt", { target: citedPart(p, "target_display_name") || citedPart(p, "target_id") || ref });
     case "evolution_proposal":
       return t("mgmt.evidence.cited.by.evolutionProposalFmt", { persona: citedPart(p, "persona_id") || ref });
     case "research_demand":
@@ -5495,8 +5506,8 @@ const EvidenceCitedList = () => {
               {rows.map((row) => (
                 <tr key={row.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
                   <td className="min-w-0 px-3 py-3 [overflow-wrap:anywhere]">
-                    {row.routeHref ? (
-                      <Link to={row.routeHref} className="break-words font-medium text-primary underline-offset-4 hover:underline">
+                    {citedRowHref(row) ? (
+                      <Link to={citedRowHref(row) ?? ""} className="break-words font-medium text-primary underline-offset-4 hover:underline">
                         {row.label}
                       </Link>
                     ) : (

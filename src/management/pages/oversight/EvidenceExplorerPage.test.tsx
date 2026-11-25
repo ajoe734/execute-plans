@@ -1338,6 +1338,23 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
     expect(document.body.textContent).not.toMatch(/management-evidence|\bunknown\b/);
   });
 
+  it("opens an artifact named in label_parts on its artifact page and names an approval target by target_display_name", () => {
+    const payload = citedPayload() as { data: { items: Array<Record<string, unknown>> } };
+    const first = payload.data.items[0];
+    first.label_parts = { artifact_id: ART_B, strategy_id: "strat-tw-momentum" };
+    first.route_href = null;
+    first.resolved_link = null;
+    const approval = (first.cited_by as Array<Record<string, unknown>>)[1];
+    approval.parts = { decision_type: "strategy_promotion", target_id: ART_B, target_display_name: "TW momentum 20d breakout v3" };
+    mocks.useV5Live.mockReturnValue({ data: adaptManagementCitedEvidence(payload), loading: false, refresh: vi.fn() });
+
+    renderEvidence("/management/evidence");
+
+    expect(screen.getByRole("link", { name: "TW momentum 20d breakout" })).toHaveAttribute("href", `/management/artifacts/${ART_B}`);
+    const approvalLink = screen.getByRole("link", { name: "Strategy promotion approval" });
+    expect(approvalLink.closest("li")).toHaveTextContent("TW momentum 20d breakout v3");
+  });
+
   it("names a source that could not be read and marks the total incomplete", () => {
     mocks.useV5Live.mockReturnValue({
       data: citedModel({
