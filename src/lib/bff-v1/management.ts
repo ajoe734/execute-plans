@@ -1331,6 +1331,15 @@ export interface ManagementEvidenceDetail {
   refId: string;
   ref_id: string;
   title: string;
+  /** False when the BFF recorded no title and `title` falls back to the ref id. */
+  titleRecorded?: boolean;
+  /** Recorded source class (for example official_reference), or null. */
+  sourceClass?: string | null;
+  /** http(s) link to the original source, or null. */
+  externalUrl?: string | null;
+  /** True when the item route answered `evidence_ref_detail.status: unavailable`. */
+  unavailable?: boolean;
+  unavailableReason?: string | null;
   sourceDocument: ManagementEvidenceSourceDocument;
   source_document: ManagementEvidenceSourceDocument;
   linkType: string;
@@ -2243,6 +2252,223 @@ export function adaptManagementEvidenceOverview(raw: unknown): ManagementEvidenc
   };
 }
 
+// ---------------------------------------------------------------------------
+// Cited evidence list (FE-EVIDENCE-CITED-20261125)
+// GET /bff/management/evidence?scope=cited (BFF-EVIDENCE-CITED-LIST-20261125)
+// ---------------------------------------------------------------------------
+
+/** Owner sources the BFF reads citations from, in the BFF's own order. */
+export const CITED_EVIDENCE_SOURCE_KEYS = [
+  "meeting_proposals",
+  "meeting_positions",
+  "governance_approvals",
+  "evolution_proposals",
+  "research_demands",
+  "research_tickets",
+  "persona_cycles",
+] as const;
+
+export interface ManagementCitedEvidenceSource {
+  key: string;
+  /** ok | partial | failed | denied (as recorded by the BFF). */
+  status: string;
+  reason: string | null;
+  readCount: number | null;
+  truncated: boolean;
+  failedCount: number | null;
+  citationCount: number | null;
+  withheldCount: number | null;
+}
+
+export interface ManagementCitedEvidenceCitation {
+  entityType: string;
+  entityRef: string;
+  /** The citing entity's recorded title, or null. */
+  label: string | null;
+  parts: Record<string, unknown>;
+  routeHref: string | null;
+  time: string | null;
+  source: string | null;
+}
+
+export interface ManagementCitedEvidenceRow {
+  id: string;
+  refId: string;
+  refKind: string;
+  sourceOwner: string | null;
+  /** Display name; equals refId when nameMissing. */
+  label: string;
+  nameMissing: boolean;
+  labelParts: Record<string, unknown>;
+  sourceClass: string | null;
+  /** Management page that shows this reference, or null when none exists. */
+  routeHref: string | null;
+  evidenceRefId: string | null;
+  citedAs: string[];
+  citedBy: ManagementCitedEvidenceCitation[];
+  citationCount: number;
+  lastCitedAt: string | null;
+  redacted: boolean;
+  requiredCapability: string | null;
+}
+
+export interface ManagementCitedEvidenceList {
+  /**
+   * ok | degraded | unavailable from the BFF; "unsupported" when the server
+   * answered without `data.scope: "cited"` (a BFF that predates the scope).
+   */
+  status: "ok" | "degraded" | "unavailable" | "unsupported";
+  items: ManagementCitedEvidenceRow[];
+  sources: ManagementCitedEvidenceSource[];
+  /** Number of cited references; null when the BFF could not count them. */
+  total: number | null;
+  complete: boolean;
+  incomplete: boolean;
+  referencesTruncated: boolean;
+  maxReferences: number | null;
+  redactedCount: number;
+  nextPageToken: string | null;
+  pageSize: number | null;
+  snapshotAt: string | null;
+}
+
+const asRecord = (value: unknown): Record<string, unknown> => (isObject(value) ? value : {});
+
+const citedNullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+function adaptCitedEvidenceCitation(value: unknown): ManagementCitedEvidenceCitation | null {
+  if (!isObject(value)) return null;
+  const entityType = asString(value.entity_type ?? value.entityType);
+  const entityRef = asString(value.entity_ref ?? value.entityRef);
+  if (!entityType && !entityRef) return null;
+  return {
+    entityType,
+    entityRef,
+    label: nullableString(value.label),
+    parts: { ...asRecord(value.parts) },
+    routeHref: nullableString(value.route_href ?? value.routeHref),
+    time: nullableString(value.time),
+    source: nullableString(value.source),
+  };
+}
+
+function adaptCitedEvidenceRow(value: unknown): ManagementCitedEvidenceRow | null {
+  if (!isObject(value)) return null;
+  const refId = asString(value.ref_id ?? value.refId ?? value.id);
+  if (!refId) return null;
+  const resolved = asRecord(value.resolved_link ?? value.resolvedLink);
+  const routeHref = nullableString(value.route_href ?? value.routeHref ?? resolved.route_href ?? resolved.routeHref);
+  const citedBy = firstArray<unknown>(value.cited_by, value.citedBy)
+    .map(adaptCitedEvidenceCitation)
+    .filter((item): item is ManagementCitedEvidenceCitation => Boolean(item));
+  const rawLabel = nullableString(value.label);
+  const nameMissing = asBoolean(value.name_missing ?? value.nameMissing, !rawLabel || rawLabel === refId);
+  return {
+    id: asString(value.id, refId),
+    refId,
+    refKind: asString(value.ref_kind ?? value.refKind),
+    sourceOwner: nullableString(value.source_owner ?? value.sourceOwner),
+    label: rawLabel ?? refId,
+    nameMissing,
+    labelParts: { ...asRecord(value.label_parts ?? value.labelParts) },
+    sourceClass: nullableString(value.source_class ?? value.sourceClass),
+    routeHref,
+    evidenceRefId: nullableString(resolved.evidence_ref_id ?? resolved.evidenceRefId),
+    citedAs: firstArray<unknown>(value.cited_as, value.citedAs).map((item) => asString(item)).filter(Boolean),
+    citedBy,
+    citationCount: asFiniteNumber(value.citation_count ?? value.citationCount, citedBy.length),
+    lastCitedAt: nullableString(value.last_cited_at ?? value.lastCitedAt),
+    redacted: asBoolean(value.redacted, false),
+    requiredCapability: nullableString(value.required_capability ?? value.requiredCapability),
+  };
+}
+
+function adaptCitedEvidenceSources(value: unknown): ManagementCitedEvidenceSource[] {
+  const record = asRecord(value);
+  const known = CITED_EVIDENCE_SOURCE_KEYS.filter((key) => key in record);
+  const extra = Object.keys(record).filter((key) => !(CITED_EVIDENCE_SOURCE_KEYS as readonly string[]).includes(key));
+  return [...known, ...extra].map((key) => {
+    const source = asRecord(record[key]);
+    return {
+      key,
+      status: asString(source.status, "failed").toLowerCase(),
+      reason: nullableString(source.reason),
+      readCount: citedNullableNumber(source.read_count ?? source.readCount),
+      truncated: asBoolean(source.truncated, false),
+      failedCount: citedNullableNumber(source.failed_count ?? source.failedCount),
+      citationCount: citedNullableNumber(source.citation_count ?? source.citationCount),
+      withheldCount: citedNullableNumber(source.withheld_count ?? source.withheldCount),
+    };
+  });
+}
+
+/**
+ * Adapts `GET /bff/management/evidence?scope=cited`. A server that predates
+ * the scope ignores the parameter and answers the ingested list; that answer
+ * is reported as `status: "unsupported"` with no rows instead of being
+ * misread as cited references.
+ */
+export function adaptManagementCitedEvidence(raw: unknown): ManagementCitedEvidenceList | null {
+  if (!isObject(raw)) return null;
+  const data = asRecord(raw.data);
+  const meta = asRecord(raw.meta);
+  const pageInfo = asRecord(raw.page_info ?? raw.pageInfo ?? data.page_info);
+  const summary = asRecord(data.summary);
+  const surfaces = asRecord(meta.surfaces);
+  const snapshotAt = nullableString(meta.snapshot_at ?? meta.snapshotAt);
+  const scope = asString(data.scope ?? summary.scope).toLowerCase();
+  if (scope !== "cited") {
+    return {
+      status: "unsupported",
+      items: [],
+      sources: [],
+      total: null,
+      complete: false,
+      incomplete: true,
+      referencesTruncated: false,
+      maxReferences: null,
+      redactedCount: 0,
+      nextPageToken: null,
+      pageSize: null,
+      snapshotAt,
+    };
+  }
+  const items = firstArray<unknown>(data.items)
+    .map(adaptCitedEvidenceRow)
+    .filter((item): item is ManagementCitedEvidenceRow => Boolean(item));
+  const sources = adaptCitedEvidenceSources(data.sources ?? surfaces.cited_evidence_sources);
+  const surfaceStatus = asString(asRecord(surfaces.cited_evidence).status).toLowerCase();
+  const anySourceNotOk = sources.some((source) => source.status !== "ok" || source.truncated);
+  const status: ManagementCitedEvidenceList["status"] =
+    surfaceStatus === "unavailable"
+      ? "unavailable"
+      : surfaceStatus === "degraded" || anySourceNotOk
+        ? "degraded"
+        : surfaceStatus === "ok" || surfaceStatus === ""
+          ? "ok"
+          : "degraded";
+  const total = status === "unavailable" ? null : citedNullableNumber(pageInfo.total ?? summary.reference_total);
+  const incomplete = status !== "ok" || asBoolean(summary.incomplete, false) || asBoolean(summary.references_truncated, false);
+  return {
+    status,
+    items,
+    sources,
+    total,
+    complete: !incomplete && asBoolean(summary.complete, true),
+    incomplete,
+    referencesTruncated: asBoolean(summary.references_truncated, false),
+    maxReferences: citedNullableNumber(summary.max_references),
+    redactedCount: asFiniteNumber(summary.redacted_count ?? meta.redacted_evidence_count, 0),
+    nextPageToken: status === "unavailable" ? null : nullableString(pageInfo.next_page_token ?? pageInfo.nextPageToken),
+    pageSize: citedNullableNumber(pageInfo.page_size ?? pageInfo.pageSize),
+    snapshotAt,
+  };
+}
+
 function adaptEvidenceStoragePreview(value: unknown): ManagementEvidenceStoragePreview {
   const record = isObject(value) ? value : {};
   const previewType = asString(record.previewType ?? record.preview_type, "unavailable");
@@ -2253,12 +2479,27 @@ function adaptEvidenceStoragePreview(value: unknown): ManagementEvidenceStorageP
   };
 }
 
+/** Values the BFF uses for "not recorded"; never shown to the reader as content. */
+const EVIDENCE_PLACEHOLDER_VALUES = new Set(["unknown", "management-evidence", "none", "null", "n/a"]);
+
+/** A recorded value, or "" when the BFF sent a placeholder such as "unknown". */
+export function evidenceRecordedText(value: unknown): string {
+  const text = asString(value);
+  return EVIDENCE_PLACEHOLDER_VALUES.has(text.toLowerCase()) ? "" : text;
+}
+
+/** An http(s) URL a reader can open, or null (storage refs and internal ids are never links). */
+export function evidenceExternalUrl(value: unknown): string | null {
+  const text = asString(value);
+  return /^https?:\/\/[^\s]+$/i.test(text) ? text : null;
+}
+
 function adaptEvidenceSourceDocument(value: unknown, fallbackTitle: string): ManagementEvidenceSourceDocument {
   const record = isObject(value) ? value : {};
-  const sourceType = asString(record.sourceType ?? record.source_type, "unknown");
+  const sourceType = evidenceRecordedText(record.sourceType ?? record.source_type);
   const storagePreview = adaptEvidenceStoragePreview(record.storagePreview ?? record.storage_preview);
   return {
-    title: asString(record.title, fallbackTitle),
+    title: evidenceRecordedText(record.title) || fallbackTitle,
     sourceType,
     source_type: sourceType,
     excerpt: nullableString(record.excerpt),
@@ -2331,15 +2572,53 @@ function adaptEvidenceSourceMemoryContext(value: unknown): ManagementEvidenceSou
   };
 }
 
-export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceDetail | null {
+/**
+ * The one item object in a detail answer. The item route answers a flat
+ * object; a list envelope (`data.id: "management-evidence"`, `data.items[]`)
+ * is searched for `wantedRefId` and never read as an item itself.
+ */
+function evidenceDetailItem(raw: unknown, wantedRefId?: string): Record<string, unknown> | null {
   const data = unwrap(raw);
   if (!isObject(data)) return null;
-  const refId = asString(data.refId ?? data.ref_id ?? data.id);
+  if (Array.isArray(data.items) || Array.isArray(data.evidence_refs)) {
+    const wanted = asString(wantedRefId);
+    const items = firstArray<unknown>(data.items, data.evidence_refs).filter(isObject);
+    const match = items.find((item) => {
+      const id = asString(item.ref_id ?? item.refId ?? item.evidence_item_id ?? item.id);
+      return wanted ? id === wanted : false;
+    });
+    return match ?? null;
+  }
+  return data;
+}
+
+export function adaptManagementEvidenceDetail(raw: unknown, wantedRefId?: string): ManagementEvidenceDetail | null {
+  const data = evidenceDetailItem(raw, wantedRefId);
+  if (!data) return null;
+  const refId = evidenceRecordedText(data.refId ?? data.ref_id ?? data.id) || asString(wantedRefId);
   if (!refId) return null;
-  const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, refId);
   const rawSourceDoc = isObject(data.sourceDocument ?? data.source_document)
     ? ((data.sourceDocument ?? data.source_document) as Record<string, unknown>)
     : {};
+  const recordedTitle = evidenceRecordedText(
+    rawSourceDoc.title ?? data.title ?? data.displayLabel ?? data.display_label,
+  );
+  const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, recordedTitle || refId);
+  if (!sourceDocument.sourceType) {
+    const flatType = evidenceRecordedText(data.sourceType ?? data.source_type);
+    sourceDocument.sourceType = flatType;
+    sourceDocument.source_type = flatType;
+  }
+  if (!sourceDocument.capturedAt) {
+    const flatCaptured = nullableString(data.capturedAt ?? data.captured_at);
+    sourceDocument.capturedAt = flatCaptured;
+    sourceDocument.captured_at = flatCaptured;
+  }
+  const sourceRef = rawSourceDoc.sourceRef ?? rawSourceDoc.source_ref ?? data.sourceRef ?? data.source_ref;
+  const rawMeta = asRecord(data.meta ?? (isObject(raw) ? raw.meta : undefined));
+  const detailSurface = asRecord(asRecord(rawMeta.surfaces).evidence_ref_detail);
+  const detailStatus = asString(detailSurface.status ?? asRecord(rawMeta.surfaces).evidence_ref_detail).toLowerCase();
+  const unavailable = detailStatus === "unavailable";
   const isOfficialReference = isOfficialReferenceSource(
     sourceDocument.sourceType ?? asString(data.sourceType ?? data.source_type),
     rawSourceDoc.sourceRef ?? rawSourceDoc.source_ref ?? data.sourceRef ?? data.source_ref,
@@ -2349,7 +2628,7 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   const linkedDecisions = firstArray<unknown>(data.linkedDecisions, data.linked_decisions)
     .map(adaptEvidenceLinkedDecision)
     .filter((item): item is ManagementEvidenceLinkedDecision => Boolean(item));
-  const linkType = asString(data.linkType ?? data.link_type, "unknown");
+  const linkType = evidenceRecordedText(data.linkType ?? data.link_type);
   const allowedActions = adaptEvidenceAllowedActions(data.allowedActions ?? data.allowed_actions);
   const disabledActionReasons = adaptEvidenceDisabledActionReasons(
     data.disabledActionReasons ?? data.disabled_action_reasons,
@@ -2363,7 +2642,12 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   return {
     refId,
     ref_id: refId,
-    title: asString(data.title ?? data.displayLabel ?? data.display_label ?? sourceDocument.title, refId),
+    title: recordedTitle || refId,
+    titleRecorded: Boolean(recordedTitle) && recordedTitle !== refId,
+    sourceClass: evidenceRecordedText(data.sourceClass ?? data.source_class) || null,
+    externalUrl: evidenceExternalUrl(sourceRef),
+    unavailable,
+    unavailableReason: unavailable ? nullableString(detailSurface.reason) : null,
     sourceDocument,
     source_document: sourceDocument,
     linkType,
@@ -7739,9 +8023,12 @@ export const mgmt = {
       page_token?: string | null;
       pageSize?: number;
       page_size?: number;
+      /** "ingested" asks for raw ingest explicitly; omitted keeps the server default. */
+      scope?: "ingested";
       signal?: AbortSignal;
     }): Promise<ManagementEvidenceOverview | undefined> => {
       const params = new URLSearchParams();
+      if (opts?.scope) params.set("scope", opts.scope);
       const pageSize = opts?.pageSize ?? opts?.page_size;
       const pageToken = opts?.pageToken ?? opts?.page_token;
       if (pageSize !== undefined) params.set("page_size", String(pageSize));
@@ -7761,8 +8048,25 @@ export const mgmt = {
     detailLiveOnly: (refId: string, opts?: { signal?: AbortSignal }): Promise<ManagementEvidenceDetail | undefined> =>
       liveOnlyRead<ManagementEvidenceDetail>(
         { method: "GET", path: paths.mgmtEvidenceRef(refId), signal: opts?.signal },
-        adaptManagementEvidenceDetail,
+        (raw) => adaptManagementEvidenceDetail(raw, refId),
       ),
+    /**
+     * References that decisions, meetings, approvals and research cite
+     * (`scope=cited`). Raw ingest is `overviewLiveOnly({ scope: "ingested" })`.
+     */
+    citedLiveOnly: (opts?: {
+      pageToken?: string | null;
+      pageSize?: number;
+      signal?: AbortSignal;
+    }): Promise<ManagementCitedEvidenceList | undefined> => {
+      const params = new URLSearchParams({ scope: "cited" });
+      if (opts?.pageSize !== undefined) params.set("page_size", String(opts.pageSize));
+      if (opts?.pageToken) params.set("page_token", String(opts.pageToken));
+      return liveOnlyRead<ManagementCitedEvidenceList>(
+        { method: "GET", path: `${paths.mgmtEvidenceExplorer()}?${params.toString()}`, signal: opts?.signal },
+        adaptManagementCitedEvidence,
+      );
+    },
   },
 
   personaIntent: {

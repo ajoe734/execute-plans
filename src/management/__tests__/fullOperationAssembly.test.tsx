@@ -60,7 +60,6 @@ const COMPLETE_BFF_PUBLIC_MODULES = [
   "./governance",
   "./search",
   "./writeOverlay",
-  "./evidenceOperations",
   "./v5",
   "./management",
   "./managementConsoleReads",
@@ -120,6 +119,8 @@ describe("full production operation assembly", () => {
     expect(exports).toEqual(COMPLETE_BFF_PUBLIC_MODULES);
     expect(exports).not.toContain("./mocks/adapters");
     expect(exports).not.toContain("./mocks/registry");
+    // FE-EVIDENCE-CITED-20261125: the evidence operation client had no backend and was removed.
+    expect(exports).not.toContain("./evidenceOperations");
     expect(index).toContain('export { runActionSafe, type RunActionSafeOpts } from "./runActionSafe";');
     expect(index).toContain('export { useLiveList, useRealtimeStatus } from "./useLiveList";');
   });

@@ -1047,7 +1047,7 @@ function PersonaDataSourceRow({ record }: { record: SystemDataSourceRecord }) {
           )}
         </div>
         <Button asChild size="sm" variant="outline" className="mt-2 h-7 px-2 text-xs">
-          <Link to="/management/evidence">{t("mgmt.actions.evidence")}</Link>
+          <Link to="/management/evidence?scope=ingested">{t("mgmt.actions.evidence")}</Link>
         </Button>
       </td>
     </tr>
