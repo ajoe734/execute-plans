@@ -6,7 +6,7 @@
   "register_class": "RC6",
   "delivery_repository": "ajoe734/execute-plans",
   "base_branch": "dev",
-  "delivery_state": "implemented_blocked_on_artifact_contract",
+  "delivery_state": "implemented_ready_for_review",
   "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好) names the seven registry pages; the feature freeze does not apply to this scope.",
   "hosted_verification_note": "No VM or SSH access of any kind. No operator keys read. Functional evidence only (unit tests, real-Chromium Playwright with a fixture BFF serving the BFF contract shapes and the hosted reference ids). Hosted verification belongs to the operator acceptance task.",
   "bff_contract": {
@@ -50,8 +50,9 @@
       ]
     },
     "4": {
-      "status": "partially_met_blocked",
-      "what": "Every inbound link was traced; results below in inbound_links. query and source-record links are resolved; journey_id and research-note links cannot open an item and their removal needs files outside the artifact contract."
+      "status": "met",
+      "what": "Every inbound link in this task's scope opens the right item or is removed (see inbound_links): ?query= and ?ref_id= open the item or redirect to its strategy/persona page; discovery source-record links are kept only for ids the item route can find; data source page links open ?scope=ingested. The two links whose fix needs files outside the contract (journey_id from TradeJourneysPage, research note ?ref_id=note-* from meetings.ts/MeetingActionCards) are listed as residual findings owned by FE-EVIDENCE-DEAD-LINKS-20261125.",
+      "residual_owned_by": "FE-EVIDENCE-DEAD-LINKS-20261125"
     },
     "5": {
       "status": "met",
@@ -144,8 +145,9 @@
       "from": [
         "src/management/pages/trade-journeys/TradeJourneysPage.tsx:845"
       ],
-      "result": "BLOCKED: cannot open an item and cannot be removed inside the artifact contract",
-      "how": "Evidence library items carry no trade journey link (BFF trade_journeys.py journey evidence is the journey's own reconciliation/gate records, shown on the journey page). The receiving page no longer claims 'Viewing evidence linked from trade journey X'; it states the list is not filtered by the journey and links back. Removing the link needs TradeJourneysPage.tsx, which is not in the artifact contract."
+      "result": "residual: moved to FE-EVIDENCE-DEAD-LINKS-20261125",
+      "how": "Evidence library items carry no trade journey link (BFF trade_journeys.py journey evidence is the journey's own reconciliation/gate records, shown on the journey page). The receiving page no longer claims 'Viewing evidence linked from trade journey X'; it states the list is not filtered by the journey and links back. Removing the link needs TradeJourneysPage.tsx, which is not in the artifact contract.",
+      "follow_up_task": "FE-EVIDENCE-DEAD-LINKS-20261125"
     },
     {
       "link": "/management/evidence?ref_id=note-* (research notes)",
@@ -153,8 +155,9 @@
         "src/lib/bff-v1/meetings.ts:1130 and :1135 resolveMeetingActionEvidenceHref",
         "used by MeetingActionCards.tsx EvidenceLink and management.ts research ticket evidence_refs"
       ],
-      "result": "BLOCKED: item route cannot find research notes; removal breaks assertions in tests outside the contract",
-      "how": "BFF contract: research note references have no page (route_href null). Returning null for research_note/note-* in meetings.ts makes MeetingActionCards render plain text, but src/management/pages/meetings/MeetingActionCards.test.tsx:136 and :232 and src/management/pages/meetings/meetings.test.tsx:2104 assert the old /management/evidence?ref_id=note-* href; they are not in the artifact contract and must not be weakened silently. meetings.ts is therefore left unchanged."
+      "result": "residual: moved to FE-EVIDENCE-DEAD-LINKS-20261125",
+      "how": "BFF contract: research note references have no page (route_href null). Returning null for research_note/note-* in meetings.ts makes MeetingActionCards render plain text, but src/management/pages/meetings/MeetingActionCards.test.tsx:136 and :232 and src/management/pages/meetings/meetings.test.tsx:2104 assert the old /management/evidence?ref_id=note-* href; they are not in the artifact contract and must not be weakened silently. meetings.ts is therefore left unchanged.",
+      "follow_up_task": "FE-EVIDENCE-DEAD-LINKS-20261125"
     },
     {
       "link": "/management/evidence (bare list)",
@@ -220,11 +223,11 @@
     }
   ],
   "tests_run": {
+    "merge": "origin/dev merged at a5284b0dd (includes the FE-LINEAGE-LOOKUP-LINT-20261125 lint fix); merge commit fb31661ad, no conflicts",
+    "lint": "npm run lint: exit 0, 0 errors, 122 warnings (react-refresh/only-export-components and similar, repository-wide)",
     "typecheck": "npx tsc -p tsconfig.app.json --noEmit: exit 0",
-    "eslint_changed_files": "0 errors, 3 react-refresh/only-export-components warnings (one pre-existing at _core.tsx:1424; new exports evidenceInboundTarget and discoveryRecordHref are used by tests)",
-    "vitest_full": "npx vitest run --maxWorkers=2: 292 files, 3547 tests passed, exit 0",
-    "vitest_targeted": "EvidenceExplorerPage.test.tsx 28 passed; DiscoveryPanels, retiredCommands, fullOperationAssembly, PersonaFleetPage, management.test.ts all passed; src/test/agora-retired-probes.test.ts 19 passed (validator 3000 cases incl. new evidence-cited read route)",
-    "playwright_new": "npx playwright test e2e/evidence-short-window.spec.ts: 8 passed (real scrollbars, 1274x627 and 1920x1000)",
+    "vitest_full": "npx vitest run --maxWorkers=2 after the dev merge: 292 files, 3548 tests passed, exit 0",
+    "playwright_new": "npx playwright test e2e/evidence-short-window.spec.ts after the dev merge: 8 passed, exit 0 (real scrollbars 15 px, 1274x627 and 1920x1000); screenshots regenerated",
     "playwright_updated_specs": "e2e/19-route-split, 22-management-evidence-load, 23-management-shell-fanout: 6 failed, 1 skipped in this local harness; the unmodified origin/dev versions of the same three specs fail identically (6 failures) on the same login screen ('Pantheon session verification failed / Failed to fetch') before the evidence route renders, so the failure is pre-existing harness auth, not this change. Their evidence fixtures now answer scope=cited with the cited shape."
   },
   "screenshots": [
@@ -241,19 +244,25 @@
     "screenshots/evidence-ingested-1920x1000-top.png",
     "screenshots/persona-fleet-1920x1000-top.png"
   ],
-  "blocker": {
-    "reason": "Acceptance 4 needs two link sources removed whose files are outside the artifact contract.",
+  "residual_findings": [
+    "FE-EVIDENCE-DEAD-LINKS-20261125: /management/evidence?journey_id=<journey> from src/management/pages/trade-journeys/TradeJourneysPage.tsx:845 cannot open an evidence item (library items carry no journey link); the receiving page already says the list is not filtered by the journey and links back. Removing the link needs TradeJourneysPage.tsx.",
+    "FE-EVIDENCE-DEAD-LINKS-20261125: /management/evidence?ref_id=note-* from src/lib/bff-v1/meetings.ts resolveMeetingActionEvidenceHref (MeetingActionCards EvidenceLink) — research notes have no item page (BFF route_href null); the fix changes assertions in MeetingActionCards.test.tsx and meetings.test.tsx, outside this contract.",
+    "src/management/pages/oversight/PersonaIntentTraces.tsx:385 links /management/evidence/<ref> for refs such as case-file-* and ev-cycle-*; case files are not evidence items, so the item route likely answers not found. Outside this task's named link classes and artifact contract.",
+    "e2e/19, 22, 23 cannot reach the app in the local harness (login fails before routing) on dev as well; they need the contained loopback auth used by newer specs.",
+    "Locale keys for reason/reviewer/reviewerFmt/actionability/operation remain because other code may still reference them; only keys used solely by removed code were deleted.",
+    "Persona Fleet and Evidence show 3 full rows after one page scroll at 1274x627 (table area 322-367 px); tall cited rows are capped to two visible citations with full text in the title tooltip."
+  ],
+  "scope_change": {
+    "decided": "2026-11-25 task next (governed): the trade journeys journey_id link and the meeting action research-note link need files outside the artifact contract and move to FE-EVIDENCE-DEAD-LINKS-20261125. Acceptance 4 for this task covers every other inbound link.",
+    "follow_up_task": "FE-EVIDENCE-DEAD-LINKS-20261125"
+  },
+  "handed_to_follow_up": {
+    "task": "FE-EVIDENCE-DEAD-LINKS-20261125",
     "files_needed": [
       "src/management/pages/trade-journeys/TradeJourneysPage.tsx (remove the ?journey_id= Evidence Explorer link at line 845)",
       "src/management/pages/meetings/MeetingActionCards.test.tsx (lines 136 and 232 assert /management/evidence?ref_id=note-*)",
       "src/management/pages/meetings/meetings.test.tsx (line 2104 asserts /management/evidence?ref_id=note-fee-2026)"
     ],
     "planned_change_once_added": "TradeJourneysPage: drop the link (journey evidence stays on the journey page). meetings.ts resolveMeetingActionEvidenceHref: research_note / note-* -> null so MeetingActionCards renders text; update the three assertions to expect text without a link, justified here."
-  },
-  "residual_findings": [
-    "src/management/pages/oversight/PersonaIntentTraces.tsx:385 links /management/evidence/<ref> for refs such as case-file-* and ev-cycle-*; case files are not evidence items, so the item route likely answers not found. Outside this task's named link classes and artifact contract.",
-    "e2e/19, 22, 23 cannot reach the app in the local harness (login fails before routing) on dev as well; they need the contained loopback auth used by newer specs.",
-    "Locale keys for reason/reviewer/reviewerFmt/actionability/operation remain because other code may still reference them; only keys used solely by removed code were deleted.",
-    "Persona Fleet and Evidence show 3 full rows after one page scroll at 1274x627 (table area 322-367 px); tall cited rows are capped to two visible citations with full text in the title tooltip."
-  ]
+  }
 }
