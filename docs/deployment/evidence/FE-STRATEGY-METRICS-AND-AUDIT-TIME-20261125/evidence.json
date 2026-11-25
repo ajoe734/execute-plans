@@ -7,9 +7,9 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125",
-  "base_commit": "90d91dd85874bca7ae2fe5ed113875c617a6ab4f",
+  "base_commit": "19e0403b71f85f9db6fec050714b3a1083b80441",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T09:15:00Z",
+  "timestamp": "2026-11-25T12:15:00Z",
   "problem_register_binding": {
     "root_cause_classes": ["RC6"],
     "summary": "AuditPage and normalizeAuditFields previously dropped occurred_at/created_at timestamps from /bff/audit and /bff/audit/events, leaving r.ts undefined on /management/audit."
@@ -59,6 +59,11 @@
       "scope": "out_of_scope_strategy_list_metrics",
       "class": "RC6",
       "finding": "Strategy list cumulative paper metrics and current-first display are owned by live tasks BFF-STRATEGY-METRICS-RUNTIME-20261125 and FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 per task brief."
+    },
+    {
+      "scope": "out_of_scope_research_detail_test_async_race",
+      "class": "RC6",
+      "finding": "src/management/pages/ResearchDetail.test.tsx lines 128-129 await screen.getByText('Management research context') (rendered when researchGet resolves) and then synchronously assert screen.getByText('TW-Index-Arbitrage') (rendered when separate useQuery personaFleetGet resolves), causing a transient race under heavy CI load (observed in push run 45607537645 while pull_request run 45607544326 on the identical commit 6a0c900e5 passed)."
     }
   ]
 }
