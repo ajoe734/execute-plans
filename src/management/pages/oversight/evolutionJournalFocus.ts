@@ -22,10 +22,32 @@ export interface EvolutionJournalEntry {
   persona_id?: string;
   personaId?: string;
   route?: string;
-  target?: { type?: string; id?: string; version?: string } | null;
+  // The BFF may send a number (or null) for any of these; read them through
+  // journalFieldText before calling string methods.
+  target?: { type?: string | number | null; id?: string | number | null; version?: string | number | null } | null;
   decision?: Record<string, unknown> | null;
   mutation_review?: Record<string, unknown> | null;
   record?: { evidence_refs?: unknown; [key: string]: unknown } | null;
+}
+
+/**
+ * FE-EVO-JOURNAL-VERSION-GUARD-20261126: journal fields arrive from the BFF as
+ * untyped JSON. A numeric `target.version` (e.g. `2`) crashed the whole page
+ * because the renderer called `.toLowerCase()` on it. Read every journal field
+ * through this before calling a string method: strings pass through, finite
+ * numbers / booleans become their text, anything else becomes "".
+ */
+export function journalFieldText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  if (typeof value === "boolean" || typeof value === "bigint") return String(value);
+  return "";
+}
+
+/** journalFieldText, with the literal "nan" / "undefined" / "null" placeholders dropped. */
+export function cleanJournalFieldText(value: unknown): string {
+  const text = journalFieldText(value);
+  return text && !["nan", "undefined", "null"].includes(text.toLowerCase()) ? text : "";
 }
 
 function safeSerialize(value: unknown): string {
@@ -38,7 +60,9 @@ function safeSerialize(value: unknown): string {
 }
 
 function evolutionEntryText(e: EvolutionJournalEntry): string {
-  const target = e.target ? [e.target.type, e.target.id, e.target.version].filter(Boolean).join(" ") : "";
+  const target = e.target
+    ? [e.target.type, e.target.id, e.target.version].map(journalFieldText).filter(Boolean).join(" ")
+    : "";
   const evidenceRefs = Array.isArray(e.record?.evidence_refs)
     ? e.record.evidence_refs.map((ref) => JSON.stringify(ref)).join(" ")
     : "";
