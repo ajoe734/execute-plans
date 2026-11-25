@@ -3994,7 +3994,7 @@ export default {
     hideSystemIncidents: "Hide system incidents",
     loading: "Loading postmortems…",
     empty: "No postmortems recorded.",
-    listError: "Could not load postmortems.",
+    listError: "Canonical postmortem transport unavailable.",
     surfaceBanner: "Postmortem surface {{status}}",
     detailTitleFallback: "Postmortem {{id}}",
     detailDescription: "Postmortem detail for {{id}}.",

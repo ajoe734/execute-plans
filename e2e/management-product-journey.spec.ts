@@ -430,7 +430,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.getByText(/Loading postmortems|載入事後檢討中/i)).toBeHidden({ timeout: 15_000 });
     await expect(
       page.locator("main tbody tr").first().or(
-        page.getByText(/No postmortems recorded|尚無事後檢討紀錄|No incident postmortems recorded|Could not load postmortems|無法載入事後檢討|transport degraded or unavailable/i).first(),
+        page.getByText(/No postmortems recorded|尚無事後檢討紀錄|No incident postmortems recorded|Could not load postmortems|Canonical postmortem transport unavailable|無法載入事後檢討|transport degraded or unavailable/i).first(),
       ).first(),
     ).toBeVisible({ timeout: 15_000 });
 

@@ -310,6 +310,20 @@ function formatPostmortemAuthors(authors: string[], t: ReturnType<typeof useT>):
     .join(", ");
 }
 
+function formatPostmortemRowAuthors(authors: string[] | undefined): string {
+  if (!authors || authors.length === 0) {
+    return "";
+  }
+  const humanAuthors = authors
+    .map((author) => author.trim())
+    .filter((author) => {
+      if (!author) return false;
+      const normalized = author.toLowerCase().replace(/-/g, "_");
+      return normalized !== "postmortem_draft_worker";
+    });
+  return humanAuthors.join(", ");
+}
+
 function formatPostmortemRootCause(rawRootCause: string | undefined, t: ReturnType<typeof useT>): string {
   const trimmed = (rawRootCause ?? "").trim();
   if (
@@ -683,7 +697,7 @@ export const PostmortemLibraryPage = () => {
         {listStatus === "error" && (
           <Card role="alert" data-testid="postmortem-list-error" className="p-4 mb-4 border-status-failed/40 bg-status-failed/5 text-xs text-status-failed flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
-            {t("postmortem.listError")}{listError ? ` ${listError}` : ""}
+            {t("postmortem.listError", { defaultValue: "Canonical postmortem transport unavailable." })}{listError ? ` ${listError}` : ""}
           </Card>
         )}
         {listDegraded && (
@@ -729,6 +743,7 @@ export const PostmortemLibraryPage = () => {
                   items.map((row) => {
                     const { at, kind } = displayedAt(row);
                     const titleDisplay = formatPostmortemTitle(row.title, t, row.binding_id);
+                    const rowAuthorLabel = formatPostmortemRowAuthors(row.author_ids);
                     const timeLabel = kind === "published"
                       ? t("postmortem.publishedAt", { defaultValue: "Published" })
                       : t("postmortem.createdAt", { defaultValue: "Created" });
@@ -763,6 +778,18 @@ export const PostmortemLibraryPage = () => {
                                     title={titleDisplay.secondary}
                                   >
                                     {titleDisplay.secondary}
+                                  </span>
+                                </>
+                              )}
+                              {rowAuthorLabel && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span
+                                    className="truncate"
+                                    data-testid="postmortem-secondary-author"
+                                    title={rowAuthorLabel}
+                                  >
+                                    {rowAuthorLabel}
                                   </span>
                                 </>
                               )}

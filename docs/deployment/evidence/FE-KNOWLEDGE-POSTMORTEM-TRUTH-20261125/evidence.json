@@ -59,7 +59,7 @@
     "AC3_postmortem_plain_title_secondary_ids_incident_link_plain_root_cause_collapsed_technical_kv_translated_labels_and_no_review_flow_notice": {
       "passed": true,
       "details": [
-        "formatPostmortemTitle and plainPostmortemTitle strip the automatic 'Postmortem draft:' / '事後檢討草稿：' prefix and translate recorded drift kinds (runtime_state, drawdown, fill_price, duplicate_execution, rolling_drawdown_multiple, and all tradeJourneys/enumLabels kinds) and downstream degradation service names into plain zh-TW and en-US titles, rendering binding_id or service slug as secondary text (data-testid='postmortem-secondary-context') and keeping raw text in secondary for unknown kinds.",
+        "formatPostmortemTitle and plainPostmortemTitle strip the automatic 'Postmortem draft:' / '事後檢討草稿：' prefix and translate recorded drift kinds (runtime_state, drawdown, fill_price, duplicate_execution, rolling_drawdown_multiple, and all tradeJourneys/enumLabels kinds) and downstream degradation service names into plain zh-TW and en-US titles, rendering binding_id or service slug as secondary text (data-testid='postmortem-secondary-context'), keeping raw text in secondary for unknown kinds, and rendering human authors (non-automatic-draft authors) as secondary text (data-testid='postmortem-secondary-author') in the list row.",
         "Each row renders a direct Link to /management/incidents/:incident_id (data-testid='postmortem-incident-link') with the incident_id as secondary text (data-testid='postmortem-secondary-incident-id') and the created/published timestamp.",
         "formatPostmortemRootCause replaces the machine pending sentence ('Draft generated from resolved incident ...; root cause pending analysis.') with localized plain text ('Root cause has not been analysed yet.' / '尚未分析根因。').",
         "partitionContributingFactors and resolveClusterDisplay translate structured contributing factors (incident_severity, incident_cluster_id including all recorded drift:* kinds such as drift:runtime_state, drift:drawdown, drift:fill_price, drift:duplicate_execution, drift:rolling_drawdown_multiple, and infrastructure:*, plus plain incident_evidence_summary) into localized labels in zh-TW and en-US, keeping unknown cluster raw tokens as secondary text (data-testid='postmortem-factor-secondary') and all raw key=value strings and technical identifiers inside a collapsed-by-default <details data-testid='postmortem-technical-details'> section.",
@@ -75,7 +75,7 @@
         "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/postmortems-detail-1274x627.png"
       ],
       "details": [
-        "All loading, empty, and error texts in KnowledgeInbox.tsx and PostmortemLibrary.tsx are localized in zh-TW.ts and en-US.ts with 1:1 global key symmetry verified by src/lib/v5/management/__tests__/i18nParity.test.ts.",
+        "All loading, empty, and error texts in KnowledgeInbox.tsx and PostmortemLibrary.tsx are localized in zh-TW.ts and en-US.ts (with postmortem.listError in en-US.ts and its defaultValue set to 'Canonical postmortem transport unavailable.') with 1:1 global key symmetry verified by src/lib/v5/management/__tests__/i18nParity.test.ts.",
         "At 1274x627 in real Chromium, the postmortem table uses table-fixed with constrained percentage column widths (42% / 11% / 22% / 25%) so table.scrollWidth <= card.clientWidth (no horizontal scroll and the Time column is never cut off), every row is <= 80px high (measured 53px), and <main> is the single vertical scroll area."
       ]
     },

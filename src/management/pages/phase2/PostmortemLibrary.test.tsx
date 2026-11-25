@@ -147,6 +147,7 @@ describe("PostmortemLibraryPage", () => {
       postmortem_id: "pm-page-3",
       title: "Postmortem analysis: execution slippage alert: page-3-row",
       status: "published",
+      author_ids: ["alice"],
     });
 
     const fetchSpy = vi.spyOn(transport, "bffFetch").mockImplementation(async (req) => {
@@ -185,6 +186,7 @@ describe("PostmortemLibraryPage", () => {
 
     expect(await screen.findByText("Downstream service degradation")).toBeInTheDocument();
     expect(screen.getByTestId("postmortem-secondary-context")).toHaveTextContent("page-1-row");
+    expect(screen.queryByTestId("postmortem-secondary-author")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Postmortem draft:/i)).not.toBeInTheDocument();
     expect(screen.getByTestId("postmortem-total-count")).toHaveTextContent("2027 postmortems");
     expect(fetchSpy).toHaveBeenNthCalledWith(1, {
@@ -212,6 +214,7 @@ describe("PostmortemLibraryPage", () => {
     // Advance to page 3 (last page)
     fireEvent.click(nextBtn);
     expect(await screen.findByText("Postmortem analysis: execution slippage alert: page-3-row")).toBeInTheDocument();
+    expect(screen.getByTestId("postmortem-secondary-author")).toHaveTextContent("alice");
     expect(fetchSpy).toHaveBeenNthCalledWith(3, {
       method: "GET",
       path: "/api/v1/postmortems",
@@ -666,7 +669,9 @@ describe("PostmortemLibraryPage", () => {
     await act(async () => {
       await i18n.changeLanguage("en-US");
     });
-    expect(screen.getByTestId("postmortem-list-error")).toHaveTextContent("Could not load postmortems.");
+    expect(screen.getByTestId("postmortem-list-error")).toHaveTextContent(
+      "Canonical postmortem transport unavailable.",
+    );
   });
 
   it("issues the list read on first render under a production build (real transport, only fetch stubbed)", async () => {
