@@ -1,0 +1,138 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125",
+  "taskId": "FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125",
+  "title": "Knowledge inbox leaves the menu until it has sources and postmortems read in plain words",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125",
+  "base_commit": "a013f969130d1d2fbf78f4dc74323ee0fa794da0",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T16:58:00Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
+    "hosted_read_only_diagnosis": "2026-11-25 06:35Z to 07:16Z on BFF adc027da9: GET /bff/knowledge returned meta.status ok while surfaces knowledge_inbox_insights and knowledge_inbox_memory were unavailable with source missing (pinned by BFF-KNOWLEDGE-EMPTY-NOT-UNAVAILABLE-20261105), causing the frontend to claim 'Inbox zero.' while exposing four promote buttons without an executing owner; /management/postmortems mixed 5355 infrastructure-health/monitor-agent drafts with 103 strategy drafts and displayed 'Postmortem draft:' prefixes, machine root-cause sentences, and raw key=value strings."
+  },
+  "modified_surfaces": [
+    "src/management/pages/phase2/KnowledgeInbox.tsx",
+    "src/management/pages/phase2/KnowledgeInbox.test.tsx",
+    "src/management/navigation/managementRouteManifest.ts",
+    "src/management/navigation/managementRouteManifest.test.ts",
+    "scripts/lib/management-routes.mjs",
+    "src/management/pages/phase2/PostmortemLibrary.tsx",
+    "src/management/pages/phase2/PostmortemLibrary.test.tsx",
+    "src/lib/bff-v1/postmortemClient.ts",
+    "src/lib/bff-v1/postmortemClient.test.ts",
+    "src/management/__tests__/fullOperationAssembly.test.tsx",
+    "e2e/21-management-canonical-reads.spec.ts",
+    "e2e/management-product-journey.spec.ts",
+    "docs/console-cleanup-2026-06-15.md",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/knowledge-inbox-1274x627.png",
+    "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/postmortems-list-1274x627.png",
+    "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/postmortems-detail-1274x627.png",
+    "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_knowledge_inbox_removed_from_menu_lists_unconnected_or_failed_sources_and_removes_promote_buttons": {
+      "passed": true,
+      "details": [
+        "Removed the 'knowledge' entry from MANAGEMENT_SIDEBAR_GROUPS in src/management/navigation/managementRouteManifest.ts, which serves as the single source of truth for both the management sidebar (ManagementLayout.tsx) and the command palette static jump-to entries (CommandPalette.tsx).",
+        "Changed '/management/knowledge' in scripts/lib/management-routes.mjs from kind 'nav' to kind 'detail-or-alias' so the direct route stays in the crawl inventory while not being expected in live sidebar navigation.",
+        "KnowledgeInbox.tsx extracts source status issues from meta.surfaces (knowledge_inbox_notes, knowledge_inbox_insights, knowledge_inbox_memory, plus fallback degraded_sources), listing each source that is not connected (source === 'missing') or failed (status !== 'ok' / source === 'unavailable') with localized labels in zh-TW and en-US.",
+        "KnowledgeInbox.tsx renders data-testid='knowledge-inbox-empty' only when every source was read (!isUnavailable and sourceIssues.length === 0) and items.length === 0.",
+        "Removed all four NonProductionActionButton promote/dismiss buttons without an executing owner from KnowledgeInbox.tsx."
+      ]
+    },
+    "AC2_postmortem_list_strategy_default_and_system_incidents_toggle_with_hidden_infrastructure_count": {
+      "passed": true,
+      "details": [
+        "postmortemClient.ts supports include_infrastructure in PostmortemListQuery (sending include_infrastructure='true' only when enabled) and normalizes meta.hidden_infrastructure_count (preserving non-negative integer, null, or undefined when absent).",
+        "PostmortemLibrary.tsx shows strategy incidents by default (includeInfrastructure=false) and renders a toggle button (data-testid='postmortem-infra-toggle') showing meta.hidden_infrastructure_count when a non-negative number is present (e.g. 'Show system incidents (5355)' / '顯示系統異常草稿（5355）').",
+        "When meta.hidden_infrastructure_count is null or absent, the toggle shows no number ('Show system incidents' / '顯示系統異常草稿') and the page remains fully usable."
+      ]
+    },
+    "AC3_postmortem_plain_title_secondary_ids_incident_link_plain_root_cause_collapsed_technical_kv_translated_labels_and_no_review_flow_notice": {
+      "passed": true,
+      "details": [
+        "formatPostmortemTitle and plainPostmortemTitle strip the automatic 'Postmortem draft:' / '事後檢討草稿：' prefix and translate recorded drift kinds (runtime_state, drawdown, fill_price, duplicate_execution, rolling_drawdown_multiple, and all tradeJourneys/enumLabels kinds) and downstream degradation service names into plain zh-TW and en-US titles, rendering binding_id or service slug as secondary text (data-testid='postmortem-secondary-context'), keeping raw text in secondary for unknown kinds, and rendering human authors (non-automatic-draft authors) as secondary text (data-testid='postmortem-secondary-author') in the list row.",
+        "Each row renders a direct Link to /management/incidents/:incident_id (data-testid='postmortem-incident-link') with the incident_id as secondary text (data-testid='postmortem-secondary-incident-id') and the created/published timestamp.",
+        "formatPostmortemRootCause replaces the machine pending sentence ('Draft generated from resolved incident ...; root cause pending analysis.') with localized plain text ('Root cause has not been analysed yet.' / '尚未分析根因。').",
+        "partitionContributingFactors and resolveClusterDisplay translate structured contributing factors (incident_severity, incident_cluster_id including all recorded drift:* kinds such as drift:runtime_state, drift:drawdown, drift:fill_price, drift:duplicate_execution, drift:rolling_drawdown_multiple, and infrastructure:*, plus plain incident_evidence_summary) into localized labels in zh-TW and en-US, keeping unknown cluster raw tokens as secondary text (data-testid='postmortem-factor-secondary') and all raw key=value strings and technical identifiers inside a collapsed-by-default <details data-testid='postmortem-technical-details'> section.",
+        "Contributing factor labels, default follow-up action items ('Complete root cause analysis', 'Validate remediation against linked telemetry and reconciliation evidence'), author ('postmortem-draft-worker'), and deployment stage ('paper', 'live', 'research', 'canary', 'shadow') are translated in zh-TW and en-US.",
+        "Both the page header bar (data-testid='postmortem-no-review-flow-notice') and the draft detail sheet (data-testid='postmortem-detail-draft-notice') state that postmortem drafts are read-only and have no review or publish flow connected yet."
+      ]
+    },
+    "AC4_i18n_parity_1274x627_row_height_single_vertical_scroll_area_and_screenshots": {
+      "passed": true,
+      "screenshots": [
+        "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/knowledge-inbox-1274x627.png",
+        "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/postmortems-list-1274x627.png",
+        "docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125/postmortems-detail-1274x627.png"
+      ],
+      "details": [
+        "All loading, empty, and error texts in KnowledgeInbox.tsx and PostmortemLibrary.tsx are localized in zh-TW.ts and en-US.ts (with postmortem.listError in en-US.ts and its defaultValue set to 'Canonical postmortem transport unavailable.') with 1:1 global key symmetry verified by src/lib/v5/management/__tests__/i18nParity.test.ts.",
+        "At 1274x627 in real Chromium, the postmortem table uses table-fixed with constrained percentage column widths (42% / 11% / 22% / 25%) so table.scrollWidth <= card.clientWidth (no horizontal scroll and the Time column is never cut off), every row is <= 80px high (measured 53px), and <main> is the single vertical scroll area."
+      ]
+    },
+    "AC5_no_weakened_tests_and_changed_assertions_justified": {
+      "passed": true,
+      "changed_assertions_justification": [
+        {
+          "file": "src/management/pages/phase2/PostmortemLibrary.test.tsx",
+          "change": "Updated row title expectations in AC1, AC2, and AC4 tests from 'Postmortem draft: BFF downstream degradation: ...' to plain localized 'Downstream service degradation' / 'Downstream service degradation: Training session' / '下游服務連線異常：訓練工作階段服務' with the service/row token in secondary text (plus asserting 'Postmortem draft:' is absent), and updated the AC4 detail root-cause expectation from the raw machine sentence 'Draft generated from resolved incident inc-training-session-001; root cause pending analysis.' to 'Root cause has not been analysed yet.' / '尚未分析根因。' (plus asserting the raw machine sentence is absent).",
+          "reason": "Per AC3, a postmortem row now shows a plain localized title without the 'Postmortem draft:' prefix and keeps raw service/binding tokens as secondary text, and the detail view says the root cause is not analysed yet instead of the machine sentence."
+        },
+        {
+          "file": "e2e/management-product-journey.spec.ts",
+          "change": "Expanded the Postmortem loading and empty/error regexes at lines 430-435 to match the localized zh-TW and en-US strings ('No postmortems recorded' / '尚無事後檢討紀錄' / 'Could not load postmortems' / '無法載入事後檢討' / '載入事後檢討中').",
+          "reason": "Per AC4, loading, empty, and error texts on PostmortemLibraryPage are now localized in zh-TW and en-US."
+        }
+      ]
+    }
+  },
+  "validation": [
+    {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0,
+      "result": "passed (0 errors)"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/pages/phase2/KnowledgeInbox.test.tsx src/management/navigation/managementRouteManifest.test.ts src/lib/bff-v1/postmortemClient.test.ts src/management/pages/phase2/PostmortemLibrary.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/test/accept-management-route-attribution.test.ts src/test/accept-management-honest-not-found.test.ts",
+      "exit_code": 0,
+      "result": "9 test files passed, 149 tests passed (including StrictLiveManagementSurfaces PostmortemLibraryPage author and transport error assertions)"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000",
+      "exit_code": 1,
+      "result": "290 of 292 test files passed (3501 of 3503 tests passed); 2 out-of-scope concurrency/close-timing failures documented in residual_findings, with ResearchDetail.test.tsx passing 12/12 standalone"
+    },
+    {
+      "command": "./node_modules/.bin/playwright test e2e/21-management-canonical-reads.spec.ts -g FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125",
+      "exit_code": 0,
+      "result": "1 passed (knowledge inbox + postmortem truth with 1274x627 table-fixed layout, plain drift/service titles, and refreshed screenshots)"
+    }
+  ],
+  "diff_budget_note": "scripts/git/diff_budget.py is a pantheon-repo script and does not exist in execute-plans; git diff --shortstat origin/dev reports 19 scoped files changed across product, i18n, unit/e2e tests, and 1274x627 evidence screenshots.",
+  "runtime_budget": {
+    "persistent_product_writers": 0,
+    "recurring_jobs": 0,
+    "added_tables_files_caches": 0
+  },
+  "residual_findings": [
+    {
+      "file": "src/management/pages/ResearchDetail.test.tsx",
+      "line": 129,
+      "description": "Under high host CPU contention, 'await waitFor(() => expect(screen.getByText(\"Management research context\")).toBeInTheDocument())' resolves when researchGet renders the section title before personaFleetGet finishes, causing the subsequent synchronous 'expect(screen.getByText(\"TW-Index-Arbitrage\"))' to race by one tick; passes 12/12 standalone."
+    },
+    {
+      "file": "src/test/persona-strategy-hosted-readonly.test.ts",
+      "line": 1040,
+      "description": "In 'completes full Trading Pulse acceptance roundtrips at 1440px and 390px', the inline fixture fires an unawaited trailing fetch('/bff/management/trading-pulse/rankings') on return navigation that can race context teardown at zh-TW/390 ('Target page, context or browser has been closed')."
+    }
+  ]
+}

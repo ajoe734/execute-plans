@@ -64,7 +64,7 @@ export const BASELINE_ROUTES = [
   { path: "/management/governance/permissions", kind: "nav" },
   { path: "/management/governance/memory", kind: "nav" },
   { path: "/management/governance/consult", kind: "nav" },
-  { path: "/management/knowledge", kind: "nav" },
+  { path: "/management/knowledge", kind: "detail-or-alias" },
   { path: "/management/postmortems", kind: "nav" },
   { path: "/management/tools", kind: "nav" },
   { path: "/management/mcp", kind: "nav" },
