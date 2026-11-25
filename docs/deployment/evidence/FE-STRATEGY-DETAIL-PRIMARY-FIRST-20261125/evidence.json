@@ -1,0 +1,121 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-STRATEGY-DETAIL-PRIMARY-FIRST-20261125",
+  "taskId": "FE-STRATEGY-DETAIL-PRIMARY-FIRST-20261125",
+  "title": "Strategy detail loads its own data first and the rest after it is shown",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-STRATEGY-DETAIL-PRIMARY-FIRST-20261125",
+  "base_commit": "62ed222ba6bba5bf963290ab9df7450f9e494ecc",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T15:20:00Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
+    "hosted_read_only_diagnosis": "2026-11-25 06:35Z to 07:16Z on BFF adc027da9 and after Root 45603700953 (BFF c3164945a; FE 38e5337d1) at 13:35Z: GET /bff/strategies/strategy-persona-a81b4fd15944698341aa alone took 2.4 to 5.3 s, but on the page took 6.5 s because eleven secondary reads started at the exact same moment as the primary read."
+  },
+  "modified_surfaces": [
+    "src/management/pages/StrategyDetail.tsx",
+    "src/management/pages/StrategyDetail.test.tsx",
+    "src/management/__tests__/fullOperationAssembly.test.tsx",
+    "e2e/06-entity-registry.spec.ts",
+    "docs/deployment/evidence/FE-STRATEGY-DETAIL-PRIMARY-FIRST-20261125/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_primary_first_and_lazy_tab_loading": {
+      "passed": true,
+      "details": [
+        "useLiveDetail in StrategyDetail.tsx now sends only bffV1.strategies.get(entityId) first without firing any secondary reads while the primary read is in flight.",
+        "Secondary reads are triggered via TabSectionLoader only after the primary strategy read resolves and renders the page, and each tab-only section (Experiments, Risk & Alerts, Incidents, Artifacts, Evolution, Governance, Lineage, Audit, Spec versions, Data & Features, Performance, Paper-Live) loads only when its tab is opened and retains its own loading and unavailable state."
+      ]
+    },
+    "AC2_jobs_and_artifacts_omitted_on_overview_and_no_zero_tab_counts": {
+      "passed": true,
+      "details": [
+        "The bffV1.jobs.list() read had no consumer on StrategyDetail since commit dafaa23e1 (the page shows no jobs section), so the read is removed.",
+        "Neither bffV1.artifacts.list() nor managementConsoleReads.lineage(entityId) is sent on the overview tab. Opening the Artifacts tab loads lineage and artifacts on open and filters to this strategy's lineage artifact IDs; tab labels do not show zero counts from unrequested reads."
+      ]
+    },
+    "AC3_refresh_keeps_shown_data_and_404_unavailable_unchanged": {
+      "passed": true,
+      "details": [
+        "Live refreshes and realtime events keep the currently displayed strategy data and any ready section data without blanking the page.",
+        "Failed secondary reads never blank the page, and existing 404 ('找不到策略'), 503, network error, and unavailable strategy payload behaviors remain unchanged."
+      ]
+    },
+    "AC4_request_order_test_browser_overview_requests_and_locale_parity": {
+      "passed": true,
+      "details": [
+        "StrategyDetail.test.tsx proves via a deferred primary strategy read that callOrder is strictly ['strategies.get'] while primary is pending, ['strategies.get', 'watchers.forSubject', 'decisionJournal.forSubject'] once the overview renders, and that tab-only reads fire only when their tab is opened.",
+        "e2e/06-entity-registry.spec.ts verifies in Chromium that opening /management/strategies/strategy-persona-a81b4fd15944698341aa sends only shell reads (GET /bff/me, GET /bff/actions, GET /bff/events/stream, GET /bff/management/shell-summary), the primary read (GET /bff/strategies/strategy-persona-a81b4fd15944698341aa), and after the primary read answers, the single overview secondary HTTP read (GET /bff/agora/journal), with zero requests before primary answers and zero requests to /bff/jobs, /bff/artifacts, or /bff/management/lineage on overview.",
+        "Locale parity passes across all 17 tests in src/lib/v5/management/__tests__/i18nParity.test.ts."
+      ]
+    },
+    "AC5_no_weakened_tests_and_justified_assertions": {
+      "passed": true,
+      "details": [
+        "No existing test was weakened or deleted across the 7 scoped StrategyDetail test files (42/42 tests pass) or fullOperationAssembly.test.tsx (16/16 tests pass).",
+        "Justification for changed assertions in src/management/__tests__/fullOperationAssembly.test.tsx lines 152-183: StrategyDetail has had no jobs consumer or jobs section since commit dafaa23e1, and AC1/AC2 require omitting jobs on StrategyDetail, starting overview secondary reads after the primary strategy read renders, and loading tab-only sections only when their tab is opened. Accordingly, fullOperationAssembly.test.tsx awaits findByText('Journal still available') / findByRole('alert') after the primary 'Surviving strategy' read renders, keeps all seven tab-backed sources (audit -> audit, approvals -> governance, alerts -> risk, incidents -> incidents, artifacts -> artifacts, research -> experiments, evolution -> evolution) and asserts the failure alert after opening their tab, and asserts for jobs that bffV1.jobs.list is not called."
+      ]
+    }
+  },
+  "overview_browser_requests": {
+    "shell_reads": [
+      "GET /bff/me",
+      "GET /bff/actions",
+      "GET /bff/events/stream",
+      "GET /bff/management/shell-summary"
+    ],
+    "primary_read": [
+      "GET /bff/strategies/strategy-persona-a81b4fd15944698341aa"
+    ],
+    "secondary_reads_before_primary_answered": [],
+    "secondary_reads_after_primary_answered_on_overview": [
+      "GET /bff/agora/journal"
+    ],
+    "omitted_on_overview": [
+      "GET /bff/jobs",
+      "GET /bff/artifacts",
+      "GET /bff/management/lineage",
+      "GET /bff/research-tasks",
+      "GET /bff/alerts",
+      "GET /bff/incidents",
+      "GET /bff/evolution-programs",
+      "GET /bff/approvals",
+      "GET /bff/audit"
+    ]
+  },
+  "validation": [
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit",
+      "exit_code": 0,
+      "result": "passed (0 errors)"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/__tests__/fullOperationAssembly.test.tsx src/management/pages/StrategyDetail.test.tsx src/management/pages/StrategyDetail.spec.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/StrategyDetail.discovery.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "result": "9 test files passed, 75 tests passed"
+    },
+    {
+      "command": "./node_modules/.bin/playwright test e2e/06-entity-registry.spec.ts --grep \"renders StrategyDetail header and recorded pool rules within 2 s\" && ./node_modules/.bin/playwright test e2e/13-agora.spec.ts",
+      "exit_code": 0,
+      "result": "4 passed (1 in 06-entity-registry.spec.ts in 1.4 s, 3 in 13-agora.spec.ts)"
+    }
+  ],
+  "runtime_budget": {
+    "persistent_product_writers": 0,
+    "recurring_jobs": 0,
+    "added_tables_files_caches": 0
+  },
+  "residual_findings": [
+    {
+      "file": "src/management/pages/ResearchDetail.test.tsx",
+      "lines": "128-129",
+      "introduced_by": "63745a0cb (FE-RESEARCH-OPERATOR-READABILITY-20261122)",
+      "symptom": "Intermittent Vitest race in ResearchDetail.test.tsx ('renders Persona Fleet research context for OODA Orient detail links'): Unable to find an element with the text: TW-Index-Arbitrage (observed in Branch CI Gate push run 45636946512 job 139291866740 while pull_request run 45636963349 job 139292206959 passed).",
+      "cause": "ResearchDetail.tsx defers mgmt.personaFleet.get() to useEffect([id, isResearch]) after the primary bffV1.research.get(id) read renders 'Management research context'. Line 128 awaits waitFor(() => expect(screen.getByText('Management research context')).toBeInTheDocument()) and line 129 synchronously asserts expect(screen.getByText('TW-Index-Arbitrage')).toBeInTheDocument() before setFleetRows is guaranteed to have flushed under high CPU load."
+    }
+  ]
+}
