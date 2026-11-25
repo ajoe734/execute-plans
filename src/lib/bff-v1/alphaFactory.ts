@@ -84,6 +84,10 @@ export type AlphaFactoryCount =
 export type AlphaFactoryCounts = Record<AlphaFactoryCountKey, AlphaFactoryCount>;
 
 export interface AlphaFactoryPipelineData extends AlphaFactoryData {
+  discovered: AlphaFactoryAdmissionCard[];
+  scaffolded: AlphaFactoryAdmissionCard[];
+  replicated: AlphaFactoryAdmissionCard[];
+  items: AlphaFactoryAdmissionCard[];
   pipeline: {
     discovered: AlphaFactoryPipelineItem[];
     scaffolded: AlphaFactoryPipelineItem[];
@@ -94,6 +98,7 @@ export interface AlphaFactoryPipelineData extends AlphaFactoryData {
 
 export interface AlphaFactoryPipelineEnvelope extends AlphaFactoryEnvelope {
   data: AlphaFactoryPipelineData;
+  items: AlphaFactoryAdmissionCard[];
 }
 
 const PIPELINE_KINDS = new Set<string>(["research_demand", "hypothesis_card", "template_search"]);
@@ -130,10 +135,13 @@ export function normalizeAlphaFactoryPipelineItem(raw: unknown): AlphaFactoryPip
     tried_families: strings(lacking.tried_families ?? record.tried_families),
     since: cleanString(record.since ?? record.created_at),
     status: cleanString(record.status ?? latest.status),
-    latest_reason_code: isSearch
-      ? cleanString(record.reason_code)
-      : cleanString(latest.reason_code),
-    latest_reason: isSearch ? cleanString(record.reason) : cleanString(latest.reason),
+    // `latest_reason_code` / `latest_reason` keep an already normalized item intact.
+    latest_reason_code:
+      cleanString(record.latest_reason_code) ??
+      (isSearch ? cleanString(record.reason_code) : cleanString(latest.reason_code)),
+    latest_reason:
+      cleanString(record.latest_reason) ??
+      (isSearch ? cleanString(record.reason) : cleanString(latest.reason)),
     attempt_count: nullableInt(record.attempt_count ?? record.attemptCount),
     latest_run_id: cleanString(record.latest_run_id ?? record.latestRunId),
     latest_at: cleanString(record.latest_at ?? record.latestAt),
@@ -698,11 +706,11 @@ function isGenericRegistryMockFallback(raw: unknown): boolean {
 function normalizeCardsForLane(
   rawList: unknown[] | undefined,
   lane: AlphaFactoryLaneId,
-): AlphaFactoryCard[] {
+): AlphaFactoryAdmissionCard[] {
   if (!Array.isArray(rawList)) return [];
   return rawList
     .map((item) => normalizeAlphaFactoryCard(item, lane))
-    .filter((card): card is AlphaFactoryCard => Boolean(card) && card.lane === lane);
+    .filter((card): card is AlphaFactoryAdmissionCard => Boolean(card) && card.lane === lane);
 }
 
 function rawLaneList(
@@ -771,7 +779,7 @@ export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryPipelin
       if (!rec || !laneName || !VALID_LANES.has(laneName as AlphaFactoryLaneId)) return undefined;
       return normalizeAlphaFactoryCard(rec);
     })
-    .filter((card): card is AlphaFactoryCard => Boolean(card));
+    .filter((card): card is AlphaFactoryAdmissionCard => Boolean(card));
 
   const discovered = Array.isArray(data.discovered)
     ? normalizeCardsForLane(data.discovered, "discovered")
@@ -791,13 +799,19 @@ export function normalizeAlphaFactoryEnvelope(raw: unknown): AlphaFactoryPipelin
       ? normalizeCardsForLane(replicatedLaneRec.items, "replicated")
       : flatNormalized.filter((card) => card.lane === "replicated");
 
+  // An already normalized envelope keeps its pipeline items under `data.pipeline`.
+  const normalizedPipeline = asRecord(data.pipeline);
   const pipelineDiscovered = normalizePipelineItems(
-    rawLaneList(data, discoveredLaneRec, "discovered"),
+    Array.isArray(normalizedPipeline?.discovered)
+      ? normalizedPipeline.discovered
+      : rawLaneList(data, discoveredLaneRec, "discovered"),
     flatRawItems,
     "discovered",
   );
   const pipelineScaffolded = normalizePipelineItems(
-    rawLaneList(data, scaffoldedLaneRec, "scaffolded"),
+    Array.isArray(normalizedPipeline?.scaffolded)
+      ? normalizedPipeline.scaffolded
+      : rawLaneList(data, scaffoldedLaneRec, "scaffolded"),
     flatRawItems,
     "scaffolded",
   );

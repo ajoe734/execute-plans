@@ -4188,7 +4188,7 @@ export default {
       researchItem: "開啟研究項目",
     },
     admission: {
-      attemptTitle: "回測驗證嘗試（{{status}}）",
+      attemptTitle: "回測驗證嘗試",
       passedTitle: "已通過驗證的策略候選",
       documentTitle: "文件檢查紀錄",
     },
@@ -4198,7 +4198,6 @@ export default {
       queued: "已排入",
       running: "執行中",
       completed: "已完成",
-      not_queued: "尚未排入",
     },
     documentChecked: {
       title: "測試與文件檢查紀錄（{{count}}）",

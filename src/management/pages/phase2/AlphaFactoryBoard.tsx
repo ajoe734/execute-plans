@@ -74,7 +74,7 @@ function includes(list: readonly string[], value: string | null | undefined): va
 }
 
 /** Plain text for a failure code; the raw code is returned only when the code is unknown. */
-export function alphaReasonText(code: string | null | undefined, t: TFn): { text: string; raw: string | null } | null {
+function alphaReasonText(code: string | null | undefined, t: TFn): { text: string; raw: string | null } | null {
   const raw = code?.trim();
   if (!raw) return null;
   const token = raw.split(":").map((part) => part.trim()).reverse().find((part) => includes(KNOWN_REASON_CODES, part));
@@ -223,7 +223,7 @@ function PipelineItemCard({
   const failed = item.kind === "template_search" && item.outcome?.toLowerCase() !== "completed";
 
   return (
-    <Card data-testid={`alpha-factory-item-${item.id}`} data-kind={item.kind} className="p-3 min-w-0 space-y-1.5">
+    <Card data-testid={`alpha-factory-item-${item.id}`} data-kind={item.kind} data-af-card="pipeline" className="p-3 min-w-0 space-y-1.5">
       <div className={`text-sm font-medium ${WRAP}`} data-testid={`alpha-factory-item-title-${item.id}`}>
         {title}
       </div>
@@ -304,16 +304,13 @@ function AdmissionCard({ c, col }: { c: AlphaFactoryAdmissionCard; col: AlphaFac
       ? t("alphaFactory.admission.passedTitle")
       : col === "document_checked"
         ? t("alphaFactory.admission.documentTitle")
-        : t("alphaFactory.admission.attemptTitle", {
-            status: c.queue_status
-              ? t(`alphaFactory.queueStatus.${c.queue_status}`, { defaultValue: c.queue_status })
-              : t("alphaFactory.queueStatus.not_queued"),
-          });
+        : t("alphaFactory.admission.attemptTitle");
   const docReason = col === "document_checked" ? documentCheckText(c.document_check_reason, t) : null;
 
   return (
     <Card
       data-testid={`alpha-factory-card-${c.id}`}
+      data-af-card={col}
       className={`p-3 min-w-0 transition ${col === "replicated" && strategyHref ? "hover:border-accent cursor-pointer" : ""}`}
       onClick={() => {
         if (col === "replicated" && strategyHref) nav(strategyHref);
@@ -359,6 +356,14 @@ function AdmissionCard({ c, col }: { c: AlphaFactoryAdmissionCard; col: AlphaFac
       )}
 
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">{t("alphaFactory.card.queueStatus")}</dt>
+          <dd className={WRAP} data-testid={`alpha-factory-card-queue-${c.id}`}>
+            {c.queue_status
+              ? t(`alphaFactory.queueStatus.${c.queue_status}`, { defaultValue: c.queue_status })
+              : t("alphaFactory.card.notReported")}
+          </dd>
+        </div>
         <div className="min-w-0">
           <dt className="text-muted-foreground">{t("alphaFactory.card.approvedAt")}</dt>
           <dd className={`text-mono ${WRAP}`}>{notReported(c.approved_at)}</dd>

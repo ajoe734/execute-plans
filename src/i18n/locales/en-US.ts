@@ -4206,7 +4206,7 @@ export default {
       researchItem: "Open research items",
     },
     admission: {
-      attemptTitle: "Backtest validation attempt ({{status}})",
+      attemptTitle: "Backtest validation attempt",
       passedTitle: "Strategy candidate that passed validation",
       documentTitle: "Document-check record",
     },
@@ -4216,7 +4216,6 @@ export default {
       queued: "queued",
       running: "running",
       completed: "completed",
-      not_queued: "not queued yet",
     },
     documentChecked: {
       title: "Test and document-check records ({{count}})",

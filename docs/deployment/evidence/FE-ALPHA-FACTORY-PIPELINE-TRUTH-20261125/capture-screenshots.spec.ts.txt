@@ -1,0 +1,246 @@
+import { expect, test, type Page, type Route } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
+
+// FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125: functional screenshots of /management/alpha-factory at
+// 1280 px and 390 px against a route-mocked fixture BFF shaped like BFF-ALPHA-FACTORY-PIPELINE-TRUTH
+// (hosted facts of 2026-11-25: no pass, failed template searches, four document-check records).
+const EVIDENCE_DIR = "./docs/deployment/evidence/FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125";
+
+function frontendUrl(path = "/"): string {
+  const base =
+    process.env.PANTHEON_FE_BASE_URL ||
+    process.env.FRONTEND_BASE_URL ||
+    process.env.PLAYWRIGHT_BASE_URL ||
+    "http://127.0.0.1:5173";
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+function corsHeaders(route: Route): Record<string, string> {
+  const origin = route.request().headers()["origin"] ?? "*";
+  return {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers":
+      "accept,authorization,content-type,idempotency-key,if-match,x-bff-api-version,x-correlation-id,x-locale,x-request-id,x-tenant-id,x-trace-id",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Expose-Headers": "x-bff-api-version,x-correlation-id,x-request-id",
+  };
+}
+
+async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
+  await route.fulfill({ body: JSON.stringify(body), contentType: "application/json", headers: corsHeaders(route), status });
+}
+
+const admission = (id: string, extra: Record<string, unknown>) => ({
+  id, admission_id: id, tenant_id: "pantheon-dev", status: "admitted", admission_status: "admitted",
+  approver: "pantheon-dev-approver", approved_at: "2026-10-23T02:00:00Z", attempt_count: 0, max_attempts: 2,
+  experiment_run_ids: ["rrun-20261023-001"], authority_task_id: null, last_revalidation_at: null, last_error: null,
+  ...extra,
+});
+
+const discovered = [
+  {
+    id: "rd-20261120-hengyue-effective-bets", lane: "discovered", kind: "research_demand", demand_id: "rd-20261120-hengyue-effective-bets",
+    persona_id: "persona-ee71a9c2f0d84b16", display_name: "衡岳",
+    lacking: { short_measure: "effective_bets", missing_datasets: ["tw_margin_daily", "tw_institutional_flows_daily"], tried_families: ["time_series", "cross_sectional"] },
+    since: "2026-11-20T02:00:00Z", status: "open",
+    latest_outcome: { reason_code: "mandate_universe_missing", reason: "template_search_unavailable:ValueError:mandate_universe_missing" },
+  },
+  {
+    id: "rd-20261122-unnamed-idle", lane: "discovered", kind: "research_demand", demand_id: "rd-20261122-unnamed-idle",
+    persona_id: "persona-0f3d21aa9b7c4e55", display_name: null,
+    lacking: { short_measure: "idle_day_share", missing_datasets: [], tried_families: [] },
+    since: "2026-11-22T05:30:00Z", status: "open", latest_outcome: { reason_code: null, reason: null },
+  },
+];
+
+const scaffolded = [
+  {
+    id: "template-search:rd-20261120-hengyue-effective-bets", lane: "scaffolded", kind: "template_search",
+    demand_id: "rd-20261120-hengyue-effective-bets", persona_id: "persona-ee71a9c2f0d84b16", display_name: "衡岳",
+    attempt_count: 3, latest_run_id: "rrun-20261124-100300-template-search-0002", latest_at: "2026-11-24T10:03:00Z",
+    outcome: "failed", reason_code: "mandate_universe_missing", reason: "template_search_unavailable:ValueError:mandate_universe_missing",
+  },
+  {
+    id: "template-search:rd-20261122-unnamed-idle", lane: "scaffolded", kind: "template_search",
+    demand_id: "rd-20261122-unnamed-idle", persona_id: "persona-0f3d21aa9b7c4e55", display_name: null,
+    attempt_count: 1, latest_run_id: "rrun-20261124-100512-template-search-0003", latest_at: "2026-11-24T10:05:12Z",
+    outcome: "failed", reason_code: "quota_wall_hit_while_compiling_a_very_long_reason_token", reason: "quota_wall_hit_while_compiling_a_very_long_reason_token: provider 429",
+  },
+  admission("adm-scaffolded-2317-tw-official-tw_price_daily-TWSE", {
+    lane: "scaffolded", queue_status: "failed", attempt_count: 2,
+    strategy_id: "strat-tw-official:tw_price_daily:TWSE:2317:9a8b7c6d5e4f3a2b-112233445566",
+    strategy_spec_id: "reg-strategy-spec-tw-official:tw_price_daily:TWSE:2317:9a8b7c6d5e4f3a2b-665544332211",
+    last_error: "survivorship_limited: listing history shorter than 730 calendar days", reason_code: "survivorship_limited",
+  }),
+];
+
+const documentChecked = [
+  admission("adm-src-dev-product-20260913T040439Z-7935481ca72f49629606e01098c3a54e-anchor", {
+    lane: "document_checked", queue_status: "completed", document_check_reason: "no_passing_gate_result",
+    strategy_id: "strat-src-dev-product-20260913T040439Z-7935481ca72f49629606e01098c3a54e-acceptance-7e96a8404f3c",
+  }),
+  admission("adm-spy-anchor", {
+    lane: "document_checked", queue_status: "completed", document_check_reason: "simulation_or_raw_market_seed", mode: "simulation",
+    strategy_id: "strat-src-dev-product-20260913T040439Z-7935481ca72f49629606e01098c3a54e-spy-anchor-7e96a8404f3c",
+  }),
+  admission("adm-h12-01a11", {
+    lane: "document_checked", queue_status: "completed", document_check_reason: "retired", strategy_state: "retired",
+    strategy_id: "strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+  }),
+  admission("adm-2330-daily-draft", {
+    lane: "document_checked", queue_status: "completed", document_check_reason: "no_passing_gate_result",
+    strategy_id: "strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
+  }),
+];
+
+const counts = {
+  collected_text_records: { value: null, status: "unavailable", reason: "no_bounded_owner_read" },
+  dropped_irrelevant: { value: null, status: "unavailable", reason: "no_bounded_owner_read" },
+  hypothesis_cards: { value: null, status: "unavailable", reason: "no_bounded_owner_read" },
+  templates_registered: { value: 182, status: "ok" },
+  templates_evaluated: { value: 0, status: "ok" },
+  searches: { value: 3, status: "ok" },
+  passes: { value: 0, status: "ok" },
+};
+
+const board = {
+  data: {
+    id: "alpha-factory", snapshotAt: "2026-11-25T06:40:00Z", snapshot_at: "2026-11-25T06:40:00Z",
+    lanes: [
+      { id: "discovered", label: "Discovered", items: discovered },
+      { id: "scaffolded", label: "Scaffolded", items: scaffolded },
+      { id: "replicated", label: "Replicated", items: [] },
+    ],
+    discovered, scaffolded, replicated: [], document_checked: documentChecked, counts,
+    items: [...discovered, ...scaffolded], templates: [],
+  },
+  items: [...discovered, ...scaffolded],
+  page_info: { page: 1, page_size: 20, total: discovered.length + scaffolded.length, next_page_token: null },
+  meta: {
+    snapshot_at: "2026-11-25T06:40:00Z",
+    surfaces: {
+      alpha_factory: { status: "ok", source: "research_orchestrator" },
+      alpha_factory_strategy_state: { status: "ok", source: "registry" },
+      alpha_factory_demands: { status: "ok", source: "research_orchestrator" },
+      alpha_factory_runs: { status: "ok", source: "research_orchestrator", runs_seen: 3, truncated: false },
+      alpha_factory_hypothesis_cards: { status: "unavailable", source: "source_ingestion", reason: "no_bounded_owner_read" },
+      alpha_factory_source_records: { status: "unavailable", source: "source_ingestion", reason: "no_bounded_owner_read" },
+      alpha_factory_persona_names: { status: "ok", source: "persona_directory" },
+    },
+    filters: { lane: null },
+  },
+};
+
+async function install(page: Page, writes: string[]): Promise<void> {
+  await page.route(/^https?:\/\/[^/]+\/(?:bff|health|healthz|readyz).*/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (request.method() === "OPTIONS") return route.fulfill({ headers: corsHeaders(route), status: 204 });
+    if (!["GET", "HEAD"].includes(request.method()) && path.includes("alpha-factory")) writes.push(`${request.method()} ${path}`);
+    if (path === "/bff/events/stream") return route.fulfill({ body: ": connected\n\n", contentType: "text/event-stream", headers: corsHeaders(route), status: 200 });
+    if (path === "/health" || path === "/healthz" || path === "/readyz") return fulfillJson(route, { status: "ok", live: true, ready: true });
+    if (path === "/bff/me") {
+      return fulfillJson(route, { data: { environment: { name: "playwright", strict_auth: false }, tenant_id: "pantheon-dev", user: { id: "op-1", roles: ["operator", "reviewer", "approver"] } } });
+    }
+    if (path === "/bff/alpha-factory") return fulfillJson(route, board);
+    return fulfillJson(route, { data: { items: [] }, items: [], meta: { status: "ok" }, page_info: { page_size: 0, total: 0 } });
+  });
+  await installOidcDevLogin(page, { goto: false, roles: ["operator", "reviewer", "approver"], tenantId: "pantheon-dev", token: LOCAL_FIXTURE_AUTH_TOKEN });
+}
+
+/** Every card's content fits inside the card, and nothing on the page sits under the assistant button. */
+async function layoutProblems(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const problems: string[] = [];
+    const cards = Array.from(document.querySelectorAll<HTMLElement>("[data-af-card]")).filter((el) => el.offsetParent !== null);
+    if (cards.length === 0) problems.push("no visible cards");
+    for (const card of cards) {
+      const box = card.getBoundingClientRect();
+      if (card.scrollWidth > card.clientWidth + 1) problems.push(`overflow ${card.dataset.testid} ${card.scrollWidth}>${card.clientWidth}`);
+      for (const child of Array.from(card.querySelectorAll<HTMLElement>("*"))) {
+        const r = child.getBoundingClientRect();
+        if (r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1)) {
+          problems.push(`child outside ${card.dataset.testid}: ${child.tagName} ${(child.textContent ?? "").slice(0, 40)}`);
+          break;
+        }
+      }
+    }
+    if (document.documentElement.scrollWidth > window.innerWidth + 1) problems.push(`page scrolls sideways ${document.documentElement.scrollWidth}>${window.innerWidth}`);
+    const button = document.querySelector<HTMLElement>('button[aria-label="開啟 Management AI"], button[title^="Management AI"]');
+    if (button) {
+      // Scroll every scroll container (the app shell scrolls an inner element) to its end:
+      // content under the button mid-scroll is reachable; at the end nothing may stay under it.
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      let scrolled = window.scrollY > 0;
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
+        const style = getComputedStyle(el);
+        if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1) {
+          el.scrollTop = el.scrollHeight;
+          if (el.scrollTop > 0) scrolled = true;
+        }
+      }
+      // The fixture page is taller than both viewports, so a check that never scrolled proves nothing.
+      if (!scrolled) problems.push("page did not scroll to its end");
+      const b = button.getBoundingClientRect();
+      const content = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="alpha-factory-"]'));
+      for (const el of content) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0 || el.contains(button)) continue;
+        // Only leaf-ish blocks matter; a lane container may legitimately span the button's column.
+        if (el.children.length > 0 && el.querySelector('[data-testid^="alpha-factory-"]')) continue;
+        const overlaps = r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top;
+        if (overlaps) problems.push(`under assistant button: ${el.dataset.testid}`);
+      }
+    } else {
+      problems.push("assistant button not found");
+    }
+    return problems;
+  });
+}
+
+test.describe("FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125", () => {
+  test("alpha factory shows the real pipeline at 1280 px and 390 px", async ({ page }) => {
+    test.skip(targetsExternalE2eEnvironment(), "route-mocked fixture coverage is loopback-only");
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    const writes: string[] = [];
+    await install(page, writes);
+
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.goto(frontendUrl("/management/alpha-factory"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await expect(page.getByTestId("alpha-factory-stage-counts")).toBeVisible();
+      await expect(page.getByTestId("alpha-factory-stage-passes-value")).toHaveText("0");
+      await expect(page.getByTestId("alpha-factory-stage-collected-value")).toContainText("無法取得");
+      await expect(page.getByTestId("alpha-factory-empty-replicated")).toHaveText("目前沒有任何候選通過回測驗證。");
+      await expect(page.getByTestId("alpha-factory-item-title-rd-20261120-hengyue-effective-bets")).toContainText("衡岳 需要：");
+      await expect(page.getByTestId("alpha-factory-source-banner")).not.toContainText("alpha_factory");
+      await page.waitForTimeout(300);
+      expect(await layoutProblems(page), `layout at ${width}px`).toEqual([]);
+      // layoutProblems leaves every scroll container at its end: this shot shows the page bottom.
+      await page.screenshot({ path: `${EVIDENCE_DIR}/alpha-factory-${width}w-bottom.png` });
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) if (el.scrollTop > 0) el.scrollTop = 0;
+      });
+      await page.screenshot({ path: `${EVIDENCE_DIR}/alpha-factory-${width}w.png`, });
+
+      await page.getByTestId("alpha-factory-document-checked").locator("summary").click();
+      await expect(page.getByTestId("alpha-factory-document-checked")).toHaveAttribute("open", "");
+      await page.waitForTimeout(200);
+      expect(await layoutProblems(page), `layout with document checks open at ${width}px`).toEqual([]);
+      await page.screenshot({ path: `${EVIDENCE_DIR}/alpha-factory-${width}w-document-checks-open-bottom.png` });
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) if (el.scrollTop > 0) el.scrollTop = 0;
+      });
+    }
+    expect(writes).toEqual([]);
+  });
+});

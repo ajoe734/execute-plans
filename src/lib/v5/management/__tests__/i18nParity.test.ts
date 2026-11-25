@@ -184,9 +184,25 @@ describe("Pack PM-i18n parity", () => {
       "alphaFactory.col.discovered",
       "alphaFactory.col.scaffolded",
       "alphaFactory.col.replicated",
-      "alphaFactory.replicatedCaption",
-      "alphaFactory.source.surface",
-      "alphaFactory.empty.noCandidateSource",
+      "alphaFactory.caption.discovered",
+      "alphaFactory.caption.scaffolded",
+      "alphaFactory.caption.replicated",
+      "alphaFactory.stages.collected",
+      "alphaFactory.stages.dropped",
+      "alphaFactory.stages.cards",
+      "alphaFactory.stages.templates",
+      "alphaFactory.stages.templatesValue",
+      "alphaFactory.stages.searches",
+      "alphaFactory.stages.passes",
+      "alphaFactory.unavailableCount",
+      "alphaFactory.reasons.mandate_universe_missing",
+      "alphaFactory.reasons.survivorship_limited",
+      "alphaFactory.reasons.below_threshold",
+      "alphaFactory.reasons.dataset_unavailable",
+      "alphaFactory.reasons.unknown",
+      "alphaFactory.documentChecked.title",
+      "alphaFactory.documentChecked.reasons.no_passing_gate_result",
+      "alphaFactory.empty.replicated",
       "alphaFactory.unavailable.title",
       "alphaFactory.unavailable.description",
       "alphaFactory.card.strategyId",
@@ -211,8 +227,14 @@ describe("Pack PM-i18n parity", () => {
     }
     expect(enKeys.has("alphaFactory.replicated.note")).toBe(false);
     expect(zhKeys.has("alphaFactory.replicated.note")).toBe(false);
-    expect(en.alphaFactory.col.replicated).toBe("Admission checks passed");
-    expect(zh.alphaFactory.col.replicated).toBe("已通過准入檢查");
+    // FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125: the passed column means a real backtest pass;
+    // document checks and the internal surface banner / no_candidate_source text are gone.
+    expect(en.alphaFactory.col.replicated).toBe("Passed backtest validation");
+    expect(zh.alphaFactory.col.replicated).toBe("通過回測驗證");
+    for (const legacy of ["alphaFactory.replicatedCaption", "alphaFactory.source.surface", "alphaFactory.empty.noCandidateSource"]) {
+      expect(enKeys.has(legacy), `en still has ${legacy}`).toBe(false);
+      expect(zhKeys.has(legacy), `zh still has ${legacy}`).toBe(false);
+    }
     expect(zh.alphaFactory.subtitle).not.toContain("Scaffolded");
     expect(en.alphaFactory.card.experimentRunCount).toBe("Check runs");
     expect(zh.alphaFactory.card.experimentRunCount).toBe("檢查執行次數");

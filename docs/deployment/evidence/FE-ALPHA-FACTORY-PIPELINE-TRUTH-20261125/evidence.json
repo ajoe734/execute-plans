@@ -1,0 +1,52 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125",
+  "title": "Alpha 工廠頁改成看得懂的流程，測試紀錄不再冒充通過的策略",
+  "owner": "Claude",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125",
+  "register_instance": "RC6",
+  "bff_contract_source": "ajoe734/pantheon PR 7850 (BFF-ALPHA-FACTORY-PIPELINE-TRUTH-20261125), merge commit 6ef1477d5, services/control-plane/bff/BFF_API_CONTRACT.md /bff/alpha-factory section and console_gap/alpha_factory.py",
+  "hosted_verification": "Not done here: no VM/SSH access. Functional evidence only (unit tests plus real Chromium against a route-mocked fixture BFF shaped like the hosted facts of 2026-11-25).",
+  "acceptance_coverage": {
+    "AC1": "StageCounts renders one ordered strip from data.counts: text collected, dropped as irrelevant, hypothesis cards, templates evaluated of registered ('0 of 182 registered' / '0 / 已登錄 182'), searches, passed validation. A count is shown only when status=ok with a numeric value; otherwise 'Unavailable (<plain reason>)' / '無法取得（…）' with known reasons (no_bounded_owner_read, owner_read_failed, reader_unconfigured, demand_scope_mismatch, ...) in plain words and unknown reasons raw. A missing counts object (older BFF) or a value with status unavailable is never shown as 0 (alphaFactoryData.test.ts 'never counts a failed owner read as 0', board test 'older payload without counts').",
+    "AC2": "Pipeline items (kind research_demand / hypothesis_card / template_search) are normalized separately from admissions. Titles: '<persona> needs: <measure>' / '<persona> 需要：<measure>', 'Template search for <persona>: <measure>' (measure joined from the demand), '<source> suggests: <claim>'; the measure uses the existing research.demand.measures labels; persona falls back to 'Persona with no recorded name'. Ids (demand, persona, run) are secondary monospace text. Failed searches and gate attempts show a plain sentence for known reason codes (mandate_universe_missing, survivorship_limited, below_threshold, dataset_unavailable, reason_not_recorded, run_budget_exhausted, template_search_unavailable, owner_credential_unconfigured, no_external_match, retrain_failed; most specific token of a colon code wins) and for an unknown code a generic sentence plus 'Code: <raw>' as secondary text. Demand and search cards link to /management/personas/<persona_id> and the research items page /management/experiments; admission cards link to their strategy and authority experiment.",
+    "AC3": "The passed column renders only data.replicated, which the BFF fills only with an owner-recorded gate pass; empty says 'No candidate has passed backtest validation yet.' / '目前沒有任何候選通過回測驗證。'. When the runs read is unavailable the column says unavailable with its reason instead of 'none passed'. data.document_checked records are in a collapsed <details> named 'Test and document-check records (N)' / '測試與文件檢查紀錄（N）' with a plain reason per record (retired, test_scope, simulation_or_raw_market_seed, no_passing_gate_result, gate_result_unavailable). The banner shows only 'Live data' / '即時資料' etc. plus a plain sentence; the surface/status/source line (alpha_factory, research_orchestrator, /bff/alpha-factory) is removed and the hardcoded no_candidate_source text is gone.",
+    "AC4": "Cards use min-w-0 and overflow-wrap:anywhere on ids, codes and titles; PageBody has pb-24 so the end of the page clears the floating assistant button (fixed bottom-4, 48 px). The Playwright capture asserts at 1280x900 and 390x844, both with the document-check section closed and open: no card has scrollWidth > clientWidth, no child box leaves its card, the page does not scroll sideways, and after scrolling every scroll container to its end no alpha-factory leaf element intersects the assistant button (the check fails if nothing scrolled). Screenshots in this directory. Unit tests cover empty, failed (502 and unavailable board surface), unavailable (counts and lane surfaces, missing counts) and populated states in en-US and zh-TW. The page issues only GET /bff/alpha-factory (asserted in unit and browser tests; the browser test records any non-GET alpha-factory request and expects none); no write button or write route was added.",
+    "AC5": "PR to execute-plans dev with exact-head independent review by Antigravity (different model family)."
+  },
+  "changed_assertions": [
+    {
+      "file": "src/management/pages/phase2/AlphaFactoryBoard.test.tsx",
+      "change": "Rewritten for the pipeline-truth contract: the four hosted 2026-09-13..2026-10-31 admissions are now fixtures in data.document_checked and asserted to be inside the collapsed section, not the passed column; the passed column asserts only a gate-passed card; the 'Surface: alpha_factory · status · source' banner and no_candidate_source assertions are replaced by assertions that those internal names are absent. Kept: GET-only read, lists.strategies never read, retired badge, strategy/experiment link encoding, Not reported markers, zh-TW labels, degraded/502 states, mock mode.",
+      "reason": "Acceptance 3 forbids document-checked records in the passed column and internal surface names in the banner; the BFF removed no_candidate_source."
+    },
+    {
+      "file": "src/management/pages/phase2/alphaFactoryData.test.ts and src/lib/bff-v1/__tests__/alphaFactory.test.ts",
+      "change": "Mock-mode expectations now match the new mock (demands, a failed search, gate attempts, zero passes, four document-check records, counts with unavailable stages) and discovered_reason is null; the null-sharpe test uses a gate-passed card instead of the old replicated mock.",
+      "reason": "The mock mirrors the hosted facts of 2026-11-25 and the removed no_candidate_source reason."
+    },
+    {
+      "file": "src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "change": "alphaFactory.col.replicated is now 'Passed backtest validation' / '通過回測驗證'; replicatedCaption, source.surface and empty.noCandidateSource are asserted removed; new caption/stages/reasons/documentChecked keys are required in both locales. All other assertions unchanged.",
+      "reason": "The old label 'Admission checks passed' is the wording acceptance 3 retires."
+    }
+  ],
+  "contract_note": "src/lib/v5/management/__tests__/i18nParity.test.ts is outside the declared artifact list but pins the retired column wording; it needs an artifact contract addition. e2e capture script is stored here as capture-screenshots.spec.ts.txt (copy to e2e/ to rerun) and is not added to the e2e suite. dto.ts is unchanged: the new pipeline types are declared in src/lib/bff-v1/alphaFactory.ts as extensions of the shared AlphaFactory types.",
+  "verification": {
+    "typecheck": "npm run typecheck (tsc -p tsconfig.app.json --noEmit): pass",
+    "eslint_scoped": "eslint on the changed files: 0 errors, 0 warnings",
+    "vitest_focused": "AlphaFactoryBoard.test.tsx (8), AlphaFactoryBoard.discovery.test.tsx (2), alphaFactoryData.test.ts (11), bff-v1 alphaFactory.test.ts, strictLiveReadOffline.test.ts, StrategyDetail.metrics.test.tsx, i18nParity.test.ts, contract-drift.test.ts: all passed",
+    "vitest_full": "npx vitest run: 292 files, 3520 tests passed",
+    "browser": "Real Chromium via Playwright (npx playwright test, vite build of this head, route-mocked /bff/alpha-factory): 1 passed. Screenshots alpha-factory-1280w.png, alpha-factory-1280w-bottom.png, alpha-factory-1280w-document-checks-open-bottom.png, alpha-factory-390w.png, alpha-factory-390w-bottom.png, alpha-factory-390w-document-checks-open-bottom.png (zh-TW). The app shell scrolls an inner container, so each width has a top and an end-of-page shot instead of one full-page image."
+  },
+  "bff_reads": "No new BFF route, query parameter or writer. The page reads GET /bff/alpha-factory only.",
+  "residual_findings": [
+    "Hypothesis cards, collected text and dropped-as-irrelevant counts stay unavailable (no_bounded_owner_read) on hosted until the BFF gets bounded owner reads; the page shows that reason rather than a number.",
+    "Template-search and demand cards link to the research items list (/management/experiments) rather than a specific item: the BFF item carries latest_run_id (an orchestrator run id), and the research detail route resolves research task ids, so a run-id deep link could 404. A BFF field with the research task id would allow a direct link.",
+    "The shared discovery panels (sample metrics, lineage, attribution from FE-DISCOVERY-VIEWS-20261110) render all-dash blocks on admission cards without discovery data, which makes gate-attempt and document-check cards tall; collapsing them when absent is outside this task.",
+    "src/management/pages/phase2/LineageExplorer.tsx:274 has a pre-existing eslint no-control-regex error (not touched here)."
+  ]
+}
