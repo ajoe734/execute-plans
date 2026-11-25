@@ -1,0 +1,308 @@
+{
+  "task_id": "FE-REGISTRY-LISTS-CURRENT-FIRST-20261125",
+  "owner": "Claude2",
+  "reviewer": "Antigravity",
+  "repository": "ajoe734/execute-plans",
+  "base": "dev",
+  "branch": "task/FE-REGISTRY-LISTS-CURRENT-FIRST-20261125",
+  "commits": {
+    "anchor": "e5facf786",
+    "tests_and_e2e": "83f0a8a62"
+  },
+  "scope": "functional evidence only; hosted verification is left to the operator acceptance task. No VM/SSH access was used and no operator key was read. No Registry fallback draft was retired or deleted.",
+  "status": "blocked_on_artifact_contract",
+  "blocker": {
+    "reason": "src/management/pages/StrategyDetail.metrics.test.tsx is not in the artifact contract but its test at line 236 ('renders StrategiesList columns with No data for null metrics and empty alpha/capital pool, and preserves real 0.00') asserts the Alpha, capital-pool, 30-day PnL and Sharpe columns and the raw ISO 'As of ...' text that acceptance 3 removes. It cannot pass unchanged, and the brief forbids both working around a missing contract file and weakening a test. Needed: Human/Ops runs artifact-contract add for execute-plans:src/management/pages/StrategyDetail.metrics.test.tsx, then the owner applies StrategyDetail.metrics.test.proposed.patch (verified passing 12/12 locally, then reverted so nothing outside the contract is committed).",
+    "proposed_patch": "StrategyDetail.metrics.test.proposed.patch",
+    "failing_test": "src/management/pages/StrategyDetail.metrics.test.tsx:236"
+  },
+  "acceptance": {
+    "1": "PersonasList and ArtifactsList open on Current with counted toggles (Test, Retired, Research, plus Unbound for artifacts, and All). A row with no or unknown scope (older BFF, or persona directory unreadable) is classified Current so it stays visible, with a notice counting those rows. lists.personas loader and PersonaDetail data path are unchanged; the persona adapter keeps its previous health input.",
+    "2": "Strategy tabs print meta.visible_state_counts only; the active tab prints its own page_info.total; with the field absent or null no number is printed. Draft tab shows the unscreened-text-drafts notice. Hidden test banner prints test+stub count with the breakdown.",
+    "3": "Columns: name, state, runtime status (+plain reason, raw code as tooltip), symbols, cumulative paper result with as-of time, drawdown, trades, persona. Alpha, 30d, Sharpe, raw capital-pool id removed. Missing value shows its recorded metricsReason (e.g. No fills yet).",
+    "4": "Null successRate shows No data on list and PersonaDetail; artifact kind and source are words with the code as title; size column removed; the disabled create button says in plain words why.",
+    "5": "entityCreate footerNote and hints rewritten without typed durable BFF owner / generic CRUD / OpenClaw SOUL / slug; create button and reason texts are i18n keys with zh-TW/en-US parity (parity asserted in enumLabels.test.ts).",
+    "6": "Measured in Chromium against the fixture BFF at 1274x627 and 1920x1000: no horizontal scrolling for all three tables and name column >= 220 px. See measurements and screenshots."
+  },
+  "measurements": {
+    "artifacts-1274x627": {
+      "viewportWidth": 1274,
+      "clientWidth": 939,
+      "scrollWidth": 939,
+      "nameWidth": 240,
+      "colWidths": [
+        240,
+        87,
+        102,
+        84,
+        93,
+        119,
+        96,
+        118
+      ],
+      "headers": [
+        "Name",
+        "Source",
+        "Kind",
+        "Version",
+        "State / Risk",
+        "Hash",
+        "Owner",
+        "Last updated"
+      ],
+      "rowCount": 5,
+      "maxRowHeight": 70,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/artifacts-1274x627.png"
+    },
+    "artifacts-1920x1000": {
+      "viewportWidth": 1920,
+      "clientWidth": 1600,
+      "scrollWidth": 1600,
+      "nameWidth": 402,
+      "colWidths": [
+        402,
+        144,
+        156,
+        122,
+        142,
+        253,
+        139,
+        243
+      ],
+      "headers": [
+        "Name",
+        "Source",
+        "Kind",
+        "Version",
+        "State / Risk",
+        "Hash",
+        "Owner",
+        "Last updated"
+      ],
+      "rowCount": 5,
+      "maxRowHeight": 65,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/artifacts-1920x1000.png"
+    },
+    "personas-1274x627": {
+      "viewportWidth": 1274,
+      "clientWidth": 939,
+      "scrollWidth": 939,
+      "nameWidth": 230,
+      "colWidths": [
+        230,
+        89,
+        72,
+        92,
+        112,
+        78,
+        96,
+        169
+      ],
+      "headers": [
+        "Name",
+        "State",
+        "Risk",
+        "Type",
+        "Strategies",
+        "Win rate",
+        "Owner",
+        "Last updated"
+      ],
+      "rowCount": 3,
+      "maxRowHeight": 57,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/personas-1274x627.png"
+    },
+    "personas-1920x1000": {
+      "viewportWidth": 1920,
+      "clientWidth": 1600,
+      "scrollWidth": 1600,
+      "nameWidth": 387,
+      "colWidths": [
+        387,
+        150,
+        121,
+        155,
+        188,
+        132,
+        161,
+        306
+      ],
+      "headers": [
+        "Name",
+        "State",
+        "Risk",
+        "Type",
+        "Strategies",
+        "Win rate",
+        "Owner",
+        "Last updated"
+      ],
+      "rowCount": 3,
+      "maxRowHeight": 53,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/personas-1920x1000.png"
+    },
+    "strategies-1274x627": {
+      "viewportWidth": 1274,
+      "clientWidth": 939,
+      "scrollWidth": 939,
+      "nameWidth": 240,
+      "colWidths": [
+        240,
+        89,
+        115,
+        80,
+        126,
+        95,
+        76,
+        117
+      ],
+      "headers": [
+        "Name",
+        "State",
+        "Runtime",
+        "Symbols",
+        "Cumulative paper result",
+        "Drawdown",
+        "Trades",
+        "Persona"
+      ],
+      "rowCount": 8,
+      "maxRowHeight": 85,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/strategies-1274x627.png"
+    },
+    "strategies-1920x1000": {
+      "viewportWidth": 1920,
+      "clientWidth": 1600,
+      "scrollWidth": 1600,
+      "nameWidth": 423,
+      "colWidths": [
+        423,
+        104,
+        182,
+        94,
+        233,
+        111,
+        89,
+        365
+      ],
+      "headers": [
+        "Name",
+        "State",
+        "Runtime",
+        "Symbols",
+        "Cumulative paper result",
+        "Drawdown",
+        "Trades",
+        "Persona"
+      ],
+      "rowCount": 8,
+      "maxRowHeight": 55,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/strategies-1920x1000.png"
+    }
+  },
+  "verification": [
+    {
+      "cmd": "npx tsc -p tsconfig.app.json --noEmit",
+      "result": "pass"
+    },
+    {
+      "cmd": "npx tsc -p tsconfig.agora.json --noEmit",
+      "result": "pass"
+    },
+    {
+      "cmd": "npx eslint <changed files>",
+      "result": "0 errors (existing react-refresh warnings only)"
+    },
+    {
+      "cmd": "npx vitest run Lists.test.tsx ObjectListPage.test.tsx lists.test.ts enumLabels.test.ts PersonaDetail.test.ts EvolutionProgramsQualification.test.tsx",
+      "result": "pass (6 files)"
+    },
+    {
+      "cmd": "npx vitest run src/lib",
+      "result": "109 files, 1214 tests pass"
+    },
+    {
+      "cmd": "npx vitest run src/management",
+      "result": "991 of 992 pass; the one failure is StrategyDetail.metrics.test.tsx:236 (outside contract, see blocker)"
+    },
+    {
+      "cmd": "npx vitest run src/platform src/routes src/i18n src/components src/pages src/mocks src/hooks src/config src/test src/App",
+      "result": "812 of 813; persona-strategy-hosted-readonly Trading Pulse roundtrip failed once under load and passed when run alone (6/6)"
+    },
+    {
+      "cmd": "npx playwright test e2e/management-list-short-window.spec.ts e2e/artifact-hosted-width.spec.ts",
+      "result": "21 passed, 1 skipped (strategy capture file absent)"
+    },
+    {
+      "cmd": "npx playwright test e2e/06-entity-registry.spec.ts",
+      "result": "5 passed, 1 skipped"
+    },
+    {
+      "cmd": "npx playwright test e2e/08-create-intent.spec.ts",
+      "result": "2 passed, 1 skipped"
+    }
+  ],
+  "row_shapes_used": "Three live paper strategies from BFF-STRATEGY-METRICS-RUNTIME test_strategy_metrics_truth.py (pnl -9.988691250022384 with 2 trades, -186.89087499999732 with 2 trades, null with no_fills; running / paused_market_input market_input_stale); 177 personas (153 test, live ones at 152/154/155, successRate null); 344 artifacts (304 test) built on the hosted 273-row capture; visible_state_counts {draft 4205, approved 14, retired 2} against raw state_counts {draft 7421, approved 170, retired 1556}.",
+  "changed_assertions": [
+    {
+      "file": "src/management/pages/ObjectListPage.test.tsx",
+      "what": "disabled artifact create button name 'Create disabled: artifact has no typed durable BFF owner.' -> plain-words reason",
+      "why": "acceptance 5 forbids the developer wording; the test still asserts the button is disabled and now also asserts the wording is absent, plus a zh-TW case"
+    },
+    {
+      "file": "src/management/pages/ObjectListPage.test.tsx",
+      "what": "artifacts list test: source_kind filter buttons (Registry bundle / Research output / All sources) -> scope tabs (Current / Test / Retired / Research output / Unbound / All); kind and source asserted as words with the code in title; 'No data' cell count 4 -> 2; size 'No data' assertion replaced by no size column",
+      "why": "acceptance 1 and 4: default view is current, research outputs have their own tab, kind/source are words, size column removed. Every row, hash, owner, link and 0 MB check is still asserted"
+    },
+    {
+      "file": "src/management/pages/ObjectListPage.test.tsx",
+      "what": "partial-data banner test: research-only response now lands on an empty Current tab and clicks the Research output tab before asserting the row",
+      "why": "acceptance 1; the banner assertions are unchanged and an empty-state assertion was added"
+    },
+    {
+      "file": "src/management/pages/ObjectListPage.test.tsx",
+      "what": "strategy default-filter test fixture: meta.visible_state_counts added next to a larger raw state_counts; added assertions that raw numbers are never printed, tab number equals pager total, draft notice",
+      "why": "acceptance 2; every previous count assertion is kept with the same numbers"
+    },
+    {
+      "file": "src/management/pages/ObjectListPage.test.tsx",
+      "what": "13-page test: PersonasList hasFilter false -> true",
+      "why": "personas now render a scope group (stricter)"
+    },
+    {
+      "file": "src/management/pages/Lists.test.tsx",
+      "what": "extractStrategyStateCounts fixture key state_counts -> visible_state_counts; added raw-state_counts-only -> null",
+      "why": "acceptance 2; same expected numbers"
+    },
+    {
+      "file": "e2e/artifact-hosted-width.spec.ts",
+      "what": "row count 273 -> 271 (2 research outputs under their own tab, All still 273); header floor >= 10 -> exactly 8; fit assertion now at both 1600 and 1366 (was 1600 only); strategy owner-cell test now asserts 8 columns, no horizontal scroll, name >= 220 and row height <= 96 (was owner text, owner width, row <= 72)",
+      "why": "size column removed, state and risk share a column, owner column removed from strategies; row-height cap for strategies is relaxed only because the runtime reason wraps (artifact rows keep the 72 px cap; the strategy test is skipped without the capture file)"
+    },
+    {
+      "file": "e2e/management-list-short-window.spec.ts",
+      "what": "artifacts row poll >= 273 -> >= 271",
+      "why": "default Current view hides the 2 research outputs of the genuine capture"
+    },
+    {
+      "file": "e2e/06-entity-registry.spec.ts",
+      "what": "strategy meta: visible_state_counts added; raw draft 3217 -> 7421; banner still asserts 3217 and 134 and now asserts 7421 is absent",
+      "why": "acceptance 2"
+    }
+  ],
+  "residual_findings": [
+    "src/management/pages/RiskCenter.tsx:430 renders safeRound(successRate*100)% so a null win rate shows 0% there (outside this contract).",
+    "src/management/components/write/createEntity.ts:33 still throws 'no typed durable BFF owner is registered'; not reachable from a drawer because ObjectListPage fail-closes first (outside this contract).",
+    "visible_state_counts.draft counts every draft-DTO row (unknown raw lifecycle values map to draft) while state=draft selects true drafts only; the inactive Draft tab could differ from its pager total by those rows. The active tab prints its own pager total so a mismatch is never shown on the open tab.",
+    "DataTable hard-codes whitespace-nowrap on headers; this task opts columns out with '!whitespace-normal'. A column-level wrap prop would be cleaner.",
+    "The persona health adapter still scores a null win rate as 0 performance (unchanged on purpose so health does not move).",
+    "Registry fallback drafts (no hypothesis_card, 4204 since 2026-11-12) were not touched; their disposition is decided elsewhere."
+  ],
+  "runtime_budget": "Frontend only: 0 new requests, 0 jobs, 0 writers. Persona and artifact lists still load all pages as before; scope is classified client-side from the existing rows."
+}

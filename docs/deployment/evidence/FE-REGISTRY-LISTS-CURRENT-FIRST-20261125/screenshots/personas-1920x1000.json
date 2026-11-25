@@ -1,0 +1,38 @@
+{
+  "rowCount": 3,
+  "viewportWidth": 1920,
+  "clientWidth": 1600,
+  "scrollWidth": 1600,
+  "docOverflow": 0,
+  "headers": [
+    "Name",
+    "State",
+    "Risk",
+    "Type",
+    "Strategies",
+    "Win rate",
+    "Owner",
+    "Last updated"
+  ],
+  "colWidths": [
+    387,
+    150,
+    121,
+    155,
+    188,
+    132,
+    161,
+    306
+  ],
+  "nameWidth": 387,
+  "lastRight": 1880,
+  "maxRowHeight": 53,
+  "scopeButtons": [
+    "Current (3)",
+    "Test (153)",
+    "Retired (17)",
+    "Research (4)",
+    "All (177)"
+  ],
+  "stateButtons": []
+}
