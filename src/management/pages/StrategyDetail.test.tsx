@@ -10,8 +10,11 @@ import i18n from "@/i18n";
 import { StrategyDetail } from "./StrategyDetail";
 import { bffV1, managementConsoleReads, realtime, type Strategy } from "@/lib/bff-v1";
 import {
+  RECORDED_039A_STRATEGY,
+  RECORDED_06D4_STRATEGY,
   RECORDED_A81B_POOL_MEMBER_RULE,
   RECORDED_A81B_STRATEGY,
+  RECORDED_LIVE_STRATEGIES,
 } from "@/management/components/detail/__fixtures__/poolRules";
 
 const REAL_POOL_STRATEGY = {
@@ -124,19 +127,47 @@ describe("StrategyDetail overview (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () =
     await waitFor(() => expect(screen.queryByTestId("strategy-discovery")).not.toBeInTheDocument());
   });
 
-  it("recorded strategy-persona-a81b4fd15944698341aa: shows pool_envelope combination, pool_member rule once when listed twice, and labels rollback_baseline as not traded", async () => {
+  it("recorded strategy-persona-a81b4fd15944698341aa: lists traded pool rules first in plain sentences with codes in tooltips, shows pool_member once when listed twice, and puts rollback_baseline last in a collapsed line", async () => {
     vi.spyOn(bffV1.strategies, "get").mockResolvedValue(RECORDED_A81B_STRATEGY);
     renderPage(RECORDED_A81B_STRATEGY.id);
 
     const summary = await screen.findByTestId("strategy-rules-summary");
     expect(screen.queryByTestId("strategy-rules-summary-empty")).not.toBeInTheDocument();
 
-    // pool_envelope combination & risk limits
+    const rulesList = screen.getByTestId("strategy-rules-list");
+    const ruleChildren = Array.from(rulesList.children);
+    expect(ruleChildren[0]).toHaveAttribute(
+      "data-testid",
+      "strategy-rule-artifact-persona-pool-a81b4fd15944698341aa-v2",
+    );
+    expect(ruleChildren[1]).toHaveAttribute(
+      "data-testid",
+      "strategy-rule-artifact-persona-paper-baseline-a81b4fd15944698341aa",
+    );
+    expect(ruleChildren[1].tagName.toLowerCase()).toBe("details");
+    expect(ruleChildren[1]).not.toHaveAttribute("open");
+
+    // pool_envelope combination & risk limits in plain words with raw codes as tooltips
     const envelopeCard = screen.getByTestId("strategy-rule-artifact-persona-pool-a81b4fd15944698341aa-v2");
     expect(envelopeCard).toHaveTextContent("策略池打包版");
-    expect(screen.getByTestId("strategy-rule-combination")).toHaveTextContent("clipped_weighted_sum_v1");
-    expect(screen.getByTestId("strategy-rule-risk-limits")).toHaveTextContent("max_net_strength=1");
-    expect(screen.getByTestId("strategy-rule-risk-limits")).toHaveTextContent("gross_weight_limit=1");
+    const combo = screen.getByTestId("strategy-rule-combination");
+    expect(combo).toHaveTextContent("依成員風險權重加權合計訊號，並裁切於風險上限內");
+    expect(combo).not.toHaveTextContent("clipped_weighted_sum_v1");
+    expect(combo.querySelector('[title="clipped_weighted_sum_v1"]')).not.toBeNull();
+
+    const limits = screen.getByTestId("strategy-rule-risk-limits");
+    expect(limits).toHaveTextContent("多空抵銷後的淨部位上限為 100%（1 倍）");
+    expect(limits).toHaveTextContent("所有成員權重絕對值合計上限為 100%（1 倍）");
+    expect(limits).not.toHaveTextContent("max_net_strength=1");
+    expect(limits).not.toHaveTextContent("gross_weight_limit=1");
+    expect(screen.getByTestId("strategy-rule-risk-limit-max_net_strength")).toHaveAttribute(
+      "title",
+      "max_net_strength=1",
+    );
+    expect(screen.getByTestId("strategy-rule-risk-limit-gross_weight_limit")).toHaveAttribute(
+      "title",
+      "gross_weight_limit=1",
+    );
 
     // pool_member listed both at top-level and inside pool_envelope.members is shown once
     const memberItem = screen.getByTestId("strategy-rule-member-artifact-persona-paper-a81b4fd15944698341aa");
@@ -156,7 +187,7 @@ describe("StrategyDetail overview (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () =
     expect(baselineCard).toHaveTextContent("不送單回滾基準（正負向皆不動作，下單數量 0）");
   });
 
-  it("deduplicates a pool_member listed twice at top level and distinguishes null rules (unavailable) from empty rules (not reported) and absent new BFF fields", async () => {
+  it("deduplicates a pool_member listed twice at top level and distinguishes null rules (unavailable) from empty rules (not reported) and absent new BFF fields without showing zero", async () => {
     vi.spyOn(bffV1.strategies, "get").mockResolvedValueOnce({
       ...RECORDED_A81B_STRATEGY,
       rules: [RECORDED_A81B_POOL_MEMBER_RULE, RECORDED_A81B_POOL_MEMBER_RULE],
@@ -196,6 +227,91 @@ describe("StrategyDetail overview (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () =
       "此策略尚未回報交易規則。",
     );
     expect(screen.queryByTestId("strategy-rules-unavailable")).not.toBeInTheDocument();
+    const perfBlock = screen.getByTestId("strategy-performance-block");
+    expect(perfBlock).not.toHaveTextContent("0.00");
+    expect(perfBlock).not.toHaveTextContent("0.00%");
+    expect(screen.getByTestId("strategy-trades")).toHaveTextContent("無資料");
+    expect(screen.getByTestId("strategy-runtime-status")).toHaveTextContent("無資料");
+  });
+
+  it("three recorded live strategies: renders cumulative paper result, runtime status and reason, translated triple state with persona-pool deployment, plain action names with disabled reason, and each object ID once as secondary text in zh-TW and en-US", async () => {
+    for (const liveStrategy of RECORDED_LIVE_STRATEGIES) {
+      vi.spyOn(bffV1.strategies, "get").mockResolvedValue(liveStrategy);
+      await i18n.changeLanguage("zh-TW");
+      const zhRender = renderPage(liveStrategy.id);
+      expect(await screen.findByRole("heading", { name: liveStrategy.name })).toBeInTheDocument();
+
+      // AC3: Strategy state block translated, never raw English or deployment "none"
+      const tripleCard = screen.getByTestId("strategy-triple-state-card");
+      expect(tripleCard).toHaveTextContent("策略狀態（生命週期 × 審查 × 部署）");
+      expect(screen.getByTestId("strategy-triple-invariant")).toHaveTextContent("狀態一致");
+      expect(screen.getByTestId("strategy-triple-lifecycle")).toHaveTextContent("已核准");
+      expect(screen.getByTestId("strategy-triple-review")).toHaveTextContent("已核准");
+      expect(screen.getByTestId("strategy-triple-deployment")).toHaveTextContent("透過 Persona 策略池執行");
+      expect(tripleCard.textContent).not.toMatch(/Strategy state|invariant ok|\bnone\b/i);
+
+      // AC4: Action buttons show plain names and say why disabled; no arrow text
+      expect(document.body.textContent ?? "").not.toMatch(/promote_paper|→\s*(paper|archived|live)/i);
+      const promoteBtn = screen.getByRole("button", { name: "升級至模擬" });
+      expect(promoteBtn).toBeDisabled();
+      expect(promoteBtn).toHaveAttribute(
+        "title",
+        "策略階段變更與封存需透過治理審查與部署流程執行，此頁面僅供唯讀檢視。",
+      );
+      expect(screen.getByTestId("strategy-actions-disabled-reason")).toHaveTextContent(
+        "此頁僅供檢視；階段變更由治理與部署流程執行",
+      );
+
+      // AC2: No PnL 30d, Sharpe, or Alpha rows on overview
+      expect(screen.queryByText("PnL 30d")).not.toBeInTheDocument();
+      expect(screen.queryByText("Sharpe")).not.toBeInTheDocument();
+      expect(screen.queryByText("夏普值")).not.toBeInTheDocument();
+      expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+
+      // AC5: Each object ID appears exactly once on the overview page
+      const personaId = liveStrategy.personaIds[0];
+      expect(screen.getAllByText(liveStrategy.id)).toHaveLength(1);
+      expect(screen.getAllByText(personaId)).toHaveLength(1);
+      expect(screen.getAllByText(liveStrategy.capitalPoolId)).toHaveLength(1);
+      for (const rule of liveStrategy.rules ?? []) {
+        expect(screen.getAllByText(rule.registryId)).toHaveLength(1);
+      }
+
+      if (liveStrategy.id === RECORDED_A81B_STRATEGY.id) {
+        expect(screen.getByTestId("strategy-performance-block")).toHaveTextContent("-9.99");
+        expect(screen.getByTestId("strategy-performance-block")).toHaveTextContent(
+          "統計截至 2026-11-23T23:34:52Z",
+        );
+        expect(screen.getByTestId("strategy-trades")).toHaveTextContent("2");
+        expect(screen.getByTestId("strategy-runtime-status")).toHaveTextContent("執行中");
+      } else if (liveStrategy.id === RECORDED_06D4_STRATEGY.id) {
+        expect(screen.getByTestId("strategy-performance-block")).toHaveTextContent("-186.89");
+        expect(screen.getByTestId("strategy-runtime-status")).toHaveTextContent("暫停：行情輸入");
+        expect(screen.getByTestId("strategy-runtime-reason")).toHaveTextContent("行情輸入中斷");
+        expect(screen.getByTestId("strategy-runtime-reason")).toHaveAttribute(
+          "title",
+          expect.stringContaining("market_input_stale"),
+        );
+      } else if (liveStrategy.id === RECORDED_039A_STRATEGY.id) {
+        expect(screen.getByTestId("strategy-result-missing")).toHaveTextContent("尚無成交");
+        expect(screen.getByTestId("strategy-result-missing")).toHaveAttribute("title", "no_fills");
+        expect(screen.getByTestId("strategy-performance-block")).not.toHaveTextContent("0.00");
+        expect(screen.getByTestId("strategy-trades")).toHaveTextContent("0");
+      }
+      zhRender.unmount();
+
+      await i18n.changeLanguage("en-US");
+      const enRender = renderPage(liveStrategy.id);
+      expect(await screen.findByRole("heading", { name: liveStrategy.name })).toBeInTheDocument();
+      expect(screen.getByTestId("strategy-triple-state-card")).toHaveTextContent(
+        "Strategy state (lifecycle × review × deployment)",
+      );
+      expect(screen.getByTestId("strategy-triple-invariant")).toHaveTextContent("State consistent");
+      expect(screen.getByTestId("strategy-triple-deployment")).toHaveTextContent("Runs through persona pool");
+      expect(screen.getByRole("button", { name: "Promote to Paper" })).toBeDisabled();
+      enRender.unmount();
+    }
+    await i18n.changeLanguage("zh-TW");
   });
 
   it("renders immediately after the single strategy read while secondary reads remain unresolved and one rejects, and keeps shown data on refresh without blanking", async () => {

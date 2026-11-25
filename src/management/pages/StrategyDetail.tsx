@@ -30,15 +30,26 @@ import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { StrategyRulesList, StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
-import { StrategyTripleStateCard } from "@/management/components/detail/StrategyTripleStateCard";
-import { normalizeStrategyOperationalStatus } from "./Lists";
-import { lifecycleOf } from "@/lib/v4/strategyTripleDerive";
+import {
+  actionLabel,
+  normalizeStrategyOperationalStatus,
+  normalizeStrategyRuntimeStatus,
+  strategyDeploymentLabel,
+  strategyLifecycleLabel,
+  strategyMetricsReasonText,
+  strategyOperationalStatusClass,
+  strategyReviewLabel,
+  strategyRuntimeReasonText,
+  strategyRuntimeStatusClass,
+} from "@/lib/enumLabels";
+import { deriveStrategyTriple, lifecycleOf } from "@/lib/v4/strategyTripleDerive";
+import { explainTripleViolation, validateStrategyTriple } from "@/lib/v4/strategyInvariants";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
 import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPaperLiveTab";
 import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
 import type { Watcher, DecisionJournalEntry } from "@/lib/bff-v1";
-import { Eye, BookOpen, User } from "lucide-react";
+import { Eye, BookOpen } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
 import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
 
@@ -515,38 +526,120 @@ export const StrategyDetail = () => {
   const benchmarkName = s.spec?.evaluation_plan?.benchmark?.trim() || "";
   const alphaRaw = s.alpha?.trim() || "";
   const alphaDisplay = alphaRaw || noData;
-  const poolDisplay = s.capitalPoolId?.trim() || noData;
-  const personasDisplay =
-    (s.personaIds ?? [])
-      .filter(Boolean)
-      .map((pid) => (s.persona_display_names?.[pid] ? `${s.persona_display_names[pid]} (${pid})` : pid))
-      .join(", ") || noData;
-  const subtitle = alphaRaw ? `${alphaRaw} · ${s.id}` : s.id;
-  const hasPnl = typeof s.pnl === "number" && Number.isFinite(s.pnl);
-  const hasPnl30d = typeof s.pnl30d === "number" && Number.isFinite(s.pnl30d);
-  const hasSharpe = typeof s.sharpe === "number" && Number.isFinite(s.sharpe);
-  const hasDrawdown = typeof s.drawdown === "number" && Number.isFinite(s.drawdown);
-  const metricsAsOfText = s.metricsAsOf?.trim() || "";
-  const pnlTone = !hasPnl || s.pnl === 0 ? "default" : s.pnl > 0 ? "success" : "danger";
-  const pnl30dTone = !hasPnl30d || s.pnl30d === 0 ? "default" : s.pnl30d > 0 ? "success" : "danger";
-  const drawdownTone = !hasDrawdown || s.drawdown === 0 ? "default" : "warning";
+  const poolIdRaw = s.capitalPoolId?.trim() || "";
+  const poolDisplay = poolIdRaw || noData;
+  const firstPersonaDisplayName = boundPersonaEntries
+    .map((entry) => personaDisplayNames[entry.personaId]?.trim())
+    .find(Boolean);
+  const poolPrimaryLabel = poolIdRaw
+    ? firstPersonaDisplayName
+      ? t("strategyDetail.capitalPool.forPersona", { persona: firstPersonaDisplayName })
+      : t("strategyDetail.capitalPool.bound")
+    : noData;
+  const ownerIsBoundPersona = Boolean(
+    s.owner && boundPersonaEntries.some((entry) => entry.personaId === s.owner.trim()),
+  );
+  const headerObject = {
+    ...s,
+    owner: (s.owner && personaDisplayNames[s.owner]?.trim()) || s.owner,
+  };
+
+  const rawPnl = s.pnl;
+  const hasPnl = typeof rawPnl === "number" && Number.isFinite(rawPnl);
+  const rawDrawdown = s.drawdown;
+  const hasDrawdown = typeof rawDrawdown === "number" && Number.isFinite(rawDrawdown);
+  const rawTotalTrades = s.totalTrades ?? s.total_trades;
+  const hasTotalTrades = typeof rawTotalTrades === "number" && Number.isFinite(rawTotalTrades);
+  const metricsAsOfText = (s.metricsAsOf ?? s.metrics_as_of)?.trim() || "";
+  const missingMetricReason = strategyMetricsReasonText(s.metricsReason ?? s.metrics_reason, t);
+  const runtimeStatus = normalizeStrategyRuntimeStatus(s.runtimeStatus ?? s.runtime_status);
+  const runtimeReason = strategyRuntimeReasonText(s.runtimeStatusReason ?? s.runtime_status_reason, t);
+  const personaStageFallbackReason =
+    !runtimeReason &&
+    runtimeStatus === "none" &&
+    normalizedOperationalStatus &&
+    normalizedOperationalStatus !== "running"
+      ? t(`strategy.operationalStatus.${normalizedOperationalStatus}`)
+      : undefined;
+  const runtimeReasonText = runtimeReason?.text ?? personaStageFallbackReason;
+  const pnlTone = !hasPnl || rawPnl === 0 ? "default" : rawPnl > 0 ? "success" : "danger";
+  const drawdownTone = !hasDrawdown || rawDrawdown === 0 ? "default" : "warning";
+  const runtimeTone: "default" | "warning" | "danger" | "success" =
+    runtimeStatus === "running"
+      ? "success"
+      : runtimeStatus === "paused_market_input" ||
+          runtimeStatus === "paused_operator" ||
+          runtimeStatus === "unknown"
+        ? "warning"
+        : "default";
+
+  const hasPoolRule =
+    Array.isArray(s.rules) &&
+    s.rules.some((r) => r && (r.role === "pool_envelope" || r.role === "pool_member"));
+  const runsThroughPersonaPool =
+    !isStub &&
+    (Boolean(poolIdRaw) ||
+      hasPoolRule ||
+      (boundPersonaEntries.length > 0 &&
+        (runtimeStatus === "running" ||
+          runtimeStatus === "paused_market_input" ||
+          runtimeStatus === "paused_operator" ||
+          normalizedOperationalStatus === "running")));
+
+  const triple = deriveStrategyTriple({
+    state: s.state,
+    lifecycleStatus: s.lifecycleStatus as string | undefined,
+    reviewStatus: s.reviewStatus as string | undefined,
+    deploymentStatus: s.deploymentStatus as string | undefined,
+  });
+  const tripleValid = validateStrategyTriple(triple);
+  const tripleViolation = tripleValid ? null : explainTripleViolation(triple);
+  const lifecycleCls: Record<string, string> = {
+    discovered: "bg-muted text-muted-foreground border-border",
+    scaffolded: "bg-muted text-muted-foreground border-border",
+    replicated: "bg-accent/15 text-accent border-accent/30",
+    approved: "bg-status-success/15 text-status-success border-status-success/30",
+    paper: "bg-status-running/15 text-status-running border-status-running/30",
+    live: "bg-status-success/15 text-status-success border-status-success/30",
+    degraded: "bg-status-warning/15 text-status-warning border-status-warning/30",
+    retired: "bg-muted text-muted-foreground border-border",
+  };
+  const reviewCls: Record<string, string> = {
+    none: "bg-muted text-muted-foreground border-border",
+    pending: "bg-status-warning/15 text-status-warning border-status-warning/30",
+    changes_requested: "bg-status-warning/15 text-status-warning border-status-warning/30",
+    approved: "bg-status-success/15 text-status-success border-status-success/30",
+  };
+  const deployCls: Record<string, string> = {
+    none: runsThroughPersonaPool
+      ? "bg-status-running/15 text-status-running border-status-running/30"
+      : "bg-muted text-muted-foreground border-border",
+    paper_running: "bg-status-running/15 text-status-running border-status-running/30",
+    live_running: "bg-status-success/15 text-status-success border-status-success/30",
+    stopped: "bg-muted text-muted-foreground border-border",
+    rollback_required: "bg-status-failed/15 text-status-failed border-status-failed/30",
+  };
 
   return (
     <>
       {loadErrors.length > 0 && <div role="alert" className="px-6 py-3 text-sm text-status-warning">Some strategy data could not be loaded: {loadErrors.join(", ")}.</div>}
       <ObjectDetailLayout
-        object={s}
-        subtitle={subtitle}
+        object={headerObject}
+        headerOmit={{ owner: ownerIsBoundPersona }}
         actions={
           <>
             <Button size="sm" variant="ghost" onClick={() => useInspector.getState().open({
               id: s.id, type: "Strategy", name: s.name, state: s.state, risk: s.risk,
               owner: s.owner, updatedAt: s.updatedAt, availableActions: s.availableActions,
-              meta: [{ label: "Alpha", value: alphaDisplay }, { label: "Pool", value: poolDisplay }],
+              meta: [{ label: t("nav.capital"), value: poolDisplay }],
             })}>
-              <Inbox className="h-4 w-4 mr-1" />Inspect
+              <Inbox className="h-4 w-4 mr-1" />{t("strategyDetail.actions.inspect")}
             </Button>
-            <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
+            <NonProductionActionButton
+              size="sm"
+              variant="outline"
+              reason={t("strategyDetail.actions.disabledReason.sweep")}
+            >
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
             </NonProductionActionButton>
             {transitions.map((tr) => (
@@ -554,11 +647,17 @@ export const StrategyDetail = () => {
                 key={tr.action}
                 size="sm"
                 variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
-                status="no executing owner"
+                reason={t("strategyDetail.actions.disabledReason.transition")}
               >
-                {tr.action} → {tr.to}
+                {actionLabel(tr.action, t)}
               </NonProductionActionButton>
             ))}
+            <span
+              data-testid="strategy-actions-disabled-reason"
+              className="text-xs text-muted-foreground"
+            >
+              {t("strategyDetail.actions.readOnlyHint")}
+            </span>
           </>
         }
         tabs={[
@@ -607,21 +706,34 @@ export const StrategyDetail = () => {
                         <div className="text-xs uppercase tracking-wider text-muted-foreground">
                           {t("strategyDetail.operationalStatusLabel")}
                         </div>
-                        <div>
-                          {normalizedOperationalStatus ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {runtimeStatus ? (
+                            <>
+                              <Badge
+                                variant="outline"
+                                data-testid="strategy-detail-operational-status"
+                                data-operational-status={normalizedOperationalStatus ?? runtimeStatus}
+                                data-runtime-status={runtimeStatus}
+                                className={strategyRuntimeStatusClass(runtimeStatus)}
+                              >
+                                {t(`strategy.runtimeStatus.${runtimeStatus}`)}
+                              </Badge>
+                              {runtimeReasonText && (
+                                <span
+                                  data-testid="strategy-overview-runtime-reason"
+                                  title={runtimeReason ? `${runtimeReason.text} (${runtimeReason.code})` : undefined}
+                                  className="text-xs text-muted-foreground"
+                                >
+                                  {runtimeReasonText}
+                                </span>
+                              )}
+                            </>
+                          ) : normalizedOperationalStatus ? (
                             <Badge
                               variant="outline"
                               data-testid="strategy-detail-operational-status"
                               data-operational-status={normalizedOperationalStatus}
-                              className={
-                                normalizedOperationalStatus === "running"
-                                  ? "border-status-success/40 text-status-success"
-                                  : normalizedOperationalStatus === "unknown"
-                                    ? "border-status-warning/40 text-status-warning"
-                                    : normalizedOperationalStatus === "idle"
-                                      ? "border-border text-foreground"
-                                      : "border-muted text-muted-foreground"
-                              }
+                              className={strategyOperationalStatusClass(normalizedOperationalStatus)}
                             >
                               {t(`strategy.operationalStatus.${normalizedOperationalStatus}`)}
                             </Badge>
@@ -664,8 +776,11 @@ export const StrategyDetail = () => {
                                     <span className="text-mono text-[10px] text-muted-foreground">{entry.personaId}</span>
                                   </span>
                                 ) : (
-                                  <span className="text-mono text-primary underline-offset-2 hover:underline">
-                                    {entry.personaId}
+                                  <span className="flex flex-col leading-tight">
+                                    <span className="text-primary underline-offset-2 hover:underline">
+                                      {t("nav.personas")}
+                                    </span>
+                                    <span className="text-mono text-[10px] text-muted-foreground">{entry.personaId}</span>
                                   </span>
                                 )}
                                 {entry.state && (
@@ -693,52 +808,187 @@ export const StrategyDetail = () => {
                         )}
                       </div>
                     </div>
-                    <StrategyTripleStateCard
-                      lifecycleStatus={s.lifecycleStatus as string | undefined}
-                      reviewStatus={s.reviewStatus as string | undefined}
-                      deploymentStatus={s.deploymentStatus as string | undefined}
-                      legacyState={s.state}
+                    <Card className="p-3 space-y-2" data-testid="strategy-triple-state-card">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs tracking-wider text-muted-foreground">
+                          {t("strategyDetail.tripleState.title")}
+                        </div>
+                        {tripleValid ? (
+                          <span
+                            data-testid="strategy-triple-invariant"
+                            className="flex items-center gap-1 text-xs text-status-success"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" /> {t("strategyDetail.tripleState.invariantOk")}
+                          </span>
+                        ) : (
+                          <span
+                            data-testid="strategy-triple-invariant"
+                            className="flex items-center gap-1 text-xs text-status-failed"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" /> {t("strategyDetail.tripleState.invariantViolated")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] text-muted-foreground">{t("strategyDetail.tripleState.lifecycle")}</div>
+                          <Badge
+                            variant="outline"
+                            data-testid="strategy-triple-lifecycle"
+                            data-value={triple.lifecycleStatus}
+                            className={lifecycleCls[triple.lifecycleStatus] ?? ""}
+                          >
+                            {strategyLifecycleLabel(triple.lifecycleStatus, t)}
+                          </Badge>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] text-muted-foreground">{t("strategyDetail.tripleState.review")}</div>
+                          <Badge
+                            variant="outline"
+                            data-testid="strategy-triple-review"
+                            data-value={triple.reviewStatus}
+                            className={reviewCls[triple.reviewStatus] ?? ""}
+                          >
+                            {strategyReviewLabel(triple.reviewStatus, t)}
+                          </Badge>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] text-muted-foreground">{t("strategyDetail.tripleState.deployment")}</div>
+                          <Badge
+                            variant="outline"
+                            data-testid="strategy-triple-deployment"
+                            data-value={
+                              runsThroughPersonaPool && triple.deploymentStatus === "none"
+                                ? "persona_pool"
+                                : triple.deploymentStatus
+                            }
+                            className={deployCls[triple.deploymentStatus] ?? ""}
+                          >
+                            {strategyDeploymentLabel(triple.deploymentStatus, t, { runsThroughPersonaPool })}
+                          </Badge>
+                        </div>
+                      </div>
+                      {tripleViolation && (
+                        <p className="text-xs text-status-failed">{tripleViolation}</p>
+                      )}
+                    </Card>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field
+                      label={t("nav.capital")}
+                      value={
+                        poolIdRaw ? (
+                          <div>
+                            <div>{poolPrimaryLabel}</div>
+                            <div
+                              data-testid="strategy-capital-pool-id"
+                              className="text-mono text-xs text-muted-foreground"
+                            >
+                              {poolIdRaw}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">{noData}</span>
+                        )
+                      }
                     />
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Field label="Alpha" value={alphaDisplay} mono />
-                    <Field label={t("nav.capital")} value={poolDisplay} mono />
-                    <Field label={t("nav.personas")} value={personasDisplay} mono />
-                    <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
-                  </div>
                 </Section>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                <div
+                  data-testid="strategy-performance-block"
+                  className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4"
+                >
                   <StatCard
                     label={t("strategyDetail.cumulativePaperPnl")}
-                    value={hasPnl ? s.pnl.toFixed(2) : noData}
+                    value={
+                      hasPnl ? (
+                        rawPnl.toFixed(2)
+                      ) : missingMetricReason ? (
+                        <span
+                          data-testid="strategy-result-missing"
+                          data-metrics-reason={missingMetricReason.code}
+                          title={missingMetricReason.code}
+                        >
+                          {missingMetricReason.text}
+                        </span>
+                      ) : (
+                        noData
+                      )
+                    }
                     hint={metricsAsOfText ? t("strategyDetail.metricsAsOf", { asOf: metricsAsOfText }) : undefined}
                     tone={pnlTone}
                   />
                   <StatCard
-                    label="PnL 30d"
-                    value={hasPnl30d ? `${(s.pnl30d * 100).toFixed(2)}%` : noData}
-                    tone={pnl30dTone}
+                    label={t("table.drawdown")}
+                    value={
+                      hasDrawdown ? (
+                        `${(rawDrawdown * 100).toFixed(2)}%`
+                      ) : missingMetricReason ? (
+                        <span
+                          data-testid="strategy-drawdown-missing"
+                          data-metrics-reason={missingMetricReason.code}
+                          title={missingMetricReason.code}
+                        >
+                          {missingMetricReason.text}
+                        </span>
+                      ) : (
+                        noData
+                      )
+                    }
+                    tone={drawdownTone}
                   />
                   <StatCard
-                    label={t("table.sharpe")}
-                    value={hasSharpe ? s.sharpe.toFixed(2) : noData}
+                    label={t("strategy.list.column.trades")}
+                    value={
+                      hasTotalTrades ? (
+                        <span data-testid="strategy-trades">{rawTotalTrades}</span>
+                      ) : (
+                        <span
+                          data-testid="strategy-trades"
+                          title={missingMetricReason?.code}
+                        >
+                          {missingMetricReason ? missingMetricReason.text : noData}
+                        </span>
+                      )
+                    }
+                    hint={hasTotalTrades && rawTotalTrades === 0 && missingMetricReason ? missingMetricReason.text : undefined}
                     tone="default"
                   />
                   <StatCard
-                    label={t("table.drawdown")}
-                    value={hasDrawdown ? `${(s.drawdown * 100).toFixed(2)}%` : noData}
-                    tone={drawdownTone}
+                    label={t("strategy.list.column.runtime")}
+                    value={
+                      runtimeStatus ? (
+                        <span
+                          data-testid="strategy-runtime-status"
+                          data-runtime-status={runtimeStatus}
+                          title={runtimeReason ? `${runtimeReason.text} (${runtimeReason.code})` : undefined}
+                        >
+                          {t(`strategy.runtimeStatus.${runtimeStatus}`)}
+                          {runtimeReasonText && (
+                            <span
+                              data-testid="strategy-runtime-reason"
+                              title={runtimeReason ? `${runtimeReason.text} (${runtimeReason.code})` : undefined}
+                              className="mt-1 block font-sans text-xs font-normal text-muted-foreground"
+                            >
+                              {runtimeReasonText}
+                            </span>
+                          )}
+                        </span>
+                      ) : normalizedOperationalStatus ? (
+                        <span
+                          data-testid="strategy-runtime-status"
+                          data-operational-status={normalizedOperationalStatus}
+                        >
+                          {t(`strategy.operationalStatus.${normalizedOperationalStatus}`)}
+                        </span>
+                      ) : (
+                        <span data-testid="strategy-runtime-status">{noData}</span>
+                      )
+                    }
+                    tone={runtimeTone}
                   />
                 </div>
-                <div className="grid gap-4 md:grid-cols-3 mt-4">
-                  <LinkedBlock
-                    icon={<User className="h-3.5 w-3.5 text-muted-foreground" />}
-                    title={t("phase13.strategy.linked.identity")}
-                    items={[
-                      { id: `owner:${s.owner}`, label: s.owner, meta: t("table.owner") },
-                      ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` })),
-                    ]}
-                  />
+                <div className="grid gap-4 md:grid-cols-2 mt-4">
                   <div
                     data-testid="strategy-watchers-section"
                     data-section-status={watchersState.status}
@@ -941,11 +1191,11 @@ export const StrategyDetail = () => {
                         { key: "act", header: "", cell: (r) => (
                           <div className="flex gap-1 justify-end">
                             {!r.acknowledged && (
-                              <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
+                              <NonProductionActionButton size="sm" variant="ghost" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}
                               </NonProductionActionButton>
                             )}
-                            <NonProductionActionButton size="sm" variant="outline" status="owner endpoint exists with frontend wiring pending">
+                            <NonProductionActionButton size="sm" variant="outline" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
                               <AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}
                             </NonProductionActionButton>
                           </div>
@@ -990,10 +1240,10 @@ export const StrategyDetail = () => {
                       { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
                       { key: "act", header: "", cell: (r) => (
                         <div className="flex gap-1 justify-end">
-                          <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
+                          <NonProductionActionButton size="sm" variant="ghost" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
                             {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
                           </NonProductionActionButton>
-                          <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
+                          <NonProductionActionButton size="sm" variant="outline" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
                             <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
                           </NonProductionActionButton>
                         </div>

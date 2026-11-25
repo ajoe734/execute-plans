@@ -295,6 +295,106 @@ export function deduplicateStrategyRules(
     }
     out.push(normalizedEnvelopes.get(rule) ?? rule);
   }
-  return out;
+  const tradedRules: StrategyRule[] = [];
+  const baselineRules: StrategyRule[] = [];
+  for (const rule of out) {
+    if (resolveStrategyRuleRole(rule) === "rollback_baseline") {
+      baselineRules.push(rule);
+    } else {
+      tradedRules.push(rule);
+    }
+  }
+  return [...tradedRules, ...baselineRules];
 }
+
+export interface FormattedPoolRuleItem {
+  text: string;
+  code: string;
+  key?: string;
+  isKnown: boolean;
+}
+
+export function formatPoolCombinationRule(
+  rawCode: string | null | undefined,
+  locale: string = "en-US",
+): FormattedPoolRuleItem | null {
+  if (typeof rawCode !== "string" || !rawCode.trim()) return null;
+  const code = rawCode.trim();
+  const isZh = locale.trim().toLowerCase().startsWith("zh");
+  if (code === "clipped_weighted_sum_v1") {
+    return {
+      text: isZh
+        ? "依成員風險權重加權合計訊號，並裁切於風險上限內"
+        : "Weighted sum of member signals by risk weight, clipped to the risk limits",
+      code,
+      isKnown: true,
+    };
+  }
+  return {
+    text: isZh ? "未登錄的組合規則" : "Unregistered combination rule",
+    code,
+    isKnown: false,
+  };
+}
+
+export function formatPoolRiskLimit(
+  rawKey: string,
+  value: unknown,
+  locale: string = "en-US",
+): FormattedPoolRuleItem {
+  const key = rawKey.trim();
+  const isZh = locale.trim().toLowerCase().startsWith("zh");
+  const valueStr = isFiniteNumber(value) ? String(value) : stringifyValue(value);
+  const code = `${key}=${valueStr}`;
+
+  if (key === "max_net_strength") {
+    const pct = isFiniteNumber(value) ? formatMomentumThresholdPercent(value) : valueStr;
+    return {
+      key,
+      code,
+      isKnown: true,
+      text: isZh
+        ? isFiniteNumber(value)
+          ? `多空抵銷後的淨部位上限為 ${pct}（${valueStr} 倍）`
+          : `多空抵銷後的淨部位上限為 ${valueStr}`
+        : isFiniteNumber(value)
+          ? `Net position after offsetting long and short is capped at ${pct} (${valueStr}x)`
+          : `Net position after offsetting long and short is capped at ${valueStr}`,
+    };
+  }
+
+  if (key === "gross_weight_limit") {
+    const pct = isFiniteNumber(value) ? formatMomentumThresholdPercent(value) : valueStr;
+    return {
+      key,
+      code,
+      isKnown: true,
+      text: isZh
+        ? isFiniteNumber(value)
+          ? `所有成員權重絕對值合計上限為 ${pct}（${valueStr} 倍）`
+          : `所有成員權重絕對值合計上限為 ${valueStr}`
+        : isFiniteNumber(value)
+          ? `Total absolute member weight is capped at ${pct} (${valueStr}x)`
+          : `Total absolute member weight is capped at ${valueStr}`,
+    };
+  }
+
+  return {
+    key,
+    code,
+    isKnown: false,
+    text: isZh
+      ? `未登錄的風險上限（值：${valueStr}）`
+      : `Unregistered risk limit (value: ${valueStr})`,
+  };
+}
+
+export function formatPoolRiskLimits(
+  riskLimits: Record<string, unknown> | null | undefined,
+  locale: string = "en-US",
+): FormattedPoolRuleItem[] {
+  if (!riskLimits || typeof riskLimits !== "object") return [];
+  return Object.entries(riskLimits).map(([k, v]) => formatPoolRiskLimit(k, v, locale));
+}
+
 

@@ -9,6 +9,8 @@ import { StrategyParamsEditor } from "./StrategyParamsEditor";
 import { MetricFreezeBadge } from "./MetricFreezeBadge";
 import {
   deduplicateStrategyRules,
+  formatPoolCombinationRule,
+  formatPoolRiskLimits,
   resolveStrategyRuleRole,
 } from "./strategyRuleText";
 import { RuleDescription } from "./RuleDescription";
@@ -67,6 +69,48 @@ export const StrategyRulesList = ({
         const isEnvelope = role === "pool_envelope";
         const isBaseline = role === "rollback_baseline";
         const roleLabel = t(`strategyDetail.ruleRole.${role}`);
+        const combinationDisplay = isEnvelope
+          ? formatPoolCombinationRule(rule.combinationRule, i18n.language)
+          : null;
+        const riskLimitDisplays = isEnvelope
+          ? formatPoolRiskLimits(rule.riskLimits, i18n.language)
+          : [];
+
+        if (isBaseline) {
+          return (
+            <details
+              key={`${rule.registryId ?? "rule"}-${idx}`}
+              data-testid={`strategy-rule-${rule.registryId}`}
+              data-rule-role={rule.role ?? role}
+              data-collapsed="true"
+              className="rounded-md border border-border/50 bg-muted/10 px-3 py-1.5 text-xs text-muted-foreground"
+            >
+              <summary
+                data-testid={variant === "summary" ? `strategy-rules-summary-rule-${idx}` : undefined}
+                className="cursor-pointer select-none flex flex-wrap items-center gap-2"
+              >
+                <Badge variant="outline" className="border-muted text-muted-foreground text-[11px]">
+                  {roleLabel}
+                </Badge>
+                <span>{t("strategyDetail.rulesSummary.rollbackCollapsedHint")}</span>
+              </summary>
+              <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <code className="text-mono text-xs text-muted-foreground">
+                    {rule.registryId}
+                  </code>
+                  {rule.version && (
+                    <span className="text-mono text-xs text-muted-foreground">
+                      v{rule.version}
+                    </span>
+                  )}
+                </div>
+                <RuleDescription rule={rule} />
+              </div>
+            </details>
+          );
+        }
+
         return (
           <div
             key={`${rule.registryId ?? "rule"}-${idx}`}
@@ -81,11 +125,7 @@ export const StrategyRulesList = ({
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge
                   variant="outline"
-                  className={
-                    isBaseline
-                      ? "border-muted text-muted-foreground"
-                      : "border-status-success/40 text-status-success"
-                  }
+                  className="border-status-success/40 text-status-success"
                 >
                   {roleLabel}
                 </Badge>
@@ -102,15 +142,53 @@ export const StrategyRulesList = ({
                 <div className="space-y-2 text-sm" data-testid="strategy-rule-envelope">
                   <div data-testid="strategy-rule-combination">
                     <span className="text-muted-foreground">{t("strategyDetail.poolRules.combinationRule")}：</span>
-                    <code className="text-mono">{rule.combinationRule ?? "—"}</code>
+                    {combinationDisplay ? (
+                      <span
+                        title={combinationDisplay.code}
+                        data-code={combinationDisplay.code}
+                        data-known={combinationDisplay.isKnown ? "true" : "false"}
+                      >
+                        <span>{combinationDisplay.text}</span>
+                        {!combinationDisplay.isKnown && (
+                          <code
+                            data-testid="strategy-rule-combination-unknown-code"
+                            className="ml-1.5 text-mono text-xs text-muted-foreground"
+                          >
+                            {combinationDisplay.code}
+                          </code>
+                        )}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </div>
-                  <div data-testid="strategy-rule-risk-limits">
+                  <div data-testid="strategy-rule-risk-limits" className="space-y-1">
                     <span className="text-muted-foreground">{t("strategyDetail.poolRules.riskLimits")}：</span>
-                    {rule.riskLimits && Object.keys(rule.riskLimits).length > 0
-                      ? Object.entries(rule.riskLimits).map(([k, v]) => (
-                          <code key={k} className="text-mono mr-3">{k}={String(v)}</code>
-                        ))
-                      : "—"}
+                    {riskLimitDisplays.length > 0 ? (
+                      <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {riskLimitDisplays.map((item) => (
+                          <span
+                            key={item.key ?? item.code}
+                            title={item.code}
+                            data-code={item.key ?? item.code}
+                            data-known={item.isKnown ? "true" : "false"}
+                            data-testid={`strategy-rule-risk-limit-${item.key ?? item.code}`}
+                          >
+                            <span>{item.text}</span>
+                            {!item.isKnown && (
+                              <code
+                                data-testid={`strategy-rule-risk-limit-unknown-${item.key ?? item.code}`}
+                                className="ml-1.5 text-mono text-xs text-muted-foreground"
+                              >
+                                {item.code}
+                              </code>
+                            )}
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </div>
                   <div className="text-muted-foreground">
                     {t("strategyDetail.poolRules.members", { count: rule.members?.length ?? 0 })}
@@ -131,10 +209,10 @@ export const StrategyRulesList = ({
                             >
                               {t("strategyDetail.ruleRole.pool_member")}
                             </Badge>
-                            <code className="text-mono">{m.registryId}</code>
                             <span className="text-muted-foreground">
                               {t("strategyDetail.poolRules.weight")} {m.riskWeight ?? "—"}
                             </span>
+                            <code className="text-mono text-xs text-muted-foreground">{m.registryId}</code>
                           </div>
                           <RuleDescription
                             rule={{ role: "pool_member", strategyLogic: m.strategyLogic, parameters: m.parameters }}
