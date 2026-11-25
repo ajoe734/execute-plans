@@ -1,7 +1,7 @@
 // Strategy Detail — Spec Part 3 §6 (11 tabs).
 // Overview · Spec & Parameters · Experiments · Paper-Live · Risk & Alerts ·
 // Incidents · Artifacts · Evolution · Governance · Lineage · Audit
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
@@ -43,6 +43,43 @@ import { safeDateTime } from "@/lib/utils";
 import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
 
 type SectionLoadStatus = "loading" | "ready" | "unavailable";
+
+type SecondarySectionKey =
+  | "watchers"
+  | "journal"
+  | "experiments"
+  | "alerts"
+  | "incidents"
+  | "artifacts"
+  | "evolution"
+  | "approvals"
+  | "lineage"
+  | "audit";
+
+const OVERVIEW_SECTIONS: SecondarySectionKey[] = ["watchers", "journal"];
+const EXPERIMENTS_SECTIONS: SecondarySectionKey[] = ["experiments"];
+const RISK_SECTIONS: SecondarySectionKey[] = ["alerts"];
+const INCIDENTS_SECTIONS: SecondarySectionKey[] = ["incidents"];
+const ARTIFACTS_SECTIONS: SecondarySectionKey[] = ["lineage", "artifacts"];
+const EVOLUTION_SECTIONS: SecondarySectionKey[] = ["evolution"];
+const GOVERNANCE_SECTIONS: SecondarySectionKey[] = ["approvals"];
+const LINEAGE_SECTIONS: SecondarySectionKey[] = ["lineage"];
+const AUDIT_SECTIONS: SecondarySectionKey[] = ["audit"];
+
+function TabSectionLoader({
+  sections,
+  ensureLoaded,
+  children,
+}: {
+  sections: SecondarySectionKey[];
+  ensureLoaded: (keys: SecondarySectionKey[]) => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    ensureLoaded(sections);
+  }, [ensureLoaded, sections]);
+  return <>{children}</>;
+}
 
 interface SectionState<T> {
   status: SectionLoadStatus;
@@ -107,9 +144,17 @@ export const StrategyDetail = () => {
   const [journalState, setJournalState] = useState<SectionState<DecisionJournalEntry[]>>({ status: "loading", data: [] });
   const [lineageState, setLineageState] = useState<SectionState<LineageRead | null>>({ status: "loading", data: null });
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
+  const [primaryLoadSeq, setPrimaryLoadSeq] = useState(0);
 
   const secondaryReqIdRef = useRef(0);
   const mountedRef = useRef(true);
+  const lastLoadedStrategyRef = useRef<Strategy | undefined>(undefined);
+  const loadedSectionsRef = useRef<{
+    entityId: string;
+    seq: number;
+    sections: Set<SecondarySectionKey>;
+  }>({ entityId: "", seq: -1, sections: new Set() });
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -118,207 +163,275 @@ export const StrategyDetail = () => {
     };
   }, []);
 
+  useEffect(() => {
+    secondaryReqIdRef.current += 1;
+    lastLoadedStrategyRef.current = undefined;
+    loadedSectionsRef.current = { entityId: id ?? "", seq: -1, sections: new Set() };
+    setLoadErrors([]);
+    setPrimaryLoadSeq(0);
+    setAuditState({ status: "loading", data: [] });
+    setApprovalsState({ status: "loading", data: [] });
+    setAlertsState({ status: "loading", data: [] });
+    setIncidentsState({ status: "loading", data: [] });
+    setArtifactsCatalogState({ status: "loading", data: [] });
+    setExperimentsState({ status: "loading", data: [] });
+    setEvolutionsState({ status: "loading", data: [] });
+    setWatchersState({ status: "loading", data: [] });
+    setJournalState({ status: "loading", data: [] });
+    setLineageState({ status: "loading", data: null });
+  }, [id]);
+
   const { data: s, setData: setS, loading, isError, notFound } = useLiveDetail<Strategy>(
     id,
     async (entityId) => {
-      const reqId = ++secondaryReqIdRef.current;
+      try {
+        const strat = await bffV1.strategies.get(entityId);
+        if (isStrategyPayloadUnavailable(strat)) {
+          throw new Error("Strategy unavailable");
+        }
+        lastLoadedStrategyRef.current = strat;
+        if (mountedRef.current) {
+          secondaryReqIdRef.current += 1;
+          setLoadErrors([]);
+          setPrimaryLoadSeq((seq) => seq + 1);
+        }
+        return strat;
+      } catch (err) {
+        if (lastLoadedStrategyRef.current && lastLoadedStrategyRef.current.id === entityId) {
+          return lastLoadedStrategyRef.current;
+        }
+        secondaryReqIdRef.current += 1;
+        throw err;
+      }
+    },
+    { kinds: ["strategies"] },
+  );
+
+  const activeEntityId = id?.trim() || s?.id;
+  const ensureSectionsLoaded = useCallback(
+    (keys: SecondarySectionKey[]) => {
+      if (!s || !activeEntityId || primaryLoadSeq <= 0) return;
+      if (
+        loadedSectionsRef.current.entityId !== activeEntityId ||
+        loadedSectionsRef.current.seq !== primaryLoadSeq
+      ) {
+        loadedSectionsRef.current = {
+          entityId: activeEntityId,
+          seq: primaryLoadSeq,
+          sections: new Set(),
+        };
+      }
+      const seen = loadedSectionsRef.current.sections;
+      const toStart = keys.filter((k) => !seen.has(k));
+      if (toStart.length === 0) return;
+      for (const k of toStart) {
+        seen.add(k);
+      }
+
+      const entityId = activeEntityId;
+      const reqId = secondaryReqIdRef.current;
       const isCurrent = () => mountedRef.current && secondaryReqIdRef.current === reqId;
       const recordFailure = (label: string) => {
         if (!isCurrent()) return;
         setLoadErrors((prev) => (prev.includes(label) ? prev : [...prev, label]));
       };
 
-      setLoadErrors([]);
-      setAuditState((prev) => beginSectionLoad(prev, entityId, []));
-      setApprovalsState((prev) => beginSectionLoad(prev, entityId, []));
-      setAlertsState((prev) => beginSectionLoad(prev, entityId, []));
-      setIncidentsState((prev) => beginSectionLoad(prev, entityId, []));
-      setArtifactsCatalogState((prev) => beginSectionLoad(prev, entityId, []));
-      setExperimentsState((prev) => beginSectionLoad(prev, entityId, []));
-      setEvolutionsState((prev) => beginSectionLoad(prev, entityId, []));
-      setWatchersState((prev) => beginSectionLoad(prev, entityId, []));
-      setJournalState((prev) => beginSectionLoad(prev, entityId, []));
-      setLineageState((prev) => beginSectionLoad(prev, entityId, null));
-
-      bffV1.jobs.list().then(
-        () => undefined,
-        () => {
-          recordFailure("Jobs");
-        },
-      );
-      bffV1.audit.list().then(
-        (a) => {
-          if (!isCurrent()) return;
-          const rows = Array.isArray(a) ? a : [];
-          setAuditState({
-            status: "ready",
-            data: rows.filter((x) => x.target === entityId || (x.target ?? "").includes(entityId)),
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Audit");
-          setAuditState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.approvals.list().then(
-        (ap) => {
-          if (!isCurrent()) return;
-          const rows = Array.isArray(ap) ? ap : [];
-          setApprovalsState({
-            status: "ready",
-            data: rows.filter((x) => (x.subject ?? "").includes(entityId)),
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Approvals");
-          setApprovalsState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.alerts.list().then(
-        (al) => {
-          if (!isCurrent()) return;
-          const rows = Array.isArray(al) ? al : [];
-          setAlertsState({
-            status: "ready",
-            data: rows.filter(
-              (x) =>
-                x.relatedTarget === entityId ||
-                (x.source ?? "").includes(entityId) ||
-                (x.title ?? "").includes(entityId),
-            ),
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Alerts");
-          setAlertsState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.incidents.list().then(
-        (inc) => {
-          if (!isCurrent()) return;
-          const rows = Array.isArray(inc) ? inc : [];
-          setIncidentsState({
-            status: "ready",
-            data: rows.filter((x) => x.affected?.includes(entityId)),
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Incidents");
-          setIncidentsState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.artifacts.list().then(
-        (ar) => {
-          if (!isCurrent()) return;
-          setArtifactsCatalogState({
-            status: "ready",
-            data: Array.isArray(ar) ? ar : [],
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Artifacts");
-          setArtifactsCatalogState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.research.list().then(
-        (ex) => {
-          if (!isCurrent()) return;
-          const rows = Array.isArray(ex) ? ex : [];
-          setExperimentsState({
-            status: "ready",
-            data: rows.slice(0, 6),
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Research");
-          setExperimentsState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.evolution.list().then(
-        (ev) => {
-          if (!isCurrent()) return;
-          setEvolutionsState({
-            status: "ready",
-            data: Array.isArray(ev) ? ev : [],
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Evolution");
-          setEvolutionsState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.watchers.forSubject("Strategy", entityId).then(
-        (w) => {
-          if (!isCurrent()) return;
-          setWatchersState({
-            status: "ready",
-            data: Array.isArray(w) ? w : [],
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Watchers");
-          setWatchersState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      bffV1.decisionJournal.forSubject("Strategy", entityId).then(
-        (dj) => {
-          if (!isCurrent()) return;
-          setJournalState({
-            status: "ready",
-            data: Array.isArray(dj) ? dj : [],
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          recordFailure("Decision journal");
-          setJournalState({ status: "unavailable", data: [], entityId });
-        },
-      );
-      managementConsoleReads.lineage(entityId).then(
-        (lin) => {
-          if (!isCurrent()) return;
-          const unavailable = isLineageUnavailable(lin);
-          setLineageState({
-            status: unavailable ? "unavailable" : "ready",
-            data: unavailable ? null : lin,
-            entityId,
-          });
-        },
-        () => {
-          if (!isCurrent()) return;
-          setLineageState({ status: "unavailable", data: null, entityId });
-        },
-      );
-
-      try {
-        const strat = await bffV1.strategies.get(entityId);
-        if (isStrategyPayloadUnavailable(strat)) {
-          throw new Error("Strategy unavailable");
+      for (const key of toStart) {
+        switch (key) {
+          case "watchers":
+            setWatchersState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.watchers.forSubject("Strategy", entityId).then(
+              (w) => {
+                if (!isCurrent()) return;
+                setWatchersState({
+                  status: "ready",
+                  data: Array.isArray(w) ? w : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Watchers");
+                setWatchersState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "journal":
+            setJournalState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.decisionJournal.forSubject("Strategy", entityId).then(
+              (dj) => {
+                if (!isCurrent()) return;
+                setJournalState({
+                  status: "ready",
+                  data: Array.isArray(dj) ? dj : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Decision journal");
+                setJournalState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "experiments":
+            setExperimentsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.research.list().then(
+              (ex) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(ex) ? ex : [];
+                setExperimentsState({
+                  status: "ready",
+                  data: rows.slice(0, 6),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Research");
+                setExperimentsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "alerts":
+            setAlertsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.alerts.list().then(
+              (al) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(al) ? al : [];
+                setAlertsState({
+                  status: "ready",
+                  data: rows.filter(
+                    (x) =>
+                      x.relatedTarget === entityId ||
+                      (x.source ?? "").includes(entityId) ||
+                      (x.title ?? "").includes(entityId),
+                  ),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Alerts");
+                setAlertsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "incidents":
+            setIncidentsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.incidents.list().then(
+              (inc) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(inc) ? inc : [];
+                setIncidentsState({
+                  status: "ready",
+                  data: rows.filter((x) => x.affected?.includes(entityId)),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Incidents");
+                setIncidentsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "artifacts":
+            setArtifactsCatalogState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.artifacts.list().then(
+              (ar) => {
+                if (!isCurrent()) return;
+                setArtifactsCatalogState({
+                  status: "ready",
+                  data: Array.isArray(ar) ? ar : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Artifacts");
+                setArtifactsCatalogState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "evolution":
+            setEvolutionsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.evolution.list().then(
+              (ev) => {
+                if (!isCurrent()) return;
+                setEvolutionsState({
+                  status: "ready",
+                  data: Array.isArray(ev) ? ev : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Evolution");
+                setEvolutionsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "approvals":
+            setApprovalsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.approvals.list().then(
+              (ap) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(ap) ? ap : [];
+                setApprovalsState({
+                  status: "ready",
+                  data: rows.filter((x) => (x.subject ?? "").includes(entityId)),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Approvals");
+                setApprovalsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "lineage":
+            setLineageState((prev) => beginSectionLoad(prev, entityId, null));
+            managementConsoleReads.lineage(entityId).then(
+              (lin) => {
+                if (!isCurrent()) return;
+                const unavailable = isLineageUnavailable(lin);
+                setLineageState({
+                  status: unavailable ? "unavailable" : "ready",
+                  data: unavailable ? null : lin,
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                setLineageState({ status: "unavailable", data: null, entityId });
+              },
+            );
+            break;
+          case "audit":
+            setAuditState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.audit.list().then(
+              (a) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(a) ? a : [];
+                setAuditState({
+                  status: "ready",
+                  data: rows.filter((x) => x.target === entityId || (x.target ?? "").includes(entityId)),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Audit");
+                setAuditState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
         }
-        return strat;
-      } catch (err) {
-        secondaryReqIdRef.current += 1;
-        throw err;
       }
     },
-    { kinds: ["strategies"] },
+    [activeEntityId, primaryLoadSeq, s],
   );
 
   const machineState: StrategyState = useMemo(() => {
@@ -453,7 +566,7 @@ export const StrategyDetail = () => {
           {
             value: "overview", label: t("section.overview"),
             content: (
-              <>
+              <TabSectionLoader sections={OVERVIEW_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
                 {isStub && (
                   <div
                     role="note"
@@ -678,7 +791,7 @@ export const StrategyDetail = () => {
                     </Link>
                   </Button>
                 </div>
-              </>
+              </TabSectionLoader>
             ),
           },
 
@@ -726,29 +839,31 @@ export const StrategyDetail = () => {
           {
             value: "experiments", label: t("nav.experiments"),
             content: (
-              <div
-                data-testid="strategy-experiments-section"
-                data-section-status={experimentsState.status}
-              >
-                <DataTable<ResearchExperiment>
-                  rows={experimentsState.status === "ready" ? experimentsState.data : []}
-                  loading={experimentsState.status === "loading"}
-                  loadingText={t("common.loading")}
-                  onRowClick={(r) => nav(`/management/experiments/${r.experiment_id || r.id}`)}
-                  columns={[
-                    { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.experiment_id || r.id}</span> },
-                    { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.experiment_name || r.name}</div> },
-                    { key: "hyp", header: t("strategyDetail.hypothesis"), cell: (r) => <span className="text-xs text-muted-foreground">{r.hypothesis}</span> },
-                    { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
-                    { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
-                  ]}
-                  empty={
-                    experimentsState.status === "unavailable"
-                      ? t("strategyDetail.experimentsUnavailable")
-                      : t("empty.noResults")
-                  }
-                />
-              </div>
+              <TabSectionLoader sections={EXPERIMENTS_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-experiments-section"
+                  data-section-status={experimentsState.status}
+                >
+                  <DataTable<ResearchExperiment>
+                    rows={experimentsState.status === "ready" ? experimentsState.data : []}
+                    loading={experimentsState.status === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/experiments/${r.experiment_id || r.id}`)}
+                    columns={[
+                      { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.experiment_id || r.id}</span> },
+                      { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.experiment_name || r.name}</div> },
+                      { key: "hyp", header: t("strategyDetail.hypothesis"), cell: (r) => <span className="text-xs text-muted-foreground">{r.hypothesis}</span> },
+                      { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
+                      { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
+                    ]}
+                    empty={
+                      experimentsState.status === "unavailable"
+                        ? t("strategyDetail.experimentsUnavailable")
+                        : t("empty.noResults")
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -803,7 +918,7 @@ export const StrategyDetail = () => {
           {
             value: "risk", label: t("strategyDetail.riskAlerts"),
             content: (
-              <>
+              <TabSectionLoader sections={RISK_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
                 <div className="grid grid-cols-3 gap-4">
                   <StatCard label={t("strategyDetail.var95")} value="—" />
                   <StatCard label={t("strategyDetail.beta")} value="—" />
@@ -844,7 +959,7 @@ export const StrategyDetail = () => {
                     />
                   </div>
                 </Section>
-              </>
+              </TabSectionLoader>
             ),
           },
 
@@ -852,39 +967,41 @@ export const StrategyDetail = () => {
           {
             value: "incidents", label: t("nav.incidents"),
             content: (
-              <div
-                data-testid="strategy-incidents-section"
-                data-section-status={incidentsState.status}
-              >
-                <DataTable<Incident>
-                  rows={incidentsState.status === "ready" ? incidentsState.data : []}
-                  loading={incidentsState.status === "loading"}
-                  loadingText={t("common.loading")}
-                  onRowClick={(r) => nav(`/management/incidents/${r.id}`)}
-                  empty={
-                    incidentsState.status === "unavailable"
-                      ? t("strategyDetail.incidentsUnavailable")
-                      : t("strategyDetail.noIncidents")
-                  }
-                  columns={[
-                    { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
-                    { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
-                    { key: "st", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-                    { key: "cmd", header: t("table.commander"), cell: (r) => <span className="text-mono text-xs">{r.commander ?? "—"}</span> },
-                    { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
-                    { key: "act", header: "", cell: (r) => (
-                      <div className="flex gap-1 justify-end">
-                        <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
-                          {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
-                        </NonProductionActionButton>
-                        <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
-                          <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
-                        </NonProductionActionButton>
-                      </div>
-                    ) },
-                  ]}
-                />
-              </div>
+              <TabSectionLoader sections={INCIDENTS_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-incidents-section"
+                  data-section-status={incidentsState.status}
+                >
+                  <DataTable<Incident>
+                    rows={incidentsState.status === "ready" ? incidentsState.data : []}
+                    loading={incidentsState.status === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/incidents/${r.id}`)}
+                    empty={
+                      incidentsState.status === "unavailable"
+                        ? t("strategyDetail.incidentsUnavailable")
+                        : t("strategyDetail.noIncidents")
+                    }
+                    columns={[
+                      { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+                      { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+                      { key: "st", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
+                      { key: "cmd", header: t("table.commander"), cell: (r) => <span className="text-mono text-xs">{r.commander ?? "—"}</span> },
+                      { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
+                      { key: "act", header: "", cell: (r) => (
+                        <div className="flex gap-1 justify-end">
+                          <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
+                            {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
+                          </NonProductionActionButton>
+                          <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
+                            <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
+                          </NonProductionActionButton>
+                        </div>
+                      ) },
+                    ]}
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -892,39 +1009,41 @@ export const StrategyDetail = () => {
           {
             value: "artifacts", label: t("nav.artifacts"),
             content: (
-              <div
-                data-testid="strategy-artifacts-section"
-                data-section-status={artifactsSectionStatus}
-              >
-                <DataTable<Artifact>
-                  rows={artifacts}
-                  loading={artifactsSectionStatus === "loading"}
-                  loadingText={t("common.loading")}
-                  onRowClick={(r) => nav(`/management/artifacts/${r.id}`)}
-                  columns={[
-                    { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-                    { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                    { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px]">{r.kind || noData}</Badge> },
-                    { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
-                    {
-                      key: "size",
-                      header: t("strategyDetail.size"),
-                      cell: (r) => (
-                        <span className="text-mono text-xs">
-                          {typeof r.sizeMb === "number" && Number.isFinite(r.sizeMb)
-                            ? `${r.sizeMb.toFixed(1)} MB`
-                            : noData}
-                        </span>
-                      ),
-                    },
-                  ]}
-                  empty={
-                    artifactsSectionStatus === "unavailable"
-                      ? t("strategyDetail.artifactsUnavailable")
-                      : t("empty.noResults")
-                  }
-                />
-              </div>
+              <TabSectionLoader sections={ARTIFACTS_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-artifacts-section"
+                  data-section-status={artifactsSectionStatus}
+                >
+                  <DataTable<Artifact>
+                    rows={artifacts}
+                    loading={artifactsSectionStatus === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/artifacts/${r.id}`)}
+                    columns={[
+                      { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+                      { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                      { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px]">{r.kind || noData}</Badge> },
+                      { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
+                      {
+                        key: "size",
+                        header: t("strategyDetail.size"),
+                        cell: (r) => (
+                          <span className="text-mono text-xs">
+                            {typeof r.sizeMb === "number" && Number.isFinite(r.sizeMb)
+                              ? `${r.sizeMb.toFixed(1)} MB`
+                              : noData}
+                          </span>
+                        ),
+                      },
+                    ]}
+                    empty={
+                      artifactsSectionStatus === "unavailable"
+                        ? t("strategyDetail.artifactsUnavailable")
+                        : t("empty.noResults")
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -932,39 +1051,41 @@ export const StrategyDetail = () => {
           {
             value: "evolution", label: t("nav.evolution"),
             content: (
-              <div
-                data-testid="strategy-evolution-section"
-                data-section-status={evolutionsState.status}
-              >
-                {evolutionsState.status === "loading" ? (
-                  <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="strategy-evolution-loading">
-                    {t("common.loading")}
-                  </Card>
-                ) : evolutionsState.status === "unavailable" ? (
-                  <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="strategy-evolution-unavailable">
-                    {t("strategyDetail.evolutionUnavailable")}
-                  </Card>
-                ) : evolutions.length ? (
-                  <DataTable<EvolutionProgram>
-                    rows={evolutions}
-                    onRowClick={(r) => nav(`/management/evolution/${r.id}`)}
-                    columns={[
-                      { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-                      { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                      { key: "gen", header: t("strategyDetail.generation"), cell: (r) => <span className="text-mono text-xs">{r.generation}</span> },
-                      { key: "fit", header: t("strategyDetail.bestFitness"), cell: (r) => <span className="text-mono text-xs">{(r.bestFitness ?? 0).toFixed(3)}</span> },
-                      { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
-                    ]}
-                  />
-                ) : (
-                  <Card className="p-8 text-center">
-                    <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: alphaDisplay })}</div>
-                    <Button size="sm" variant="outline" onClick={() => nav("/management/evolution")}>
-                      {t("strategyDetail.startEvolution")} <ArrowRight className="ml-1 h-3 w-3" />
-                    </Button>
-                  </Card>
-                )}
-              </div>
+              <TabSectionLoader sections={EVOLUTION_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-evolution-section"
+                  data-section-status={evolutionsState.status}
+                >
+                  {evolutionsState.status === "loading" ? (
+                    <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="strategy-evolution-loading">
+                      {t("common.loading")}
+                    </Card>
+                  ) : evolutionsState.status === "unavailable" ? (
+                    <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="strategy-evolution-unavailable">
+                      {t("strategyDetail.evolutionUnavailable")}
+                    </Card>
+                  ) : evolutions.length ? (
+                    <DataTable<EvolutionProgram>
+                      rows={evolutions}
+                      onRowClick={(r) => nav(`/management/evolution/${r.id}`)}
+                      columns={[
+                        { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+                        { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                        { key: "gen", header: t("strategyDetail.generation"), cell: (r) => <span className="text-mono text-xs">{r.generation}</span> },
+                        { key: "fit", header: t("strategyDetail.bestFitness"), cell: (r) => <span className="text-mono text-xs">{(r.bestFitness ?? 0).toFixed(3)}</span> },
+                        { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
+                      ]}
+                    />
+                  ) : (
+                    <Card className="p-8 text-center">
+                      <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: alphaDisplay })}</div>
+                      <Button size="sm" variant="outline" onClick={() => nav("/management/evolution")}>
+                        {t("strategyDetail.startEvolution")} <ArrowRight className="ml-1 h-3 w-3" />
+                      </Button>
+                    </Card>
+                  )}
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -972,29 +1093,31 @@ export const StrategyDetail = () => {
           {
             value: "governance", label: t("nav.governance"),
             content: (
-              <div
-                data-testid="strategy-governance-section"
-                data-section-status={approvalsState.status}
-              >
-                <DataTable<ApprovalRequest>
-                  rows={approvalsState.status === "ready" ? approvalsState.data : []}
-                  loading={approvalsState.status === "loading"}
-                  loadingText={t("common.loading")}
-                  onRowClick={(r) => nav(`/management/governance/${r.id}`)}
-                  columns={[
-                    { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
-                    { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
-                    { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
-                    { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-                    { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
-                  ]}
-                  empty={
-                    approvalsState.status === "unavailable"
-                      ? t("strategyDetail.governanceUnavailable")
-                      : t("strategyDetail.noGovernance")
-                  }
-                />
-              </div>
+              <TabSectionLoader sections={GOVERNANCE_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-governance-section"
+                  data-section-status={approvalsState.status}
+                >
+                  <DataTable<ApprovalRequest>
+                    rows={approvalsState.status === "ready" ? approvalsState.data : []}
+                    loading={approvalsState.status === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/governance/${r.id}`)}
+                    columns={[
+                      { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+                      { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
+                      { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
+                      { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                      { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
+                    ]}
+                    empty={
+                      approvalsState.status === "unavailable"
+                        ? t("strategyDetail.governanceUnavailable")
+                        : t("strategyDetail.noGovernance")
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -1002,40 +1125,42 @@ export const StrategyDetail = () => {
           {
             value: "lineage", label: t("section.lineage"),
             content: (
-              <div
-                data-testid="strategy-lineage-section"
-                data-section-status={lineageState.status}
-              >
-                {lineageState.status === "loading" ? (
-                  <div
-                    data-testid="strategy-lineage-loading"
-                    className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
-                  >
-                    {t("common.loading")}
-                  </div>
-                ) : lineageState.status === "unavailable" ? (
-                  <div
-                    data-testid="strategy-lineage-unavailable"
-                    className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
-                  >
-                    {t("strategyDetail.lineageUnavailable")}
-                  </div>
-                ) : (() => {
-                  const nodes: LineageNode[] = highlightLineageNodesForRoot(
-                    lineageState.data?.nodes ?? [],
-                    s.id,
-                  );
-                  const nodeIds = new Set(nodes.map((node) => node.id));
-                  const edges: LineageEdge[] = (lineageState.data?.edges ?? []).filter(
-                    (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
-                  );
-                  return (
-                    <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
-                      id: n.id, type: n.type, name: n.display_name || n.label, state: n.state, risk: n.risk,
-                    })} />
-                  );
-                })()}
-              </div>
+              <TabSectionLoader sections={LINEAGE_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-lineage-section"
+                  data-section-status={lineageState.status}
+                >
+                  {lineageState.status === "loading" ? (
+                    <div
+                      data-testid="strategy-lineage-loading"
+                      className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+                    >
+                      {t("common.loading")}
+                    </div>
+                  ) : lineageState.status === "unavailable" ? (
+                    <div
+                      data-testid="strategy-lineage-unavailable"
+                      className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+                    >
+                      {t("strategyDetail.lineageUnavailable")}
+                    </div>
+                  ) : (() => {
+                    const nodes: LineageNode[] = highlightLineageNodesForRoot(
+                      lineageState.data?.nodes ?? [],
+                      s.id,
+                    );
+                    const nodeIds = new Set(nodes.map((node) => node.id));
+                    const edges: LineageEdge[] = (lineageState.data?.edges ?? []).filter(
+                      (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
+                    );
+                    return (
+                      <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
+                        id: n.id, type: n.type, name: n.display_name || n.label, state: n.state, risk: n.risk,
+                      })} />
+                    );
+                  })()}
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -1043,21 +1168,23 @@ export const StrategyDetail = () => {
           {
             value: "audit", label: t("nav.audit"),
             content: (
-              <div
-                data-testid="strategy-audit-section"
-                data-section-status={auditState.status}
-              >
-                <AuditTimeline
-                  entries={auditState.status === "ready" ? auditState.data : []}
-                  emptyText={
-                    auditState.status === "loading"
-                      ? t("common.loading")
-                      : auditState.status === "unavailable"
-                        ? t("strategyDetail.auditUnavailable")
-                        : undefined
-                  }
-                />
-              </div>
+              <TabSectionLoader sections={AUDIT_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-audit-section"
+                  data-section-status={auditState.status}
+                >
+                  <AuditTimeline
+                    entries={auditState.status === "ready" ? auditState.data : []}
+                    emptyText={
+                      auditState.status === "loading"
+                        ? t("common.loading")
+                        : auditState.status === "unavailable"
+                          ? t("strategyDetail.auditUnavailable")
+                          : undefined
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
         ]}
