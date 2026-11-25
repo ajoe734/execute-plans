@@ -919,7 +919,41 @@ export interface CollectorQueryPlan {
   changes: Record<string, { before: string[]; after: string[] }>;
 }
 
+/** BFF-RESEARCH-DEMAND-READ-20261125: one open persona demand from the Research owner. */
+export interface ResearchDemand {
+  demand_id: string;
+  persona_id: string | null;
+  persona_display_name: string | null;
+  short_measure: string | null;
+  tried_families: string[];
+  missing_datasets: string[];
+  mandate: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  status: string | null;
+  evidence_ref: string | null;
+  last_template_search_reason: string | null;
+  last_discovery_reason: string | null;
+}
+
+/** Template-search task join: the demand it searched for and what was recorded. */
+export interface ResearchTaskDemandRef {
+  demand_id: string;
+  persona_id: string | null;
+  attempt_count: number | null;
+  last_reason_code: string | null;
+  short_measure: string | null;
+  status: string | null;
+}
+
+export type ResearchDemandsSurface =
+  | { state: "ok"; demands: ResearchDemand[] }
+  | { state: "unavailable"; reason: string | null };
+
 export interface ResearchTask extends ResearchExperiment {
+  demand?: ResearchTaskDemandRef | null;
+  persona_ids?: string[];
+  non_real_reason?: string | null;
   taskId: string;
   task_id?: string;
   title?: string | null;
