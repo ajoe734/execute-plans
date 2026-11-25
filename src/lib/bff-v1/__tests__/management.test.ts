@@ -6,6 +6,7 @@ import {
   adaptCockpitCapitalSummary,
   adaptPersonaLeagueInventory,
   adaptPersonaLeagueRankedRows,
+  adaptManagementCitedEvidence,
   adaptManagementEvidenceDetail,
   adaptManagementEvidenceOverview,
   adaptTradingPulseOverview,
@@ -4159,5 +4160,154 @@ describe("evolutionQualification BFF contract", () => {
     expect(rows?.[1]?.multiplier).toBeUndefined();
     expect(rows?.[1]?.marginReserved).toBeUndefined();
     expect(rows?.[1]?.reasonCode).toBeUndefined();
+  });
+});
+
+describe("cited evidence client (FE-EVIDENCE-CITED-20261125)", () => {
+  // GET /bff/management/evidence?scope=cited answer shape from
+  // BFF-EVIDENCE-CITED-LIST-20261125 (cited_evidence.compose_cited_evidence).
+  const ART_B = "artifact-persona-paper-a81b4fd15944698341aa";
+  const citedAnswer = (sources: Record<string, unknown>, status = "degraded") => ({
+    data: {
+      id: "management-evidence-cited",
+      scope: "cited",
+      items: [
+        {
+          id: ART_B,
+          ref_id: ART_B,
+          ref_kind: "registry_artifact",
+          source_owner: "registry",
+          label: "TW momentum 20d breakout",
+          name_missing: false,
+          label_parts: { strategy_id: ART_B },
+          source_class: "registry_record",
+          resolved_link: { route_href: `/management/strategies/${ART_B}`, evidence_ref_id: null },
+          route_href: `/management/strategies/${ART_B}`,
+          cited_as: [`facts:registry_entry:${ART_B}`],
+          cited_by: [
+            {
+              entity_type: "meeting_position",
+              entity_ref: "mtg-6edaff7d0ff76275",
+              label: "Pool evolution review for Paper Momentum Persona (2026-W48)",
+              parts: { meeting_id: "mtg-6edaff7d0ff76275", round: 1, position: "A", persona_id: "persona-ee7112a829d38b9135ac" },
+              route_href: "/management/meetings/mtg-6edaff7d0ff76275",
+              time: "2026-11-25T10:00:00Z",
+              source: "meeting_positions",
+            },
+          ],
+          citation_count: 1,
+          last_cited_at: "2026-11-25T10:00:00Z",
+          redacted: false,
+        },
+      ],
+      summary: { scope: "cited", complete: false, incomplete: true, reference_total: 1, references_truncated: false, max_references: 500, redacted_count: 0 },
+      sources,
+    },
+    page_info: { next_page_token: "20", total: 1, page_size: 20 },
+    meta: { snapshot_at: "2026-11-25T12:30:00Z", surfaces: { cited_evidence: { status }, cited_evidence_sources: sources } },
+  });
+
+  it("requests scope=cited with paging and adapts rows, citations and per-source status", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const urls: string[] = [];
+    const sources = {
+      meeting_positions: { status: "ok", read_count: 1, truncated: false, failed_count: 0, citation_count: 1, withheld_count: 0 },
+      governance_approvals: { status: "denied", reason: "owner_denied", read_count: null, truncated: false, failed_count: null, citation_count: 0, withheld_count: 0 },
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      urls.push(String(input));
+      return jsonResponse(citedAnswer(sources));
+    });
+
+    const out = await mgmt.evidence.citedLiveOnly({ pageToken: "20", pageSize: 20 });
+
+    expect(urls[0]).toContain("/bff/management/evidence?scope=cited&page_size=20&page_token=20");
+    expect(out).toMatchObject({
+      status: "degraded",
+      total: 1,
+      incomplete: true,
+      complete: false,
+      nextPageToken: "20",
+    });
+    expect(out?.items[0]).toMatchObject({
+      refId: ART_B,
+      refKind: "registry_artifact",
+      label: "TW momentum 20d breakout",
+      nameMissing: false,
+      sourceClass: "registry_record",
+      routeHref: `/management/strategies/${ART_B}`,
+      citationCount: 1,
+    });
+    expect(out?.items[0].citedBy[0]).toMatchObject({
+      entityType: "meeting_position",
+      routeHref: "/management/meetings/mtg-6edaff7d0ff76275",
+      time: "2026-11-25T10:00:00Z",
+    });
+    expect(out?.sources.map((source) => [source.key, source.status])).toEqual([
+      ["meeting_positions", "ok"],
+      ["governance_approvals", "denied"],
+    ]);
+  });
+
+  it("sends scope=ingested only for the ingested list", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      urls.push(String(input));
+      return jsonResponse({ data: { id: "management-evidence", items: [] }, page_info: { total: 0 }, meta: { surfaces: { management_evidence: { status: "ok" } } } });
+    });
+
+    await mgmt.evidence.overviewLiveOnly({ scope: "ingested" });
+    await mgmt.evidence.overviewLiveOnly();
+
+    expect(urls[0]).toContain("/bff/management/evidence?scope=ingested");
+    expect(urls[1]).not.toContain("scope=");
+  });
+
+  it("reports an older server that ignores scope as unsupported, never as cited rows", () => {
+    const out = adaptManagementCitedEvidence({
+      data: { id: "management-evidence", items: [{ ref_id: "evitem-1", title: "Ingested" }] },
+      page_info: { total: 614 },
+      meta: { surfaces: { management_evidence: { status: "ok" } } },
+    });
+    expect(out).toMatchObject({ status: "unsupported", items: [], total: null });
+  });
+
+  it("keeps total null and status unavailable when every source failed", () => {
+    const failed = { status: "failed", reason: "read_timeout", read_count: null, truncated: false, failed_count: null, citation_count: 0, withheld_count: 0 };
+    const answer = citedAnswer({ meeting_positions: failed, governance_approvals: failed }, "unavailable");
+    answer.data.items = [];
+    (answer.page_info as { total: number | null; next_page_token: string | null }).total = null;
+    const out = adaptManagementCitedEvidence(answer);
+    expect(out).toMatchObject({ status: "unavailable", total: null, nextPageToken: null, incomplete: true });
+  });
+
+  it("reads the item route answer for detail and never the list envelope id", () => {
+    const item = {
+      id: "evi-1217cd1c8ccc7274",
+      ref_id: "evi-1217cd1c8ccc7274",
+      title: "TW official tw_price_daily TWSE 0050 2026-11-24",
+      source_type: "official_reference",
+      source_class: "official_reference",
+      source_ref: "https://www.twse.com.tw/exchangeReport/STOCK_DAY?date=20261124&stockNo=0050",
+      captured_at: "2026-11-24T14:30:00+08:00",
+      source_document: { title: "TW official tw_price_daily TWSE 0050 2026-11-24", source_type: "official_reference", excerpt: "0050 close 192.35" },
+    };
+    const flat = adaptManagementEvidenceDetail({ data: item, meta: { surfaces: { evidence_ref_detail: { status: "ok" } } } }, "evi-1217cd1c8ccc7274");
+    expect(flat).toMatchObject({
+      refId: "evi-1217cd1c8ccc7274",
+      title: "TW official tw_price_daily TWSE 0050 2026-11-24",
+      sourceClass: "official_reference",
+      externalUrl: "https://www.twse.com.tw/exchangeReport/STOCK_DAY?date=20261124&stockNo=0050",
+      unavailable: false,
+      sourceDocument: { sourceType: "official_reference", capturedAt: "2026-11-24T14:30:00+08:00", excerpt: "0050 close 192.35" },
+    });
+    const envelope = { data: { id: "management-evidence", items: [item] } };
+    expect(adaptManagementEvidenceDetail(envelope, "evi-1217cd1c8ccc7274")?.refId).toBe("evi-1217cd1c8ccc7274");
+    expect(adaptManagementEvidenceDetail(envelope, "evi-missing")).toBeNull();
+    const placeholder = adaptManagementEvidenceDetail({ data: { ref_id: "evi-x", source_document: { source_type: "unknown" }, link_type: "unknown" } }, "evi-x");
+    expect(placeholder?.sourceDocument.sourceType).toBe("");
+    expect(placeholder?.linkType).toBe("");
+    expect(placeholder?.externalUrl).toBeNull();
   });
 });
