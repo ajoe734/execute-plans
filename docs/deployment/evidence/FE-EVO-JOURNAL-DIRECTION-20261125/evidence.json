@@ -20,10 +20,31 @@
     "AC6": "No test deleted or weakened; changed assertions are listed below with reasons."
   },
   "changed_assertions": [
-    {"file": "src/management/pages/oversight/EvolutionJournalPage.test.tsx", "change": "Four header/empty text expectations now use the new wording (threshold/infrastructure/other parts, no postmortem draft inside the proposals total); two expectations of the removed Mutation reviews number now assert it is absent.", "reason": "AC2 explicitly removes the repeated mutation review number and moves postmortem drafts out of the proposal total (BFF contract: postmortem_draft is not part of total). Fixture numbers unchanged."},
-    {"file": "src/management/pages/EvolutionProgramsQualification.test.tsx and src/management/pages/ObjectListPage.test.tsx", "change": "qualification-evaluated-at expects the viewer-local formatted time instead of the raw ISO string.", "reason": "AC3 requires the latest evaluation time in the viewer time zone."},
-    {"file": "src/lib/bff-v1/__tests__/management.test.ts", "change": "autoProposalCounts toEqual includes threshold/other/infrastructure = 0.", "reason": "The adapter now carries the BFF's new count parts; absent fields default to 0; all earlier fields unchanged."},
-    {"file": "src/management/pages/ResearchList.test.tsx and src/management/components/persona/PersonaStrategyPoolPanel.test.tsx", "change": "角色任務→Persona 任務, 角色頁面→Persona 頁面, 已嘗試：momentum→已嘗試：動能 (ResearchList only).", "reason": "Residual from FE-RESEARCH-DEMANDS-20261125 named in the task: Persona wording and no raw family code; meaning unchanged."}
+    {
+      "file": "src/management/pages/oversight/EvolutionJournalPage.test.tsx",
+      "change": "Four header/empty text expectations now use the new wording (threshold/infrastructure/other parts, no postmortem draft inside the proposals total); two expectations of the removed Mutation reviews number now assert it is absent.",
+      "reason": "AC2 explicitly removes the repeated mutation review number and moves postmortem drafts out of the proposal total (BFF contract: postmortem_draft is not part of total). Fixture numbers unchanged."
+    },
+    {
+      "file": "src/management/pages/EvolutionProgramsQualification.test.tsx and src/management/pages/ObjectListPage.test.tsx",
+      "change": "qualification-evaluated-at expects the viewer-local formatted time instead of the raw ISO string.",
+      "reason": "AC3 requires the latest evaluation time in the viewer time zone."
+    },
+    {
+      "file": "src/lib/bff-v1/__tests__/management.test.ts",
+      "change": "autoProposalCounts toEqual includes threshold/other/infrastructure = 0.",
+      "reason": "The adapter now carries the BFF's new count parts; absent fields default to 0; all earlier fields unchanged."
+    },
+    {
+      "file": "src/management/pages/ResearchList.test.tsx and src/management/components/persona/PersonaStrategyPoolPanel.test.tsx",
+      "change": "角色任務→Persona 任務, 角色頁面→Persona 頁面, 已嘗試：momentum→已嘗試：動能 (ResearchList only).",
+      "reason": "Residual from FE-RESEARCH-DEMANDS-20261125 named in the task: Persona wording and no raw family code; meaning unchanged."
+    },
+    {
+      "file": "e2e/06-entity-registry.spec.ts",
+      "change": "qualification-evaluated-at: toHaveText(raw ISO SNAPSHOT_AT) -> toContainText(new Date(SNAPSHOT_AT).toLocaleString() evaluated in the browser) and not.toContainText(raw ISO)",
+      "justification": "Acceptance 3 requires the latest evaluation time in the viewer time zone. CI browser zone is UTC so the page shows '5/13/2026, 2:10:00 PM (UTC)'; the page is right and the raw-text expectation was stale. The new assertion is not weaker: it checks the formatted value and that no raw ISO leaks."
+    }
   ],
   "contract_note": "Test files ResearchList.test.tsx, PersonaStrategyPoolPanel.test.tsx, ObjectListPage.test.tsx and src/lib/bff-v1/__tests__/management.test.ts are outside the declared artifact list but contained assertions that the in-contract locale/Lists/adapter changes necessarily change; they need an artifact contract addition.",
   "i18n_note": "mgmt.evolution.summaryMutationReviews key is kept (marked no longer shown) because the existing i18nParity test requires it.",
@@ -31,7 +52,8 @@
     "typecheck": "npm run typecheck: pass",
     "vitest_focused": "23 files, 451 tests passed (oversight/, EvolutionProgramsQualification, ResearchList, ObjectListPage, PersonaStrategyPoolPanel, bff-v1 management, i18nParity)",
     "vitest_full": "292 files: 288 passed; failures fixed afterwards (ObjectListPage, management.test, i18nParity). src/test/persona-strategy-hosted-readonly.test.ts Trading Pulse case fails identically on the clean base (pre-existing, unrelated).",
-    "browser": "Real Chromium via Playwright against a route-mocked fixture BFF; capture script saved as capture-screenshots.spec.ts.txt (copy to e2e/ to rerun). Screenshots: journal-1274x900.png, journal-system-shown-1274x900.png, journal-390w.png, direction-1274x900.png, direction-test-records-shown-1274x900.png (zh-TW)."
+    "browser": "Real Chromium via Playwright against a route-mocked fixture BFF; capture script saved as capture-screenshots.spec.ts.txt (copy to e2e/ to rerun). Screenshots: journal-1274x900.png, journal-system-shown-1274x900.png, journal-390w.png, direction-1274x900.png, direction-test-records-shown-1274x900.png (zh-TW).",
+    "e2e_fixture_pr1093_fix": "Isolated fixture Playwright (npm run e2e:fixture) 49 passed 11 skipped; 03-execution-loop persona-health and 06 registry failed once under full-suite load at gotoRegistry and passed on rerun together (7 passed 3 skipped, retries=0)."
   },
   "bff_reads": "No new BFF route or writer. The FE adds only the include_system query parameter to the existing evolution-journal read."
 }
