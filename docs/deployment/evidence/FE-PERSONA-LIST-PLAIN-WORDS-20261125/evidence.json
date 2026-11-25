@@ -1,0 +1,130 @@
+{
+  "task_id": "FE-PERSONA-LIST-PLAIN-WORDS-20261125",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "repository": "ajoe734/execute-plans",
+  "base": "dev",
+  "branch": "task/FE-PERSONA-LIST-PLAIN-WORDS-20261125",
+  "commits": {
+    "anchor": "64fb75b38"
+  },
+  "scope": "functional evidence only; hosted verification is left to the operator acceptance task. No VM/SSH access was used and no operator key was read.",
+  "status": "ready_for_review",
+  "acceptance": {
+    "1": "In PersonasList (src/management/pages/Lists.tsx), orderPersonasByRoutedStrategies partitions rows with routedStrategies >= 1 before the others while keeping relative order within each group unchanged. Because ObjectListPage computes scopeCounts over the full list and filters each scope tab with Array.prototype.filter, the trading-first ordering holds on every scope tab (Current, Test, Retired, Research, All) and tab counts are unchanged.",
+    "2": "personaArchetypeText (src/lib/enumLabels.ts) maps the recorded codes momentum, generalist, and agora_servant to localized words in zh-TW (動能, 通用, 交易僕人) and en-US (Momentum, Generalist, Agora servant) with the raw code in the title tooltip. Unknown codes (e.g. mean_reversion, quant) are rendered as-is. Values that are sentences (containing whitespace, such as Risk Officer and Red Team mandates) render with block max-w-[104px] truncate whitespace-nowrap and the full sentence as title tooltip so sentence rows remain single-line (57 px at 1274x627 and 53 px at 1920x1000, identical to code rows).",
+    "3": "shortOwnerText (src/lib/enumLabels.ts) and OwnerCell (src/management/pages/Lists.tsx) strip the shared pantheon-dev- prefix on PersonasList and ArtifactsList so the cell shows the distinguishing part (admin-test, operator-a, operator-b, paper-provisioner, operator-bff) while preserving the full owner ID in title and data-full-owner.",
+    "4": "buildStrategyColumns (src/management/pages/Lists.tsx) renders strategy symbols inside an inline-flex flex-wrap container where each symbol item is a whitespace-nowrap span (data-testid=strategy-symbol-item). A symbol such as 2330.TWSE is never broken inside the code (clientRectCount = 1, height = 16 px), and multiple symbols (e.g. 2330.TWSE, 2317.TWSE) wrap between symbols.",
+    "5": "Verified in Chromium via Playwright at 1274x627 and 1920x1000 across /management/personas, /management/strategies, and /management/artifacts: scrollWidth <= clientWidth (no horizontal scroll), docOverflow = 0, and name column width >= 220 px (230-237 px at 1274x627; 373-400 px at 1920x1000), with browser screenshots saved under docs/deployment/evidence/FE-PERSONA-LIST-PLAIN-WORDS-20261125/screenshots/. Focused unit and E2E tests use the seven recorded current personas. npm run lint reports 0 errors; zh-TW and en-US locale parity holds (6080 keys each, 0 only-in-either). No existing test was weakened or deleted."
+  },
+  "measurements": {
+    "personas-1274x627": {
+      "viewportWidth": 1274,
+      "clientWidth": 939,
+      "scrollWidth": 939,
+      "docOverflow": 0,
+      "nameWidth": 230,
+      "colWidths": [230, 89, 72, 120, 112, 77, 103, 136],
+      "headers": ["Name", "State", "Risk", "Type", "Strategies", "Win rate", "Owner", "Last updated"],
+      "rowCount": 7,
+      "rowHeights": [57, 57, 57, 57, 57, 57, 57],
+      "maxRowHeight": 57,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/personas-1274x627.png"
+    },
+    "personas-1920x1000": {
+      "viewportWidth": 1920,
+      "clientWidth": 1600,
+      "scrollWidth": 1600,
+      "docOverflow": 0,
+      "nameWidth": 373,
+      "colWidths": [373, 145, 117, 195, 182, 127, 167, 295],
+      "headers": ["Name", "State", "Risk", "Type", "Strategies", "Win rate", "Owner", "Last updated"],
+      "rowCount": 7,
+      "rowHeights": [53, 53, 53, 53, 53, 53, 53],
+      "maxRowHeight": 53,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/personas-1920x1000.png"
+    },
+    "strategies-1274x627": {
+      "viewportWidth": 1274,
+      "clientWidth": 939,
+      "scrollWidth": 939,
+      "docOverflow": 0,
+      "nameWidth": 237,
+      "colWidths": [237, 89, 114, 92, 124, 95, 76, 111],
+      "headers": ["Name", "State", "Runtime", "Symbols", "Cumulative paper result", "Drawdown", "Trades", "Persona"],
+      "rowCount": 8,
+      "maxRowHeight": 85,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/strategies-1274x627.png"
+    },
+    "strategies-1920x1000": {
+      "viewportWidth": 1920,
+      "clientWidth": 1600,
+      "scrollWidth": 1600,
+      "docOverflow": 0,
+      "nameWidth": 400,
+      "colWidths": [400, 99, 172, 176, 220, 105, 84, 345],
+      "headers": ["Name", "State", "Runtime", "Symbols", "Cumulative paper result", "Drawdown", "Trades", "Persona"],
+      "rowCount": 8,
+      "maxRowHeight": 55,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/strategies-1920x1000.png"
+    },
+    "artifacts-1274x627": {
+      "viewportWidth": 1274,
+      "clientWidth": 939,
+      "scrollWidth": 939,
+      "docOverflow": 0,
+      "nameWidth": 237,
+      "colWidths": [237, 86, 101, 84, 93, 114, 112, 113],
+      "headers": ["Name", "Source", "Kind", "Version", "State / Risk", "Hash", "Owner", "Last updated"],
+      "rowCount": 5,
+      "maxRowHeight": 70,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/artifacts-1274x627.png"
+    },
+    "artifacts-1920x1000": {
+      "viewportWidth": 1920,
+      "clientWidth": 1600,
+      "scrollWidth": 1600,
+      "docOverflow": 0,
+      "nameWidth": 396,
+      "colWidths": [396, 142, 154, 120, 140, 250, 160, 239],
+      "headers": ["Name", "Source", "Kind", "Version", "State / Risk", "Hash", "Owner", "Last updated"],
+      "rowCount": 5,
+      "maxRowHeight": 65,
+      "no_horizontal_scroll": true,
+      "screenshot": "screenshots/artifacts-1920x1000.png"
+    }
+  },
+  "verification": [
+    {
+      "cmd": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "result": "pass (0 errors)"
+    },
+    {
+      "cmd": "npm run lint",
+      "result": "pass (0 errors, 131 existing warnings)"
+    },
+    {
+      "cmd": "./node_modules/.bin/vitest run src/lib/__tests__/enumLabels.test.ts src/management/pages/Lists.test.tsx src/management/pages/ObjectListPage.test.tsx",
+      "result": "pass (3 files, 67 tests)"
+    },
+    {
+      "cmd": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/lists.test.ts src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/PersonaDetail.test.ts src/management/pages/RiskCenter.test.tsx",
+      "result": "pass (4 files, 100 tests)"
+    },
+    {
+      "cmd": "E2E_EVIDENCE_DIR=docs/deployment/evidence/FE-PERSONA-LIST-PLAIN-WORDS-20261125 ./node_modules/.bin/playwright test e2e/management-list-short-window.spec.ts e2e/artifact-hosted-width.spec.ts",
+      "result": "pass (27 passed, 1 skipped)"
+    }
+  ],
+  "row_shapes_used": "Seven recorded current personas from BFF b3f93d448 (2026-11-25 20:38Z): Agora Servant (agora_servant, pantheon-dev-operator-a, routedStrategies 0), Agora Servant (agora_servant, pantheon-dev-operator-b, routedStrategies 0), the three trading personas 衡岳 / 青禾 / 澄川 (momentum, pantheon-dev-admin-test, routedStrategies 1 each), Risk Officer (sentence archetype 'Independent risk reviewer. Never trades. Reviews trial admission, envelope publication and every harness patch; may veto.', operator-bff, routedStrategies 0), Red Team (sentence archetype 'Adversarial reviewer. Never trades. Attacks patches that touch guardrails or the consult policy.', operator-bff, routedStrategies 0); recorded strategies with 2330.TWSE and [2330.TWSE, 2317.TWSE]; recorded artifacts owned by pantheon-dev-paper-provisioner.",
+  "changed_assertions": [],
+  "residual_findings": [
+    "ObjectListPage defaultColumns (used by generic lists that do not pass custom columns) still renders raw r.owner with max-w-[120px] truncate; PersonasList and ArtifactsList define custom owner columns using OwnerCell/shortOwnerText as scoped by this task."
+  ],
+  "runtime_budget": "Frontend only: 0 new requests, 0 recurring jobs, 0 persistent writers."
+}

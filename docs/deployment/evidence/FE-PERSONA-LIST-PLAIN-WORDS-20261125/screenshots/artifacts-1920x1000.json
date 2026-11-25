@@ -1,0 +1,82 @@
+{
+  "rowCount": 5,
+  "viewportWidth": 1920,
+  "clientWidth": 1600,
+  "scrollWidth": 1600,
+  "docOverflow": 0,
+  "headers": [
+    "Name",
+    "Source",
+    "Kind",
+    "Version",
+    "State / Risk",
+    "Hash",
+    "Owner",
+    "Last updated"
+  ],
+  "colWidths": [
+    396,
+    142,
+    154,
+    120,
+    140,
+    250,
+    160,
+    239
+  ],
+  "nameWidth": 396,
+  "lastRight": 1880,
+  "rowHeights": [
+    65,
+    65,
+    65,
+    65,
+    65
+  ],
+  "maxRowHeight": 65,
+  "rowNames": [
+    "strategy-persona-a81b4fd15944698341aaartifact-persona-paper-8088eeda7be0b3e9e4d2",
+    "strategy-persona-06d4775a9b6a8f63b311artifact-persona-paper-baseline-8088eeda7be0b3e9e4d2",
+    "strategy-persona-039ad01f8bcd2b4aa466artifact-persona-paper-f3eb8d4357470c736025",
+    "strategy-persona-f3eb8d4357470c736025artifact-persona-paper-baseline-f3eb8d4357470c736025",
+    "strategy-persona-b24a2a8782d5d9dbf5d8artifact-persona-paper-b24a2a8782d5d9dbf5d8"
+  ],
+  "types": [],
+  "owners": [
+    {
+      "text": "paper-provisioner",
+      "title": "pantheon-dev-paper-provisioner",
+      "full": "pantheon-dev-paper-provisioner"
+    },
+    {
+      "text": "paper-provisioner",
+      "title": "pantheon-dev-paper-provisioner",
+      "full": "pantheon-dev-paper-provisioner"
+    },
+    {
+      "text": "paper-provisioner",
+      "title": "pantheon-dev-paper-provisioner",
+      "full": "pantheon-dev-paper-provisioner"
+    },
+    {
+      "text": "paper-provisioner",
+      "title": "pantheon-dev-paper-provisioner",
+      "full": "pantheon-dev-paper-provisioner"
+    },
+    {
+      "text": "paper-provisioner",
+      "title": "pantheon-dev-paper-provisioner",
+      "full": "pantheon-dev-paper-provisioner"
+    }
+  ],
+  "symbolItems": [],
+  "scopeButtons": [
+    "Current (5)",
+    "Test (304)",
+    "Retired (20)",
+    "Research output (2)",
+    "Unbound (13)",
+    "All (344)"
+  ],
+  "stateButtons": []
+}
