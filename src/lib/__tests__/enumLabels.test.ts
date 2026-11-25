@@ -38,10 +38,13 @@ import {
   strategyOperationalStatusClass,
   STRATEGY_RUNTIME_STATUSES,
   REGISTRY_LIST_SCOPES,
+  KNOWN_PERSONA_ARCHETYPES,
   artifactKindText,
   artifactSourceText,
   normalizeRegistryListScope,
   normalizeStrategyRuntimeStatus,
+  personaArchetypeText,
+  shortOwnerText,
   strategyMetricsReasonText,
   strategyRuntimeReasonText,
   strategyRuntimeStatusClass,
@@ -355,5 +358,73 @@ describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 runtime status, metric reason
       ];
       for (const text of texts) expect(text).not.toMatch(developerWording);
     }
+  });
+
+  it("FE-PERSONA-LIST-PLAIN-WORDS-20261125: maps recorded persona archetype codes to zh-TW and en-US words with code tooltip, keeps unknown codes as-is, flags sentences, and strips shared pantheon-dev- owner prefix", () => {
+    expect(KNOWN_PERSONA_ARCHETYPES).toEqual(["momentum", "generalist", "agora_servant"]);
+    expect(personaArchetypeText("momentum", tEn)).toEqual({
+      text: "Momentum",
+      tooltip: "momentum",
+      code: "momentum",
+      isSentence: false,
+      isKnown: true,
+    });
+    expect(personaArchetypeText("momentum", tZh)?.text).toBe("動能");
+    expect(personaArchetypeText("generalist", tEn)?.text).toBe("Generalist");
+    expect(personaArchetypeText("generalist", tZh)?.text).toBe("通用");
+    expect(personaArchetypeText("agora_servant", tEn)).toEqual({
+      text: "Agora servant",
+      tooltip: "agora_servant",
+      code: "agora_servant",
+      isSentence: false,
+      isKnown: true,
+    });
+    expect(personaArchetypeText("agora_servant", tZh)?.text).toBe("交易僕人");
+
+    // Unknown code is shown as it is (never humanized).
+    expect(personaArchetypeText("mean_reversion", tEn)).toEqual({
+      text: "mean_reversion",
+      tooltip: "mean_reversion",
+      code: "mean_reversion",
+      isSentence: false,
+      isKnown: false,
+    });
+    expect(personaArchetypeText("mean_reversion", tZh)?.text).toBe("mean_reversion");
+
+    // Recorded Risk Officer and Red Team sentences.
+    const riskSentence =
+      "Independent risk reviewer. Never trades. Reviews trial admission, envelope publication and every harness patch; may veto.";
+    expect(personaArchetypeText(riskSentence, tEn)).toEqual({
+      text: riskSentence,
+      tooltip: riskSentence,
+      isSentence: true,
+      isKnown: false,
+    });
+    expect(personaArchetypeText("", tEn)).toBeUndefined();
+    expect(personaArchetypeText(null, tEn)).toBeUndefined();
+
+    // Owner prefix stripping.
+    expect(shortOwnerText("pantheon-dev-admin-test")).toEqual({
+      text: "admin-test",
+      full: "pantheon-dev-admin-test",
+    });
+    expect(shortOwnerText("pantheon-dev-operator-a")).toEqual({
+      text: "operator-a",
+      full: "pantheon-dev-operator-a",
+    });
+    expect(shortOwnerText("pantheon-dev-operator-b")).toEqual({
+      text: "operator-b",
+      full: "pantheon-dev-operator-b",
+    });
+    expect(shortOwnerText("pantheon-dev-paper-provisioner")).toEqual({
+      text: "paper-provisioner",
+      full: "pantheon-dev-paper-provisioner",
+    });
+    expect(shortOwnerText("operator-bff")).toEqual({
+      text: "operator-bff",
+      full: "operator-bff",
+    });
+    expect(shortOwnerText("")).toBeUndefined();
+    expect(shortOwnerText(null)).toBeUndefined();
   });
 });
