@@ -4129,7 +4129,9 @@ export default {
     subtitle: "新策略從哪裡來：誰在找什麼、跑過哪些搜尋、哪些候選真的通過回測。",
     openList: "開啟策略列表",
     scaffold: "建檔", replicate: "重現",
-    col: { discovered: "誰在找什麼", scaffolded: "搜尋與驗證嘗試", replicated: "通過回測驗證" },
+    col: { discovered: "誰在找什麼", scaffolded: "搜尋與驗證嘗試", passed: "通過回測驗證", replicated: "已通過准入檢查" },
+    // 以下舊鍵僅為 i18n parity 測試保留，頁面不再顯示（FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125）。
+    replicatedCaption: "准入檢查僅檢視規格、血緣與治理紀錄，不重跑回測。",
     caption: {
       discovered: "各 Persona 未結的研究需求，以及從蒐集文字整理出的假設卡。",
       scaffolded: "已執行的範本搜尋與回測驗證嘗試，以及最近一次的結果。",
@@ -4219,8 +4221,10 @@ export default {
       degraded: "資料可能不是最新",
       unverified: "資料來源未確認",
       explain: "數量與卡片來自研究與來源服務；無法讀取的階段會顯示「無法取得」與原因，不會顯示 0。",
+      surface: "表面：{{surface}} · 狀態：{{status}} · 來源：{{source}}",
     },
     empty: {
+      noCandidateSource: "目前尚無候選來源（no_candidate_source）。",
       discovered: "目前沒有 Persona 有未結的研究需求，也沒有假設卡。",
       scaffolded: "尚未執行任何範本搜尋或驗證嘗試。",
       replicated: "目前沒有任何候選通過回測驗證。",

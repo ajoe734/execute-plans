@@ -629,7 +629,7 @@ export const AlphaFactoryBoardPage = () => {
                 <div key={col} className="space-y-3 min-w-0" data-testid={`alpha-factory-lane-${col}`}>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold">{t(`alphaFactory.col.${col}`)}</div>
+                      <div className="text-sm font-semibold">{t(`alphaFactory.col.${col === "replicated" ? "passed" : col}`)}</div>
                       <Badge variant="outline">{laneCount(col)}</Badge>
                     </div>
                     <p data-testid={`alpha-factory-${col}-caption`} className="text-xs text-muted-foreground">

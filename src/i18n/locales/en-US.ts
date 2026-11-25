@@ -4147,7 +4147,10 @@ export default {
     subtitle: "Where new strategies come from: who is looking for what, which searches ran, and which candidates truly passed a backtest.",
     openList: "Open strategies list",
     scaffold: "Scaffold", replicate: "Replicate",
-    col: { discovered: "Who is looking for what", scaffolded: "Searches and validation attempts", replicated: "Passed backtest validation" },
+    col: { discovered: "Who is looking for what", scaffolded: "Searches and validation attempts", passed: "Passed backtest validation", replicated: "Admission checks passed" },
+    // Legacy keys kept only because the i18n parity test pins them; the page no longer shows them
+    // (FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125: document checks are not passes, no internal surface names).
+    replicatedCaption: "Admission checks review the spec, lineage, and governance records and do not rerun a backtest.",
     caption: {
       discovered: "Open research needs of each persona and hypothesis cards drawn from collected text.",
       scaffolded: "Template searches and backtest validation attempts that ran, with their latest outcome.",
@@ -4237,8 +4240,10 @@ export default {
       degraded: "Data may be out of date",
       unverified: "Data source not confirmed",
       explain: "Counts and cards come from the research and source services. A stage that could not be read says unavailable with its reason instead of showing 0.",
+      surface: "Surface: {{surface}} · status: {{status}} · source: {{source}}",
     },
     empty: {
+      noCandidateSource: "There is no candidate source yet (no_candidate_source).",
       discovered: "No persona has an open research need and there are no hypothesis cards.",
       scaffolded: "No template search or validation attempt has run.",
       replicated: "No candidate has passed backtest validation yet.",
