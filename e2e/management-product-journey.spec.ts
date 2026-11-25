@@ -523,12 +523,11 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
 
     // Mandatory assertions on Strategy Detail: lifecycle / triple state and disabled controls
     await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByText("Strategy state · lifecycle × review × deployment", { exact: true }),
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("lifecycle", { exact: true })).toBeVisible();
-    await expect(page.getByText("review", { exact: true })).toBeVisible();
-    await expect(page.getByText("deployment", { exact: true })).toBeVisible();
+    const tripleStateCard = page.getByTestId("strategy-triple-state-card");
+    await expect(tripleStateCard).toBeVisible({ timeout: 30_000 });
+    await expect(tripleStateCard.getByTestId("strategy-triple-lifecycle")).toBeVisible();
+    await expect(tripleStateCard.getByTestId("strategy-triple-review")).toBeVisible();
+    await expect(tripleStateCard.getByTestId("strategy-triple-deployment")).toBeVisible();
 
     const disabledButtons = page.locator("main button[disabled], main button[aria-disabled='true']");
     await expect(disabledButtons.first()).toBeVisible({ timeout: 15_000 });

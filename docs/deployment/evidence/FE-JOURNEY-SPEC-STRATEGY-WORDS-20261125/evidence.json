@@ -1,0 +1,96 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-JOURNEY-SPEC-STRATEGY-WORDS-20261125",
+  "taskId": "FE-JOURNEY-SPEC-STRATEGY-WORDS-20261125",
+  "title": "Hosted journey spec reads the strategy state block that the page now shows",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "repository": "ajoe734/execute-plans",
+  "base": "dev",
+  "branch": "task/FE-JOURNEY-SPEC-STRATEGY-WORDS-20261125",
+  "status": "ready_for_review",
+  "scope": "functional evidence only; hosted verification is done later by the operator acceptance task. No VM or SSH access was used and no operator key was read.",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)"
+  },
+  "acceptance_coverage": {
+    "1_journey_spec_strategy_state_by_data_testid": {
+      "passed": true,
+      "details": [
+        "e2e/management-product-journey.spec.ts lines 526-530 locate the Strategy State block via page.getByTestId('strategy-triple-state-card') instead of the literal text 'Strategy state · lifecycle × review × deployment'.",
+        "The three state parts stay asserted via tripleStateCard.getByTestId('strategy-triple-lifecycle'), tripleStateCard.getByTestId('strategy-triple-review'), and tripleStateCard.getByTestId('strategy-triple-deployment'), so the spec passes in both zh-TW and en-US.",
+        "The disabled action button assertion on main button[disabled], main button[aria-disabled='true'] remains unchanged."
+      ]
+    },
+    "2_unused_strategy_triple_state_card_deleted_after_search": {
+      "passed": true,
+      "details": [
+        "Repository search across src and e2e before deletion found references to StrategyTripleStateCard only inside src/management/components/detail/StrategyTripleStateCard.tsx itself (lines 37, 46, 48) and zero imports outside itself.",
+        "src/management/components/detail/StrategyTripleStateCard.tsx was deleted, and post-deletion search across src and e2e returned 0 matches."
+      ],
+      "search_evidence": {
+        "pre_deletion_command": "grep -rn \"StrategyTripleStateCard\" src e2e",
+        "pre_deletion_output": [
+          "src/management/components/detail/StrategyTripleStateCard.tsx:37:export interface StrategyTripleStateCardProps {",
+          "src/management/components/detail/StrategyTripleStateCard.tsx:46:export const StrategyTripleStateCard = ({",
+          "src/management/components/detail/StrategyTripleStateCard.tsx:48:}: StrategyTripleStateCardProps) => {"
+        ],
+        "external_imports_found": 0,
+        "post_deletion_command": "grep -rn \"StrategyTripleStateCard\" src e2e",
+        "post_deletion_matches": 0
+      }
+    },
+    "3_no_other_page_source_changes_lint_tsc_playwright_list_and_changed_assertions": {
+      "passed": true,
+      "details": [
+        "No page source other than deleting src/management/components/detail/StrategyTripleStateCard.tsx changed.",
+        "npm run lint reports 0 errors (0 errors, 131 warnings) and tsc passes across tsconfig.app.json and tsconfig.agora.json.",
+        "npx playwright test e2e/management-product-journey.spec.ts --list lists the 2 hosted journey tests cleanly.",
+        "No existing test is weakened or deleted, and the changed assertion in e2e/management-product-journey.spec.ts is justified below."
+      ]
+    }
+  },
+  "changed_assertions": [
+    {
+      "file": "e2e/management-product-journey.spec.ts",
+      "lines": "526-530",
+      "what": "Replaced page.getByText('Strategy state · lifecycle × review × deployment', { exact: true }) and page.getByText('lifecycle' | 'review' | 'deployment', { exact: true }) with page.getByTestId('strategy-triple-state-card') and child getByTestId('strategy-triple-lifecycle' | 'strategy-triple-review' | 'strategy-triple-deployment').",
+      "why": "FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125 localized the Strategy State block on StrategyDetail in zh-TW ('策略狀態（生命週期 × 審查 × 部署）') and en-US ('Strategy state (lifecycle × review × deployment)'). Asserting the card and its three parts by their data-testid attributes keeps the exact 3-part state block check while working across both zh-TW and en-US locales."
+    }
+  ],
+  "verification": [
+    {
+      "command": "npm run lint",
+      "exit_code": 0,
+      "result": "0 errors, 131 warnings"
+    },
+    {
+      "command": "./node_modules/.bin/eslint e2e/management-product-journey.spec.ts",
+      "exit_code": 0,
+      "result": "0 errors, 0 warnings"
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "result": "pass"
+    },
+    {
+      "command": "npx playwright test e2e/management-product-journey.spec.ts --list",
+      "exit_code": 0,
+      "result": "Total: 2 tests in 1 file"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/StrategyDetail.test.tsx",
+      "exit_code": 0,
+      "result": "1 test file passed, 7 tests passed"
+    }
+  ],
+  "runtime_budget": {
+    "persistent_product_writers": 0,
+    "recurring_jobs": 0,
+    "added_tables_files_caches": 0,
+    "new_network_requests": 0
+  },
+  "residual_findings": []
+}
