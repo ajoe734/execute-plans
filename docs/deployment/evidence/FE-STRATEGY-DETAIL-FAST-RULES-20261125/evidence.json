@@ -1,0 +1,98 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-STRATEGY-DETAIL-FAST-RULES-20261125",
+  "taskId": "FE-STRATEGY-DETAIL-FAST-RULES-20261125",
+  "title": "Strategy detail shows the strategy at once and its real trading rules",
+  "owner": "Antigravity",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-STRATEGY-DETAIL-FAST-RULES-20261125",
+  "base_commit": "535556719",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T08:00:30Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
+    "hosted_read_only_diagnosis": "2026-11-25 06:35Z to 07:16Z on BFF adc027da9: StrategyDetail visible after 17.6 s / 12.2 s / 9.6 s while GET /bff/strategies/{id} answered in 1.7 s due to 12-read Promise.all and loading gate; rules summary filtered only role==='trading' so pool_member and pool_envelope rules of strategy-persona-a81b4fd15944698341aa rendered '尚未回報'."
+  },
+  "modified_surfaces": [
+    "src/management/pages/StrategyDetail.tsx",
+    "src/management/pages/StrategyDetail.test.tsx",
+    "src/management/pages/StrategyDetail.spec.test.tsx",
+    "src/management/pages/StrategyDetail.lineage.test.tsx",
+    "src/management/components/detail/StrategySpecTab.tsx",
+    "src/management/components/detail/strategyRuleText.ts",
+    "src/management/components/detail/__fixtures__/poolRules.ts",
+    "e2e/06-entity-registry.spec.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-STRATEGY-DETAIL-FAST-RULES-20261125/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_single_read_render_per_section_states_and_non_blank_refresh": {
+      "passed": true,
+      "details": [
+        "useLiveDetail in StrategyDetail.tsx now awaits only bffV1.strategies.get(entityId) and gates initial full-page loading with `if (loading && !s)` so the page renders immediately after the single strategy read and keeps shown data during live refreshes instead of blanking.",
+        "Every secondary section (Watchers, Decision journal, Experiments, Risk & Alerts, Incidents, Artifacts, Evolution, Governance, Lineage, Audit, and Spec version history) tracks its own loading, ready, and unavailable state independently.",
+        "StrategyDetail.test.tsx verifies rendering with all secondary reads unresolved and one rejecting while the page remains usable, and verifies live refresh retains the displayed strategy."
+      ]
+    },
+    "AC2_strategy_read_failure_404_and_unavailable_pinned": {
+      "passed": true,
+      "details": [
+        "StrategyDetail.spec.test.tsx pins 404 ('找不到策略'), 503 ('Strategy could not be loaded.'), network failure ('Strategy could not be loaded.'), and an unavailable strategy payload (meta.status === 'unavailable' -> 'Strategy could not be loaded.')."
+      ]
+    },
+    "AC3_rules_summary_pool_member_envelope_dedup_baseline_null_and_reused_spec_logic": {
+      "passed": true,
+      "details": [
+        "StrategySpecTab.tsx exports StrategyRulesList (reused by both StrategyDetail overview rules summary and StrategySpecTab) using deduplicateStrategyRules and resolveStrategyRuleRole from strategyRuleText.ts.",
+        "Recorded rules of strategy-persona-a81b4fd15944698341aa (rollback_baseline order_quantity 0, pool_member artifact-persona-paper-a81b4fd15944698341aa order_quantity 1, pool_envelope artifact-persona-pool-a81b4fd15944698341aa-v2) render the pool_envelope combination rule and risk limits, show the duplicated pool_member rule once, and label rollback_baseline as not traded ('不送單回滾基準' / 'No-order rollback baseline').",
+        "Null rules render unavailable ('無法讀取交易規則（執行套件讀取失敗）。' / 'Trading rules unavailable (execution bundle read failed).') and only an empty or omitted rules list renders not reported ('此策略尚未回報交易規則。' / 'This strategy has not reported any trading rules.')."
+      ]
+    },
+    "AC4_lineage_and_other_sections_unavailable_never_no_data_on_failure": {
+      "passed": true,
+      "details": [
+        "When managementConsoleReads.lineage rejects or returns meta.status === 'unavailable', StrategyDetail renders strategy-lineage-unavailable ('Lineage unavailable' / '血緣資料暫時無法取得') and never 'No lineage available.'.",
+        "StrategyDetail.spec.test.tsx and StrategyDetail.lineage.test.tsx verify that every secondary section renders its section-specific unavailable state and never 'no data' or 'no matching records' when its read fails."
+      ]
+    },
+    "AC5_real_browser_timing_and_no_weakened_tests": {
+      "passed": true,
+      "details": [
+        "e2e/06-entity-registry.spec.ts adds a real Chromium browser timing test against a fixture BFF whose secondary reads delay 15 s and verifies StrategyDetail renders the header and recorded rules summary for strategy-persona-a81b4fd15944698341aa within 2 s (observed 1.3 s total test time).",
+        "No existing test was weakened or deleted, and no existing assertion was changed."
+      ]
+    }
+  },
+  "validation": [
+    {
+      "command": "tsc --noEmit",
+      "exit_code": 0,
+      "result": "passed (0 errors)"
+    },
+    {
+      "command": "vitest run src/management/pages/StrategyDetail.test.tsx src/management/pages/StrategyDetail.spec.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/StrategyDetail.discovery.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx",
+      "exit_code": 0,
+      "result": "5 test files passed, 20 tests passed"
+    },
+    {
+      "command": "vitest run src/management/pages/StrategyDetail.metrics.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/components/detail/StrategySpecTab.poolRules.test.tsx src/management/components/detail/strategyRuleText.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/__tests__/fullOperationAssembly.test.tsx",
+      "exit_code": 0,
+      "result": "6 test files passed, 62 tests passed"
+    },
+    {
+      "command": "playwright test e2e/06-entity-registry.spec.ts e2e/13-agora.spec.ts",
+      "exit_code": 0,
+      "result": "8 passed, 1 skipped (including real browser timing with 15 s secondary reads rendering StrategyDetail header and recorded pool rules in < 2 s)"
+    }
+  ],
+  "runtime_budget": {
+    "persistent_product_writers": 0,
+    "recurring_jobs": 0,
+    "added_tables_files_caches": 0
+  },
+  "residual_findings": []
+}
