@@ -443,7 +443,14 @@ function envelope(items: unknown[], total = items.length, next?: string, extraMe
   };
 }
 
-async function installFixtureBff(page: Page): Promise<void> {
+interface FixtureOverrides {
+  personas?: Array<Record<string, unknown>>;
+  artifacts?: Array<Record<string, unknown>>;
+  strategies?: Array<Record<string, unknown>>;
+  strategyMeta?: Record<string, unknown>;
+}
+
+async function installFixtureBff(page: Page, overrides: FixtureOverrides = {}): Promise<void> {
   await installContainedLoopbackAuth(page);
   await page.route("**/*", async (route) => {
     const request = route.request();
@@ -468,7 +475,8 @@ async function installFixtureBff(page: Page): Promise<void> {
     if (path === "/bff/strategies") {
       return fulfillJson(
         route,
-        envelope(STRATEGY_RECORDS, 25, "20", {
+        envelope(overrides.strategies ?? STRATEGY_RECORDS, 25, "20", {
+          ...(overrides.strategyMeta ?? {}),
           state_counts: {
             draft: 4764,
             review: 1,
@@ -496,15 +504,21 @@ async function installFixtureBff(page: Page): Promise<void> {
     if (path === "/bff/personas") {
       return fulfillJson(
         route,
-        envelope(PERSONA_RECORDS, PERSONA_RECORDS.length, undefined, HOSTED_PERSONAS_FIXTURE.meta),
+        envelope(
+          overrides.personas ?? PERSONA_RECORDS,
+          (overrides.personas ?? PERSONA_RECORDS).length,
+          undefined,
+          HOSTED_PERSONAS_FIXTURE.meta,
+        ),
       );
     }
     if (path === "/bff/artifacts") {
+      const artifactRows = overrides.artifacts ?? ARTIFACT_RECORDS;
       const start = Number(url.searchParams.get("page_token") || 0);
       const size = Number(url.searchParams.get("page_size") || 100);
-      const slice = ARTIFACT_RECORDS.slice(start, start + size);
-      const next = start + size < ARTIFACT_RECORDS.length ? String(start + size) : undefined;
-      return fulfillJson(route, envelope(slice, ARTIFACT_RECORDS.length, next));
+      const slice = artifactRows.slice(start, start + size);
+      const next = start + size < artifactRows.length ? String(start + size) : undefined;
+      return fulfillJson(route, envelope(slice, artifactRows.length, next));
     }
     if (path === "/bff/deployments") {
       return fulfillJson(
@@ -547,7 +561,10 @@ test.describe("FE-MGMT-LIST-SHORT-WINDOW-20261125 short-window list readability"
         await expect(page.locator('[data-testid="data-table-loading"]')).toHaveCount(0, { timeout: 30_000 });
         await expect(page.locator("tbody tr").first()).toBeVisible({ timeout: 30_000 });
         if (route.key === "artifacts") {
-          await expect.poll(() => page.locator("tbody tr").count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(273);
+          // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the default view is Current. This genuine capture has no
+          // list_scope (older BFF) so its 271 Registry rows stay visible; the 2 research run outputs sit under
+          // their own tab (All still counts 273).
+          await expect.poll(() => page.locator("tbody tr").count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(271);
         }
 
         const measurement = await page.evaluate(() => {
@@ -717,4 +734,167 @@ test.describe("FE-MGMT-LIST-SHORT-WINDOW-20261125 short-window list readability"
 
     await context.close();
   });
+});
+
+// ---------------------------------------------------------------------------
+// FE-REGISTRY-LISTS-CURRENT-FIRST-20261125
+// Hosted shapes of 2026-11-25 06:35Z-07:16Z: 177 personas (153 test, the live ones at 152/154/155),
+// 344 artifacts (304 test), and the three recorded live strategies with the BFF runtime fields.
+// ---------------------------------------------------------------------------
+const LIVE_PERSONAS = PERSONA_RECORDS.slice(0, 3).map((row) => ({ ...row, listScope: "current", successRate: null }));
+
+function buildHostedPersonas(): Array<Record<string, unknown>> {
+  const test = new Set<number>([...Array.from({ length: 151 }, (_, k) => k + 1), 153, 156]);
+  const rows: Array<Record<string, unknown>> = [];
+  for (let i = 1; i <= 177; i += 1) {
+    const clone = (extra: Record<string, unknown>) => ({
+      ...BASE_PERSONA,
+      id: `persona-clone-${String(i).padStart(4, "0")}`,
+      name: `Pantheon Dev Paper Baseline ${i}`,
+      successRate: null,
+      ...extra,
+    });
+    if (i === 152) rows.push(LIVE_PERSONAS[0]);
+    else if (i === 154) rows.push(LIVE_PERSONAS[1]);
+    else if (i === 155) rows.push(LIVE_PERSONAS[2]);
+    else if (test.has(i)) rows.push(clone({ listScope: "test" }));
+    else if (i >= 157 && i <= 160) rows.push(clone({ listScope: "research", state: "approved", lifecycleStatus: "research_only" }));
+    else rows.push(clone({ listScope: "retired", state: "retired", lifecycleStatus: "retired" }));
+  }
+  return rows;
+}
+
+function buildHostedArtifacts(): Array<Record<string, unknown>> {
+  const liveIds = [
+    "strategy-persona-a81b4fd15944698341aa",
+    "strategy-persona-06d4775a9b6a8f63b311",
+    "strategy-persona-039ad01f8bcd2b4aa466",
+  ];
+  const all: Array<Record<string, unknown>> = [...ARTIFACT_RECORDS];
+  const registryBase = ARTIFACT_RECORDS.filter((r) => r.source_kind !== "research_run_output");
+  for (let i = 0; all.length < 344; i += 1) {
+    const base = registryBase[i % registryBase.length];
+    all.push({ ...base, id: `${String(base.id)}-clone-${i}`, name: `${String(base.name)}-clone-${i}` });
+  }
+  const registryIdx = all.map((r, i) => (r.source_kind === "research_run_output" ? -1 : i)).filter((i) => i >= 0);
+  const scope = new Map<number, string>();
+  registryIdx.slice(0, 5).forEach((i) => scope.set(i, "current"));
+  registryIdx.slice(5, 25).forEach((i) => scope.set(i, "retired"));
+  registryIdx.slice(25, 38).forEach((i) => scope.set(i, "unbound"));
+  return all.map((row, i) => {
+    if (row.source_kind === "research_run_output") return { ...row, list_scope: "research" };
+    const s = scope.get(i) ?? "test";
+    const idx = registryIdx.indexOf(i);
+    return {
+      ...row,
+      list_scope: s,
+      ...(idx >= 0 && idx < 3 ? { name: liveIds[idx], strategy_id: liveIds[idx] } : {}),
+    };
+  });
+}
+
+const RUNTIME_STRATEGIES = STRATEGY_RECORDS.map((row, i) => ({
+  ...row,
+  persona_display_names: { [String((row.personaIds as string[])[0])]: String(row.name) },
+  metricsReason: row.pnl === null ? "no_fills" : null,
+  runtimeStatus: i === 1 ? "paused_market_input" : "running",
+  runtimeStatusReason: i === 1 ? "market_input_stale" : null,
+}));
+
+const STRATEGY_VISIBLE_META = {
+  state_counts: { draft: 7421, review: 1, approved: 170, paper_running: 0, canary_running: 0, live_running: 0, deployed: 0, paused: 0, retired: 1556 },
+  visible_state_counts: { draft: 4205, review: 0, approved: 14, paper_running: 0, canary_running: 0, live_running: 0, deployed: 0, paused: 0, retired: 2 },
+  hidden_unbound_stub_strategy_count: 4,
+};
+
+const CURRENT_FIRST_VIEWPORTS = [
+  { width: 1274, height: 627 },
+  { width: 1920, height: 1000 },
+] as const;
+const CURRENT_FIRST_ROUTES = [
+  { key: "strategies", path: "/management/strategies" },
+  { key: "personas", path: "/management/personas" },
+  { key: "artifacts", path: "/management/artifacts" },
+] as const;
+
+test.describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 current-first lists fit the window", () => {
+  test.setTimeout(180_000);
+  test.skip(targetsExternalE2eEnvironment(), "fixture BFF layout regression runs on loopback");
+
+  for (const vp of CURRENT_FIRST_VIEWPORTS) {
+    for (const route of CURRENT_FIRST_ROUTES) {
+      test(`${route.key} at ${vp.width}x${vp.height} needs no horizontal scroll and keeps the name column >= 220px`, async ({ browser }) => {
+        const personas = buildHostedPersonas();
+        const artifacts = buildHostedArtifacts();
+        expect(personas).toHaveLength(177);
+        expect(artifacts).toHaveLength(344);
+        const context = await browser.newContext({ viewport: vp });
+        await context.addInitScript(() => window.localStorage.setItem("pantheon.locale", "en-US"));
+        const page = await context.newPage();
+        await installFixtureBff(page, {
+          personas,
+          artifacts,
+          strategies: RUNTIME_STRATEGIES,
+          strategyMeta: STRATEGY_VISIBLE_META,
+        });
+        await page.goto(frontendUrl(route.path), { waitUntil: "domcontentloaded", timeout: 30_000 });
+        await expect(page.locator('[data-testid="data-table-loading"]')).toHaveCount(0, { timeout: 30_000 });
+        await expect(page.locator("tbody tr").first()).toBeVisible({ timeout: 30_000 });
+        if (route.key === "artifacts") {
+          await expect(page.getByRole("button", { name: /^All \(344\)$/ })).toBeVisible({ timeout: 30_000 });
+        }
+        if (route.key === "personas") {
+          await expect(page.getByRole("button", { name: /^All \(177\)$/ })).toBeVisible({ timeout: 30_000 });
+        }
+
+        const m = await page.evaluate(() => {
+          const scroller = document.querySelector<HTMLElement>("[data-management-table-scrollbar='native']")!;
+          const ths = Array.from(scroller.querySelectorAll("thead th"));
+          const rows = Array.from(scroller.querySelectorAll<HTMLElement>("tbody tr"));
+          return {
+            rowCount: rows.length,
+            viewportWidth: window.innerWidth,
+            clientWidth: scroller.clientWidth,
+            scrollWidth: scroller.scrollWidth,
+            docOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            headers: ths.map((th) => (th.textContent || "").trim()),
+            colWidths: ths.map((th) => Math.round(th.getBoundingClientRect().width)),
+            nameWidth: Math.round(ths[0].getBoundingClientRect().width),
+            lastRight: Math.round(ths[ths.length - 1].getBoundingClientRect().right),
+            maxRowHeight: Math.max(...rows.map((r) => Math.round(r.getBoundingClientRect().height))),
+            scopeButtons: Array.from(document.querySelectorAll<HTMLElement>("[data-scope]")).map((b) => (b.textContent || "").trim()),
+            stateButtons: Array.from(document.querySelectorAll<HTMLElement>("[data-strategy-state]")).map((b) => (b.textContent || "").trim()),
+          };
+        });
+        console.log(`CURRENT_FIRST_WIDTH ${route.key}@${vp.width}x${vp.height} ${JSON.stringify(m)}`);
+
+        const evidenceDir = process.env.E2E_EVIDENCE_DIR;
+        if (evidenceDir) {
+          const { mkdirSync, writeFileSync } = await import("node:fs");
+          mkdirSync(`${evidenceDir}/screenshots`, { recursive: true });
+          await page.screenshot({ path: `${evidenceDir}/screenshots/${route.key}-${vp.width}x${vp.height}.png` });
+          writeFileSync(`${evidenceDir}/screenshots/${route.key}-${vp.width}x${vp.height}.json`, JSON.stringify(m, null, 2));
+        }
+        expect(m.scrollWidth, "no horizontal scrolling").toBeLessThanOrEqual(m.clientWidth + 1);
+        expect(m.docOverflow).toBeLessThanOrEqual(0);
+        expect(m.nameWidth).toBeGreaterThanOrEqual(220);
+        expect(m.headers).not.toContain("Alpha");
+        expect(m.headers.join("|")).not.toMatch(/size|大小|Sharpe|30d/i);
+        if (route.key === "personas") {
+          // current-first: the three live personas, none of the 153 test rows.
+          expect(m.rowCount).toBe(3);
+          expect(m.scopeButtons).toEqual(["Current (3)", "Test (153)", "Retired (17)", "Research (4)", "All (177)"]);
+        }
+        if (route.key === "artifacts") {
+          expect(m.rowCount).toBe(5);
+          expect(m.scopeButtons).toEqual(["Current (5)", "Test (304)", "Retired (20)", "Research output (2)", "Unbound (13)", "All (344)"]);
+        }
+        if (route.key === "strategies") {
+          expect(m.headers).toHaveLength(8);
+        }
+
+        await context.close();
+      });
+    }
+  }
 });

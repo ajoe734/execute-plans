@@ -58,6 +58,14 @@ import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 
 export const TRADING_PULSE_RETURN_HREF = "/management/trading-pulse";
 
+/**
+ * FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the BFF sends `successRate: null`
+ * when no win rate was recorded; show "no data", never 0%.
+ */
+export function personaWinRateDisplay(value: unknown, noData: string): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(0)}%` : noData;
+}
+
 export function resolvePersonaTradingPulseReturnHref(state: unknown): string | null {
   if (!state || typeof state !== "object" || Array.isArray(state)) return null;
   const candidate = (state as { returnTo?: unknown }).returnTo;
@@ -691,7 +699,7 @@ export const PersonaDetail = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label={t("table.type")} value={p.archetype} />
                   <Field label={t("nav.strategies")} value={p.routedStrategies} mono />
-                  <Field label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} mono />
+                  <Field label={t("table.winRate")} value={personaWinRateDisplay(p.successRate, t("common.noData"))} mono />
                   <Field label={t("table.owner")} value={p.owner} mono />
                 </div>
                 <div className="flex justify-end pt-2">
@@ -801,7 +809,11 @@ export const PersonaDetail = () => {
             content: (
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-4">
-                  <StatCard label={t("table.winRate")} value={`${(p.successRate * 100).toFixed(0)}%`} tone="success" />
+                  <StatCard
+                    label={t("table.winRate")}
+                    value={personaWinRateDisplay(p.successRate, t("common.noData"))}
+                    tone={typeof p.successRate === "number" && Number.isFinite(p.successRate) ? "success" : "default"}
+                  />
                   <StatCard label={t("nav.strategies")} value={p.routedStrategies} />
                   <StatCard label={t("section.activity")} value="—" />
                 </div>

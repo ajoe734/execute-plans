@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ObjectListPage } from "./ObjectListPage";
+import { ObjectListPage, type ObjectListEmptyStateConfig } from "./ObjectListPage";
 import { collectorCheckStatus, demandMeasureText, demandPersonaName, demandReasonText, isNonRealRun, isTemplateSearchTask, researchTitle } from "./researchPresentation";
 import { ServerPager, freshServerPageCursor, useServerPageCursor } from "@/platform/components/ServerPager";
 import {
@@ -20,16 +20,25 @@ import {
 import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
 import { isRecordedTestRecord, splitReasonCode } from "./oversight/evolutionJournalFocus";
 import {
+  artifactKindText,
+  artifactSourceText,
+  normalizeRegistryListScope,
   normalizeStrategyOperationalStatus,
+  normalizeStrategyRuntimeStatus,
   rebalanceWorkflowLabel,
   resolveBffSubjectDisplay,
+  strategyMetricsReasonText,
   strategyOperationalStatusClass,
+  strategyRuntimeReasonText,
+  strategyRuntimeStatusClass,
+  type RegistryListScope,
 } from "@/lib/enumLabels";
 import { useT } from "@/platform/hooks";
 import { formulaVersion, formulaWeightSummary } from "./RankingFormulaDetail";
 import { safeDateTime } from "@/lib/utils";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, ResearchDemand, ResearchDemandsSurface, ResearchTicketsRead, Artifact, ListEnvelope, RiskLevel } from "@/lib/bff-v1";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import type { Column } from "@/platform/components/DataTable";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -159,9 +168,16 @@ export interface StrategyStateCounts {
   draftCount: number | undefined;
 }
 
+/**
+ * Tab numbers come only from `meta.visible_state_counts`
+ * (REGISTRY-STRATEGY-LIST-OWNER-HIDE-20261125): the rows the owner did not
+ * hide, which is what each tab's pager total counts. `meta.state_counts` also
+ * counts hidden test/stub rows, so it is never printed; when
+ * `visible_state_counts` is absent or null the tabs print no number.
+ */
 export function extractStrategyStateCounts(meta: unknown): StrategyStateCounts | null {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return null;
-  const rawCounts = (meta as { state_counts?: unknown }).state_counts;
+  const rawCounts = (meta as { visible_state_counts?: unknown }).visible_state_counts;
   if (!rawCounts || typeof rawCounts !== "object" || Array.isArray(rawCounts)) return null;
   const byState: Record<string, number> = {};
   let hasNumericEntry = false;
@@ -226,6 +242,22 @@ export function extractHiddenTestPersonaStrategyCount(meta: unknown): number | u
   const testCount = typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
   if (testCount === undefined && stubCount === undefined) return undefined;
   return (testCount ?? 0) + (stubCount ?? 0);
+}
+
+/** The two parts of the hidden-test banner number, when the BFF sends both. */
+export function extractHiddenTestBreakdown(
+  meta: unknown,
+): { testCount: number; stubCount: number } | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const record = meta as {
+    hidden_test_persona_strategy_count?: unknown;
+    hidden_unbound_stub_strategy_count?: unknown;
+  };
+  const test = record.hidden_test_persona_strategy_count;
+  const stub = record.hidden_unbound_stub_strategy_count;
+  const ok = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
+  if (!ok(test) || !ok(stub)) return undefined;
+  return { testCount: test, stubCount: stub };
 }
 
 export function extractIncludeTestPersonas(meta: unknown): boolean | undefined {
@@ -364,9 +396,247 @@ export function resolveStrategyListQuery(
   };
 }
 
+type ListT = (key: string, options?: Record<string, unknown>) => string;
+
+/**
+ * FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 — the strategy table shows only
+ * owner-backed values: name, state, runtime status (with its plain reason),
+ * symbols, the cumulative paper result with its as-of time, drawdown, trades
+ * and persona. Alpha, 30-day PnL, Sharpe (always null on this path) and the
+ * raw capital-pool id are not shown. The minimum widths sum to 900 px so the
+ * table fits the 1274 px window beside the 240 px navigation without
+ * horizontal scrolling, and the name column keeps at least 220 px.
+ */
+export const STRATEGY_COLUMN_MIN_WIDTHS = {
+  name: 230,
+  state: 88,
+  runtime: 112,
+  symbols: 80,
+  result: 120,
+  drawdown: 92,
+  trades: 76,
+  persona: 100,
+} as const;
+
+/**
+ * Compact cells: 8 px side padding and headers that may wrap. The table card
+ * is 939 px wide in a 1274 px window (240 px navigation), so these sums stay
+ * under 935 px.
+ */
+export const COMPACT_COLUMN_CLASS = "px-2 !whitespace-normal";
+
+function strategyMissingValue(r: Strategy, t: ListT, noData: string): { text: string; code?: string } {
+  const reason = strategyMetricsReasonText(r.metricsReason, t);
+  return reason ? { text: reason.text, code: reason.code } : { text: noData };
+}
+
+function StrategyRuntimeCell({ row, t, noData }: { row: Strategy; t: ListT; noData: string }) {
+  const runtime = normalizeStrategyRuntimeStatus(row.runtimeStatus);
+  const operational = normalizeStrategyOperationalStatus(row.operationalStatus);
+  if (!runtime) {
+    // Older BFF without runtimeStatus: keep the persona-stage status it sends.
+    if (!operational) {
+      return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+    }
+    return (
+      <Badge
+        variant="outline"
+        data-testid="strategy-operational-status"
+        data-operational-status={operational}
+        className={`text-xs ${strategyOperationalStatusClass(operational)}`}
+      >
+        {t(`strategy.operationalStatus.${operational}`)}
+      </Badge>
+    );
+  }
+  const reason = strategyRuntimeReasonText(row.runtimeStatusReason, t);
+  // With no runtime binding the persona stage is the plain reason (retired,
+  // unbound, idle); "running" there only means the persona stage, so it is not
+  // repeated under "Not running".
+  const personaReason =
+    !reason && runtime === "none" && operational && operational !== "running"
+      ? t(`strategy.operationalStatus.${operational}`)
+      : undefined;
+  const reasonText = reason?.text ?? personaReason;
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-0.5">
+      <Badge
+        variant="outline"
+        data-testid="strategy-runtime-status"
+        data-runtime-status={runtime}
+        className={`text-xs !whitespace-normal text-left ${strategyRuntimeStatusClass(runtime)}`}
+      >
+        {t(`strategy.runtimeStatus.${runtime}`)}
+      </Badge>
+      {reasonText && (
+        <span
+          className="line-clamp-2 text-[11px] leading-tight text-muted-foreground"
+          data-testid="strategy-runtime-reason"
+          title={reason ? `${reason.text} (${reason.code})` : undefined}
+        >
+          {reasonText}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function buildStrategyColumns(t: ListT, noData: string): Column<Strategy>[] {
+  const w = STRATEGY_COLUMN_MIN_WIDTHS;
+  return [
+    {
+      key: "name",
+      header: t("common.name"),
+      minWidth: w.name,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) => (
+        <div className="min-w-0">
+          <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>
+          {r.id && r.name && r.id !== r.name && (
+            <div
+              className="max-w-[200px] truncate font-mono text-xs text-muted-foreground"
+              title={r.id}
+              data-testid="object-secondary-id"
+            >
+              {r.id}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "state",
+      header: t("common.state"),
+      minWidth: w.state,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) => <span className="inline-flex whitespace-nowrap"><StatusBadge state={r.state} /></span>,
+    },
+    {
+      key: "runtime",
+      header: t("strategy.list.column.runtime"),
+      minWidth: w.runtime,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) => <StrategyRuntimeCell row={r} t={t} noData={noData} />,
+    },
+    {
+      key: "symbols",
+      header: t("strategy.list.column.symbols"),
+      minWidth: w.symbols,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) => {
+        const symbols = Array.isArray(r.symbols)
+          ? r.symbols.map((s) => String(s).trim()).filter(Boolean)
+          : [];
+        const symbolsText = symbols.join(", ");
+        return (
+          <span
+            data-testid="strategy-symbols"
+            className={`text-mono text-xs [overflow-wrap:anywhere] ${symbolsText ? "text-foreground" : "text-muted-foreground"}`}
+          >
+            {symbolsText || noData}
+          </span>
+        );
+      },
+    },
+    {
+      key: "cumulativePnl",
+      header: t("strategy.list.column.cumulativeResult"),
+      minWidth: w.result,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) => {
+        if (!hasNumber(r.pnl)) {
+          const missing = strategyMissingValue(r, t, noData);
+          return (
+            <span
+              className="text-xs text-muted-foreground"
+              data-testid="strategy-result-missing"
+              data-metrics-reason={missing.code}
+              title={missing.code}
+            >
+              {missing.text}
+            </span>
+          );
+        }
+        const toneClass =
+          r.pnl === 0 ? "text-foreground" : r.pnl > 0 ? "text-status-success" : "text-status-failed";
+        const asOf = r.metricsAsOf?.trim() || "";
+        return (
+          <div className="flex flex-col" data-testid="strategy-result">
+            <span className={`text-mono text-xs ${toneClass}`}>
+              {r.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            {asOf && (
+              <span className="text-[11px] leading-tight text-muted-foreground" data-testid="strategy-result-as-of">
+                {t("strategy.list.asOf", { asOf: safeDateTime(asOf) })}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: "drawdown",
+      header: t("strategy.list.column.drawdown"),
+      minWidth: w.drawdown,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) => {
+        if (!hasNumber(r.drawdown)) {
+          const missing = strategyMissingValue(r, t, noData);
+          return (
+            <span className="text-mono text-xs text-muted-foreground" title={missing.text}>
+              {noData}
+            </span>
+          );
+        }
+        const toneClass = r.drawdown === 0 ? "text-foreground" : "text-status-warning";
+        return <span className={`text-mono text-xs ${toneClass}`}>{`${(r.drawdown * 100).toFixed(2)}%`}</span>;
+      },
+    },
+    {
+      key: "trades",
+      header: t("strategy.list.column.trades"),
+      minWidth: w.trades,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) =>
+        hasNumber(r.totalTrades) ? (
+          <span className="text-mono text-xs text-foreground" data-testid="strategy-trades">{r.totalTrades}</span>
+        ) : (
+          <span className="text-mono text-xs text-muted-foreground" data-testid="strategy-trades">{noData}</span>
+        ),
+    },
+    {
+      key: "persona",
+      header: t("strategy.list.column.persona"),
+      minWidth: w.persona,
+      className: COMPACT_COLUMN_CLASS,
+      cell: (r) => {
+        const ids = Array.isArray(r.personaIds) ? r.personaIds.filter((id) => typeof id === "string" && id.trim()) : [];
+        if (ids.length === 0) {
+          return <span className="text-xs text-muted-foreground">{t("strategy.list.noPersona")}</span>;
+        }
+        const names = r.persona_display_names ?? {};
+        const labels = ids.map((id) => {
+          const name = typeof names[id] === "string" ? names[id].trim() : "";
+          return name || id;
+        });
+        return (
+          <span
+            className="block text-xs text-foreground [overflow-wrap:anywhere]"
+            title={t("strategy.list.personaIdsTooltip", { ids: ids.join(", ") })}
+            data-testid="strategy-persona"
+          >
+            {labels.join(", ")}
+          </span>
+        );
+      },
+    },
+  ];
+}
+
 export const StrategiesList = () => {
   const t = useT();
   const noData = t("common.noData");
+  const strategyColumns = buildStrategyColumns(t, noData);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeFilter = normalizeStrategyFilterParam(searchParams.get("state"));
   const includeTestPersonas = searchParams.get("include_test_personas") === "true";
@@ -424,6 +694,7 @@ export const StrategiesList = () => {
         const pageInfoTotal = extractStrategyPageInfoTotal(ctx.meta);
         const hiddenRetiredCount = extractHiddenRetiredPersonaCount(ctx.meta);
         const hiddenTestPersonaStrategyCount = extractHiddenTestPersonaStrategyCount(ctx.meta);
+        const hiddenTestBreakdown = extractHiddenTestBreakdown(ctx.meta);
         const hasHiddenTestPersonaStrategyCount =
           typeof hiddenTestPersonaStrategyCount === "number" &&
           Number.isFinite(hiddenTestPersonaStrategyCount);
@@ -438,16 +709,23 @@ export const StrategiesList = () => {
               : id === "all"
                 ? t("common.all")
                 : t(`status.${id}`, { defaultValue: id });
+          // Numbers print only when the owner sent visible_state_counts. The
+          // active tab prints its own pager total (page_info.total), which the
+          // contract makes equal to the visible count of that filter; the
+          // default tab also drops retired-persona rows, so it has a number
+          // only while it is the active tab.
+          const visibleCount =
+            stateCounts === null || id === "default"
+              ? undefined
+              : id === "all"
+                ? stateCounts.allCount
+                : stateCounts.byState[id];
           const count =
-            id === "default"
-              ? activeFilter === "default"
+            stateCounts === null
+              ? undefined
+              : id === activeFilter && typeof pageInfoTotal === "number"
                 ? pageInfoTotal
-                : undefined
-              : stateCounts === null
-                ? undefined
-                : id === "all"
-                  ? stateCounts.allCount
-                  : stateCounts.byState[id];
+                : visibleCount;
           return { id, label, count };
         });
 
@@ -497,6 +775,15 @@ export const StrategiesList = () => {
                 );
               })}
             </div>
+            {activeFilter === "draft" && (
+              <Card
+                data-testid="strategy-draft-notice"
+                role="note"
+                className="mb-3 border-status-warning/40 bg-status-warning/10 p-3 text-sm text-foreground"
+              >
+                {t("strategy.list.draftNotice")}
+              </Card>
+            )}
             {activeFilter === "default" && !ctx.isInitialLoading && !ctx.isDegradedEmpty && (
               <Card
                 data-testid="strategy-hidden-drafts-banner"
@@ -531,6 +818,11 @@ export const StrategiesList = () => {
                             count: hiddenTestPersonaStrategyCount,
                           })
                         : t("strategy.list.hiddenTestPersonaStrategiesNoCount")}
+                    {!includeTestPersonas && hiddenTestBreakdown && (
+                      <span className="ml-1 text-muted-foreground" data-testid="strategy-hidden-test-breakdown">
+                        {t("strategy.list.hiddenTestBreakdown", hiddenTestBreakdown)}
+                      </span>
+                    )}
                   </span>
                   <Button
                     type="button"
@@ -569,141 +861,154 @@ export const StrategiesList = () => {
           />
         );
       }}
-      extraColumns={[
-        {
-          key: "operationalStatus",
-          header: t("strategy.list.column.operationalStatus"),
-          cell: (r) => {
-            const status = normalizeStrategyOperationalStatus(r.operationalStatus);
-            if (!status) {
-              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
-            }
-            return (
-              <Badge
-                variant="outline"
-                data-testid="strategy-operational-status"
-                data-operational-status={status}
-                className={`text-xs ${strategyOperationalStatusClass(status)}`}
-              >
-                {t(`strategy.operationalStatus.${status}`)}
-              </Badge>
-            );
-          },
-        },
-        {
-          key: "symbols",
-          header: t("strategy.list.column.symbols"),
-          cell: (r) => {
-            const symbols = Array.isArray(r.symbols)
-              ? r.symbols.map((s) => String(s).trim()).filter(Boolean)
-              : [];
-            const symbolsText = symbols.join(", ");
-            return (
-              <span
-                data-testid="strategy-symbols"
-                className={`text-mono text-xs ${symbolsText ? "text-foreground" : "text-muted-foreground"}`}
-              >
-                {symbolsText || noData}
-              </span>
-            );
-          },
-        },
-        {
-          key: "alpha",
-          header: "Alpha",
-          cell: (r) => {
-            const alphaText = r.alpha?.trim() || "";
-            return (
-              <span className={`text-mono text-xs ${alphaText ? "text-foreground" : "text-muted-foreground"}`}>
-                {alphaText || noData}
-              </span>
-            );
-          },
-        },
-        {
-          key: "capitalPool",
-          header: t("nav.capital"),
-          cell: (r) => {
-            const poolText = r.capitalPoolId?.trim() || "";
-            return (
-              <span className={`text-mono text-xs ${poolText ? "text-foreground" : "text-muted-foreground"}`}>
-                {poolText || noData}
-              </span>
-            );
-          },
-        },
-        {
-          key: "cumulativePnl",
-          header: t("strategyDetail.cumulativePaperPnl"),
-          cell: (r) => {
-            if (!hasNumber(r.pnl)) {
-              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
-            }
-            const toneClass =
-              r.pnl === 0 ? "text-foreground" : r.pnl > 0 ? "text-status-success" : "text-status-failed";
-            const asOf = r.metricsAsOf?.trim() || "";
-            return (
-              <div className="flex flex-col">
-                <span className={`text-mono text-xs ${toneClass}`}>{r.pnl.toFixed(2)}</span>
-                {asOf && (
-                  <span className="text-[11px] text-muted-foreground">
-                    {t("strategyDetail.metricsAsOf", { asOf })}
-                  </span>
-                )}
-              </div>
-            );
-          },
-        },
-        {
-          key: "pnl",
-          header: "PnL 30d",
-          cell: (r) => {
-            if (!hasNumber(r.pnl30d)) {
-              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
-            }
-            const toneClass =
-              r.pnl30d === 0 ? "text-foreground" : r.pnl30d > 0 ? "text-status-success" : "text-status-failed";
-            return <span className={`text-mono text-xs ${toneClass}`}>{`${(r.pnl30d * 100).toFixed(2)}%`}</span>;
-          },
-        },
-        {
-          key: "sharpe",
-          header: t("table.sharpe"),
-          cell: (r) =>
-            hasNumber(r.sharpe) ? (
-              <span className="text-mono text-xs text-foreground">{r.sharpe.toFixed(2)}</span>
-            ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
-            ),
-        },
-        {
-          key: "drawdown",
-          header: t("table.drawdown"),
-          cell: (r) => {
-            if (!hasNumber(r.drawdown)) {
-              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
-            }
-            const toneClass = r.drawdown === 0 ? "text-foreground" : "text-status-warning";
-            return <span className={`text-mono text-xs ${toneClass}`}>{`${(r.drawdown * 100).toFixed(2)}%`}</span>;
-          },
-        },
-      ]}
+      columns={strategyColumns}
     />
   );
 };
 
+// FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 — Persona and Artifact lists open
+// on the current rows. The BFF row field `listScope` / `list_scope` decides the
+// tab; a row without a recorded scope (older BFF, or `unknown` because the
+// persona directory could not be read) stays on the default Current tab so no
+// row disappears.
+type CurrentFirstTab = "current" | "test" | "retired" | "research" | "unbound" | "all";
+
+export function classifyCurrentFirstScope(
+  row: unknown,
+  tabs: readonly CurrentFirstTab[],
+  fallback?: (row: unknown) => RegistryListScope | undefined,
+): CurrentFirstTab {
+  let scope: RegistryListScope = normalizeRegistryListScope(row);
+  if (scope === "unknown" && fallback) scope = fallback(row) ?? "unknown";
+  if (scope !== "unknown" && scope !== "current" && (tabs as readonly string[]).includes(scope)) {
+    return scope as CurrentFirstTab;
+  }
+  return "current";
+}
+
+export function countUnknownScopeRows(rows: readonly unknown[], fallback?: (row: unknown) => RegistryListScope | undefined): number {
+  let count = 0;
+  for (const row of rows) {
+    if (normalizeRegistryListScope(row) !== "unknown") continue;
+    if (fallback && fallback(row)) continue;
+    count += 1;
+  }
+  return count;
+}
+
+function UnknownScopeNotice({ count }: { count: number }) {
+  const t = useT();
+  if (count <= 0) return null;
+  return (
+    <p className="mb-3 text-xs text-muted-foreground" data-testid="list-unknown-scope-notice" data-unknown-scope-count={count}>
+      {t("registryLists.unknownScopeNotice", { count })}
+    </p>
+  );
+}
+
+function currentFirstEmptyState(
+  t: ListT,
+  scope: string,
+  counts: Record<string, number>,
+  buildScopeHref: (target: string) => string,
+): ObjectListEmptyStateConfig | undefined {
+  if (scope !== "current") return undefined;
+  const elsewhere = (counts.all ?? 0) - (counts.current ?? 0);
+  if (elsewhere <= 0) return undefined;
+  return {
+    title: t("registryLists.emptyCurrent.title"),
+    description: t("registryLists.emptyCurrent.description", { count: elsewhere }),
+    actionLabel: t("registryLists.emptyCurrent.action", { count: counts.all ?? elsewhere }),
+    actionTo: buildScopeHref("all"),
+  };
+}
+
+const PERSONA_SCOPE_TABS = ["current", "test", "retired", "research", "all"] as const;
+
+export const PERSONA_COLUMN_MIN_WIDTHS = {
+  name: 230,
+  state: 88,
+  risk: 72,
+  type: 92,
+  strategies: 112,
+  winRate: 76,
+  owner: 96,
+  updated: 104,
+} as const;
+
+/** `null` / missing win rate is "no data", never 0%. */
+export function personaWinRateText(value: unknown, noData: string): string {
+  return hasNumber(value) ? pct(value) : noData;
+}
+
 export const PersonasList = () => {
   const t = useT();
+  const noData = t("common.noData");
+  const w = PERSONA_COLUMN_MIN_WIDTHS;
   return (
     <ObjectListPage<Persona>
       title={t("nav.personas")}
       loader={asEntityLoader<Persona>(lists.personas)}
       basePath="/management/personas" liveKinds={["Persona"]}
       createBehavior={{ kind: "drawer", entity: "persona" }}
-      extraColumns={[
-        { key: "arch", header: t("table.type"), cell: (r) => r.archetype },
-        { key: "rs", header: t("nav.strategies"), cell: (r) => <span className="text-mono text-xs">{r.routedStrategies}</span> },
-        { key: "sr", header: t("table.winRate"), cell: (r) => <span className="text-mono text-xs">{pct(r.successRate)}</span> },
+      scopeConfig={{
+        paramName: "list_scope",
+        defaultScope: "current",
+        groupLabel: t("registryLists.scope.personaGroupLabel"),
+        options: PERSONA_SCOPE_TABS.map((id) => ({ id, label: t(`registryLists.scope.${id}`) })),
+        classify: (row) => classifyCurrentFirstScope(row, PERSONA_SCOPE_TABS),
+        emptyStateForScope: (scope, counts, buildScopeHref) => currentFirstEmptyState(t, scope, counts, buildScopeHref),
+      }}
+      topControls={(ctx) => <UnknownScopeNotice count={countUnknownScopeRows(ctx.rows)} />}
+      columns={[
+        {
+          key: "name",
+          header: t("common.name"),
+          minWidth: w.name,
+          className: COMPACT_COLUMN_CLASS,
+          cell: (r) => (
+            <div className="min-w-0">
+              <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>
+              {r.id && r.name && r.id !== r.name && (
+                <div className="max-w-[200px] truncate font-mono text-xs text-muted-foreground" title={r.id} data-testid="object-secondary-id">
+                  {r.id}
+                </div>
+              )}
+            </div>
+          ),
+        },
+        { key: "state", header: t("common.state"), minWidth: w.state, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="inline-flex whitespace-nowrap"><StatusBadge state={r.state} /></span> },
+        { key: "risk", header: t("common.risk"), minWidth: w.risk, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="inline-flex whitespace-nowrap"><RiskBadge level={r.risk} /></span> },
+        { key: "arch", header: t("table.type"), minWidth: w.type, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="text-xs [overflow-wrap:anywhere]">{r.archetype || noData}</span> },
+        { key: "rs", header: t("registryLists.column.routedStrategies"), minWidth: w.strategies, className: COMPACT_COLUMN_CLASS, cell: (r) => <span className="text-mono text-xs">{hasNumber(r.routedStrategies) ? r.routedStrategies : noData}</span> },
+        {
+          key: "sr",
+          header: t("table.winRate"),
+          minWidth: w.winRate,
+          className: COMPACT_COLUMN_CLASS,
+          cell: (r) => (
+            <span
+              className={`text-mono text-xs ${hasNumber(r.successRate) ? "" : "text-muted-foreground"}`}
+              data-testid="persona-win-rate"
+            >
+              {personaWinRateText(r.successRate, noData)}
+            </span>
+          ),
+        },
+        {
+          key: "owner",
+          header: t("common.owner"),
+          minWidth: w.owner,
+          className: COMPACT_COLUMN_CLASS,
+          cell: (r) => <span className="text-mono text-xs block max-w-[80px] truncate whitespace-nowrap" title={r.owner} data-full-owner={r.owner}>{r.owner}</span>,
+        },
+        {
+          key: "updated",
+          header: t("common.updated"),
+          minWidth: w.updated,
+          className: COMPACT_COLUMN_CLASS,
+          cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</span>,
+        },
       ]}
     />
   );
@@ -1763,12 +2068,41 @@ export const ResearchList = () => {
   );
 };
 
-type ArtifactScopeTab = "all" | "registry" | "research_run_output";
+const ARTIFACT_SCOPE_TABS = ["current", "test", "retired", "research", "unbound", "all"] as const;
 
-function classifyArtifactSourceScope(row: Artifact): ArtifactScopeTab {
-  const raw = String(row.source_kind ?? row.sourceKind ?? "").trim().toLowerCase();
-  if (raw === "research_run_output" || raw === "research") return "research_run_output";
-  return "registry";
+/** Older BFF rows carry no `list_scope`; a research run output is still research. */
+function artifactScopeFromSource(row: unknown): RegistryListScope | undefined {
+  const record = (row ?? {}) as { source_kind?: unknown; sourceKind?: unknown };
+  const raw = String(record.source_kind ?? record.sourceKind ?? "").trim().toLowerCase();
+  return raw === "research_run_output" || raw === "research" ? "research" : undefined;
+}
+
+export const ARTIFACT_COLUMN_MIN_WIDTHS = {
+  name: 230,
+  source: 84,
+  kind: 100,
+  version: 84,
+  state: 92,
+  hash: 104,
+  owner: 96,
+  updated: 104,
+} as const;
+
+function WordWithCode({ value, testId }: { value: { text: string; code: string } | undefined; testId: string }) {
+  const t = useT();
+  if (!value) {
+    return <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{t("common.noData")}</span>;
+  }
+  return (
+    <span
+      className="text-xs [overflow-wrap:anywhere] cursor-help"
+      title={value.code}
+      data-testid={testId}
+      data-code={value.code}
+    >
+      {value.text}
+    </span>
+  );
 }
 
 /** Shorten `sha256:38fb8f49…2e008e`; the full value stays available via title. */
@@ -1783,6 +2117,7 @@ export function shortenHash(hash: string): string {
 export const ArtifactsList = () => {
   const t = useT();
   const noData = t("common.noData");
+  const w = ARTIFACT_COLUMN_MIN_WIDTHS;
   return (
     <ObjectListPage<Artifact>
       title={t("nav.artifacts")}
@@ -1791,21 +2126,22 @@ export const ArtifactsList = () => {
       liveKinds={["Artifact"]}
       createBehavior={{ kind: "drawer", entity: "artifact" }}
       scopeConfig={{
-        paramName: "source_kind",
-        defaultScope: "all",
-        groupLabel: t("artifact.sources.groupLabel", { defaultValue: "Artifact source filter" }),
-        options: [
-          { id: "all", label: t("artifact.sources.all", { defaultValue: "All sources" }) },
-          { id: "registry", label: t("artifact.sources.registry", { defaultValue: "Registry bundle" }) },
-          { id: "research_run_output", label: t("artifact.sources.research_run_output", { defaultValue: "Research output" }) },
-        ],
-        classify: classifyArtifactSourceScope,
+        paramName: "list_scope",
+        defaultScope: "current",
+        groupLabel: t("registryLists.scope.artifactGroupLabel"),
+        options: ARTIFACT_SCOPE_TABS.map((id) => ({
+          id,
+          label: t(id === "research" ? "registryLists.scope.researchOutput" : `registryLists.scope.${id}`),
+        })),
+        classify: (row) => classifyCurrentFirstScope(row, ARTIFACT_SCOPE_TABS, artifactScopeFromSource),
+        emptyStateForScope: (scope, counts, buildScopeHref) => currentFirstEmptyState(t, scope, counts, buildScopeHref),
       }}
+      topControls={(ctx) => <UnknownScopeNotice count={countUnknownScopeRows(ctx.rows, artifactScopeFromSource)} />}
       columns={[
         {
           key: "name",
-          minWidth: 170,
-          className: "px-3",
+          minWidth: w.name,
+          className: COMPACT_COLUMN_CLASS,
           header: t("common.name"),
           cell: (r) => {
             const strategyId = r.strategy_id ?? r.strategyId ?? undefined;
@@ -1849,7 +2185,7 @@ export const ArtifactsList = () => {
               <div className="space-y-0.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <div
-                    className="font-medium line-clamp-2 break-words"
+                    className="text-sm font-medium leading-tight line-clamp-2 break-words"
                     title={primaryTitle}
                     data-testid="artifact-primary-name"
                   >
@@ -1913,100 +2249,69 @@ export const ArtifactsList = () => {
         },
         {
           key: "source",
-          minWidth: 130,
-          className: "px-3",
+          minWidth: w.source,
+          className: COMPACT_COLUMN_CLASS,
           header: t("artifact.sourceKind", { defaultValue: t("table.source") }),
           cell: (r) => {
-            const sourceKind = typeof (r.source_kind ?? r.sourceKind) === "string"
-              ? String(r.source_kind ?? r.sourceKind).trim()
-              : "";
-            return sourceKind ? (
-              <Badge variant="outline" data-source-kind={sourceKind} className="font-mono text-[11px] whitespace-normal text-left [overflow-wrap:anywhere]">
-                {sourceKind}
-              </Badge>
-            ) : (
-              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
+            const source = artifactSourceText(r.source_kind ?? r.sourceKind, t);
+            return (
+              <span data-source-kind={source?.code}>
+                <WordWithCode value={source} testId="artifact-source" />
+              </span>
             );
           },
         },
         {
           key: "kind",
-          minWidth: 120,
-          className: "px-3",
+          minWidth: w.kind,
+          className: COMPACT_COLUMN_CLASS,
           header: t("table.kind"),
-          cell: (r) => {
-            const kind = typeof r.kind === "string" ? r.kind.trim() : "";
-            return kind ? (
-              <span className="text-mono text-xs [overflow-wrap:anywhere]" title={kind}>{kind}</span>
-            ) : (
-              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
-            );
-          },
+          cell: (r) => <WordWithCode value={artifactKindText(r.kind, t)} testId="artifact-kind" />,
         },
         {
           key: "ver",
-          minWidth: 70,
-          className: "px-3",
+          minWidth: w.version,
+          className: COMPACT_COLUMN_CLASS,
           header: t("table.version"),
           cell: (r) => {
             const version = typeof r.version === "string" ? r.version.trim() : "";
             return version ? (
-              <span className="text-mono text-xs">{version}</span>
+              <span className="text-mono text-xs [overflow-wrap:anywhere]">{version}</span>
             ) : (
               <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
+          // State and risk share one column so the table fits 1274 px.
           key: "state",
-          minWidth: 90,
-          className: "px-3",
-          header: t("common.state"),
+          minWidth: w.state,
+          className: COMPACT_COLUMN_CLASS,
+          header: `${t("common.state")} / ${t("common.risk")}`,
           cell: (r) => {
             const state = typeof r.state === "string" ? r.state.trim() : "";
-            return state ? (
-              <span className="inline-flex whitespace-nowrap"><StatusBadge state={state} /></span>
-            ) : (
-              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
-            );
-          },
-        },
-        {
-          key: "risk",
-          minWidth: 80,
-          className: "px-3",
-          header: t("common.risk"),
-          cell: (r) => {
             const risk = typeof r.risk === "string" ? r.risk.trim() : "";
-            return risk ? (
-              <span className="inline-flex whitespace-nowrap"><RiskBadge level={risk as RiskLevel} /></span>
-            ) : (
-              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
+            if (!state && !risk) {
+              return <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>;
+            }
+            return (
+              <div className="flex flex-col items-start gap-1">
+                {state && <span className="inline-flex whitespace-nowrap"><StatusBadge state={state} /></span>}
+                {risk && <span className="inline-flex whitespace-nowrap"><RiskBadge level={risk as RiskLevel} /></span>}
+              </div>
             );
           },
-        },
-        {
-          key: "size",
-          minWidth: 90,
-          className: "px-3",
-          header: t("detail.label.size", { defaultValue: "Size" }),
-          cell: (r) =>
-            hasNumber(r.sizeMb) ? (
-              <span className="text-mono text-xs whitespace-nowrap">{`${loc(r.sizeMb)} MB`}</span>
-            ) : (
-              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
-            ),
         },
         {
           key: "hash",
-          minWidth: 150,
-          className: "px-3",
+          minWidth: w.hash,
+          className: COMPACT_COLUMN_CLASS,
           header: t("detail.section.hash", { defaultValue: "Hash" }),
           cell: (r) => {
             const hash = typeof r.hash === "string" ? r.hash.trim() : "";
             return hash ? (
               <span
-                className="text-mono text-xs text-muted-foreground whitespace-nowrap cursor-help"
+                className="text-mono text-xs text-muted-foreground [overflow-wrap:anywhere] cursor-help"
                 title={hash}
                 data-full-hash={hash}
               >
@@ -2019,13 +2324,13 @@ export const ArtifactsList = () => {
         },
         {
           key: "owner",
-          minWidth: 120,
-          className: "px-3",
+          minWidth: w.owner,
+          className: COMPACT_COLUMN_CLASS,
           header: t("common.owner"),
           cell: (r) => {
             const owner = typeof r.owner === "string" ? r.owner.trim() : "";
             return owner ? (
-              <span className="text-mono text-xs block max-w-[120px] truncate whitespace-nowrap" title={owner} data-full-owner={owner}>{owner}</span>
+              <span className="text-mono text-xs block max-w-[80px] truncate whitespace-nowrap" title={owner} data-full-owner={owner}>{owner}</span>
             ) : (
               <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
@@ -2033,11 +2338,11 @@ export const ArtifactsList = () => {
         },
         {
           key: "updated",
-          minWidth: 150,
-          className: "px-3",
+          minWidth: w.updated,
+          className: COMPACT_COLUMN_CLASS,
           header: t("common.updated"),
           cell: (r) => (
-            <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">
+            <span className="text-mono text-xs text-muted-foreground">
               {safeDateTime(r.updatedAt)}
             </span>
           ),

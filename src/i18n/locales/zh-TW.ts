@@ -1426,6 +1426,32 @@ export default {
       unbound: "未綁定 Persona",
       unknown: "無法讀取 Persona 狀態",
     },
+    runtimeStatus: {
+      running: "執行中",
+      paused_market_input: "暫停：行情輸入",
+      paused_operator: "操作員暫停",
+      none: "未執行",
+      unknown: "執行狀態不明",
+    },
+    runtimeReason: {
+      marketInput: "行情輸入中斷",
+      bindingStatus: "綁定狀態：{{status}}",
+      runtime_bindings_unavailable: "無法讀取執行綁定",
+      runtime_truth_unavailable: "無法讀取執行狀態",
+      scope_unavailable: "無法確認租戶範圍",
+      other: "已記錄的原因",
+    },
+    metricsReason: {
+      no_fills: "尚無成交",
+      marks_unavailable: "無市場價格",
+      no_admitted_binding: "尚未部署到模擬交易",
+      not_observed: "尚未觀測到",
+      stale: "最後結果已過時",
+      runtime_bindings_unavailable: "無法讀取執行綁定",
+      runtime_truth_unavailable: "無法讀取執行狀態",
+      scope_unavailable: "無法確認租戶範圍",
+      other: "未記錄",
+    },
     sweep: {
       run: "執行參數掃描",
       queued: "參數掃描已排入",
@@ -1436,9 +1462,20 @@ export default {
         default: "預設（隱藏草稿）",
       },
       column: {
+        runtime: "執行狀態",
+        cumulativeResult: "累計模擬損益",
+        drawdown: "回撤",
+        trades: "成交筆數",
+        persona: "Persona",
         operationalStatus: "運行狀態",
         symbols: "標的",
       },
+      asOf: "截至 {{asOf}}",
+      personaIdsTooltip: "Persona ID：{{ids}}",
+      noPersona: "無 Persona",
+      draftNotice:
+        "草稿是尚未篩選的文字草稿，不是策略：在篩選並核准之前，不會執行也不會交易。",
+      hiddenTestBreakdown: "其中 {{testCount}} 筆屬於測試 Persona，{{stubCount}} 筆是未綁定的佔位策略。",
       hiddenDraftsAndRetiredPersonasWithCounts:
         "預設已隱藏 {{draftCount}} 筆草稿策略與 {{retiredPersonaCount}} 筆 Persona 已退役的策略。",
       hiddenRetiredPersonasWithCount:
@@ -3434,6 +3471,16 @@ export default {
       registry: "Registry 執行包",
       research_run_output: "研究產出",
     },
+    kindLabel: {
+      execution_bundle: "執行包",
+      strategy_spec: "策略規格",
+      factor_eval_report: "因子評估報告",
+      backtest_report: "回測報告",
+      model: "模型",
+      dataset: "資料集",
+      report: "報告",
+      container: "容器",
+    },
     degradedBanner: {
       title: "部分 Artifact 目錄資料 — 失敗來源：{{failedSources}}",
       activeSource: "目前僅顯示來自 {{source}} 的資料列。",
@@ -4627,9 +4674,34 @@ export default {
       validator: { schema: "Schema 檢查", consistency: "一致性", impact: "影響分析", precedence: "優先順序", coverage: "涵蓋率" },
     },
   },
+  // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125：清單預設只看現役
+  registryLists: {
+    column: { routedStrategies: "策略數" },
+    scope: {
+      personaGroupLabel: "Persona 範圍",
+      artifactGroupLabel: "Artifact 範圍",
+      current: "現役",
+      test: "測試",
+      retired: "已退役",
+      research: "研究",
+      researchOutput: "研究產出",
+      unbound: "未綁定",
+      all: "全部",
+    },
+    unknownScopeNotice: "有 {{count}} 筆尚未記錄範圍，與現役一起顯示。",
+    emptyCurrent: {
+      title: "沒有現役資料",
+      description: "有 {{count}} 筆在其他分頁（測試、已退役、研究等）。",
+      action: "顯示全部（{{count}}）",
+    },
+    create: {
+      paperPersona: "建立模擬交易 Persona",
+      disabledNoOwner: "{{entity}}由各自的流程產生，無法從這個清單建立。",
+    },
+  },
   // EntityCreateDrawer 持久化邊界
   entityCreate: {
-    footerNote: "寫入必須有 typed durable BFF owner；不支援的 generic CRUD 已停用。",
+    footerNote: "儲存後會送到負責保存這類紀錄的服務；沒有對應服務的紀錄類型無法在此建立。",
     required: "必填",
     submitting: "送出中…",
     cooldown: {
@@ -4644,7 +4716,7 @@ export default {
     },
     field: {
       name: "名稱", owner: "負責人", memo: "備註",
-      alpha: "Alpha 名稱（slug）", capitalPoolId: "資金池 ID", personaIds: "Persona ID 清單",
+      alpha: "Alpha 代號", capitalPoolId: "資金池 ID", personaIds: "Persona ID 清單",
       archetype: "角色類型", description: "描述", initialMode: "初始狀態",
       mandate: "職責授權（Mandate）", strategyFamily: "策略家族", instruments: "交易標的 / 範圍",
       riskAppetite: "風險偏好", decisionStyle: "決策風格", timeHorizon: "持有週期",
@@ -4661,10 +4733,10 @@ export default {
       personaIds: "逗號分隔，至少 1 個 persona id",
       riskBudget: "範圍 0 < value ≤ 1（資金池占比）",
       quarter: "格式：YYYY-Qn，例如 2026-Q2",
-      alpha: "小寫 slug，例如 alpha-momentum",
-      archetype: "選擇 Persona 的主要工作角色；送出後仍會以 archetype 欄位寫入。",
+      alpha: "小寫英文、數字與連字號，例如 alpha-momentum",
+      archetype: "選擇 Persona 的主要工作角色。",
       initialMode: "新 Persona 建立即進入 Paper 模擬交易，不允許實盤資金副作用。",
-      mandate: "這個 Persona 實際負責交易什麼——它的具體職責。會寫進它在 OpenClaw 的 agent SOUL。",
+      mandate: "這個 Persona 實際負責交易什麼——它的具體職責，也會成為它的工作說明。",
       strategyFamily: "它執行的策略家族，例如 momentum、mean-reversion、macro-overlay。",
       instruments: "它交易的標的 / 範圍，例如 BTC、ETH、黃金期貨 (GC)。",
       riskAppetite: "風險偏好與上限，例如 moderate；每筆最多 2%。",
@@ -4690,7 +4762,7 @@ export default {
     error: {
       required: "必填",
       nameLength: "名稱長度需介於 3–120",
-      slugFormat: "需為 slug 格式",
+      slugFormat: "只能使用小寫英文、數字與連字號",
       atLeastOnePersona: "至少需 1 個 persona id",
       gtZero: "需大於 0",
       riskBudgetRange: "需介於 (0, 1]",
