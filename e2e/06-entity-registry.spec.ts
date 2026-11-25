@@ -807,11 +807,19 @@ function listEnvelope(registry: RegistryFixture): JsonRecord {
       totalCountExact: true,
       ...(registry.key === "strategies"
         ? {
+            // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the raw state_counts also counts hidden
+            // test/stub rows and is never printed; the draft banner reads visible_state_counts.
             state_counts: {
+              draft: 7421,
+              review: 1,
+              approved: 170,
+              retired: 1556,
+            },
+            visible_state_counts: {
               draft: 3217,
               review: 1,
               approved: 140,
-              retired: 1556,
+              retired: 2,
             },
             operational_counts: {
               running: 1,
@@ -1205,6 +1213,7 @@ test.describe("F07 entity registry", () => {
         );
         await expect(page.getByTestId("strategy-symbols")).toHaveText("2330.TW");
         await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("3217");
+        await expect(page.getByTestId("strategy-hidden-drafts-banner")).not.toContainText("7421");
         await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("134");
       }
       if (registry.key === "evolution-programs") {

@@ -233,7 +233,7 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 StrategyDetail & StrategiesList", (
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
   });
 
-  it("renders StrategiesList columns with No data for null metrics and empty alpha/capital pool, and preserves real 0.00", async () => {
+  it("renders StrategiesList columns with No data for null metrics and preserves real 0.00 (alpha, 30-day, Sharpe and capital pool columns removed by FE-REGISTRY-LISTS-CURRENT-FIRST-20261125)", async () => {
     const items = Object.values(REAL_BFF_STRATEGY_ROWS);
     const envelope: ListEnvelope<Strategy> = {
       items,
@@ -258,12 +258,18 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 StrategyDetail & StrategiesList", (
     expect(screen.getByText("110.00")).toHaveClass("text-status-success");
     expect(screen.getByText("-5.50")).toHaveClass("text-status-failed");
     expect(screen.getByText("0.00")).toHaveClass("text-foreground");
-    expect(screen.getAllByText("As of 2026-11-04T01:16:27Z")).toHaveLength(3);
+    expect(screen.getAllByTestId("strategy-result-as-of")).toHaveLength(3);
     expect(screen.getAllByText("0.00%")).toHaveLength(2);
     expect(screen.getByText("0.01%")).toHaveClass("text-status-warning");
+    // The removed columns never come back: no alpha, 30-day PnL, Sharpe or raw capital-pool id.
+    expect(screen.queryByText("alpha.momo.v1")).not.toBeInTheDocument();
+    expect(screen.queryByText("pool-persona-paper-fd1281847a3b1c6a9735")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /alpha|sharpe|30d/i })).not.toBeInTheDocument();
 
+    // Runtime status, symbols, cumulative result, drawdown and trades have no value: 5 "No data" cells
+    // (was 8 with the alpha, capital pool, 30-day and Sharpe columns).
     const notRunningRow = screen.getByText("Unstarted Candidate Strategy").closest("tr") as HTMLElement;
-    expect(within(notRunningRow).getAllByText("No data")).toHaveLength(8);
+    expect(within(notRunningRow).getAllByText("No data")).toHaveLength(5);
   });
 });
 
