@@ -16,12 +16,14 @@ describe("PageBody bottom clearance", () => {
     );
   });
 
-  it("fill mode keeps its height and reserves clearance as inner padding", () => {
+  it("fill mode scrolls vertically when content exceeds the viewport and reserves clearance as inner padding", () => {
     const { container } = render(<PageBody fill>x</PageBody>);
     const el = container.firstElementChild as HTMLElement;
     expect(el.dataset.pageBodyMode).toBe("fill");
     expect(el.className).toContain("flex-1");
-    expect(el.className).toContain("overflow-hidden");
+    expect(el.className).toContain("overflow-y-auto");
+    expect(el.className).toContain("overflow-x-hidden");
+    expect(el.className).not.toContain("overflow-hidden");
     expect(el.className).toContain("pb-[calc(1rem+var(--page-body-bottom-clearance,0px))]");
     expect(el.className).not.toContain("after:");
   });

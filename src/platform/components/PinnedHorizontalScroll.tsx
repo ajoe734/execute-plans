@@ -80,7 +80,7 @@ export function PinnedHorizontalScroll({
         aria-label={ariaLabel}
         className={cn(
           showPinnedScrollbar && "pinned-horizontal-scroll__native",
-          "min-h-0 overflow-auto overscroll-contain [scrollbar-gutter:stable_both-edges]",
+          "min-h-0 overflow-auto [scrollbar-gutter:stable_both-edges]",
           viewportClassName,
         )}
         data-management-table-scrollbar="native"
