@@ -738,13 +738,16 @@ describe("EvidenceExplorerPage", () => {
       "href",
       "/management/evidence?ref_id=evref-rart-20260615-002",
     );
-    expect(screen.getByText("producer record")).toBeInTheDocument();
+    // Recorded codes show in plain words with the code as tooltip (reviewer point 3).
+    expect(screen.getByText("Recorded by the producer")).toHaveAttribute("title", "producer_record");
+    expect(screen.queryByText("producer record")).not.toBeInTheDocument();
     expect(screen.queryByText("unresolved source")).not.toBeInTheDocument();
     expect(screen.queryByText("needs evidence")).not.toBeInTheDocument();
     expect(screen.queryByText("reviewer: ops-reviewer")).not.toBeInTheDocument();
     expect(screen.queryByText("Verified")).not.toBeInTheDocument();
     expect(screen.queryByText("unknown")).not.toBeInTheDocument();
-    expect(screen.getByText("Source unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Source not available")).toBeInTheDocument();
+    expect(screen.queryByText("Source unavailable")).not.toBeInTheDocument();
     expect(screen.getAllByText("artifact:rart-20260615-002").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "TW momentum candidate artifact" })).toHaveAttribute(
       "href",
@@ -797,7 +800,8 @@ describe("EvidenceExplorerPage", () => {
     expect(screen.getByRole("heading", { name: "TW momentum candidate" })).toBeInTheDocument();
     expect(screen.getByText("evref-rart-20260615-002")).toBeInTheDocument();
     expect(screen.getByText("research orchestrator projection")).toBeInTheDocument();
-    expect(screen.getByText("Source unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Source not available")).toBeInTheDocument();
+    expect(screen.queryByText("Source unavailable")).not.toBeInTheDocument();
     expect(screen.getAllByText("artifact:rart-20260615-002").length).toBeGreaterThan(0);
     // FE-EVIDENCE-CITED-20261125: the operation panel (Mark stale, Create task,
     // ...) had no backend and is removed, as are the actionability/operation
@@ -1142,7 +1146,8 @@ describe("EvidenceExplorerPage", () => {
     expect(metricCards[0]).toHaveTextContent("614");
 
     expect(screen.getByText("TW official tw_price_daily TWSE 0050 2026-11-01")).toBeInTheDocument();
-    expect(screen.getByTitle("official_reference")).toHaveTextContent("official reference");
+    expect(screen.getByTestId("evidence-row-source-type")).toHaveAttribute("title", "official_reference");
+    expect(screen.getByTestId("evidence-row-source-type")).toHaveTextContent("Official reference");
     expect(screen.getByText(safeDateTime("2026-11-01T14:30:00+08:00"))).toBeInTheDocument();
 
     const nextButton = screen.getByTestId("evidence-pagination-next");
@@ -1300,7 +1305,12 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
     expect(rows[0]).toHaveTextContent("Registry record");
     const meetingLinks = screen.getAllByRole("link", { name: "Pool evolution review for Paper Momentum Persona (2026-W48)" });
     expect(meetingLinks[0]).toHaveAttribute("href", `/management/meetings/${MEETING}`);
-    expect(screen.getByRole("link", { name: `Approval for ${ART_B}` })).toHaveAttribute("href", "/management/approvals");
+    // Reviewer point 4: an untitled approval is named by its type, the target is secondary text.
+    const approvalLink = screen.getByRole("link", { name: "Strategy promotion approval" });
+    expect(approvalLink).toHaveAttribute("href", "/management/approvals");
+    expect(approvalLink.closest("li")).toHaveTextContent(ART_B);
+    expect(screen.queryByRole("link", { name: ART_B })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: `Approval for ${ART_B}` })).not.toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "Paper Momentum Persona" })).toHaveAttribute("href", `/management/personas/${PERSONA}`);
     expect(rows[1]).toHaveTextContent("Persona strategy pool");
@@ -1474,7 +1484,15 @@ describe("Evidence page: detail and inbound links (FE-EVIDENCE-CITED-20261125)",
     renderEvidence(route);
 
     expect(screen.getByRole("heading", { name: "TW official tw_price_daily TWSE 0050 2026-11-24" })).toBeInTheDocument();
-    expect(screen.getAllByText("official reference").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Official reference").length).toBeGreaterThan(0);
+    // Reviewer point 3: recorded codes read as words, the code stays as tooltip.
+    expect(screen.getByText("Taiwan daily prices")).toHaveAttribute("title", "tw_price_daily");
+    expect(screen.getAllByText("Recorded by the producer")[0]).toHaveAttribute("title", "producer_record");
+    // official_reference without an internal link reads "external source" / "No internal link".
+    expect(screen.getByText("No internal link")).toBeInTheDocument();
+    for (const raw of ["official reference", "producer record", "tw price daily", "Source unavailable", "unavailable"]) {
+      expect(screen.queryByText(raw)).not.toBeInTheDocument();
+    }
     expect(screen.getByText(safeDateTime("2026-11-24T14:30:00+08:00"))).toBeInTheDocument();
     expect(screen.getByTestId("evidence-detail-excerpt")).toHaveTextContent("0050 close 192.35, volume 18,204 lots");
     const external = screen.getByRole("link", { name: "Open original source" });
@@ -1514,27 +1532,27 @@ describe("Evidence page: detail and inbound links (FE-EVIDENCE-CITED-20261125)",
   });
 
   it("opens the right item for query links from rankings and league", () => {
-    expect(evidenceInboundTarget(`facts:registry_entry:${ART_B}`)).toEqual({ kind: "route", href: `/management/strategies/${ART_B}` });
-    expect(evidenceInboundTarget(ART_B)).toEqual({ kind: "route", href: `/management/strategies/${ART_B}` });
-    expect(evidenceInboundTarget(`facts:member_virtual_book:${ART_B}`)).toEqual({ kind: "route", href: `/management/strategies/${ART_B}` });
+    expect(evidenceInboundTarget(`facts:registry_entry:${ART_B}`)).toEqual({ kind: "route", href: `/management/artifacts/${ART_B}` });
+    expect(evidenceInboundTarget(ART_B)).toEqual({ kind: "route", href: `/management/artifacts/${ART_B}` });
+    expect(evidenceInboundTarget(`facts:member_virtual_book:${ART_B}`)).toEqual({ kind: "route", href: `/management/artifacts/${ART_B}` });
     expect(evidenceInboundTarget(`facts:strategy_pool:${PERSONA}@4`)).toEqual({ kind: "route", href: `/management/personas/${PERSONA}` });
     expect(evidenceInboundTarget("evidence:search_excerpt:evi-1217cd1c8ccc7274")).toEqual({ kind: "item", refId: "evi-1217cd1c8ccc7274" });
     expect(evidenceInboundTarget("evitem-tw_price_daily-0050-2026-11-01-abc123")).toEqual({ kind: "item", refId: "evitem-tw_price_daily-0050-2026-11-01-abc123" });
   });
 
-  it("redirects a ?query= registry reference to the strategy and looks an item id up as detail", () => {
+  it("redirects a ?query= registry reference to the artifact page and looks an item id up as detail", () => {
     mocks.useV5Live.mockReturnValue({ data: undefined, loading: false, error: null, refresh: vi.fn() });
     render(
       <I18nextProvider i18n={i18n}>
         <MemoryRouter initialEntries={[`/management/evidence?query=${encodeURIComponent(`facts:registry_entry:${ART_B}`)}`]}>
           <Routes>
             <Route path="/management/evidence" element={<EvidenceExplorerPage />} />
-            <Route path="/management/strategies/:id" element={<div data-testid="strategy-page">strategy</div>} />
+            <Route path="/management/artifacts/:id" element={<div data-testid="artifact-page">artifact</div>} />
           </Routes>
         </MemoryRouter>
       </I18nextProvider>,
     );
-    expect(screen.getByTestId("strategy-page")).toBeInTheDocument();
+    expect(screen.getByTestId("artifact-page")).toBeInTheDocument();
   });
 
   it("does not claim to filter by trade journey when journey_id is passed", () => {

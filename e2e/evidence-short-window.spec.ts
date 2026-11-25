@@ -482,6 +482,64 @@ test.describe("FE-EVIDENCE-CITED-20261125 evidence and persona fleet in a short 
     }
   }
 
+  test("cited table fits the 1274x627 content width without horizontal scrolling and keeps who cites it and last cited on screen", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1274, height: 627 } });
+    const page = await context.newPage();
+    await installFixtureBff(page);
+    await page.goto(frontendUrl("/management/evidence"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.locator('[data-testid="evidence-cited-table"] [data-testid="evidence-route-row"]').first()).toBeAttached({ timeout: 30_000 });
+    const fit = await page.evaluate(() => {
+      const table = document.querySelector<HTMLElement>('[data-testid="evidence-cited-table"]');
+      const main = document.querySelector<HTMLElement>("main");
+      if (!table || !main) throw new Error("cited table not rendered");
+      // Every ancestor of the table up to <body> must not need horizontal scrolling.
+      const scrollers: string[] = [];
+      for (let el = table.parentElement; el && el !== document.body; el = el.parentElement) {
+        const ox = getComputedStyle(el).overflowX;
+        if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 1) {
+          scrollers.push(`${el.tagName}.${el.getAttribute("data-testid") ?? ""} ${el.scrollWidth}>${el.clientWidth}`);
+        }
+      }
+      const rightEdge = Math.min(window.innerWidth, main.getBoundingClientRect().right);
+      const cells = (selector: string) => Array.from(document.querySelectorAll<HTMLElement>(selector)).map((el) => el.getBoundingClientRect());
+      const citedBy = cells('[data-testid="evidence-cited-table"] tbody tr td:nth-child(2)');
+      const lastCited = cells('[data-testid="evidence-cited-last-cited"]');
+      return {
+        mainWidth: Math.round(main.getBoundingClientRect().width),
+        tableWidth: Math.round(table.getBoundingClientRect().width),
+        horizontalScrollers: scrollers,
+        citedByOffscreen: citedBy.filter((r) => r.right > rightEdge + 1 || r.width < 200).length,
+        lastCitedOffscreen: lastCited.filter((r) => r.right > rightEdge + 1).length,
+        lastCitedCount: lastCited.length,
+      };
+    });
+    console.log(`MEASUREMENT evidence-cited-fit@1274x627 ${JSON.stringify(fit)}`);
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/evidence-cited-fit-1274x627.png` });
+    expect(fit.tableWidth).toBeLessThanOrEqual(fit.mainWidth);
+    expect(fit.horizontalScrollers, "no horizontal scrolling for the cited table").toEqual([]);
+    expect(fit.lastCitedCount).toBeGreaterThan(0);
+    expect(fit.citedByOffscreen).toBe(0);
+    expect(fit.lastCitedOffscreen).toBe(0);
+    await context.close();
+  });
+
+  test("ingested list and detail show recorded codes as words with the code as tooltip", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1274, height: 627 } });
+    const page = await context.newPage();
+    await installFixtureBff(page);
+    const RAW = /\b(source record|producer record|tw price daily|official reference)\b|Source unavailable/;
+    await page.goto(frontendUrl("/management/evidence?scope=ingested"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.locator('[data-testid="evidence-route-row"]').first()).toBeAttached({ timeout: 30_000 });
+    await expect(page.getByTestId("evidence-row-source-type").first()).toHaveAttribute("title", "official_reference");
+    expect(await page.locator("main").innerText()).not.toMatch(RAW);
+    await page.goto(frontendUrl("/management/evidence/evi-1217cd1c8ccc7274"), { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("evidence-detail")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[title="tw_price_daily"]').first()).toBeVisible();
+    expect(await page.locator("main").innerText()).not.toMatch(RAW);
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/evidence-detail-codes-1274x627.png`, fullPage: true });
+    await context.close();
+  });
+
   test("cited list names a source that could not be read and marks the total incomplete", async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 1274, height: 627 } });
     const page = await context.newPage();

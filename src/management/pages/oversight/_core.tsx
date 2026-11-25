@@ -4749,6 +4749,28 @@ function evidenceLabel(value?: string | null): string {
   return text.replace(/_/g, " ");
 }
 
+type EvidenceT = (key: string, opts?: Record<string, unknown>) => string;
+
+/**
+ * Plain words for a recorded evidence code (link type, tier, availability,
+ * source type...). Known codes map to the locale; unknown codes keep the
+ * existing humanised form so nothing is hidden.
+ */
+function evidenceCodeLabel(t: EvidenceT, value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  const fallback = evidenceLabel(raw);
+  if (fallback === "—" || !/^[A-Za-z0-9_-]+$/.test(raw)) return fallback;
+  return t(`mgmt.evidence.code.${raw}`, { defaultValue: fallback });
+}
+
+/** A recorded code in plain words with the raw code as its tooltip. */
+const EvidenceCode = ({ value, testId }: { value?: string | null; testId?: string }) => {
+  const { t } = useTranslation();
+  const text = evidenceCodeLabel(t, value);
+  if (text === "—") return <span data-testid={testId}>—</span>;
+  return <span title={String(value).trim()} data-testid={testId}>{text}</span>;
+};
+
 function evidenceTimestamp(value?: string | null): string {
   return value ? safeDateTime(value) : "—";
 }
@@ -4814,12 +4836,19 @@ const EvidenceResolvedLinkAction = ({
   const href = link.routeHref ?? link.route_href;
   const officialNoInternalLink = isOfficialReferenceWithoutInternalLink(link, sourceType);
   const rawLabel = link.displayLabel || link.display_label;
+  // The BFF falls back to the English labels "Source unavailable" / "Open
+  // source" when nothing was recorded; show them in the reader's language.
+  const fallbackLabel = !rawLabel || rawLabel === "Source unavailable" || rawLabel === "Open source";
   const label = officialNoInternalLink
     ? t("mgmt.evidence.noInternalLink", { defaultValue: "No internal link" })
-    : rawLabel || t("mgmt.evidence.openResolvedSource");
-  const badgeText = officialNoInternalLink
+    : !fallbackLabel
+      ? rawLabel
+      : link.availability === "unavailable" || (!href && rawLabel === "Source unavailable")
+        ? t("mgmt.evidence.resolvedSourceUnavailable")
+        : t("mgmt.evidence.openResolvedSource");
+  const badgeText: ReactNode = officialNoInternalLink
     ? t("mgmt.evidence.externalSourceBadge", { defaultValue: "external source" })
-    : evidenceLabel(link.availability);
+    : <EvidenceCode value={link.availability} />;
   if (!href) {
     return (
       <div className="flex flex-col gap-1">
@@ -4888,7 +4917,7 @@ function evidenceStateTone(state?: string): string {
 
 const EvidenceStateBadge = ({ state, label }: { state?: string; label?: string }) => (
   <Badge variant="outline" className={evidenceStateTone(state)}>
-    {label ?? evidenceLabel(state)}
+    {label ?? <EvidenceCode value={state} />}
   </Badge>
 );
 
@@ -4933,7 +4962,7 @@ const EvidenceRelationshipsPanel = ({ relationships }: { relationships: Manageme
           {buckets.map(([bucket, rows]) => (
             <div key={bucket} className="rounded-md border border-border p-3">
               <div className="flex items-center justify-between gap-2">
-                <Badge variant="outline">{evidenceLabel(bucket)}</Badge>
+                <Badge variant="outline"><EvidenceCode value={bucket} /></Badge>
                 <span className="text-xs text-muted-foreground">{rows.length}</span>
               </div>
               <ul className="mt-2 space-y-2 text-sm">
@@ -4951,7 +4980,7 @@ const EvidenceRelationshipsPanel = ({ relationships }: { relationships: Manageme
                         {[row.entityType ?? row.entity_type, row.entityRef ?? row.entity_ref].filter(Boolean).join(":")}
                       </div>
                       {(row.linkType ?? row.link_type) && (
-                        <div className="text-xs text-muted-foreground">{evidenceLabel(row.linkType ?? row.link_type)}</div>
+                        <div className="text-xs text-muted-foreground"><EvidenceCode value={row.linkType ?? row.link_type} /></div>
                       )}
                     </li>
                   );
@@ -4984,7 +5013,7 @@ const EvidenceChainPanel = ({ chain }: { chain: ManagementEvidenceChain }) => {
               <li key={`${edge.from}-${edge.to}-${index}`} className="rounded-md border border-border p-3 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-foreground">{from?.label ?? edge.from}</span>
-                  <span className="text-xs text-muted-foreground">→ {evidenceLabel(edge.relationship)} →</span>
+                  <span className="text-xs text-muted-foreground">→ <EvidenceCode value={edge.relationship} /> →</span>
                   <span className="font-medium text-foreground">{to?.label ?? edge.to}</span>
                   {edge.degraded && <EvidenceStateBadge state="degraded" />}
                 </div>
@@ -5023,7 +5052,7 @@ const EvidenceTasksPanel = ({ tasks }: { tasks: ManagementEvidenceTask[] }) => {
                 )}
                 <div className="mt-1 flex flex-wrap gap-2">
                   <EvidenceStateBadge state={task.status} />
-                  {task.materialization && <Badge variant="outline">{evidenceLabel(task.materialization)}</Badge>}
+                  {task.materialization && <Badge variant="outline"><EvidenceCode value={task.materialization} /></Badge>}
                 </div>
               </li>
             );
@@ -5073,8 +5102,9 @@ function evidenceScopeFromParams(params: URLSearchParams): EvidenceScope {
 /**
  * Where an inbound reference opens (FE-EVIDENCE-CITED-20261125). Mirrors the
  * BFF cited-list reference shapes (cited_evidence.py `_parse_string_ref` and
- * `_route_for`): registry entries and virtual books open the strategy, a
- * strategy pool opens the persona, an evidence item opens its detail.
+ * `_route_for`): registry entries, virtual books and bare artifact ids open
+ * the artifact page (hosted /bff/strategies/<artifact> answers 404 while
+ * /bff/artifacts/<artifact> answers 200), a strategy pool opens the persona, an evidence item opens its detail.
  * Anything else is looked up as an evidence item and answers found or not
  * found honestly.
  */
@@ -5085,7 +5115,7 @@ export function evidenceInboundTarget(rawRef: string): { kind: "route"; href: st
     const [group, kind] = parts;
     const sourceId = parts.slice(2).join(":");
     if (group === "facts" && (kind === "registry_entry" || kind === "member_virtual_book") && sourceId) {
-      return { kind: "route", href: `/management/strategies/${encodeURIComponent(sourceId)}` };
+      return { kind: "route", href: `/management/artifacts/${encodeURIComponent(sourceId)}` };
     }
     if (group === "facts" && kind === "strategy_pool" && sourceId) {
       const persona = sourceId.split("@", 1)[0];
@@ -5096,7 +5126,7 @@ export function evidenceInboundTarget(rawRef: string): { kind: "route"; href: st
     }
   }
   if (ref.startsWith("artifact-")) {
-    return { kind: "route", href: `/management/strategies/${encodeURIComponent(ref)}` };
+    return { kind: "route", href: `/management/artifacts/${encodeURIComponent(ref)}` };
   }
   return { kind: "item", refId: ref };
 }
@@ -5253,7 +5283,29 @@ function citedSourceProblem(t: (key: string, opts?: Record<string, unknown>) => 
   return t(`mgmt.evidence.cited.sourceStatus.${source.status}`, { defaultValue: t("mgmt.evidence.cited.sourceStatus.failed") });
 }
 
+/**
+ * An approval without a recorded title is named by its type of approval; the
+ * target it approves is secondary text, never the name.
+ */
+function approvalCitationName(t: EvidenceT, citation: ManagementCitedEvidenceCitation): { text: string; secondary: string | null } {
+  const p = citation.parts;
+  const type = citedPart(p, "decision_type") || citedPart(p, "approval_type") || citedPart(p, "target_type");
+  const text = !type
+    ? t("mgmt.evidence.cited.by.approvalUntyped")
+    : /^[A-Za-z0-9_-]+$/.test(type)
+      ? t(`mgmt.evidence.cited.by.approvalType.${type}`, {
+          defaultValue: t("mgmt.evidence.cited.by.approvalTypeFmt", { type: humanizeEvidenceToken(type) }),
+        })
+      : t("mgmt.evidence.cited.by.approvalTypeFmt", { type });
+  return { text, secondary: citedPart(p, "target_id") || citation.entityRef || null };
+}
+
 /** Plain words for who cites a reference; the BFF sends recorded titles and parts, never sentences. */
+function citationName(t: EvidenceT, citation: ManagementCitedEvidenceCitation): { text: string; secondary: string | null } {
+  if (!citation.label && citation.entityType === "approval") return approvalCitationName(t, citation);
+  return { text: citationText(t, citation), secondary: null };
+}
+
 function citationText(t: (key: string, opts?: Record<string, unknown>) => string, citation: ManagementCitedEvidenceCitation): string {
   if (citation.label) return citation.label;
   const p = citation.parts;
@@ -5295,14 +5347,14 @@ const CitedByList = ({ row }: { row: ManagementCitedEvidenceRow }) => {
   return (
     <ul className="space-y-1" data-testid="evidence-cited-by">
       {visible.map((citation, index) => {
-        const text = citationText(t, citation);
+        const { text, secondary } = citationName(t, citation);
         const entity = citedEntityLabel(t, citation.entityType);
         const when = citation.time ? evidenceTimestamp(citation.time) : "";
         return (
           <li
             key={`${citation.entityType}-${citation.entityRef}-${index}`}
-            className="max-w-[460px] truncate text-xs"
-            title={[`${entity}: ${text}`, when].filter(Boolean).join(" · ")}
+            className="break-words text-xs [overflow-wrap:anywhere]"
+            title={[`${entity}: ${text}`, secondary, when].filter(Boolean).join(" · ")}
           >
             <span className="mr-1 text-muted-foreground">{entity}:</span>
             {citation.routeHref ? (
@@ -5311,6 +5363,9 @@ const CitedByList = ({ row }: { row: ManagementCitedEvidenceRow }) => {
               </Link>
             ) : (
               <span className="font-medium text-foreground">{text}</span>
+            )}
+            {secondary && (
+              <span className="ml-1 font-mono text-muted-foreground" data-testid="evidence-cited-by-secondary">{secondary}</span>
             )}
             {citation.time && <span className="ml-1 text-muted-foreground">· {evidenceTimestamp(citation.time)}</span>}
           </li>
@@ -5412,17 +5467,23 @@ const EvidenceCitedList = () => {
         <ManagementTableScroll
           className={EVIDENCE_TABLE_SCROLL_CLASS}
           testId="evidence-explorer-table-scroll"
-          minScrollWidth={1180}
+          minScrollWidth={0}
           showPinnedScrollbar={false}
           contentClassName="pb-4"
           viewportClassName={EVIDENCE_TABLE_VIEWPORT_CLASS}
         >
-          <table className="w-full min-w-[1180px] text-sm" data-testid="evidence-cited-table">
+          {/* Fits the content width (939 px at 1274x627) without horizontal
+              scrolling: kind and source class sit under the label and the
+              citations wrap, so "who cites it" and "last cited" stay visible. */}
+          <table className="w-full table-fixed text-sm" data-testid="evidence-cited-table">
+            <colgroup>
+              <col className="w-[38%]" />
+              <col />
+              <col className="w-[132px]" />
+            </colgroup>
             <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">{t("mgmt.evidence.cited.reference")}</th>
-                <th className="px-3 py-2">{t("mgmt.evidence.cited.kindHeader")}</th>
-                <th className="px-3 py-2">{t("mgmt.evidence.cited.sourceClassHeader")}</th>
                 <th className="px-3 py-2">{t("mgmt.evidence.cited.citedBy")}</th>
                 <th className="px-3 py-2">{t("mgmt.evidence.cited.lastCited")}</th>
               </tr>
@@ -5430,7 +5491,7 @@ const EvidenceCitedList = () => {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
-                  <td className="max-w-[340px] px-3 py-3">
+                  <td className="min-w-0 px-3 py-3 [overflow-wrap:anywhere]">
                     {row.routeHref ? (
                       <Link to={row.routeHref} className="break-words font-medium text-primary underline-offset-4 hover:underline">
                         {row.label}
@@ -5438,8 +5499,13 @@ const EvidenceCitedList = () => {
                     ) : (
                       <span className="break-words font-medium text-foreground">{row.label}</span>
                     )}
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      <span data-testid="evidence-cited-kind" title={t("mgmt.evidence.cited.kindHeader")}>{citedKindLabel(t, row.refKind)}</span>
+                      {" · "}
+                      <span data-testid="evidence-cited-source-class" title={t("mgmt.evidence.cited.sourceClassHeader")}>{citedSourceClassLabel(t, row.sourceClass)}</span>
+                    </div>
                     {!row.nameMissing && (
-                      <div className="mt-1 max-w-[320px] truncate font-mono text-xs text-muted-foreground" title={row.refId}>{row.refId}</div>
+                      <div className="mt-1 truncate font-mono text-xs text-muted-foreground" title={row.refId}>{row.refId}</div>
                     )}
                     {row.nameMissing && (
                       <div className="mt-1 text-xs text-muted-foreground">{t("mgmt.evidence.cited.nameMissing")}</div>
@@ -5448,22 +5514,20 @@ const EvidenceCitedList = () => {
                       <Badge variant="outline" className="mt-2">{t("mgmt.evidence.redacted")}</Badge>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3" data-testid="evidence-cited-kind">{citedKindLabel(t, row.refKind)}</td>
-                  <td className="whitespace-nowrap px-3 py-3" data-testid="evidence-cited-source-class">{citedSourceClassLabel(t, row.sourceClass)}</td>
-                  <td className="px-3 py-3"><CitedByList row={row} /></td>
-                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground" title={row.lastCitedAt ?? undefined}>{evidenceTimestamp(row.lastCitedAt)}</td>
+                  <td className="min-w-0 px-3 py-3"><CitedByList row={row} /></td>
+                  <td className="px-3 py-3 text-xs text-muted-foreground" title={row.lastCitedAt ?? undefined} data-testid="evidence-cited-last-cited">{evidenceTimestamp(row.lastCitedAt)}</td>
                 </tr>
               ))}
               {rows.length === 0 && !loading && (
                 listed ? (
                   <tr data-testid="evidence-route-empty">
-                    <td className="px-3 py-6 text-center text-muted-foreground" colSpan={5}>
+                    <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
                       {status === "ok" ? t("mgmt.evidence.cited.noRows") : t("mgmt.evidence.cited.noRowsIncomplete")}
                     </td>
                   </tr>
                 ) : (
                   <tr data-testid="evidence-route-unavailable">
-                    <td className="px-3 py-6 text-center text-muted-foreground" colSpan={5}>
+                    <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
                       {status === "unsupported" ? t("mgmt.evidence.cited.unsupportedTitle") : t("mgmt.evidence.cited.unavailableRows")}
                     </td>
                   </tr>
@@ -5565,7 +5629,6 @@ const EvidenceExplorerList = () => {
               const detailHref = e.managementHref ?? e.management_href;
               const linkedObjectHref = e.linkedObjectLink?.routeHref ?? e.linked_object_link?.route_href;
               const linkedObjectUnavailable = e.disabledActionReasons.canOpenLinkedObject ?? e.disabled_action_reasons.canOpenLinkedObject;
-              const sourceType = evidenceLabel(e.sourceType);
               const linkType = evidenceLabel(e.linkType);
               return (
                 <tr key={e.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
@@ -5579,17 +5642,17 @@ const EvidenceExplorerList = () => {
                     )}
                     <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{e.refId}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      <span data-testid="evidence-row-source-type" title={e.sourceType}>{sourceType}</span>
+                      <EvidenceCode value={e.sourceType} testId="evidence-row-source-type" />
                       {linkType !== "—" && (
                         <>
                           {" · "}
-                          <span title={e.linkType}>{linkType}</span>
+                          <EvidenceCode value={e.linkType} testId="evidence-row-link-type" />
                         </>
                       )}
                     </div>
                   </td>
                   <td className="px-3 py-3">
-                    <span className="text-xs text-muted-foreground">{evidenceLabel(e.credibility.tier)}</span>
+                    <span className="text-xs text-muted-foreground"><EvidenceCode value={e.credibility.tier} testId="evidence-row-tier" /></span>
                   </td>
                   <td className="px-3 py-3">
                     <EvidenceResolvedLinkAction link={e.resolvedLink} sourceType={e.sourceType ?? e.source_type} />
@@ -5697,7 +5760,7 @@ const EvidenceLinkedDecisions = ({ decisions }: { decisions: ManagementEvidenceL
               {[decision.entityType ?? decision.entity_type, decision.entityRef ?? decision.entity_ref].filter(Boolean).join(":") || "—"}
             </div>
             {decision.linkType || decision.link_type ? (
-              <div className="mt-1 text-xs text-muted-foreground">{evidenceLabel(decision.linkType ?? decision.link_type)}</div>
+              <div className="mt-1 text-xs text-muted-foreground"><EvidenceCode value={decision.linkType ?? decision.link_type} /></div>
             ) : null}
             {decision.relationshipNote || decision.relationship_note ? (
               <p className="mt-1 text-sm text-muted-foreground">{decision.relationshipNote ?? decision.relationship_note}</p>
@@ -5742,8 +5805,8 @@ const EvidenceSourceContexts = ({ detail }: { detail: ManagementEvidenceDetail }
           <dl className="mt-3 space-y-3">
             <EvidenceField label={t("mgmt.evidence.titleLabel")} value={memory.headline || "—"} />
             <EvidenceField label={t("mgmt.evidence.id")} value={memory.entryId ?? memory.entry_id ?? "—"} mono />
-            <EvidenceField label={t("mgmt.evidence.kind")} value={evidenceLabel(memory.knowledgeType ?? memory.knowledge_type)} />
-            <EvidenceField label={t("mgmt.evidence.status")} value={evidenceLabel(memory.lifecycleStatus ?? memory.lifecycle_status)} />
+            <EvidenceField label={t("mgmt.evidence.kind")} value={<EvidenceCode value={memory.knowledgeType ?? memory.knowledge_type} />} />
+            <EvidenceField label={t("mgmt.evidence.status")} value={<EvidenceCode value={memory.lifecycleStatus ?? memory.lifecycle_status} />} />
             {(memory.routeHref ?? memory.route_href) && (
               <dd>
                 <Button asChild size="sm" variant="outline">
@@ -5868,12 +5931,12 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
         <Card className="p-4">
           <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.packetContent")}</h2>
           <dl className="mt-4 grid gap-4 md:grid-cols-2">
-            <EvidenceField label={t("mgmt.evidence.sourceType")} value={evidenceLabel(sourceType)} />
+            <EvidenceField label={t("mgmt.evidence.sourceType")} value={<EvidenceCode value={sourceType} />} />
             <EvidenceField label={t("mgmt.evidence.sourceClass")} value={citedSourceClassLabel(t, detail.sourceClass ?? null)} />
             <EvidenceField label={t("mgmt.evidence.captured")} value={evidenceTimestamp(detail.sourceDocument.capturedAt ?? detail.sourceDocument.captured_at)} />
             <EvidenceField label={t("mgmt.evidence.capturedBy")} value={detail.sourceDocument.capturedBy ?? detail.sourceDocument.captured_by ?? "—"} />
-            <EvidenceField label={t("mgmt.evidence.linkType")} value={evidenceLabel(detail.linkType)} />
-            <EvidenceField label={t("mgmt.evidence.preview")} value={storagePreview.available ? evidenceLabel(storagePreview.previewType ?? storagePreview.preview_type) : t("mgmt.evidence.previewUnavailable")} />
+            <EvidenceField label={t("mgmt.evidence.linkType")} value={<EvidenceCode value={detail.linkType} />} />
+            <EvidenceField label={t("mgmt.evidence.preview")} value={storagePreview.available ? <EvidenceCode value={storagePreview.previewType ?? storagePreview.preview_type} /> : t("mgmt.evidence.previewUnavailable")} />
             <EvidenceField label={t("mgmt.evidence.created")} value={evidenceTimestamp(detail.createdAt ?? detail.created_at)} />
             <div data-testid="evidence-detail-external">
               <dt className="text-xs font-medium uppercase text-muted-foreground">{t("mgmt.evidence.originalSource")}</dt>
@@ -5908,8 +5971,8 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
           <Card className="p-4">
             <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.credibility")}</h2>
             <dl className="mt-3 space-y-3">
-              <EvidenceField label={t("mgmt.evidence.tier")} value={evidenceLabel(detail.credibility.tier)} />
-              <EvidenceField label={t("mgmt.evidence.verificationMethod")} value={evidenceLabel(detail.credibility.verificationMethod ?? detail.credibility.verification_method)} />
+              <EvidenceField label={t("mgmt.evidence.tier")} value={<EvidenceCode value={detail.credibility.tier} />} />
+              <EvidenceField label={t("mgmt.evidence.verificationMethod")} value={<EvidenceCode value={detail.credibility.verificationMethod ?? detail.credibility.verification_method} />} />
             </dl>
           </Card>
           <Card className="p-4">
@@ -5920,7 +5983,7 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
                 value={
                   isOfficialReferenceWithoutInternalLink(detail.resolvedLink, sourceType)
                     ? t("mgmt.evidence.externalSourceBadge", { defaultValue: "external source" })
-                    : evidenceLabel(detail.resolvedLink.availability)
+                    : <EvidenceCode value={detail.resolvedLink.availability} />
                 }
               />
               <dd>

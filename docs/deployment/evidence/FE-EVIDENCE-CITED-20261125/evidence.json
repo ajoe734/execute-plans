@@ -264,5 +264,38 @@
       "src/management/pages/meetings/meetings.test.tsx (line 2104 asserts /management/evidence?ref_id=note-fee-2026)"
     ],
     "planned_change_once_added": "TradeJourneysPage: drop the link (journey evidence stays on the journey page). meetings.ts resolveMeetingActionEvidenceHref: research_note / note-* -> null so MeetingActionCards renders text; update the three assertions to expect text without a link, justified here."
+  },
+  "coordinator_prereview_rework_8ed883bea": {
+    "date": "2026-11-25",
+    "points": [
+      {
+        "point": "1 inbound artifact refs",
+        "fix": "evidenceInboundTarget sends facts:registry_entry:<a>, facts:member_virtual_book:<a> and bare artifact-* to /management/artifacts/<a> (hosted GET /bff/strategies/<artifact> 404, /bff/artifacts/<artifact> 200 per coordinator). strategy_pool still opens /management/personas/<p>.",
+        "changed_assertions": "EvidenceExplorerPage.test.tsx 'opens the right item for query links' three href expectations /management/strategies -> /management/artifacts; the ?query= redirect test now mounts /management/artifacts/:id. Justified: coordinator point 1, the old target 404s on hosted."
+      },
+      {
+        "point": "2 cited table fits 939 px",
+        "fix": "Cited table is table-fixed w-full with three columns (reference 38% with kind and source class under the label and the ref id; who cites it wrapping; last cited 132 px). min-w-[1180px] and the separate kind / source class columns removed.",
+        "proof": "e2e/evidence-short-window.spec.ts 'cited table fits the 1274x627 content width ...': MEASUREMENT {mainWidth:1034, tableWidth:939, horizontalScrollers:[], citedByOffscreen:0, lastCitedOffscreen:0, lastCitedCount:11}; screenshot screenshots/evidence-cited-fit-1274x627.png"
+      },
+      {
+        "point": "3 raw tokens",
+        "fix": "New EvidenceCode / evidenceCodeLabel maps recorded codes through mgmt.evidence.code.* (en-US and zh-TW: source_record, supporting, verified, unavailable, official_reference, producer_record, tw_price_daily and related) with the raw code as title tooltip; unknown codes keep the previous humanised text. Used for ingested list source type / link type / tier and detail source type, link type, preview, tier, verification method, availability, state badges, relationships, chain, tasks, linked decisions and memory context. The BFF fallback display labels 'Source unavailable' / 'Open source' are shown as mgmt.evidence.resolvedSourceUnavailable / openResolvedSource.",
+        "changed_assertions": "'renders evidence operations rows' and 'renders detail from the BFF evidence detail model' expected the raw 'producer record' / 'Source unavailable'; now expect 'Recorded by the producer' (title producer_record) / 'Source not available' and assert the raw text is absent. 'renders title, source type, ...' expected title official_reference with text 'official reference'; now 'Official reference' via evidence-row-source-type. The cited/ingested detail it.each expected 'official reference'; now 'Official reference' plus 'Taiwan daily prices' (title tw_price_daily) and asserts none of the raw tokens remain. Justified: coordinator point 3 asks exactly for these words; each assertion is stricter, not weaker.",
+        "proof": "e2e 'ingested list and detail show recorded codes as words with the code as tooltip' (screenshots/evidence-detail-codes-1274x627.png)"
+      },
+      {
+        "point": "4 untitled approval citation",
+        "fix": "An approval citation without label is named by its approval type (parts.decision_type / approval_type / target_type -> mgmt.evidence.cited.by.approvalType.*, fallback '{{type}} approval', untyped 'Approval'); target id is secondary mono text.",
+        "changed_assertions": "cited list test expected link 'Approval for <artifact>'; now link 'Strategy promotion approval' with the artifact id as secondary text in the same item, and asserts no link is named by the raw id. Justified: coordinator point 4."
+      }
+    ],
+    "tests_run": {
+      "vitest": "npx vitest run EvidenceExplorerPage, PersonaFleetPage, fullOperationAssembly, bff-v1 management, retiredCommands, DiscoveryPanels: 6 files, 187 passed, exit 0",
+      "playwright": "npx playwright test e2e/evidence-short-window.spec.ts --project=chromium: 10 passed, exit 0 (scrollbar 15 px)",
+      "lint": "npm run lint: 0 errors, 122 warnings, exit 0",
+      "tsc": "npx tsc --noEmit: exit 0"
+    },
+    "pending": "FE-EVO-JOURNAL-VERSION-GUARD-20261126 must merge into dev first; then origin/dev is merged here and lint plus focused tests rerun."
   }
 }
