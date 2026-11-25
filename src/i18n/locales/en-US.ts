@@ -1441,6 +1441,32 @@ export default {
       unbound: "Unbound",
       unknown: "Persona state could not be read",
     },
+    runtimeStatus: {
+      running: "Running",
+      paused_market_input: "Paused: market data",
+      paused_operator: "Paused by operator",
+      none: "Not running",
+      unknown: "Runtime state unknown",
+    },
+    runtimeReason: {
+      marketInput: "Market data input stopped, so trading is paused until it recovers.",
+      bindingStatus: "The runtime binding reports {{status}}.",
+      runtime_bindings_unavailable: "Runtime bindings could not be read.",
+      runtime_truth_unavailable: "Runtime state could not be read.",
+      scope_unavailable: "Tenant scope could not be resolved.",
+      other: "Recorded reason",
+    },
+    metricsReason: {
+      no_fills: "No fills yet",
+      marks_unavailable: "Market prices unavailable",
+      no_admitted_binding: "Not deployed to paper trading",
+      not_observed: "Not observed yet",
+      stale: "Last result is stale",
+      runtime_bindings_unavailable: "Runtime bindings could not be read",
+      runtime_truth_unavailable: "Runtime state could not be read",
+      scope_unavailable: "Tenant scope could not be resolved",
+      other: "Not recorded",
+    },
     sweep: {
       run: "Run parameter sweep",
       queued: "Parameter sweep queued",
@@ -1453,7 +1479,18 @@ export default {
       column: {
         operationalStatus: "Run Status",
         symbols: "Symbols",
+        runtime: "Runtime",
+        cumulativeResult: "Cumulative paper result",
+        drawdown: "Drawdown",
+        trades: "Trades",
+        persona: "Persona",
       },
+      asOf: "as of {{asOf}}",
+      personaIdsTooltip: "Persona IDs: {{ids}}",
+      noPersona: "No persona",
+      draftNotice:
+        "Drafts are unscreened text drafts, not strategies: nothing runs or trades from them until one is screened and approved.",
+      hiddenTestBreakdown: "{{testCount}} from test personas and {{stubCount}} unbound placeholders.",
       hiddenDraftsAndRetiredPersonasWithCounts:
         "{{draftCount}} draft strategies and {{retiredPersonaCount}} strategies with retired personas are hidden by default.",
       hiddenRetiredPersonasWithCount:
@@ -3452,6 +3489,16 @@ export default {
       registry: "Registry bundle",
       research_run_output: "Research output",
     },
+    kindLabel: {
+      execution_bundle: "Execution bundle",
+      strategy_spec: "Strategy spec",
+      factor_eval_report: "Factor evaluation report",
+      backtest_report: "Backtest report",
+      model: "Model",
+      dataset: "Dataset",
+      report: "Report",
+      container: "Container",
+    },
     degradedBanner: {
       title: "Partial artifact catalog — failed source: {{failedSources}}",
       activeSource: "Showing rows from {{source}} only.",
@@ -4380,9 +4427,33 @@ export default {
       validator: { schema: "Schema check", consistency: "Consistency", impact: "Impact analysis", precedence: "Precedence", coverage: "Coverage" },
     },
   },
+  // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: current-first registry lists.
+  registryLists: {
+    scope: {
+      personaGroupLabel: "Persona scope",
+      artifactGroupLabel: "Artifact scope",
+      current: "Current",
+      test: "Test",
+      retired: "Retired",
+      research: "Research",
+      researchOutput: "Research output",
+      unbound: "Unbound",
+      all: "All",
+    },
+    unknownScopeNotice: "{{count}} rows have no recorded scope yet and are shown with the current ones.",
+    emptyCurrent: {
+      title: "No current rows",
+      description: "{{count}} rows are under the other tabs (test, retired, research and the rest).",
+      action: "Show all ({{count}})",
+    },
+    create: {
+      paperPersona: "Create Paper Persona",
+      disabledNoOwner: "{{entity}} records come from their own workflow and cannot be created from this list.",
+    },
+  },
   // EntityCreateDrawer persistence boundary.
   entityCreate: {
-    footerNote: "Writes require a typed durable BFF owner. Unsupported generic CRUD is disabled.",
+    footerNote: "Saving sends this to the service that keeps these records. Record types without such a service cannot be created here.",
     required: "Required",
     submitting: "Submitting…",
     cooldown: {
@@ -4397,7 +4468,7 @@ export default {
     },
     field: {
       name: "Name", owner: "Owner", memo: "Memo",
-      alpha: "Alpha (slug)", capitalPoolId: "Capital Pool ID", personaIds: "Persona IDs",
+      alpha: "Alpha code", capitalPoolId: "Capital Pool ID", personaIds: "Persona IDs",
       archetype: "Role type", description: "Description", initialMode: "Initial state",
       mandate: "Mandate", strategyFamily: "Strategy family", instruments: "Instruments / universe",
       riskAppetite: "Risk appetite", decisionStyle: "Decision style", timeHorizon: "Time horizon",
@@ -4414,10 +4485,10 @@ export default {
       personaIds: "Comma-separated, ≥ 1 persona id",
       riskBudget: "0 < value ≤ 1 (fraction of pool)",
       quarter: "Format: YYYY-Qn, e.g. 2026-Q2",
-      alpha: "Lowercase slug, e.g. alpha-momentum",
-      archetype: "Choose the persona's main operating role. It is still stored as the archetype field.",
+      alpha: "Lowercase letters, digits and dashes, e.g. alpha-momentum",
+      archetype: "Choose the persona's main operating role.",
       initialMode: "New personas start in paper trading with no live capital side effects.",
-      mandate: "What this persona is actually responsible for trading — its concrete charter. Flows into its OpenClaw agent SOUL.",
+      mandate: "What this persona is actually responsible for trading — its concrete charter. It becomes the persona's working brief.",
       strategyFamily: "Strategy family it runs, e.g. momentum, mean-reversion, macro-overlay.",
       instruments: "Instruments / universe it trades, e.g. BTC, ETH, gold futures (GC).",
       riskAppetite: "Risk appetite + limits, e.g. moderate; max 2% per trade.",
@@ -4443,7 +4514,7 @@ export default {
     error: {
       required: "Required",
       nameLength: "Name length must be 3–120",
-      slugFormat: "Must be slug format",
+      slugFormat: "Use lowercase letters, digits and dashes only",
       atLeastOnePersona: "At least 1 persona id required",
       gtZero: "Must be > 0",
       riskBudgetRange: "Must be in (0, 1]",

@@ -368,16 +368,28 @@ export function ObjectListPage<T extends BaseObject>({
       );
     }
     if (!hasDurableCreateOwner(createBehavior.entity)) {
-      const reason = `Create disabled: ${createBehavior.entity} has no typed durable BFF owner.`;
+      // Plain words only: the operator is told where these records come from,
+      // never an internal owner/route name.
+      const reason = t("registryLists.create.disabledNoOwner", {
+        entity: t(`entityCreate.entity.${createBehavior.entity}`, { defaultValue: createBehavior.entity }),
+      });
       return (
-        <span tabIndex={0} title={reason}>
-          <Button size="sm" disabled aria-label={reason}>
-            <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
-          </Button>
-        </span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} title={reason} data-testid="create-disabled-reason">
+                <Button size="sm" disabled aria-label={reason} title={reason}>
+                  <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+                </Button>
+                <span className="sr-only">{reason}</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{reason}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
-    const buttonLabel = createBehavior.entity === "persona" ? "Create Paper Persona" : t("actions.create");
+    const buttonLabel = createBehavior.entity === "persona" ? t("registryLists.create.paperPersona") : t("actions.create");
     if (!realWritesEnabled()) {
       const reason = t("mgmt.dataSources.realWritesRequired");
       return (
