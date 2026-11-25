@@ -8,9 +8,9 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125",
-  "base_commit": "62ed222ba6bba5bf963290ab9df7450f9e494ecc",
+  "base_commit": "a013f969130d1d2fbf78f4dc74323ee0fa794da0",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T14:43:30Z",
+  "timestamp": "2026-11-25T16:58:00Z",
   "problem_register_binding": {
     "root_cause_class": "RC6",
     "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
@@ -102,14 +102,19 @@
       "result": "passed (0 errors)"
     },
     {
-      "command": "./node_modules/.bin/vitest run src/management/pages/phase2/KnowledgeInbox.test.tsx src/management/navigation/managementRouteManifest.test.ts src/lib/bff-v1/postmortemClient.test.ts src/management/pages/phase2/PostmortemLibrary.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/test/accept-management-route-attribution.test.ts src/test/accept-management-honest-not-found.test.ts",
+      "command": "./node_modules/.bin/vitest run src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/pages/phase2/KnowledgeInbox.test.tsx src/management/navigation/managementRouteManifest.test.ts src/lib/bff-v1/postmortemClient.test.ts src/management/pages/phase2/PostmortemLibrary.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/test/accept-management-route-attribution.test.ts src/test/accept-management-honest-not-found.test.ts",
       "exit_code": 0,
-      "result": "8 test files passed, 140 tests passed"
+      "result": "9 test files passed, 149 tests passed (including StrictLiveManagementSurfaces PostmortemLibraryPage author and transport error assertions)"
     },
     {
-      "command": "./node_modules/.bin/playwright test e2e/21-management-canonical-reads.spec.ts",
+      "command": "./node_modules/.bin/vitest run --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000",
+      "exit_code": 1,
+      "result": "290 of 292 test files passed (3501 of 3503 tests passed); 2 out-of-scope concurrency/close-timing failures documented in residual_findings, with ResearchDetail.test.tsx passing 12/12 standalone"
+    },
+    {
+      "command": "./node_modules/.bin/playwright test e2e/21-management-canonical-reads.spec.ts -g FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125",
       "exit_code": 0,
-      "result": "3 passed (canonical reads, lineage lookup, and knowledge inbox + postmortem truth with 1274x627 table-fixed layout, plain drift/service titles, and re-captured screenshots)"
+      "result": "1 passed (knowledge inbox + postmortem truth with 1274x627 table-fixed layout, plain drift/service titles, and refreshed screenshots)"
     }
   ],
   "diff_budget_note": "scripts/git/diff_budget.py is a pantheon-repo script and does not exist in execute-plans; git diff --shortstat origin/dev reports 19 scoped files changed across product, i18n, unit/e2e tests, and 1274x627 evidence screenshots.",
@@ -118,5 +123,16 @@
     "recurring_jobs": 0,
     "added_tables_files_caches": 0
   },
-  "residual_findings": []
+  "residual_findings": [
+    {
+      "file": "src/management/pages/ResearchDetail.test.tsx",
+      "line": 129,
+      "description": "Under high host CPU contention, 'await waitFor(() => expect(screen.getByText(\"Management research context\")).toBeInTheDocument())' resolves when researchGet renders the section title before personaFleetGet finishes, causing the subsequent synchronous 'expect(screen.getByText(\"TW-Index-Arbitrage\"))' to race by one tick; passes 12/12 standalone."
+    },
+    {
+      "file": "src/test/persona-strategy-hosted-readonly.test.ts",
+      "line": 1040,
+      "description": "In 'completes full Trading Pulse acceptance roundtrips at 1440px and 390px', the inline fixture fires an unawaited trailing fetch('/bff/management/trading-pulse/rankings') on return navigation that can race context teardown at zh-TW/390 ('Target page, context or browser has been closed')."
+    }
+  ]
 }
