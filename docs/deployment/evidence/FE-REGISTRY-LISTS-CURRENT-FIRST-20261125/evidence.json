@@ -10,7 +10,8 @@
   "tests_and_e2e": "83f0a8a62",
   "evidence_and_blocker": "536647526",
   "metrics_test_patch": "f0f68c591",
-  "merge_origin_dev": "651173337"
+  "merge_origin_dev": "651173337",
+  "merge_origin_dev_2": "8531b7b2c"
  },
  "scope": "functional evidence only; hosted verification is left to the operator acceptance task. No VM/SSH access was used and no operator key was read. No Registry fallback draft was retired or deleted.",
  "status": "ready_for_review",
@@ -256,6 +257,10 @@
   {
    "cmd": "after merge origin/dev: npx playwright test e2e/management-list-short-window.spec.ts e2e/artifact-hosted-width.spec.ts e2e/06-entity-registry.spec.ts e2e/08-create-intent.spec.ts",
    "result": "28 passed"
+  },
+  {
+   "cmd": "after second merge of origin/dev (alpha-factory #1096): tsc app + vitest run src/management",
+   "result": "tsc pass; 92 files, 1002 of 1002 pass"
   }
  ],
  "row_shapes_used": "Three live paper strategies from BFF-STRATEGY-METRICS-RUNTIME test_strategy_metrics_truth.py (pnl -9.988691250022384 with 2 trades, -186.89087499999732 with 2 trades, null with no_fills; running / paused_market_input market_input_stale); 177 personas (153 test, live ones at 152/154/155, successRate null); 344 artifacts (304 test) built on the hosted 273-row capture; visible_state_counts {draft 4205, approved 14, retired 2} against raw state_counts {draft 7421, approved 170, retired 1556}.",
