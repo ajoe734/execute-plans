@@ -9,9 +9,11 @@
   "repository": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-PR-GATE-RUNS-LINT-20261125",
+  "pr_number": 1099,
+  "pr_url": "https://github.com/ajoe734/execute-plans/pull/1099",
   "base_commit": "a5284b0dd51cfa9dc1e58083209bec0b769a8fa9",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T20:29:00Z",
+  "timestamp": "2026-11-25T20:34:40Z",
   "problem_register_binding": {
     "root_cause_class": "RC1 / RC6",
     "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
@@ -104,6 +106,25 @@
       }
     },
     "passing_on_head_without_pr_1091_error": {
+      "github_actions_pr_component_merge_gate_run": {
+        "pr_number": 1099,
+        "pr_url": "https://github.com/ajoe734/execute-plans/pull/1099",
+        "evaluated_head_sha": "be8befa022ef056fb89569a5b9cb5a48e3a0e4e5",
+        "workflow_name": "Branch CI Gate",
+        "workflow_run_id": 45695762585,
+        "workflow_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/45695762585",
+        "job_name": "Component merge gate",
+        "job_id": 139493087929,
+        "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/45695762585/job/139493087929",
+        "step_name": "Lint",
+        "step_number": 6,
+        "step_started_at": "2026-11-25T20:33:47Z",
+        "step_completed_at": "2026-11-25T20:34:06Z",
+        "added_time_seconds": 19,
+        "step_conclusion": "success",
+        "errors": 0,
+        "warnings": 120
+      },
       "local_gate_run_on_clean_head": {
         "base_commit_with_fix": "a5284b0dd51cfa9dc1e58083209bec0b769a8fa9 (Merge PR #1098 FE-LINEAGE-LOOKUP-LINT-20261125 / 55d813d0530abcd1e893abc619a3b83fc390be60)",
         "command": "npm run lint",
@@ -129,7 +150,7 @@
       "passed": true,
       "details": [
         "With the PR #1091 /[^\\x00-\\x7f]/ control-character regex present in src/management/pages/phase2/LineageExplorer.tsx, 'npm run lint' fails with exit code 1 (1 error, 120 warnings: '274:25 error Unexpected control character(s) in regular expression: \\x00 no-control-regex') in 21.64s locally (and 15s on GitHub Actions ubuntu-24.04 runner in run 45679247274).",
-        "Without the PR #1091 error (on head a5284b0dd51cfa9dc1e58083209bec0b769a8fa9 after FE-LINEAGE-LOOKUP-LINT-20261125 merged), 'npm run lint' passes with exit code 0 (0 errors, 120 warnings) in 23.00s locally.",
+        "Without the PR #1091 error (on head a5284b0dd51cfa9dc1e58083209bec0b769a8fa9 / PR #1099 head be8befa022ef056fb89569a5b9cb5a48e3a0e4e5 after FE-LINEAGE-LOOKUP-LINT-20261125 merged), 'npm run lint' passes with exit code 0 (0 errors, 120 warnings) in 19s on GitHub Actions Component merge gate (run 45695762585, job 139493087929, step 6 'Lint', 20:33:47Z-20:34:06Z) and 23.00s locally.",
         "Existing required check names ('Commit trailers', 'Generated files guard', 'Component merge gate', 'Smoke acceptance', 'Pantheon canonical review gate') are unchanged."
       ]
     },
@@ -155,6 +176,12 @@
       "exit_code": 0,
       "duration_seconds": 23.0,
       "result": "passed (0 errors, 120 warnings; ✖ 120 problems (0 errors, 120 warnings))"
+    },
+    {
+      "command": "GitHub Actions Branch CI Gate / Component merge gate step 6 'Lint' (PR #1099, run 45695762585, job 139493087929)",
+      "exit_code": 0,
+      "duration_seconds": 19,
+      "result": "passed (2026-11-25T20:33:47Z to 2026-11-25T20:34:06Z, added 19s)"
     },
     {
       "command": "python3 scripts/git/test_publish_promote.py",
