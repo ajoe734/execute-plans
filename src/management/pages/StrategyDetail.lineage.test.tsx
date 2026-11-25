@@ -103,10 +103,15 @@ describe("StrategyDetail Lineage tab — registry truth (FE-LINEAGE-REGISTRY-GRA
     const specNode = await screen.findByTestId(`lineage-node-${spec}`);
     expect(specNode).toHaveAttribute("data-node-state", "draft");
     expect(specNode).toHaveAttribute("data-node-risk", "");
+    expect(specNode).toHaveAttribute("data-node-highlight", "true");
+
+    const baseSpecNode = screen.getByTestId(`lineage-node-${baseSpec}`);
+    expect(baseSpecNode).toHaveAttribute("data-node-highlight", "false");
 
     const artNode = screen.getByTestId(`lineage-node-${art}`);
     expect(artNode).toHaveAttribute("data-node-state", "approved");
     expect(artNode).toHaveAttribute("data-node-risk", "");
+    expect(artNode).toHaveAttribute("data-node-highlight", "false");
 
     const personaNode = screen.getByTestId(`lineage-node-${persona}`);
     expect(personaNode).toHaveAttribute("data-node-state", "");
@@ -147,7 +152,7 @@ describe("StrategyDetail Lineage tab — registry truth (FE-LINEAGE-REGISTRY-GRA
     openLineageTab(lineageTab);
 
     expect(lineageSpy).toHaveBeenCalledWith(STRATEGY_ID);
-    expect(await screen.findByTestId("lineage-empty")).toHaveTextContent("No lineage available.");
+    expect(await screen.findByTestId("lineage-empty")).toHaveTextContent(/No lineage available\.|尚無血緣資料。/);
     expect(screen.queryByTestId("lineage-node-alpha_src")).not.toBeInTheDocument();
     expect(screen.queryByTestId(`lineage-node-dp_${STRATEGY_ID}`)).not.toBeInTheDocument();
   });
