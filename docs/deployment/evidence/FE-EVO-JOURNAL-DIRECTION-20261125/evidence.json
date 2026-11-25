@@ -53,7 +53,8 @@
     "vitest_focused": "23 files, 451 tests passed (oversight/, EvolutionProgramsQualification, ResearchList, ObjectListPage, PersonaStrategyPoolPanel, bff-v1 management, i18nParity)",
     "vitest_full": "292 files: 288 passed; failures fixed afterwards (ObjectListPage, management.test, i18nParity). src/test/persona-strategy-hosted-readonly.test.ts Trading Pulse case fails identically on the clean base (pre-existing, unrelated).",
     "browser": "Real Chromium via Playwright against a route-mocked fixture BFF; capture script saved as capture-screenshots.spec.ts.txt (copy to e2e/ to rerun). Screenshots: journal-1274x900.png, journal-system-shown-1274x900.png, journal-390w.png, direction-1274x900.png, direction-test-records-shown-1274x900.png (zh-TW).",
-    "e2e_fixture_pr1093_fix": "Isolated fixture Playwright (npm run e2e:fixture) 49 passed 11 skipped; 03-execution-loop persona-health and 06 registry failed once under full-suite load at gotoRegistry and passed on rerun together (7 passed 3 skipped, retries=0)."
+    "e2e_fixture_pr1093_fix": "Isolated fixture Playwright (npm run e2e:fixture) 49 passed 11 skipped; 03-execution-loop persona-health and 06 registry failed once under full-suite load at gotoRegistry and passed on rerun together (7 passed 3 skipped, retries=0).",
+    "rerun_after_dev_merge_pr1094": "Merged origin/dev (a013f9691, PR 1094 FE-STRATEGY-DETAIL-PRIMARY-FIRST) with no conflicts and no other change. Reran: npm run typecheck pass; eslint on scoped files 0 errors; focused vitest 24 files 457 tests passed (adds StrategyDetail.test.tsx); vite build with placeholder public identity config then npm run e2e:fixture 51 passed 11 skipped, exit 0."
   },
   "bff_reads": "No new BFF route or writer. The FE adds only the include_system query parameter to the existing evolution-journal read."
 }
