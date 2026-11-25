@@ -293,6 +293,13 @@ export const BFF_ACTION_VALUES = [
   "buy",
   "sell",
   "hold",
+  "scaffold_spec",
+  "run_replication",
+  "submit_review",
+  "mark_degraded",
+  "replace_strategy",
+  "retire_live",
+  "rollback_to_paper",
 ] as const;
 
 export const BFF_RISK_VALUES = [
@@ -877,6 +884,13 @@ const EN_FALLBACK_ACTIONS: Record<string, string> = {
   buy: "Buy",
   sell: "Sell",
   hold: "Hold",
+  scaffold_spec: "Scaffold Specification",
+  run_replication: "Run Replication",
+  submit_review: "Submit for Review",
+  mark_degraded: "Mark as Degraded",
+  replace_strategy: "Replace Strategy",
+  retire_live: "Retire Live Strategy",
+  rollback_to_paper: "Roll Back to Paper",
 };
 
 const EN_FALLBACK_RISK: Record<string, string> = {
@@ -1734,6 +1748,76 @@ export function artifactSourceText(source: unknown, t: TranslateFn): { text: str
     return { text: t("artifact.sources.research_run_output"), code };
   }
   return { text: humanizeCode(code), code };
+}
+
+const KNOWN_STRATEGY_LIFECYCLE_VALUES = new Set([
+  "discovered",
+  "scaffolded",
+  "replicated",
+  "approved",
+  "paper",
+  "live",
+  "degraded",
+  "replaced",
+  "retired",
+  "archived",
+]);
+
+export function strategyLifecycleLabel(
+  lifecycle: string | undefined | null,
+  t: TranslateFn,
+): string {
+  const raw = typeof lifecycle === "string" ? lifecycle.trim().toLowerCase() : "";
+  if (!raw) return "—";
+  if (KNOWN_STRATEGY_LIFECYCLE_VALUES.has(raw)) {
+    return t(`strategyDetail.tripleState.lifecycleValues.${raw}`);
+  }
+  return statusLabel(raw, t);
+}
+
+const KNOWN_STRATEGY_REVIEW_VALUES = new Set([
+  "none",
+  "pending",
+  "changes_requested",
+  "approved",
+]);
+
+export function strategyReviewLabel(
+  review: string | undefined | null,
+  t: TranslateFn,
+): string {
+  const raw = typeof review === "string" ? review.trim().toLowerCase() : "";
+  if (!raw) return t("strategyDetail.tripleState.reviewValues.none");
+  if (KNOWN_STRATEGY_REVIEW_VALUES.has(raw)) {
+    return t(`strategyDetail.tripleState.reviewValues.${raw}`);
+  }
+  return statusLabel(raw, t);
+}
+
+export function strategyDeploymentLabel(
+  deployment: string | undefined | null,
+  t: TranslateFn,
+  options?: { runsThroughPersonaPool?: boolean },
+): string {
+  const raw = typeof deployment === "string" ? deployment.trim().toLowerCase() : "";
+  if (!raw || raw === "none" || raw === "not_deployed") {
+    return options?.runsThroughPersonaPool
+      ? t("strategyDetail.tripleState.deploymentValues.persona_pool")
+      : t("strategyDetail.tripleState.deploymentValues.none");
+  }
+  if (raw === "paper_running" || raw === "paper_active") {
+    return t("strategyDetail.tripleState.deploymentValues.paper_running");
+  }
+  if (raw === "live_running") {
+    return t("strategyDetail.tripleState.deploymentValues.live_running");
+  }
+  if (raw === "stopped") {
+    return t("strategyDetail.tripleState.deploymentValues.stopped");
+  }
+  if (raw === "rollback_required") {
+    return t("strategyDetail.tripleState.deploymentValues.rollback_required");
+  }
+  return statusLabel(raw, t);
 }
 
 // --- BFF-owned display names & localized incident summaries (RC6 WP6.1/6.2) ---

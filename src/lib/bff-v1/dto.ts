@@ -419,17 +419,23 @@ export interface Strategy extends BaseObject {
   sharpe: number | null;
   drawdown: number | null;
   totalTrades?: number | null;
+  total_trades?: number | null;
   metricsAsOf?: string | null;
+  metrics_as_of?: string | null;
   metricsResolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
+  metrics_resolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
   metricsPersonaId?: string | null;
   /** BFF-STRATEGY-METRICS-RUNTIME-20261125: recorded reason a metric is null (e.g. `no_fills`). */
   metricsReason?: string | null;
+  metrics_reason?: string | null;
   /**
    * BFF-STRATEGY-METRICS-RUNTIME-20261125: runtime state read from the
    * RuntimeBinding owner. Absent on older BFFs; `unknown` when the read failed.
    */
   runtimeStatus?: "running" | "paused_market_input" | "paused_operator" | "none" | "unknown" | string | null;
+  runtime_status?: "running" | "paused_market_input" | "paused_operator" | "none" | "unknown" | string | null;
   runtimeStatusReason?: string | null;
+  runtime_status_reason?: string | null;
 }
 
 export type PaperRiskTier = "low" | "medium" | "high";

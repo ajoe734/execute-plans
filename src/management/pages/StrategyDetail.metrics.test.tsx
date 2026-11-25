@@ -156,11 +156,14 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 StrategyDetail & StrategiesList", (
     vi.restoreAllMocks();
   });
 
-  it("renders positive cumulative paper PnL with metricsAsOf, preserves real zero drawdown, and shows No data with neutral tone for null PnL 30d and Sharpe", async () => {
+  it("renders positive cumulative paper PnL with metricsAsOf, preserves real zero drawdown, shows trades and runtime status, and removes PnL 30d, Sharpe and Alpha rows on overview", async () => {
     renderStrategyDetail("strat-paper-running-01");
 
     expect(await screen.findByText("Momentum Paper Runner")).toBeInTheDocument();
-    expect(screen.getByText("alpha.momo.v1 · strat-paper-running-01")).toBeInTheDocument();
+    expect(screen.getAllByText("strat-paper-running-01")).toHaveLength(1);
+    expect(screen.queryByText("alpha.momo.v1 · strat-paper-running-01")).not.toBeInTheDocument();
+    expect(screen.queryByText("PnL 30d")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sharpe")).not.toBeInTheDocument();
 
     const cumPnlCard = getStatCardByLabel("Cumulative Paper PnL");
     const cumPnlValue = within(cumPnlCard).getByText("110.00");
@@ -169,20 +172,16 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 StrategyDetail & StrategiesList", (
     expect(cumPnlCard.textContent).not.toContain("11000");
     expect(cumPnlCard.textContent).not.toContain("%");
 
-    const pnl30dCard = getStatCardByLabel("PnL 30d");
-    const pnl30dValue = within(pnl30dCard).getByText("No data");
-    expect(pnl30dValue).toHaveClass("text-foreground");
-    expect(pnl30dValue).not.toHaveClass("text-status-success");
-    expect(pnl30dValue).not.toHaveClass("text-status-failed");
-
-    const sharpeCard = getStatCardByLabel("Sharpe");
-    const sharpeValue = within(sharpeCard).getByText("No data");
-    expect(sharpeValue).toHaveClass("text-foreground");
-
     const drawdownCard = getStatCardByLabel("Drawdown");
     const drawdownValue = within(drawdownCard).getByText("0.00%");
     expect(drawdownValue).toHaveClass("text-foreground");
     expect(drawdownValue).not.toHaveClass("text-status-warning");
+
+    const tradesCard = getStatCardByLabel("Trades");
+    expect(within(tradesCard).getByText("3")).toBeInTheDocument();
+
+    const runtimeCard = getStatCardByLabel("Runtime");
+    expect(within(runtimeCard).getByText("Running")).toBeInTheDocument();
   });
 
   it("renders negative cumulative paper PnL with danger tone and non-zero drawdown with warning tone", async () => {
@@ -211,24 +210,24 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 StrategyDetail & StrategiesList", (
     expect(within(cumPnlCard).getByText("As of 2026-11-04T01:16:27Z")).toBeInTheDocument();
   });
 
-  it("shows No data for all null metrics and empty alpha/capitalPoolId, and omits leading separator in header when alpha is empty", async () => {
+  it("shows No data for all null metrics and empty capitalPoolId, shows strategy id once, and never shows 0 when metrics are null", async () => {
     renderStrategyDetail("strat-not-running-05");
 
     expect(await screen.findByText("Unstarted Candidate Strategy")).toBeInTheDocument();
-    expect(screen.getAllByText("strat-not-running-05").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("strat-not-running-05")).toHaveLength(1);
     expect(screen.queryByText(/·\s*strat-not-running-05/)).not.toBeInTheDocument();
 
-    for (const label of ["Cumulative Paper PnL", "PnL 30d", "Sharpe", "Drawdown"]) {
+    for (const label of ["Cumulative Paper PnL", "Drawdown", "Trades", "Runtime"]) {
       const card = getStatCardByLabel(label);
       const valueEl = within(card).getByText("No data");
-      expect(valueEl).toHaveClass("text-foreground");
-      expect(valueEl).not.toHaveClass("text-status-success");
-      expect(valueEl).not.toHaveClass("text-status-failed");
-      expect(valueEl).not.toHaveClass("text-status-warning");
+      expect(valueEl.closest(".text-2xl") ?? valueEl).toHaveClass("text-foreground");
+      expect(valueEl.closest(".text-2xl") ?? valueEl).not.toHaveClass("text-status-success");
+      expect(valueEl.closest(".text-2xl") ?? valueEl).not.toHaveClass("text-status-failed");
+      expect(valueEl.closest(".text-2xl") ?? valueEl).not.toHaveClass("text-status-warning");
     }
 
-    // Alpha, Capital Pools, Personas fields + 4 StatCards = 7 "No data" instances in overview
-    expect(screen.getAllByText("No data").length).toBeGreaterThanOrEqual(7);
+    // Capital Pools field + Run status badge + 4 StatCards = 6 "No data" instances in overview
+    expect(screen.getAllByText("No data").length).toBeGreaterThanOrEqual(6);
     expect(screen.queryByText("0.00")).not.toBeInTheDocument();
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
   });

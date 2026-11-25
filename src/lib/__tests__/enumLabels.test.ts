@@ -42,7 +42,10 @@ import {
   artifactSourceText,
   normalizeRegistryListScope,
   normalizeStrategyRuntimeStatus,
+  strategyDeploymentLabel,
+  strategyLifecycleLabel,
   strategyMetricsReasonText,
+  strategyReviewLabel,
   strategyRuntimeReasonText,
   strategyRuntimeStatusClass,
 } from "../enumLabels";
@@ -355,5 +358,60 @@ describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 runtime status, metric reason
       ];
       for (const text of texts) expect(text).not.toMatch(developerWording);
     }
+  });
+});
+
+describe("FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125 strategy triple state, transition action labels and locale parity", () => {
+  it("translates lifecycle, review and deployment values and says when a strategy runs through its persona pool instead of deployment none", () => {
+    expect(strategyLifecycleLabel("approved", tZh)).toBe("已核准");
+    expect(strategyLifecycleLabel("approved", tEn)).toBe("Approved");
+    expect(strategyLifecycleLabel("paper", tZh)).toBe("模擬交易");
+    expect(strategyLifecycleLabel("paper", tEn)).toBe("Paper trading");
+
+    expect(strategyReviewLabel("approved", tZh)).toBe("已核准");
+    expect(strategyReviewLabel("approved", tEn)).toBe("Approved");
+    expect(strategyReviewLabel("none", tZh)).toBe("尚未送審");
+    expect(strategyReviewLabel("none", tEn)).toBe("Not in review");
+
+    expect(strategyDeploymentLabel("none", tZh, { runsThroughPersonaPool: true })).toBe("透過 Persona 策略池執行");
+    expect(strategyDeploymentLabel("none", tEn, { runsThroughPersonaPool: true })).toBe("Runs through persona pool");
+    expect(strategyDeploymentLabel("none", tZh, { runsThroughPersonaPool: false })).toBe("尚未部署");
+    expect(strategyDeploymentLabel("none", tEn, { runsThroughPersonaPool: false })).toBe("Not deployed");
+    expect(strategyDeploymentLabel("paper_running", tZh)).toBe("模擬交易執行中");
+    expect(strategyDeploymentLabel("paper_running", tEn)).toBe("Paper trading active");
+  });
+
+  it("translates every strategy transition action into plain words without arrow text", () => {
+    const actions = [
+      "scaffold_spec",
+      "run_replication",
+      "submit_review",
+      "promote_paper",
+      "promote_live",
+      "mark_degraded",
+      "replace_strategy",
+      "retire_live",
+      "rollback_to_paper",
+      "archive",
+    ] as const;
+
+    for (const action of actions) {
+      const zh = actionLabel(action, tZh);
+      const en = actionLabel(action, tEn);
+      expect(zh).toBeTruthy();
+      expect(en).toBeTruthy();
+      expect(zh).not.toBe(action);
+      expect(en).not.toBe(action);
+      expect(zh).not.toContain("→");
+      expect(en).not.toContain("→");
+    }
+  });
+
+  it("maintains 1:1 zh-TW and en-US key parity across strategyDetail", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.strategyDetail).sort()).toEqual(keysOf(enUS.strategyDetail).sort());
   });
 });
