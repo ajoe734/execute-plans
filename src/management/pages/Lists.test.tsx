@@ -885,7 +885,8 @@ describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 persona list opens on current
       fireEvent.click(screen.getByRole("button", { name: "All (177)" }));
       expect(screen.getAllByRole("row").slice(1)).toHaveLength(177);
     });
-  });
+    // Renders 153-304 recorded rows and queries by role; slow under full-suite parallel load.
+  }, 30_000);
 
   it("keeps every row on the default view when the BFF sends no listScope (older BFF)", async () => {
     await withLanguage("en-US", async () => {
@@ -976,7 +977,8 @@ describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 artifact list opens on curren
       fireEvent.click(screen.getByRole("button", { name: "Test (304)" }));
       expect(screen.getAllByRole("row").slice(1)).toHaveLength(304);
     });
-  });
+    // Renders 153-304 recorded rows and queries by role; slow under full-suite parallel load.
+  }, 30_000);
 
   it("keeps every row visible with scope unknown when the persona directory was unreadable", async () => {
     await withLanguage("en-US", async () => {
