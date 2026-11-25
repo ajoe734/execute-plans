@@ -736,4 +736,333 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     await assertGraphGeometry("artifact-detail-lineage-390w");
     await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/artifact-detail-lineage-390w.png` });
   });
+
+  test("FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125: knowledge inbox leaves sidebar and command palette, lists unconnected sources from meta.surfaces, and postmortems show plain titles, hidden_infrastructure_count toggle, collapsed technical key=value, and <=80px row height with 1 vertical scroll area at 1274x627", async ({
+    page,
+  }) => {
+    test.skip(
+      targetsExternalE2eEnvironment(),
+      "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+    );
+
+    const KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR =
+      "./docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125";
+    mkdirSync(KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR, { recursive: true });
+
+    const DRIFT_SAMPLE_KINDS = [
+      "drift:runtime_state",
+      "drift:drawdown",
+      "drift:fill_price",
+      "drift:duplicate_execution",
+      "drift:rolling_drawdown_multiple",
+    ];
+
+    const buildRealDriftPostmortem = (idx: number) => {
+      const idSuffix = String(idx).padStart(4, "0");
+      const postmortemId = `pm-drift-20261125-${idSuffix}`;
+      const incidentId = `inc-drift-20261125-${idSuffix}`;
+      const clusterId = DRIFT_SAMPLE_KINDS[(idx - 1) % DRIFT_SAMPLE_KINDS.length];
+      const bindingId = `rb-3823397e125e4579ba5f41740670${idSuffix}`;
+      return {
+        postmortem_id: postmortemId,
+        incident_id: incidentId,
+        title: `Postmortem draft: Drift threshold breach: ${clusterId} for ${bindingId}`,
+        status: "draft",
+        created_at: "2026-11-25T06:35:00Z",
+        binding_id: bindingId,
+        deployment_stage: "paper",
+        deployment_plan_id: `plan-202611-${idSuffix}`,
+        capital_pool_id: LIVE_POOL_ID,
+        persona_capital_binding_id: `pcb-alpha-${idSuffix}`,
+        artifact_id: LIVE_ARTIFACT_ID,
+        artifact_version: "1.2.0",
+        runtime_id: `rt-paper-${idSuffix}`,
+        trace_id: `trace-inc-${idSuffix}-9f8e7d6c5b4a`,
+        telemetry_event_ids: [`tel-${idSuffix}-a`, `tel-${idSuffix}-b`],
+        incident_evidence_summary:
+          "metric=rolling_drawdown_multiple observed=1.42 threshold=1.20 comparator=gt",
+        lineage_ref: `${LIVE_ARTIFACT_ID}@1.2.0`,
+        incident_cluster_id: clusterId,
+        root_cause: `Draft generated from resolved incident ${incidentId}; root cause pending analysis.`,
+        contributing_factors: [
+          "incident_severity=high",
+          `incident_cluster_id=${clusterId}`,
+          "incident_evidence_summary=metric=rolling_drawdown_multiple observed=1.42 threshold=1.20 comparator=gt",
+        ],
+        timeline: [
+          {
+            ts: "2026-11-25T06:00:00Z",
+            description: `Incident ${incidentId} opened`,
+            actor: "incident-service",
+          },
+          {
+            ts: "2026-11-25T06:35:00Z",
+            description: "Postmortem draft generated from resolved incident evidence",
+            actor: "postmortem-service",
+          },
+        ],
+        action_items: [
+          "Complete root cause analysis",
+          "Validate remediation against linked telemetry and reconciliation evidence",
+        ],
+        author_ids: ["postmortem-draft-worker"],
+      };
+    };
+
+    const strategyPostmortems = Array.from({ length: 12 }, (_, idx) => buildRealDriftPostmortem(idx + 1));
+    const infraPostmortem = {
+      ...buildRealDriftPostmortem(99),
+      postmortem_id: "pm-infra-bff-1c619cdd05621fa6fabe2316",
+      incident_id: "inc-infra-bff-1c619cdd05621fa6fabe2316",
+      title: "Postmortem draft: BFF downstream degradation: training-session",
+      incident_cluster_id: "infrastructure:tenant-dev:control-plane-bff:downstream_degradation",
+      incident_evidence_summary: "non_trading_infrastructure_incident=true downstream degradation",
+    };
+
+    const postmortemRequests: string[] = [];
+
+    await page.route(/^https?:\/\/[^/]+\/(?:bff|api\/v1|health|healthz|readyz).*/, async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+      if (request.method() === "OPTIONS") {
+        await route.fulfill({ headers: corsHeaders(route), status: 204 });
+        return;
+      }
+      if (path === "/bff/events/stream") {
+        await route.fulfill({
+          body: ": connected\n\n",
+          contentType: "text/event-stream",
+          headers: corsHeaders(route),
+          status: 200,
+        });
+        return;
+      }
+      if (path === "/health" || path === "/healthz" || path === "/readyz") {
+        await fulfillJson(route, { status: "ok", live: true, ready: true });
+        return;
+      }
+      if (path === "/bff/me") {
+        await fulfillJson(route, {
+          data: {
+            environment: { name: "playwright", strict_auth: false },
+            tenant_id: "pantheon-dev",
+            user: { id: "op-postmortem-20261125", roles: ["operator", "reviewer", "approver"] },
+          },
+        });
+        return;
+      }
+      if (path === "/bff/knowledge") {
+        // Real hosted BFF adc027da9 response shape: meta.status ok while knowledge_inbox_insights and knowledge_inbox_memory are unavailable (source: missing)
+        await fulfillJson(route, {
+          data: [],
+          items: [],
+          page_info: { next_page_token: null, total: 0, page_size: 20, returned: 0, has_more: false },
+          meta: {
+            snapshot_at: "2026-11-25T06:45:00Z",
+            status: "ok",
+            source: "bff_composed",
+            surfaces: {
+              knowledge_inbox: { status: "ok", source: "bff_composed" },
+              knowledge_inbox_notes: { status: "ok", source: "service_client" },
+              knowledge_inbox_insights: {
+                status: "unavailable",
+                source: "missing",
+                message: "insight_cards has no readable source records.",
+              },
+              knowledge_inbox_memory: {
+                status: "unavailable",
+                source: "missing",
+                message: "institutional_memory_entries has no readable source records.",
+              },
+            },
+            composition: {
+              datasets: ["research_notes", "insight_cards", "institutional_memory_entries"],
+              itemCounts: { research_note: 0, insight: 0, memory_entry: 0 },
+            },
+          },
+        });
+        return;
+      }
+      if (path === "/api/v1/postmortems") {
+        postmortemRequests.push(url.pathname + url.search);
+        const includeInfra = url.searchParams.get("include_infrastructure") === "true";
+        const rows = includeInfra ? [infraPostmortem, ...strategyPostmortems] : strategyPostmortems;
+        await fulfillJson(route, {
+          data: rows,
+          page_info: {
+            total: includeInfra ? 5458 : 103,
+            page_size: 50,
+            next_page_token: "50",
+          },
+          meta: {
+            total: includeInfra ? 5458 : 103,
+            hidden_infrastructure_count: includeInfra ? 0 : 5355,
+            staleness: null,
+            surfaces: {
+              postmortems: { status: "ok", source: "service_client" },
+            },
+          },
+        });
+        return;
+      }
+      if (path.startsWith("/api/v1/postmortems/")) {
+        const requestedId = decodeURIComponent(path.slice("/api/v1/postmortems/".length));
+        const match =
+          [infraPostmortem, ...strategyPostmortems].find((item) => item.postmortem_id === requestedId) ??
+          strategyPostmortems[0];
+        await fulfillJson(route, {
+          data: match,
+          meta: { staleness: null },
+        });
+        return;
+      }
+      await fulfillJson(route, envelope([], path));
+    });
+
+    await installOidcDevLogin(page, {
+      goto: false,
+      roles: ["operator", "reviewer", "approver"],
+      tenantId: "pantheon-dev",
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
+    });
+
+    await page.setViewportSize({ width: 1274, height: 627 });
+
+    // 1. Direct route /management/knowledge opens, sidebar & command palette do not list Knowledge Inbox, lists unconnected sources from meta.surfaces
+    await page.goto(frontendUrl("/management/knowledge"), {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("knowledge-source-issues")).toBeVisible();
+    await expect(page.getByTestId("knowledge-source-knowledge_inbox_insights")).toBeVisible();
+    await expect(page.getByTestId("knowledge-source-knowledge_inbox_memory")).toBeVisible();
+    await expect(page.getByTestId("knowledge-inbox-empty")).toHaveCount(0);
+
+    // Sidebar does not contain /management/knowledge
+    await expect(page.locator('nav a[href="/management/knowledge"]')).toHaveCount(0);
+
+    // Command palette does not list Knowledge Inbox
+    await page.keyboard.press("Control+k");
+    const cmdList = page.locator("[cmdk-list]");
+    await expect(cmdList).toBeVisible();
+    await expect(cmdList.getByText(/^(Knowledge Inbox|知識收件匣)$/)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    await page.screenshot({
+      path: `${KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR}/knowledge-inbox-1274x627.png`,
+    });
+
+    // 2. Postmortem Library at 1274x627
+    await page.goto(frontendUrl("/management/postmortems"), {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("postmortem-no-review-flow-notice")).toBeVisible();
+    const infraToggle = page.getByTestId("postmortem-infra-toggle");
+    await expect(infraToggle).toBeVisible();
+    await expect(infraToggle).toContainText("5355");
+
+    // Plain localized title without "Postmortem draft:" prefix or raw "drift:runtime_state"
+    const firstPlainTitle = page.getByTestId("postmortem-plain-title").first();
+    await expect(firstPlainTitle).toHaveText(
+      /^(Drift threshold breach: Runtime state|偏離門檻超限：執行環境狀態)$/,
+    );
+    await expect(page.getByTestId("postmortem-secondary-context").first()).toHaveText(
+      "rb-3823397e125e4579ba5f417406700001",
+    );
+    await expect(page.getByText(/^Postmortem draft:/i)).toHaveCount(0);
+    await expect(page.getByText(/drift:runtime_state/i)).toHaveCount(0);
+
+    // Verify at 1274x627 every row is at most 80px high, table fits with no horizontal scroll, time column is not cut off, and main has one vertical scroll area
+    const layoutMetrics = await page.evaluate(() => {
+      const cardEl = document.querySelector<HTMLElement>('[data-testid="postmortem-table-card"]');
+      const tableEl = document.querySelector<HTMLTableElement>('[data-testid="postmortem-table"]');
+      const cardRect = cardEl?.getBoundingClientRect();
+      const rows = Array.from(document.querySelectorAll<HTMLTableRowElement>("main tbody tr"));
+      const rowHeights = rows.map((tr) => Number(tr.getBoundingClientRect().height.toFixed(2)));
+      const clippedTimeCells: Array<{ idx: number; cellRight: number; cardRight: number }> = [];
+      rows.forEach((tr, idx) => {
+        const timeEl = tr.querySelector<HTMLElement>("[data-time-kind]");
+        if (!timeEl || !cardRect) return;
+        const tRect = timeEl.getBoundingClientRect();
+        if (tRect.right > cardRect.right + 1 || tRect.left < cardRect.left - 1) {
+          clippedTimeCells.push({
+            idx,
+            cellRight: Number(tRect.right.toFixed(2)),
+            cardRight: Number(cardRect.right.toFixed(2)),
+          });
+        }
+      });
+      const mainEl = document.querySelector<HTMLElement>("main");
+      const mainCandidates = mainEl
+        ? [mainEl, ...Array.from(mainEl.querySelectorAll<HTMLElement>("*"))]
+        : [];
+      const verticalScrollAreas = mainCandidates
+        .filter((el) => {
+          const style = window.getComputedStyle(el);
+          const overflowY = style.overflowY;
+          return (
+            (overflowY === "auto" || overflowY === "scroll") &&
+            el.scrollHeight > el.clientHeight + 2
+          );
+        })
+        .map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          testId: el.getAttribute("data-testid") || el.getAttribute("data-pinned-horizontal-scrollbar") || "",
+          clientHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+        }));
+      return {
+        rowCount: rows.length,
+        maxRowHeight: rowHeights.length ? Math.max(...rowHeights) : 0,
+        rowHeights,
+        tableScrollWidth: tableEl?.scrollWidth ?? 0,
+        cardClientWidth: cardEl?.clientWidth ?? 0,
+        clippedTimeCells,
+        verticalScrollAreaCount: verticalScrollAreas.length,
+        verticalScrollAreas,
+      };
+    });
+
+    expect(layoutMetrics.rowCount).toBe(12);
+    expect(layoutMetrics.maxRowHeight).toBeGreaterThan(0);
+    expect(layoutMetrics.maxRowHeight).toBeLessThanOrEqual(80);
+    expect(layoutMetrics.tableScrollWidth).toBeLessThanOrEqual(layoutMetrics.cardClientWidth);
+    expect(layoutMetrics.clippedTimeCells).toEqual([]);
+    expect(layoutMetrics.verticalScrollAreaCount).toBe(1);
+    expect(layoutMetrics.verticalScrollAreas[0]?.tag).toBe("main");
+
+    await page.screenshot({
+      path: `${KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR}/postmortems-list-1274x627.png`,
+    });
+
+    // 3. Open Postmortem detail sheet and verify plain root cause, translated labels (incl. drift:runtime_state), and collapsed technical key=value section
+    await firstPlainTitle.click();
+    await expect(page.getByTestId("postmortem-detail-root-cause")).toBeVisible();
+    await expect(page.getByTestId("postmortem-detail-root-cause")).toHaveText(
+      /^(Root cause has not been analysed yet\.|尚未分析根因。)$/,
+    );
+    await expect(
+      page.getByText(/^(• Incident category: Paper vs live drift \(Runtime state\)|• 事件分類：模擬與實盤偏離（執行環境狀態）)$/),
+    ).toBeVisible();
+    const techDetails = page.getByTestId("postmortem-technical-details");
+    await expect(techDetails).toBeVisible();
+    expect(await techDetails.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(false);
+    await page.waitForTimeout(550);
+
+    await page.screenshot({
+      path: `${KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR}/postmortems-detail-1274x627.png`,
+    });
+
+    // Close detail sheet and toggle system incidents on
+    await page.keyboard.press("Escape");
+    await infraToggle.click();
+    await expect.poll(() =>
+      postmortemRequests.some((req) => req.includes("include_infrastructure=true")),
+    ).toBe(true);
+    await expect(
+      page.getByText(/^(Downstream service degradation: Training session|下游服務連線異常：訓練工作階段服務)$/),
+    ).toBeVisible();
+  });
 });
