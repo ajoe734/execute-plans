@@ -15,26 +15,257 @@ import {
   type PostmortemRecord,
   type PostmortemResponseMeta,
 } from "@/lib/bff-v1/postmortemClient";
-import { postmortemStatusLabel } from "@/lib/enumLabels";
+import {
+  normalizeEnumKey,
+  postmortemStatusLabel,
+  resolveEnumLabel,
+  type EnumCategory,
+} from "@/lib/enumLabels";
 import { safeDateTime } from "@/lib/utils";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { useT } from "@/platform/hooks";
 import { Field } from "../ObjectDetailLayout";
 
 type LoadStatus = "loading" | "ready" | "error";
+type TFunc = ReturnType<typeof useT>;
 
 const DEFAULT_PAGE_SIZE = 50;
 const POSTMORTEM_STATUS_OPTIONS = ["draft", "review", "approved", "published"] as const;
 const KEY_VALUE_TOKEN_RE = /\b[a-z][a-z0-9_]{2,}=[^\s;,]+/i;
+const RAW_DRIFT_EVIDENCE_RE = /\b(?:drift:[a-z0-9_.:-]+|DriftReport\s+drift-[a-z0-9_.:-]+)\b/i;
+const ENUM_LOOKUP_CATEGORIES: readonly EnumCategory[] = [
+  "reason",
+  "status",
+  "outcome",
+  "action",
+  "risk",
+  "lineageNodeType",
+  "lineageEdge",
+];
 
-/** Strip the automatic "Postmortem draft:" prefix while keeping the underlying incident title intact. */
-export function plainPostmortemTitle(rawTitle: string): string {
+export interface ResolvedPostmortemToken {
+  label: string;
+  rawCode: string;
+  isKnown: boolean;
+}
+
+export interface PostmortemTitleDisplay {
+  primary: string;
+  secondary?: string;
+  isKnown: boolean;
+}
+
+export interface PostmortemFactorItem {
+  key: string;
+  primary: string;
+  secondary?: string;
+}
+
+function stripPostmortemDraftPrefix(rawTitle: string): string {
   const trimmed = (rawTitle ?? "").trim();
-  const stripped = trimmed
+  const withoutPrefix = trimmed
     .replace(/^postmortem\s+draft\s*:\s*/i, "")
     .replace(/^事後檢討草稿\s*[：:]\s*/, "")
     .trim();
-  return stripped || trimmed;
+  const withoutTrailingPmId = withoutPrefix.replace(/\s+\(pm-[a-z0-9_.-]+\)\s*$/i, "").trim();
+  return withoutTrailingPmId || withoutPrefix || trimmed;
+}
+
+function lookupTranslatedKey(t: TFunc, i18nKey: string): string | null {
+  const out = t(i18nKey, { defaultValue: "" });
+  if (typeof out === "string" && out.trim() && out !== i18nKey) {
+    return out.trim();
+  }
+  return null;
+}
+
+function extractDriftKindCandidate(rawToken: string): string {
+  let clean = rawToken.trim();
+  if (/^drift:/i.test(clean)) {
+    clean = clean.slice("drift:".length).trim();
+  }
+  if (clean.includes(":")) {
+    const parts = clean.split(":").map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const last = parts[parts.length - 1];
+      clean = /^\d+$/.test(last) ? parts[parts.length - 2] : last;
+    }
+  }
+  return normalizeEnumKey(clean);
+}
+
+/**
+ * Resolves a drift metric/check/reason token (e.g. `drift:runtime_state`, `drawdown`,
+ * `fill_price`, `duplicate_execution`, `queue_lag_ms`, or any enum-helper code) into
+ * a localized plain label in zh-TW and en-US, marking unknown tokens `isKnown: false`.
+ */
+export function resolvePostmortemKindLabel(rawKindToken: string, t: TFunc): ResolvedPostmortemToken {
+  const trimmed = (rawKindToken ?? "").trim();
+  if (!trimmed) {
+    return { label: "", rawCode: "", isKnown: false };
+  }
+  const key = extractDriftKindCandidate(trimmed);
+  if (!key) {
+    return { label: trimmed, rawCode: trimmed, isKnown: false };
+  }
+
+  const fromPostmortemKinds = lookupTranslatedKey(t, `postmortem.driftKinds.${key}`);
+  if (fromPostmortemKinds) {
+    return { label: fromPostmortemKinds, rawCode: trimmed, isKnown: true };
+  }
+
+  const fromJourneyChecks = lookupTranslatedKey(t, `tradeJourneys.checks.${key}`);
+  if (fromJourneyChecks) {
+    return { label: fromJourneyChecks, rawCode: trimmed, isKnown: true };
+  }
+
+  const fromJourneyFields = lookupTranslatedKey(t, `tradeJourneys.evidenceFields.${key}`);
+  if (fromJourneyFields) {
+    return { label: fromJourneyFields, rawCode: trimmed, isKnown: true };
+  }
+
+  if (key !== "unknown") {
+    const fromJourneyReasons = lookupTranslatedKey(t, `tradeJourneys.reasons.${key}`);
+    if (fromJourneyReasons) {
+      return { label: fromJourneyReasons, rawCode: trimmed, isKnown: true };
+    }
+  }
+
+  for (const category of ENUM_LOOKUP_CATEGORIES) {
+    const resolved = resolveEnumLabel(category, key, t);
+    if (resolved.isKnown) {
+      return { label: resolved.label, rawCode: trimmed, isKnown: true };
+    }
+  }
+
+  return { label: trimmed, rawCode: trimmed, isKnown: false };
+}
+
+export function resolvePostmortemServiceLabel(rawServiceToken: string, t: TFunc): ResolvedPostmortemToken {
+  const trimmed = (rawServiceToken ?? "").trim();
+  if (!trimmed) {
+    return { label: "", rawCode: "", isKnown: false };
+  }
+  const key = normalizeEnumKey(trimmed);
+  if (!key) {
+    return { label: trimmed, rawCode: trimmed, isKnown: false };
+  }
+  const fromServices = lookupTranslatedKey(t, `postmortem.services.${key}`);
+  if (fromServices) {
+    return { label: fromServices, rawCode: trimmed, isKnown: true };
+  }
+  return { label: trimmed, rawCode: trimmed, isKnown: false };
+}
+
+/**
+ * Formats a postmortem title into plain localized primary text and optional secondary
+ * identifier/raw-kind text (binding id, service id, or unknown kind code).
+ */
+export function formatPostmortemTitle(
+  rawTitle: string,
+  t?: TFunc,
+  fallbackBindingId?: string,
+): PostmortemTitleDisplay {
+  const core = stripPostmortemDraftPrefix(rawTitle);
+  if (!t || !core) {
+    return { primary: core, isKnown: true };
+  }
+
+  // 1. "Drift threshold breach: <kind> [for <bindingId>]" / "Threshold breach: <kind> [for <bindingId>]"
+  const breachMatch = /^(drift\s+threshold\s+breach(?:ed)?|threshold\s+breach(?:ed)?)\s*:\s*(.+?)(?:\s+for\s+([A-Za-z0-9_.:@-]+))?$/i.exec(
+    core,
+  );
+  if (breachMatch) {
+    const isDrift = /^drift/i.test(breachMatch[1]) || /^drift:/i.test(breachMatch[2].trim());
+    const rawKindToken = breachMatch[2].trim();
+    const bindingId = (breachMatch[3]?.trim() || fallbackBindingId?.trim() || "") || undefined;
+    const resolvedKind = resolvePostmortemKindLabel(rawKindToken, t);
+    if (resolvedKind.isKnown) {
+      const primary = t(
+        isDrift
+          ? "postmortem.titles.driftThresholdBreachWithKind"
+          : "postmortem.titles.thresholdBreachWithKind",
+        { kind: resolvedKind.label },
+      );
+      return { primary, secondary: bindingId, isKnown: true };
+    }
+    const primary = t(
+      isDrift
+        ? "postmortem.titles.driftThresholdBreachGeneric"
+        : "postmortem.titles.thresholdBreachGeneric",
+    );
+    const secondary = [rawKindToken, bindingId].filter(Boolean).join(" · ") || undefined;
+    return { primary, secondary, isKnown: false };
+  }
+
+  // 2. "[Paper vs live] Drift threshold breach(ed) on <target>"
+  const onTargetMatch = /^(?:paper\s+vs\s+live\s+)?drift\s+threshold\s+breach(?:ed)?\s+on\s+(.+)$/i.exec(core);
+  if (onTargetMatch) {
+    const target = onTargetMatch[1].trim();
+    return {
+      primary: t("postmortem.titles.driftThresholdBreachOnTarget", { target }),
+      secondary: fallbackBindingId?.trim() || undefined,
+      isKnown: true,
+    };
+  }
+
+  // 3. "<Paper|Canary|Live> reconciliation threshold breach [for <bindingId>]"
+  const stageReconMatch = /^(paper|canary|live)\s+reconciliation\s+threshold\s+breach(?:ed)?(?:\s+for\s+([A-Za-z0-9_.:@-]+))?$/i.exec(
+    core,
+  );
+  if (stageReconMatch) {
+    const stageLabel = formatDeploymentStage(stageReconMatch[1], t);
+    const bindingId = (stageReconMatch[2]?.trim() || fallbackBindingId?.trim() || "") || undefined;
+    return {
+      primary: t("postmortem.titles.reconciliationThresholdBreach", { stage: stageLabel }),
+      secondary: bindingId,
+      isKnown: true,
+    };
+  }
+
+  // 4. "BFF downstream degradation[: <SERVICE>]" / "Infrastructure degradation[: <SERVICE>]" / "downstream degradation"
+  const degradationMatch = /^(?:bff\s+downstream\s+degradation|infrastructure\s+degradation|downstream\s+degradation)(?:\s*:\s*(.+?)|\s+(#\d+))?$/i.exec(
+    core,
+  );
+  if (degradationMatch) {
+    if (degradationMatch[1]) {
+      const rawService = degradationMatch[1].trim();
+      const timeoutMatch = /^(.+?)\s+timeout$/i.exec(rawService);
+      const serviceSlug = timeoutMatch ? timeoutMatch[1].trim() : rawService;
+      const hasTimeout = Boolean(timeoutMatch);
+      const resolvedService = resolvePostmortemServiceLabel(serviceSlug, t);
+      if (resolvedService.isKnown) {
+        const primary = t(
+          hasTimeout
+            ? "postmortem.titles.downstreamDegradationServiceTimeout"
+            : "postmortem.titles.downstreamDegradationWithService",
+          { service: resolvedService.label },
+        );
+        return { primary, secondary: rawService, isKnown: true };
+      }
+      return {
+        primary: t("postmortem.titles.downstreamDegradationGeneric"),
+        secondary: rawService,
+        isKnown: false,
+      };
+    }
+    return {
+      primary: t("postmortem.titles.downstreamDegradationGeneric"),
+      secondary: degradationMatch[2]?.trim() || undefined,
+      isKnown: true,
+    };
+  }
+
+  return { primary: core, isKnown: true };
+}
+
+/** Strip the automatic "Postmortem draft:" prefix and localize known drift/degradation titles. */
+export function plainPostmortemTitle(
+  rawTitle: string,
+  t?: TFunc,
+  fallbackBindingId?: string,
+): string {
+  return formatPostmortemTitle(rawTitle, t, fallbackBindingId).primary;
 }
 
 /** published_at when the record was published; otherwise created_at (never labelled as closed). */
@@ -100,23 +331,52 @@ function formatSeverityValue(rawSeverity: string, t: ReturnType<typeof useT>): s
   return rawSeverity;
 }
 
-function formatClusterValue(rawCluster: string, t: ReturnType<typeof useT>): string {
-  const trimmed = rawCluster.trim();
+export function resolveClusterDisplay(rawCluster: string, t: TFunc): PostmortemTitleDisplay {
+  const trimmed = (rawCluster ?? "").trim();
   const normalized = trimmed.toLowerCase();
-  if (normalized === "drift:rolling_drawdown_multiple") {
-    return t("postmortem.clusters.drift_rolling_drawdown_multiple");
+  if (normalized.startsWith("drift:")) {
+    const resolvedKind = resolvePostmortemKindLabel(trimmed, t);
+    if (resolvedKind.isKnown) {
+      return {
+        primary: t("postmortem.clusters.driftWithKind", { kind: resolvedKind.label }),
+        isKnown: true,
+      };
+    }
+    return {
+      primary: t("postmortem.clusters.driftGeneric"),
+      secondary: trimmed,
+      isKnown: false,
+    };
   }
   if (normalized.startsWith("infrastructure:") || normalized.startsWith("infra-cluster:")) {
-    return t("postmortem.clusters.infrastructure");
+    return {
+      primary: t("postmortem.clusters.infrastructure"),
+      isKnown: true,
+    };
   }
-  return trimmed;
+  const resolvedDirect = resolvePostmortemKindLabel(trimmed, t);
+  if (resolvedDirect.isKnown) {
+    return {
+      primary: resolvedDirect.label,
+      isKnown: true,
+    };
+  }
+  return {
+    primary: t("postmortem.clusters.unknown"),
+    secondary: trimmed,
+    isKnown: false,
+  };
+}
+
+export function formatClusterValue(rawCluster: string, t: TFunc): string {
+  return resolveClusterDisplay(rawCluster, t).primary;
 }
 
 function partitionContributingFactors(
   record: PostmortemRecord,
-  t: ReturnType<typeof useT>,
-): { visibleFactors: string[]; rawKeyValues: string[] } {
-  const visibleFactors: string[] = [];
+  t: TFunc,
+): { visibleFactors: PostmortemFactorItem[]; rawKeyValues: string[] } {
+  const visibleFactors: PostmortemFactorItem[] = [];
   const rawKeyValues: string[] = [];
 
   for (const rawFactor of record.contributing_factors ?? []) {
@@ -128,31 +388,55 @@ function partitionContributingFactors(
       const key = kvMatch[1].toLowerCase();
       const val = kvMatch[2].trim();
       if (key === "incident_severity" && val) {
-        visibleFactors.push(
-          t("postmortem.factors.incidentSeverity", { value: formatSeverityValue(val, t) }),
-        );
+        visibleFactors.push({
+          key: factor,
+          primary: t("postmortem.factors.incidentSeverity", { value: formatSeverityValue(val, t) }),
+        });
       } else if (key === "incident_cluster_id" && val) {
-        visibleFactors.push(
-          t("postmortem.factors.incidentCluster", { value: formatClusterValue(val, t) }),
-        );
-      } else if (key === "incident_evidence_summary" && val && !KEY_VALUE_TOKEN_RE.test(val)) {
-        visibleFactors.push(
-          t("postmortem.factors.evidenceSummary", { value: val }),
-        );
+        const clusterDisplay = resolveClusterDisplay(val, t);
+        visibleFactors.push({
+          key: factor,
+          primary: t("postmortem.factors.incidentCluster", { value: clusterDisplay.primary }),
+          secondary: clusterDisplay.secondary,
+        });
+      } else if (
+        key === "incident_evidence_summary" &&
+        val &&
+        !KEY_VALUE_TOKEN_RE.test(val) &&
+        !RAW_DRIFT_EVIDENCE_RE.test(val)
+      ) {
+        visibleFactors.push({
+          key: factor,
+          primary: t("postmortem.factors.evidenceSummary", { value: val }),
+        });
       }
       continue;
     }
 
-    if (KEY_VALUE_TOKEN_RE.test(factor)) {
+    if (/^(?:drift:|infrastructure:|infra-cluster:)/i.test(factor)) {
+      rawKeyValues.push(factor);
+      const clusterDisplay = resolveClusterDisplay(factor, t);
+      visibleFactors.push({
+        key: factor,
+        primary: t("postmortem.factors.incidentCluster", { value: clusterDisplay.primary }),
+        secondary: clusterDisplay.secondary,
+      });
+      continue;
+    }
+
+    if (KEY_VALUE_TOKEN_RE.test(factor) || RAW_DRIFT_EVIDENCE_RE.test(factor)) {
       rawKeyValues.push(factor);
       continue;
     }
 
-    visibleFactors.push(factor);
+    visibleFactors.push({ key: factor, primary: factor });
   }
 
   const evidenceSummary = (record.incident_evidence_summary ?? "").trim();
-  if (evidenceSummary && KEY_VALUE_TOKEN_RE.test(evidenceSummary)) {
+  if (
+    evidenceSummary &&
+    (KEY_VALUE_TOKEN_RE.test(evidenceSummary) || RAW_DRIFT_EVIDENCE_RE.test(evidenceSummary))
+  ) {
     const kvLine = `incident_evidence_summary=${evidenceSummary}`;
     if (!rawKeyValues.includes(kvLine) && !rawKeyValues.includes(evidenceSummary)) {
       rawKeyValues.push(kvLine);
@@ -322,6 +606,7 @@ export const PostmortemLibraryPage = () => {
       ? t("postmortem.strategyScopeWithHiddenCount", { count: rawHiddenCount })
       : t("postmortem.strategyScopeDefault");
 
+  const activeTitleDisplay = active ? formatPostmortemTitle(active.title, t, active.binding_id) : null;
   const activeFactors = active ? partitionContributingFactors(active, t) : { visibleFactors: [], rawKeyValues: [] };
   const activeTechnicalIds = active
     ? [
@@ -352,7 +637,7 @@ export const PostmortemLibraryPage = () => {
               onChange={(event) => handleSearchChange(event.target.value)}
               placeholder={t("postmortem.search")}
               aria-label={t("postmortem.search")}
-              className="w-56"
+              className="w-48"
             />
             <select
               aria-label={t("postmortem.statusFilter", { defaultValue: "Filter status" })}
@@ -410,20 +695,20 @@ export const PostmortemLibraryPage = () => {
           </Card>
         )}
         {listStatus !== "error" && !surfaceUnavailable && (
-          <Card className="overflow-hidden">
-            <table className="w-full caption-bottom text-sm">
+          <Card className="overflow-hidden" data-testid="postmortem-table-card">
+            <table className="w-full table-fixed caption-bottom text-sm" data-testid="postmortem-table">
               <TableHeader className="bg-card">
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="text-xs uppercase tracking-wider whitespace-nowrap">
+                  <TableHead className="w-[42%] text-xs uppercase tracking-wider whitespace-nowrap">
                     {t("table.title")}
                   </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider whitespace-nowrap">
+                  <TableHead className="w-[11%] text-xs uppercase tracking-wider whitespace-nowrap">
                     {t("table.status")}
                   </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider whitespace-nowrap">
+                  <TableHead className="w-[22%] text-xs uppercase tracking-wider whitespace-nowrap">
                     {t("postmortem.incident")}
                   </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider whitespace-nowrap">
+                  <TableHead className="w-[25%] text-xs uppercase tracking-wider whitespace-nowrap">
                     {t("postmortem.time", { defaultValue: "Time" })}
                   </TableHead>
                 </TableRow>
@@ -443,47 +728,67 @@ export const PostmortemLibraryPage = () => {
                 ) : (
                   items.map((row) => {
                     const { at, kind } = displayedAt(row);
+                    const titleDisplay = formatPostmortemTitle(row.title, t, row.binding_id);
+                    const timeLabel = kind === "published"
+                      ? t("postmortem.publishedAt", { defaultValue: "Published" })
+                      : t("postmortem.createdAt", { defaultValue: "Created" });
                     return (
                       <TableRow
                         key={row.id}
                         className="cursor-pointer"
                         onClick={() => selectPostmortem(row)}
                       >
-                        <TableCell className="py-1.5">
+                        <TableCell className="py-1.5 overflow-hidden">
                           <div className="min-w-0 py-0.5">
                             <div
-                              className="font-medium text-sm leading-5 truncate max-w-[520px]"
+                              className="font-medium text-sm leading-5 truncate"
                               data-testid="postmortem-plain-title"
+                              title={titleDisplay.primary}
                             >
-                              {plainPostmortemTitle(row.title)}
+                              {titleDisplay.primary}
                             </div>
-                            <div
-                              className="text-mono text-[11px] leading-4 text-muted-foreground truncate max-w-[520px]"
-                              data-testid="postmortem-secondary-id"
-                            >
-                              {row.postmortem_id}
+                            <div className="flex items-center gap-1.5 text-mono text-[11px] leading-4 text-muted-foreground truncate">
+                              <span
+                                className="shrink-0"
+                                data-testid="postmortem-secondary-id"
+                              >
+                                {row.postmortem_id}
+                              </span>
+                              {titleDisplay.secondary && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span
+                                    className="truncate"
+                                    data-testid="postmortem-secondary-context"
+                                    title={titleDisplay.secondary}
+                                  >
+                                    {titleDisplay.secondary}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="py-1.5">
+                        <TableCell className="py-1.5 overflow-hidden">
                           <Badge variant="outline" className="whitespace-nowrap shrink-0">
                             {statusLabel(t, row.status)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="py-1.5">
+                        <TableCell className="py-1.5 overflow-hidden">
                           {row.incident_id ? (
                             <div className="min-w-0 py-0.5">
                               <Link
                                 to={`/management/incidents/${encodeURIComponent(row.incident_id)}`}
                                 onClick={(event) => event.stopPropagation()}
-                                className="text-xs font-medium text-primary underline underline-offset-2 hover:text-primary/80 whitespace-nowrap"
+                                className="block text-xs font-medium leading-5 text-primary underline underline-offset-2 hover:text-primary/80 truncate"
                                 data-testid="postmortem-incident-link"
                               >
                                 {t("postmortem.openIncident")}
                               </Link>
                               <div
-                                className="text-mono text-[11px] leading-4 text-muted-foreground truncate max-w-[220px]"
+                                className="text-mono text-[11px] leading-4 text-muted-foreground truncate"
                                 data-testid="postmortem-secondary-incident-id"
+                                title={row.incident_id}
                               >
                                 {row.incident_id}
                               </div>
@@ -492,18 +797,14 @@ export const PostmortemLibraryPage = () => {
                             <span className="text-xs text-muted-foreground">{t("common.notReported")}</span>
                           )}
                         </TableCell>
-                        <TableCell className="py-1.5">
-                          <span
-                            className="text-mono text-xs text-muted-foreground whitespace-nowrap"
+                        <TableCell className="py-1.5 overflow-hidden">
+                          <div
+                            className="min-w-0 py-0.5 text-mono text-xs leading-4 text-muted-foreground break-words"
                             data-time-kind={kind}
                           >
-                            {safeDateTime(at)}
-                            <span className="ml-1">
-                              ({kind === "published"
-                                ? t("postmortem.publishedAt", { defaultValue: "Published" })
-                                : t("postmortem.createdAt", { defaultValue: "Created" })})
-                            </span>
-                          </span>
+                            <span className="inline-block">{safeDateTime(at)}</span>{" "}
+                            <span className="inline-block">({timeLabel})</span>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -548,7 +849,7 @@ export const PostmortemLibraryPage = () => {
         <SheetContent className="w-full sm:!max-w-[540px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {active ? plainPostmortemTitle(active.title) : t("postmortem.detailTitleFallback", { id: selectedId })}
+              {activeTitleDisplay ? activeTitleDisplay.primary : t("postmortem.detailTitleFallback", { id: selectedId })}
             </SheetTitle>
             <SheetDescription className="sr-only">
               {t("postmortem.detailDescription", { id: selectedId })}
@@ -556,22 +857,30 @@ export const PostmortemLibraryPage = () => {
           </SheetHeader>
 
           {detailStatus === "loading" && (
-            <div role="status" data-testid="postmortem-detail-loading" className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+            <div role="status" data-testid="postmortem-detail-loading" className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />{t("postmortem.detailLoading")}
             </div>
           )}
           {detailStatus === "error" && (
-            <Card role="alert" data-testid="postmortem-detail-error" className="mt-6 p-4 border-status-failed/40 bg-status-failed/5 text-sm text-status-failed">
+            <Card role="alert" data-testid="postmortem-detail-error" className="mt-4 p-4 border-status-failed/40 bg-status-failed/5 text-sm text-status-failed">
               {t("postmortem.detailError", { id: selectedId })}{detailError ? ` ${detailError}` : ""}
             </Card>
           )}
           {active && (
-            <div className="mt-6 space-y-4">
+            <div className="mt-4 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{statusLabel(t, active.status)}</Badge>
                 <span className="text-mono text-xs text-muted-foreground" data-testid="postmortem-detail-secondary-id">
                   {active.postmortem_id}
                 </span>
+                {activeTitleDisplay?.secondary && (
+                  <span
+                    className="text-mono text-xs text-muted-foreground"
+                    data-testid="postmortem-detail-secondary-context"
+                  >
+                    {activeTitleDisplay.secondary}
+                  </span>
+                )}
               </div>
 
               {active.status === "draft" && (
@@ -592,7 +901,7 @@ export const PostmortemLibraryPage = () => {
                 </Card>
               )}
 
-              <Card className="p-4 grid grid-cols-2 gap-4">
+              <Card className="p-3 grid grid-cols-2 gap-3">
                 <Field
                   label={t("postmortem.incident")}
                   value={
@@ -624,7 +933,7 @@ export const PostmortemLibraryPage = () => {
                 />
                 <Field label={t("postmortem.deploymentStage")} value={formatDeploymentStage(active.deployment_stage, t)} />
               </Card>
-              <Card className="p-4 space-y-3">
+              <Card className="p-3 space-y-2.5">
                 <div>
                   <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("postmortem.rootCause")}</div>
                   <div className="text-sm mt-1" data-testid="postmortem-detail-root-cause">
@@ -633,16 +942,36 @@ export const PostmortemLibraryPage = () => {
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("postmortem.contributingFactors")}</div>
-                  {activeFactors.visibleFactors.length > 0
-                    ? <ul className="mt-1 space-y-1">{activeFactors.visibleFactors.map((factor) => <li key={factor} className="text-sm">• {factor}</li>)}</ul>
-                    : <div className="text-sm mt-1 text-muted-foreground">{t("postmortem.noContributingFactors")}</div>}
+                  {activeFactors.visibleFactors.length > 0 ? (
+                    <ul className="mt-1 space-y-1">
+                      {activeFactors.visibleFactors.map((factor) => (
+                        <li key={factor.key} className="text-sm">
+                          {factor.secondary ? (
+                            <>
+                              <span>• {factor.primary}</span>
+                              <span
+                                className="ml-1.5 text-mono text-xs text-muted-foreground"
+                                data-testid="postmortem-factor-secondary"
+                              >
+                                {factor.secondary}
+                              </span>
+                            </>
+                          ) : (
+                            `• ${factor.primary}`
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-sm mt-1 text-muted-foreground">{t("postmortem.noContributingFactors")}</div>
+                  )}
                 </div>
               </Card>
-              <Card className="p-4">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("postmortem.followUps")}</div>
+              <Card className="p-3">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">{t("postmortem.followUps")}</div>
                 {active.action_items.length > 0
                   ? (
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-1">
                       {active.action_items.map((action) => (
                         <li key={action} className="text-sm">• {translatePostmortemAction(action, t)}</li>
                       ))}

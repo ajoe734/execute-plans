@@ -10,7 +10,7 @@
   "branch": "task/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125",
   "base_commit": "62ed222ba6bba5bf963290ab9df7450f9e494ecc",
   "status": "ready_for_review",
-  "timestamp": "2026-11-25T13:15:00Z",
+  "timestamp": "2026-11-25T14:43:30Z",
   "problem_register_binding": {
     "root_cause_class": "RC6",
     "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
@@ -59,10 +59,10 @@
     "AC3_postmortem_plain_title_secondary_ids_incident_link_plain_root_cause_collapsed_technical_kv_translated_labels_and_no_review_flow_notice": {
       "passed": true,
       "details": [
-        "plainPostmortemTitle strips the automatic 'Postmortem draft:' / '事後檢討草稿：' prefix in both the table rows and detail sheet title while keeping postmortem_id as secondary monospace text (data-testid='postmortem-secondary-id').",
+        "formatPostmortemTitle and plainPostmortemTitle strip the automatic 'Postmortem draft:' / '事後檢討草稿：' prefix and translate recorded drift kinds (runtime_state, drawdown, fill_price, duplicate_execution, rolling_drawdown_multiple, and all tradeJourneys/enumLabels kinds) and downstream degradation service names into plain zh-TW and en-US titles, rendering binding_id or service slug as secondary text (data-testid='postmortem-secondary-context') and keeping raw text in secondary for unknown kinds.",
         "Each row renders a direct Link to /management/incidents/:incident_id (data-testid='postmortem-incident-link') with the incident_id as secondary text (data-testid='postmortem-secondary-incident-id') and the created/published timestamp.",
         "formatPostmortemRootCause replaces the machine pending sentence ('Draft generated from resolved incident ...; root cause pending analysis.') with localized plain text ('Root cause has not been analysed yet.' / '尚未分析根因。').",
-        "partitionContributingFactors translates structured contributing factors (incident_severity, incident_cluster_id, plain incident_evidence_summary) into localized labels while keeping all raw key=value strings and technical identifiers inside a collapsed-by-default <details data-testid='postmortem-technical-details'> section.",
+        "partitionContributingFactors and resolveClusterDisplay translate structured contributing factors (incident_severity, incident_cluster_id including all recorded drift:* kinds such as drift:runtime_state, drift:drawdown, drift:fill_price, drift:duplicate_execution, drift:rolling_drawdown_multiple, and infrastructure:*, plus plain incident_evidence_summary) into localized labels in zh-TW and en-US, keeping unknown cluster raw tokens as secondary text (data-testid='postmortem-factor-secondary') and all raw key=value strings and technical identifiers inside a collapsed-by-default <details data-testid='postmortem-technical-details'> section.",
         "Contributing factor labels, default follow-up action items ('Complete root cause analysis', 'Validate remediation against linked telemetry and reconciliation evidence'), author ('postmortem-draft-worker'), and deployment stage ('paper', 'live', 'research', 'canary', 'shadow') are translated in zh-TW and en-US.",
         "Both the page header bar (data-testid='postmortem-no-review-flow-notice') and the draft detail sheet (data-testid='postmortem-detail-draft-notice') state that postmortem drafts are read-only and have no review or publish flow connected yet."
       ]
@@ -76,7 +76,7 @@
       ],
       "details": [
         "All loading, empty, and error texts in KnowledgeInbox.tsx and PostmortemLibrary.tsx are localized in zh-TW.ts and en-US.ts with 1:1 global key symmetry verified by src/lib/v5/management/__tests__/i18nParity.test.ts.",
-        "At 1274x627 in real Chromium, every postmortem table row is <= 80px high (measured 53px) and <main> is the single vertical scroll area (inner DataTable pinned scroll container max-height and vertical overflow are disabled on PostmortemLibraryPage)."
+        "At 1274x627 in real Chromium, the postmortem table uses table-fixed with constrained percentage column widths (42% / 11% / 22% / 25%) so table.scrollWidth <= card.clientWidth (no horizontal scroll and the Time column is never cut off), every row is <= 80px high (measured 53px), and <main> is the single vertical scroll area."
       ]
     },
     "AC5_no_weakened_tests_and_changed_assertions_justified": {
@@ -84,8 +84,8 @@
       "changed_assertions_justification": [
         {
           "file": "src/management/pages/phase2/PostmortemLibrary.test.tsx",
-          "change": "Updated row title expectations in AC1, AC2, and AC4 tests from 'Postmortem draft: BFF downstream degradation: ...' to plain 'BFF downstream degradation: ...' (plus asserting 'Postmortem draft:' is absent), and updated the AC4 detail root-cause expectation from the raw machine sentence 'Draft generated from resolved incident inc-training-session-001; root cause pending analysis.' to 'Root cause has not been analysed yet.' / '尚未分析根因。' (plus asserting the raw machine sentence is absent).",
-          "reason": "Per AC3, a postmortem row now shows a plain title without the 'Postmortem draft:' prefix, and the detail view says the root cause is not analysed yet instead of the machine sentence."
+          "change": "Updated row title expectations in AC1, AC2, and AC4 tests from 'Postmortem draft: BFF downstream degradation: ...' to plain localized 'Downstream service degradation' / 'Downstream service degradation: Training session' / '下游服務連線異常：訓練工作階段服務' with the service/row token in secondary text (plus asserting 'Postmortem draft:' is absent), and updated the AC4 detail root-cause expectation from the raw machine sentence 'Draft generated from resolved incident inc-training-session-001; root cause pending analysis.' to 'Root cause has not been analysed yet.' / '尚未分析根因。' (plus asserting the raw machine sentence is absent).",
+          "reason": "Per AC3, a postmortem row now shows a plain localized title without the 'Postmortem draft:' prefix and keeps raw service/binding tokens as secondary text, and the detail view says the root cause is not analysed yet instead of the machine sentence."
         },
         {
           "file": "e2e/management-product-journey.spec.ts",
@@ -104,14 +104,15 @@
     {
       "command": "./node_modules/.bin/vitest run src/management/pages/phase2/KnowledgeInbox.test.tsx src/management/navigation/managementRouteManifest.test.ts src/lib/bff-v1/postmortemClient.test.ts src/management/pages/phase2/PostmortemLibrary.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/test/accept-management-route-attribution.test.ts src/test/accept-management-honest-not-found.test.ts",
       "exit_code": 0,
-      "result": "8 test files passed, 139 tests passed"
+      "result": "8 test files passed, 140 tests passed"
     },
     {
       "command": "./node_modules/.bin/playwright test e2e/21-management-canonical-reads.spec.ts",
       "exit_code": 0,
-      "result": "3 passed (canonical reads, lineage lookup, and knowledge inbox + postmortem truth with 1274x627 layout & screenshots)"
+      "result": "3 passed (canonical reads, lineage lookup, and knowledge inbox + postmortem truth with 1274x627 table-fixed layout, plain drift/service titles, and re-captured screenshots)"
     }
   ],
+  "diff_budget_note": "scripts/git/diff_budget.py is a pantheon-repo script and does not exist in execute-plans; git diff --shortstat origin/dev reports 19 scoped files changed across product, i18n, unit/e2e tests, and 1274x627 evidence screenshots.",
   "runtime_budget": {
     "persistent_product_writers": 0,
     "recurring_jobs": 0,

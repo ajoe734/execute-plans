@@ -749,17 +749,27 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       "./docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125";
     mkdirSync(KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR, { recursive: true });
 
+    const DRIFT_SAMPLE_KINDS = [
+      "drift:runtime_state",
+      "drift:drawdown",
+      "drift:fill_price",
+      "drift:duplicate_execution",
+      "drift:rolling_drawdown_multiple",
+    ];
+
     const buildRealDriftPostmortem = (idx: number) => {
       const idSuffix = String(idx).padStart(4, "0");
       const postmortemId = `pm-drift-20261125-${idSuffix}`;
       const incidentId = `inc-drift-20261125-${idSuffix}`;
+      const clusterId = DRIFT_SAMPLE_KINDS[(idx - 1) % DRIFT_SAMPLE_KINDS.length];
+      const bindingId = `rb-3823397e125e4579ba5f41740670${idSuffix}`;
       return {
         postmortem_id: postmortemId,
         incident_id: incidentId,
-        title: `Postmortem draft: Paper vs live drift threshold breach on 0050.TW #${idx}`,
+        title: `Postmortem draft: Drift threshold breach: ${clusterId} for ${bindingId}`,
         status: "draft",
         created_at: "2026-11-25T06:35:00Z",
-        binding_id: `bind-paper-${idSuffix}`,
+        binding_id: bindingId,
         deployment_stage: "paper",
         deployment_plan_id: `plan-202611-${idSuffix}`,
         capital_pool_id: LIVE_POOL_ID,
@@ -772,11 +782,11 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
         incident_evidence_summary:
           "metric=rolling_drawdown_multiple observed=1.42 threshold=1.20 comparator=gt",
         lineage_ref: `${LIVE_ARTIFACT_ID}@1.2.0`,
-        incident_cluster_id: "drift:rolling_drawdown_multiple",
+        incident_cluster_id: clusterId,
         root_cause: `Draft generated from resolved incident ${incidentId}; root cause pending analysis.`,
         contributing_factors: [
           "incident_severity=high",
-          "incident_cluster_id=drift:rolling_drawdown_multiple",
+          `incident_cluster_id=${clusterId}`,
           "incident_evidence_summary=metric=rolling_drawdown_multiple observed=1.42 threshold=1.20 comparator=gt",
         ],
         timeline: [
@@ -804,7 +814,7 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       ...buildRealDriftPostmortem(99),
       postmortem_id: "pm-infra-bff-1c619cdd05621fa6fabe2316",
       incident_id: "inc-infra-bff-1c619cdd05621fa6fabe2316",
-      title: "Postmortem draft: BFF downstream degradation: surface-1 timeout",
+      title: "Postmortem draft: BFF downstream degradation: training-session",
       incident_cluster_id: "infrastructure:tenant-dev:control-plane-bff:downstream_degradation",
       incident_evidence_summary: "non_trading_infrastructure_incident=true downstream degradation",
     };
@@ -953,16 +963,37 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     await expect(infraToggle).toBeVisible();
     await expect(infraToggle).toContainText("5355");
 
-    // Plain title without "Postmortem draft:" prefix
-    await expect(
-      page.getByText("Paper vs live drift threshold breach on 0050.TW #1", { exact: true }),
-    ).toBeVisible();
+    // Plain localized title without "Postmortem draft:" prefix or raw "drift:runtime_state"
+    const firstPlainTitle = page.getByTestId("postmortem-plain-title").first();
+    await expect(firstPlainTitle).toHaveText(
+      /^(Drift threshold breach: Runtime state|偏離門檻超限：執行環境狀態)$/,
+    );
+    await expect(page.getByTestId("postmortem-secondary-context").first()).toHaveText(
+      "rb-3823397e125e4579ba5f417406700001",
+    );
     await expect(page.getByText(/^Postmortem draft:/i)).toHaveCount(0);
+    await expect(page.getByText(/drift:runtime_state/i)).toHaveCount(0);
 
-    // Verify at 1274x627 every row is at most 80px high and main has one vertical scroll area
+    // Verify at 1274x627 every row is at most 80px high, table fits with no horizontal scroll, time column is not cut off, and main has one vertical scroll area
     const layoutMetrics = await page.evaluate(() => {
+      const cardEl = document.querySelector<HTMLElement>('[data-testid="postmortem-table-card"]');
+      const tableEl = document.querySelector<HTMLTableElement>('[data-testid="postmortem-table"]');
+      const cardRect = cardEl?.getBoundingClientRect();
       const rows = Array.from(document.querySelectorAll<HTMLTableRowElement>("main tbody tr"));
       const rowHeights = rows.map((tr) => Number(tr.getBoundingClientRect().height.toFixed(2)));
+      const clippedTimeCells: Array<{ idx: number; cellRight: number; cardRight: number }> = [];
+      rows.forEach((tr, idx) => {
+        const timeEl = tr.querySelector<HTMLElement>("[data-time-kind]");
+        if (!timeEl || !cardRect) return;
+        const tRect = timeEl.getBoundingClientRect();
+        if (tRect.right > cardRect.right + 1 || tRect.left < cardRect.left - 1) {
+          clippedTimeCells.push({
+            idx,
+            cellRight: Number(tRect.right.toFixed(2)),
+            cardRight: Number(cardRect.right.toFixed(2)),
+          });
+        }
+      });
       const mainEl = document.querySelector<HTMLElement>("main");
       const mainCandidates = mainEl
         ? [mainEl, ...Array.from(mainEl.querySelectorAll<HTMLElement>("*"))]
@@ -986,6 +1017,9 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
         rowCount: rows.length,
         maxRowHeight: rowHeights.length ? Math.max(...rowHeights) : 0,
         rowHeights,
+        tableScrollWidth: tableEl?.scrollWidth ?? 0,
+        cardClientWidth: cardEl?.clientWidth ?? 0,
+        clippedTimeCells,
         verticalScrollAreaCount: verticalScrollAreas.length,
         verticalScrollAreas,
       };
@@ -994,6 +1028,8 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     expect(layoutMetrics.rowCount).toBe(12);
     expect(layoutMetrics.maxRowHeight).toBeGreaterThan(0);
     expect(layoutMetrics.maxRowHeight).toBeLessThanOrEqual(80);
+    expect(layoutMetrics.tableScrollWidth).toBeLessThanOrEqual(layoutMetrics.cardClientWidth);
+    expect(layoutMetrics.clippedTimeCells).toEqual([]);
     expect(layoutMetrics.verticalScrollAreaCount).toBe(1);
     expect(layoutMetrics.verticalScrollAreas[0]?.tag).toBe("main");
 
@@ -1001,12 +1037,15 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       path: `${KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR}/postmortems-list-1274x627.png`,
     });
 
-    // 3. Open Postmortem detail sheet and verify plain root cause, translated labels, and collapsed technical key=value section
-    await page.getByText("Paper vs live drift threshold breach on 0050.TW #1", { exact: true }).click();
+    // 3. Open Postmortem detail sheet and verify plain root cause, translated labels (incl. drift:runtime_state), and collapsed technical key=value section
+    await firstPlainTitle.click();
     await expect(page.getByTestId("postmortem-detail-root-cause")).toBeVisible();
     await expect(page.getByTestId("postmortem-detail-root-cause")).toHaveText(
       /^(Root cause has not been analysed yet\.|尚未分析根因。)$/,
     );
+    await expect(
+      page.getByText(/^(• Incident category: Paper vs live drift \(Runtime state\)|• 事件分類：模擬與實盤偏離（執行環境狀態）)$/),
+    ).toBeVisible();
     const techDetails = page.getByTestId("postmortem-technical-details");
     await expect(techDetails).toBeVisible();
     expect(await techDetails.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(false);
@@ -1023,7 +1062,7 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       postmortemRequests.some((req) => req.includes("include_infrastructure=true")),
     ).toBe(true);
     await expect(
-      page.getByText("BFF downstream degradation: surface-1 timeout"),
+      page.getByText(/^(Downstream service degradation: Training session|下游服務連線異常：訓練工作階段服務)$/),
     ).toBeVisible();
   });
 });

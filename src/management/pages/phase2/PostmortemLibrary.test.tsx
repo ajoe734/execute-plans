@@ -183,7 +183,8 @@ describe("PostmortemLibraryPage", () => {
 
     renderLibrary();
 
-    expect(await screen.findByText("BFF downstream degradation: page-1-row")).toBeInTheDocument();
+    expect(await screen.findByText("Downstream service degradation")).toBeInTheDocument();
+    expect(screen.getByTestId("postmortem-secondary-context")).toHaveTextContent("page-1-row");
     expect(screen.queryByText(/^Postmortem draft:/i)).not.toBeInTheDocument();
     expect(screen.getByTestId("postmortem-total-count")).toHaveTextContent("2027 postmortems");
     expect(fetchSpy).toHaveBeenNthCalledWith(1, {
@@ -199,7 +200,7 @@ describe("PostmortemLibraryPage", () => {
 
     // Advance to page 2
     fireEvent.click(nextBtn);
-    expect(await screen.findByText("BFF downstream degradation: page-2-row")).toBeInTheDocument();
+    expect(await screen.findByText("page-2-row")).toBeInTheDocument();
     expect(fetchSpy).toHaveBeenNthCalledWith(2, {
       method: "GET",
       path: "/api/v1/postmortems",
@@ -220,7 +221,7 @@ describe("PostmortemLibraryPage", () => {
 
     // Navigate back to page 2
     fireEvent.click(prevBtn);
-    expect(await screen.findByText("BFF downstream degradation: page-2-row")).toBeInTheDocument();
+    expect(await screen.findByText("page-2-row")).toBeInTheDocument();
     expect(fetchSpy).toHaveBeenNthCalledWith(4, {
       method: "GET",
       path: "/api/v1/postmortems",
@@ -275,7 +276,8 @@ describe("PostmortemLibraryPage", () => {
 
     renderLibrary();
 
-    expect(await screen.findByText("BFF downstream degradation: surface-1")).toBeInTheDocument();
+    expect(await screen.findByText("Downstream service degradation")).toBeInTheDocument();
+    expect(screen.getByTestId("postmortem-secondary-context")).toHaveTextContent("surface-1");
     // Localized draft badge in en-US
     expect(screen.getAllByText("Draft").length).toBeGreaterThan(0);
 
@@ -372,14 +374,15 @@ describe("PostmortemLibraryPage", () => {
 
     renderLibrary();
 
-    // Plain title without "Postmortem draft:" prefix
-    const titleCell = await screen.findByText("BFF downstream degradation: training-session");
+    // Plain localized title without "Postmortem draft:" prefix and with raw service id in secondary text
+    const titleCell = await screen.findByText("Downstream service degradation: Training session");
     expect(titleCell).toBeInTheDocument();
     expect(screen.queryByText(/^Postmortem draft:/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("Draft").length).toBeGreaterThan(0);
 
     // Secondary IDs and link to incident
     expect(screen.getByTestId("postmortem-secondary-id")).toHaveTextContent("pm-inc-training-session-001");
+    expect(screen.getByTestId("postmortem-secondary-context")).toHaveTextContent("training-session");
     expect(screen.getByTestId("postmortem-secondary-incident-id")).toHaveTextContent("inc-training-session-001");
     const incidentLink = screen.getByTestId("postmortem-incident-link");
     expect(incidentLink).toHaveAttribute("href", "/management/incidents/inc-training-session-001");
@@ -405,7 +408,8 @@ describe("PostmortemLibraryPage", () => {
 
     // Translated contributing factors, actions, author, deployment stage
     expect(screen.getByText("• Incident severity: High")).toBeInTheDocument();
-    expect(screen.getByText("• Incident category: cluster-deg-01")).toBeInTheDocument();
+    expect(screen.getByText("• Incident category: Unclassified cluster")).toBeInTheDocument();
+    expect(screen.getByTestId("postmortem-factor-secondary")).toHaveTextContent("cluster-deg-01");
     expect(screen.getByText("• Complete root cause analysis")).toBeInTheDocument();
     expect(
       screen.getByText("• Validate remediation against linked telemetry and reconciliation evidence"),
@@ -423,19 +427,150 @@ describe("PostmortemLibraryPage", () => {
     expect(within(techDetails).getByText("incident_severity=high")).toBeInTheDocument();
     expect(within(techDetails).getByText("incident_cluster_id=cluster-deg-01")).toBeInTheDocument();
 
-    // Switch to zh-TW and verify full Chinese translations in detail sheet
+    // Switch to zh-TW and verify full Chinese translations in row & detail sheet
     await act(async () => {
       await i18n.changeLanguage("zh-TW");
     });
+    expect(screen.getAllByText("下游服務連線異常：訓練工作階段服務").length).toBeGreaterThan(0);
     expect(screen.getByTestId("postmortem-detail-root-cause")).toHaveTextContent("尚未分析根因。");
     expect(screen.getByText("• 事件嚴重度：高")).toBeInTheDocument();
-    expect(screen.getByText("• 事件分類：cluster-deg-01")).toBeInTheDocument();
+    expect(screen.getByText("• 事件分類：未分類事件群組")).toBeInTheDocument();
+    expect(screen.getByTestId("postmortem-factor-secondary")).toHaveTextContent("cluster-deg-01");
     expect(screen.getByText("• 完成根因分析")).toBeInTheDocument();
     expect(screen.getByText("• 對照關聯遙測與對帳證據驗證改善措施")).toBeInTheDocument();
     expect(screen.getByText("系統自動草稿")).toBeInTheDocument();
     expect(screen.getByText("模擬")).toBeInTheDocument();
     expect(screen.getByTestId("postmortem-no-review-flow-notice")).toHaveTextContent(
       "事後檢討草稿目前僅供檢視，尚未開放審核與發佈流程。",
+    );
+  });
+
+  it("FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125 AC3: renders recorded drift kinds (runtime_state, drawdown, fill_price, duplicate_execution, and enum-helper kinds) plain in zh-TW and en-US with binding id as secondary text, keeps raw text as secondary for unknown kinds, and translates contributing-factor drift:runtime_state", async () => {
+    const runtimeStateDraft = buildRealPostmortemRecord(1, {
+      postmortem_id: "pm-drift-runtime-001",
+      incident_id: "inc-drift-runtime-001",
+      binding_id: "rb-3823397e125e4579ba5f4174067087ed",
+      title: "Postmortem draft: Drift threshold breach: drift:runtime_state for rb-3823397e125e4579ba5f4174067087ed",
+      incident_cluster_id: "drift:runtime_state",
+      contributing_factors: [
+        "incident_severity=high",
+        "incident_cluster_id=drift:runtime_state",
+      ],
+    });
+    const drawdownDraft = buildRealPostmortemRecord(2, {
+      postmortem_id: "pm-drift-drawdown-002",
+      incident_id: "inc-drift-drawdown-002",
+      binding_id: "rb-drawdown-002",
+      title: "Postmortem draft: Drift threshold breach: drift:drawdown for rb-drawdown-002",
+      incident_cluster_id: "drift:drawdown",
+    });
+    const fillPriceDraft = buildRealPostmortemRecord(3, {
+      postmortem_id: "pm-drift-fillprice-003",
+      incident_id: "inc-drift-fillprice-003",
+      binding_id: "rb-fillprice-003",
+      title: "Postmortem draft: Drift threshold breach: drift:fill_price for rb-fillprice-003",
+      incident_cluster_id: "drift:fill_price",
+    });
+    const duplicateExecDraft = buildRealPostmortemRecord(4, {
+      postmortem_id: "pm-drift-dup-004",
+      incident_id: "inc-drift-dup-004",
+      binding_id: "rb-dup-004",
+      title: "Postmortem draft: Drift threshold breach: drift:duplicate_execution for rb-dup-004",
+      incident_cluster_id: "drift:duplicate_execution",
+    });
+    const enumHelperKindDraft = buildRealPostmortemRecord(5, {
+      postmortem_id: "pm-drift-enum-005",
+      incident_id: "inc-drift-enum-005",
+      binding_id: "rb-enum-005",
+      title: "Postmortem draft: Drift threshold breach: drift:stale_telemetry for rb-enum-005",
+      incident_cluster_id: "drift:stale_telemetry",
+    });
+    const unknownKindDraft = buildRealPostmortemRecord(6, {
+      postmortem_id: "pm-drift-unknown-006",
+      incident_id: "inc-drift-unknown-006",
+      binding_id: "rb-unknown-006",
+      title: "Postmortem draft: Drift threshold breach: drift:unmapped_custom_probe for rb-unknown-006",
+      incident_cluster_id: "drift:unmapped_custom_probe",
+      contributing_factors: [
+        "incident_severity=medium",
+        "incident_cluster_id=drift:unmapped_custom_probe",
+      ],
+    });
+
+    vi.spyOn(transport, "bffFetch").mockImplementation(async (req) => {
+      if (req.path === "/api/v1/postmortems/pm-drift-runtime-001") {
+        return { data: runtimeStateDraft, meta: { staleness: null } } as never;
+      }
+      if (req.path === "/api/v1/postmortems/pm-drift-unknown-006") {
+        return { data: unknownKindDraft, meta: { staleness: null } } as never;
+      }
+      return {
+        data: [
+          runtimeStateDraft,
+          drawdownDraft,
+          fillPriceDraft,
+          duplicateExecDraft,
+          enumHelperKindDraft,
+          unknownKindDraft,
+        ],
+        page_info: { total: 6, page_size: 50, next_page_token: null },
+        meta: {
+          total: 6,
+          hidden_infrastructure_count: 5355,
+          surfaces: { postmortems: { status: "ok", source: "service_client" } },
+        },
+      } as never;
+    });
+
+    renderLibrary();
+
+    // en-US plain titles for recorded kinds and generic title for unknown kind
+    expect(await screen.findByText("Drift threshold breach: Runtime state")).toBeInTheDocument();
+    expect(screen.getByText("Drift threshold breach: Drawdown")).toBeInTheDocument();
+    expect(screen.getByText("Drift threshold breach: Fill price")).toBeInTheDocument();
+    expect(screen.getByText("Drift threshold breach: Duplicate execution")).toBeInTheDocument();
+    expect(screen.getByText("Drift threshold breach: Telemetry data is stale")).toBeInTheDocument();
+    expect(screen.getByText("Drift threshold breach")).toBeInTheDocument();
+
+    // Binding IDs in secondary text; unknown kind keeps raw text in secondary
+    const secondaryContexts = screen.getAllByTestId("postmortem-secondary-context").map((el) => el.textContent);
+    expect(secondaryContexts).toEqual([
+      "rb-3823397e125e4579ba5f4174067087ed",
+      "rb-drawdown-002",
+      "rb-fillprice-003",
+      "rb-dup-004",
+      "rb-enum-005",
+      "drift:unmapped_custom_probe · rb-unknown-006",
+    ]);
+
+    // Open runtime_state detail and check contributing factor line in en-US
+    fireEvent.click(screen.getByText("Drift threshold breach: Runtime state"));
+    expect(
+      await screen.findByText("• Incident category: Paper vs live drift (Runtime state)"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("postmortem-detail-secondary-context")).toHaveTextContent(
+      "rb-3823397e125e4579ba5f4174067087ed",
+    );
+
+    // Switch to zh-TW and verify plain Chinese titles and contributing factor
+    await act(async () => {
+      await i18n.changeLanguage("zh-TW");
+    });
+    expect(screen.getAllByText("偏離門檻超限：執行環境狀態").length).toBeGreaterThan(0);
+    expect(screen.getByText("偏離門檻超限：回撤")).toBeInTheDocument();
+    expect(screen.getByText("偏離門檻超限：成交價格")).toBeInTheDocument();
+    expect(screen.getByText("偏離門檻超限：重複執行")).toBeInTheDocument();
+    expect(screen.getByText("偏離門檻超限：遙測資料已過時")).toBeInTheDocument();
+    expect(screen.getByText("偏離門檻超限")).toBeInTheDocument();
+    expect(
+      screen.getByText("• 事件分類：模擬與實盤偏離（執行環境狀態）"),
+    ).toBeInTheDocument();
+
+    // Open unknown kind detail and verify plain primary + raw secondary in zh-TW
+    fireEvent.click(screen.getByText("偏離門檻超限"));
+    expect(await screen.findByText("• 事件分類：模擬與實盤偏離")).toBeInTheDocument();
+    expect(screen.getByTestId("postmortem-factor-secondary")).toHaveTextContent(
+      "drift:unmapped_custom_probe",
     );
   });
 
@@ -480,8 +615,8 @@ describe("PostmortemLibraryPage", () => {
 
     const first = renderLibrary();
 
-    expect(await screen.findByText("Drift threshold breached on 0050.TW")).toBeInTheDocument();
-    expect(screen.queryByText("downstream degradation")).not.toBeInTheDocument();
+    expect(await screen.findByText("Drift threshold breach: 0050.TW")).toBeInTheDocument();
+    expect(screen.queryByText("Downstream service degradation")).not.toBeInTheDocument();
 
     const toggle = screen.getByTestId("postmortem-infra-toggle");
     expect(toggle).toHaveTextContent("Show system incidents (5355)");
@@ -489,7 +624,7 @@ describe("PostmortemLibraryPage", () => {
 
     // Toggle system incidents on
     fireEvent.click(toggle);
-    expect(await screen.findByText("downstream degradation")).toBeInTheDocument();
+    expect(await screen.findByText("Downstream service degradation")).toBeInTheDocument();
     expect(fetchSpy).toHaveBeenLastCalledWith({
       method: "GET",
       path: "/api/v1/postmortems",
