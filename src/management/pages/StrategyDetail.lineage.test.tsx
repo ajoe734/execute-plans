@@ -151,4 +151,46 @@ describe("StrategyDetail Lineage tab — registry truth (FE-LINEAGE-REGISTRY-GRA
     expect(screen.queryByTestId("lineage-node-alpha_src")).not.toBeInTheDocument();
     expect(screen.queryByTestId(`lineage-node-dp_${STRATEGY_ID}`)).not.toBeInTheDocument();
   });
+
+  it("shows unavailable (and never 'No lineage available.') when the lineage read is unavailable or rejects", async () => {
+    vi.spyOn(managementConsoleReads, "lineage").mockResolvedValueOnce({
+      nodes: [],
+      edges: [],
+      meta: {
+        status: "unavailable",
+        source: "service_client",
+        surfaces: { lineage: { status: "unavailable", source: "service_client" } },
+      },
+      page_info: { total: 0, page_size: 0, has_more: false },
+      has_more: false,
+    });
+
+    const first = render(
+      <MemoryRouter initialEntries={[`/management/strategies/${STRATEGY_ID}`]}>
+        <Routes>
+          <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    openLineageTab(await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i }));
+    expect(await screen.findByTestId("strategy-lineage-unavailable")).toHaveTextContent(/Lineage unavailable|血緣資料暫時無法取得/);
+    expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No lineage available/i)).not.toBeInTheDocument();
+    first.unmount();
+
+    vi.spyOn(managementConsoleReads, "lineage").mockRejectedValueOnce(new Error("lineage transport timeout"));
+    render(
+      <MemoryRouter initialEntries={[`/management/strategies/${STRATEGY_ID}`]}>
+        <Routes>
+          <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    openLineageTab(await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i }));
+    expect(await screen.findByTestId("strategy-lineage-unavailable")).toHaveTextContent(/Lineage unavailable|血緣資料暫時無法取得/);
+    expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No lineage available/i)).not.toBeInTheDocument();
+  });
 });
