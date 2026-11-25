@@ -194,11 +194,11 @@ describe("ResearchList (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () => {
       const row = await screen.findByTestId("research-demand-row");
       expect(row).toHaveTextContent("Momentum Persona A");
       expect(row).toHaveTextContent("缺少：足夠的獨立押注");
-      expect(row).toHaveTextContent("已嘗試：momentum");
+      expect(row).toHaveTextContent("已嘗試：動能");
       expect(row).toHaveTextContent("到期");
       expect(row).toHaveTextContent("已搜尋 2 次");
-      expect(screen.getByTestId("research-demand-outcome")).toHaveTextContent("角色任務沒有可交易標的範圍");
-      expect(within(row).getByRole("link", { name: "角色頁面" })).toHaveAttribute("href", "/management/personas/" + PERSONA_A);
+      expect(screen.getByTestId("research-demand-outcome")).toHaveTextContent("Persona 任務沒有可交易標的範圍");
+      expect(within(row).getByRole("link", { name: "Persona 頁面" })).toHaveAttribute("href", "/management/personas/" + PERSONA_A);
       expect(within(row).getByRole("link", { name: "搜尋任務" })).toHaveAttribute("href", "/management/experiments/rtask-tmpl-1");
       expect(screen.getByTestId("research-demands").compareDocumentPosition(screen.getByTestId("research-toggle-non-real-button")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
@@ -211,7 +211,7 @@ describe("ResearchList (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () => {
       expect(title).not.toHaveTextContent("rd-975bb");
       const outcome = screen.getByTestId("research-search-outcome");
       expect(outcome).toHaveTextContent("已搜尋 2 次");
-      expect(outcome).toHaveTextContent("角色任務沒有可交易標的範圍");
+      expect(outcome).toHaveTextContent("Persona 任務沒有可交易標的範圍");
       expect(screen.getByTestId("research-toggle-non-real-button")).toHaveTextContent("3");
     });
 

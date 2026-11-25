@@ -86,6 +86,8 @@ import {
   type EvolutionQualificationCriterionRow,
   type EvolutionQualificationDecisionItem,
   type EvolutionQualificationReport,
+  type EvolutionMemberBaseline,
+  type EvolutionMemberBaselinesSurface,
 } from "./dto";
 import { isRawEvidenceSummaryText } from "@/lib/enumLabels";
 
@@ -5851,6 +5853,10 @@ export type ManagementEvolutionJournalEvidenceClass =
   | "unclassified";
 
 export interface ManagementEvolutionJournalAutoProposalCounts {
+  /** BFF-EVO-JOURNAL-POOL-VERSIONS: threshold + incident_followup + incident_severity + other + infrastructure == total. */
+  threshold: number;
+  other: number;
+  infrastructure: number;
   incident_followup: number;
   incident_severity: number;
   postmortem_draft: number;
@@ -5875,6 +5881,13 @@ export interface ManagementEvolutionJournalSummary {
   rollbackCount: number;
   freeze_order_count: number;
   freezeOrderCount: number;
+  /** Pool version rows (each owner version of each paper_owner persona). */
+  pool_version_count: number | null;
+  refused_pool_version_count: number | null;
+  /** Hidden infrastructure/test entries (view=history without include_system). */
+  hidden_system_counts: Record<string, number> | null;
+  unclassified_decision_count: number | null;
+  decision_subject_class_counts: Record<string, number> | null;
   pending_review_count: number;
   pendingReviewCount: number;
   active_freeze_count: number;
@@ -5939,6 +5952,10 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
     const postmortemCount = asFiniteNumber(rawSummary.postmortem_count ?? rawSummary.postmortemCount, 0);
     const rollbackCount = asFiniteNumber(rawSummary.rollback_count ?? rawSummary.rollbackCount, 0);
     const freezeOrderCount = asFiniteNumber(rawSummary.freeze_order_count ?? rawSummary.freezeOrderCount, 0);
+    const optCount = (v: unknown): number | null =>
+      typeof v === "number" && Number.isFinite(v) ? v : null;
+    const optCounts = (v: unknown): Record<string, number> | null =>
+      isObject(v) ? asCountRecord(v) : null;
     const pendingReviewCount = asFiniteNumber(rawSummary.pending_review_count ?? rawSummary.pendingReviewCount, 0);
     const activeFreezeCount = asFiniteNumber(rawSummary.active_freeze_count ?? rawSummary.activeFreezeCount, 0);
     const completedRollbackCount = asFiniteNumber(rawSummary.completed_rollback_count ?? rawSummary.completedRollbackCount, 0);
@@ -5961,6 +5978,11 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
       rollbackCount,
       freeze_order_count: freezeOrderCount,
       freezeOrderCount,
+      pool_version_count: optCount(rawSummary.pool_version_count ?? rawSummary.poolVersionCount),
+      refused_pool_version_count: optCount(rawSummary.refused_pool_version_count ?? rawSummary.refusedPoolVersionCount),
+      hidden_system_counts: optCounts(rawSummary.hidden_system_counts ?? rawSummary.hiddenSystemCounts),
+      unclassified_decision_count: optCount(rawSummary.unclassified_decision_count ?? rawSummary.unclassifiedDecisionCount),
+      decision_subject_class_counts: optCounts(rawSummary.decision_subject_class_counts ?? rawSummary.decisionSubjectClassCounts),
       pending_review_count: pendingReviewCount,
       pendingReviewCount,
       active_freeze_count: activeFreezeCount,
@@ -5991,8 +6013,14 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
     const incidentFollowup = asFiniteNumber(rawCounts.incident_followup ?? rawCounts.incidentFollowup, 0);
     const incidentSeverity = asFiniteNumber(rawCounts.incident_severity ?? rawCounts.incidentSeverity, 0);
     const postmortemDraft = asFiniteNumber(rawCounts.postmortem_draft ?? rawCounts.postmortemDraft, 0);
-    const total = asFiniteNumber(rawCounts.total, incidentFollowup + incidentSeverity + postmortemDraft);
+    const threshold = asFiniteNumber(rawCounts.threshold, 0);
+    const other = asFiniteNumber(rawCounts.other, 0);
+    const infrastructure = asFiniteNumber(rawCounts.infrastructure, 0);
+    const total = asFiniteNumber(rawCounts.total, threshold + incidentFollowup + incidentSeverity + other + infrastructure);
     const counts: ManagementEvolutionJournalAutoProposalCounts = {
+      threshold,
+      other,
+      infrastructure,
       incident_followup: incidentFollowup,
       incident_severity: incidentSeverity,
       postmortem_draft: postmortemDraft,
@@ -6084,6 +6112,42 @@ function adaptEvolutionQualificationDecisionItem(raw: unknown): EvolutionQualifi
   };
 }
 
+function adaptMemberBaselines(raw: unknown): EvolutionMemberBaseline[] | null {
+  if (!Array.isArray(raw)) return null;
+  const rows: EvolutionMemberBaseline[] = [];
+  for (const item of raw) {
+    if (!isObject(item)) continue;
+    const artifactRef = asString(item.artifact_ref ?? item.artifactRef);
+    const personaId = asString(item.persona_id ?? item.personaId);
+    if (!artifactRef || !personaId) continue;
+    const rw = item.risk_weight ?? item.riskWeight;
+    const pv = item.pool_version ?? item.poolVersion;
+    rows.push({
+      persona_id: personaId,
+      persona_name: nullableString(item.persona_name ?? item.personaName),
+      artifact_ref: artifactRef,
+      stage: nullableString(item.stage),
+      risk_weight: typeof rw === "number" && Number.isFinite(rw) ? rw : null,
+      pool_version: typeof pv === "number" && Number.isFinite(pv) ? pv : null,
+      status: asString(item.status, "unavailable"),
+      reason: nullableString(item.reason),
+    });
+  }
+  return rows;
+}
+
+function adaptMemberBaselinesSurface(raw: unknown): EvolutionMemberBaselinesSurface | null {
+  if (!isObject(raw)) return null;
+  const n = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return {
+    status: asString(raw.status, "unknown"),
+    reason: nullableString(raw.reason),
+    approved: n(raw.approved),
+    not_approved: n(raw.not_approved ?? raw.notApproved),
+    unavailable: n(raw.unavailable),
+  };
+}
+
 export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualificationReport | null {
   const data = unwrap(raw);
   if (!isObject(data)) return null;
@@ -6103,6 +6167,7 @@ export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualif
     "evaluatedAt" in data ||
     "failure_reason" in data ||
     "failureReason" in data ||
+    "member_baselines" in data ||
     items.length > 0;
   if (!hasReportFields) return null;
   const rawCounts = isObject(data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion)
@@ -6132,6 +6197,8 @@ export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualif
     counts_by_first_failing_criterion: countsByFirstFailingCriterion,
     failure_reason: nullableString(data.failure_reason ?? data.failureReason),
     items,
+    member_baselines: adaptMemberBaselines(data.member_baselines ?? data.memberBaselines),
+    member_baselines_surface: adaptMemberBaselinesSurface(data.member_baselines_surface ?? data.memberBaselinesSurface),
     total: asFiniteNumber(data.total, evaluated),
     limit: asFiniteNumber(data.limit, 50),
     offset: asFiniteNumber(data.offset, 0),
@@ -7583,6 +7650,7 @@ export const mgmt = {
         persona?: string;
         mutationReview?: string;
         decision?: string;
+        includeSystem?: boolean;
         pageSize?: number;
         pageToken?: string | null;
       },

@@ -128,6 +128,18 @@ function normalizeRejection(raw: unknown): EvolutionProgramRejection | null {
   };
 }
 
+const CLASSIFICATION_KEYS = ["subject_class", "record_class", "classification", "data_scope", "origin_class", "is_test"] as const;
+
+function passthroughClassification(record: UnknownRecord): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of CLASSIFICATION_KEYS) {
+    if (record[key] !== undefined && record[key] !== null) out[key] = record[key];
+  }
+  const meta = asRecord(record.metadata);
+  if (meta) out.metadata = meta;
+  return out;
+}
+
 export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | undefined {
   const record = asRecord(raw);
   if (!record) return undefined;
@@ -221,6 +233,9 @@ export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | unde
     review,
     approval,
     rejection,
+    // Recorded classification fields are passed through untouched so the page can
+    // hide test records from what the owner/BFF recorded, never from the name.
+    ...passthroughClassification(record),
     ...(asRecord(record.discovery) ? { discovery: asRecord(record.discovery) } : {}),
     ...(allowedActions !== undefined
       ? {

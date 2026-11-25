@@ -246,12 +246,14 @@ export const paths = {
       persona?: string;
       mutationReview?: string;
       decision?: string;
+      includeSystem?: boolean;
       pageSize?: number;
       pageToken?: string | null;
     } = {},
   ) => {
     const params = new URLSearchParams();
     if (filters.view) params.set("view", filters.view);
+    if (filters.includeSystem) params.set("include_system", "true");
     if (filters.persona) params.set("persona", filters.persona);
     if (filters.mutationReview) params.set("mutation_review", filters.mutationReview);
     if (filters.decision) params.set("decision", filters.decision);
