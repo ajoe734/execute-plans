@@ -7,6 +7,7 @@ import {
   AlertsPage,
   IncidentsPage,
   ApprovalsPage,
+  AuditPage,
   loadCachedListItems,
   updateCachedListItems,
   useCachedOperationList,
@@ -14,6 +15,8 @@ import {
 } from "./Operations";
 import { BffError } from "@/lib/bff-v1/errors";
 import { normalizeApprovalFields, normalizeJobFields } from "@/lib/bff-v1/operations";
+import { normalizeBaseObjectFields } from "@/lib/bff-v1/domainReads";
+import { safeDateTime } from "@/lib/utils";
 import { GovernanceReview } from "./GovernanceReview";
 import { GovernanceQueuePage } from "./phase2/GovernanceQueue";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
@@ -2025,5 +2028,190 @@ describe("Jobs and incidents degraded notice and unavailable state (FE-OPS-LIST-
       "rolling_drawdown_multiple drift occurrence: observed 9.6093 > threshold 1.25 (+8.3593 past threshold)",
     );
     expect(screen.getByTestId("incident-timeline-entry-1")).toHaveTextContent("alert-drift-002");
+  });
+});
+
+describe("AuditPage timestamp normalization and fallback rendering (FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125)", () => {
+  beforeEach(() => {
+    __resetOperationListCacheForTests();
+    clearAuthProvider();
+    vi.clearAllMocks();
+    m.translate = null;
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetOperationListCacheForTests();
+    clearAuthProvider();
+    m.translate = null;
+    (lists.audit as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+  });
+
+  it("normalizes occurred_at, created_at, timestamp, missing timestamp, unparseable timestamp, and conflicting timestamp rows on /management/audit and never renders Invalid Date", async () => {
+    const occurredAtIso = "2026-11-25T07:10:00Z";
+    const createdAtIso = "2026-11-25T07:20:00Z";
+    const timestampIso = "2026-11-25T07:30:00Z";
+
+    const rawAuditRows = [
+      {
+        entry_id: "aud-occurred-at",
+        actor: "actor-occurred",
+        action_type: "strategy.promoted",
+        target_id: "strat-occurred",
+        occurred_at: occurredAtIso,
+      },
+      {
+        entry_id: "aud-created-at",
+        actor: "actor-created",
+        action_type: "route_policy_published",
+        target_id: "strat-created",
+        created_at: createdAtIso,
+      },
+      {
+        entry_id: "aud-timestamp",
+        actor: "actor-timestamp",
+        action_type: "approval.decided",
+        target_id: "apv-timestamp",
+        timestamp: timestampIso,
+      },
+      {
+        entry_id: "aud-missing-ts",
+        actor: "actor-missing",
+        action_type: "audit.missing_time",
+        target_id: "target-missing",
+      },
+      {
+        entry_id: "aud-unparseable-ts",
+        actor: "actor-unparseable",
+        action_type: "audit.unparseable_time",
+        target_id: "target-unparseable",
+        occurred_at: "not-a-valid-date",
+      },
+      {
+        entry_id: "aud-conflicting-ts",
+        actor: "actor-conflicting",
+        action_type: "audit.conflicting_time",
+        target_id: "target-conflicting",
+        occurred_at: "2026-11-25T07:00:00Z",
+        created_at: "2026-11-25T07:05:00Z",
+      },
+    ];
+
+    const auditMock = lists.audit as unknown as ReturnType<typeof vi.fn>;
+    auditMock.mockResolvedValue({
+      items: rawAuditRows.map((r) => normalizeBaseObjectFields(r)),
+    });
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/management/audit"]}>
+        <AuditPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("strat-occurred")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("strategy.promoted")).toBeInTheDocument();
+    expect(within(table).getByText("route_policy_published")).toBeInTheDocument();
+    expect(within(table).getByText("approval.decided")).toBeInTheDocument();
+    expect(within(table).getByText("audit.missing_time")).toBeInTheDocument();
+    expect(within(table).getByText("audit.unparseable_time")).toBeInTheDocument();
+    expect(within(table).getByText("audit.conflicting_time")).toBeInTheDocument();
+
+    expect(within(table).getByText(safeDateTime(occurredAtIso))).toBeInTheDocument();
+    expect(within(table).getByText(safeDateTime(createdAtIso))).toBeInTheDocument();
+    expect(within(table).getByText(safeDateTime(timestampIso))).toBeInTheDocument();
+
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(6);
+    expect(rows[0]).toHaveTextContent(safeDateTime(occurredAtIso));
+    expect(rows[1]).toHaveTextContent(safeDateTime(createdAtIso));
+    expect(rows[2]).toHaveTextContent(safeDateTime(timestampIso));
+    expect(within(rows[3]).getByText("—")).toBeInTheDocument();
+    expect(within(rows[4]).getByText("—")).toBeInTheDocument();
+    expect(within(rows[5]).getByText("—")).toBeInTheDocument();
+
+    expect(container.textContent).not.toContain("Invalid Date");
+  });
+
+  it("normalizes realtime audit prepends and target-filtered AuditTimeline entries across occurred_at, created_at, timestamp, missing, and conflicting timestamps without rendering Invalid Date", async () => {
+    const initialIso = "2026-11-25T08:00:00Z";
+    const liveOccurredIso = "2026-11-25T08:05:00Z";
+    const liveCreatedIso = "2026-11-25T08:10:00Z";
+
+    const auditMock = lists.audit as unknown as ReturnType<typeof vi.fn>;
+    auditMock.mockResolvedValue({
+      items: [
+        normalizeBaseObjectFields({
+          entry_id: "aud-target-init",
+          actor: "op-init",
+          action_type: "target.initial",
+          target_id: "strat-target-1",
+          occurred_at: initialIso,
+        }),
+      ],
+    });
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/management/audit?target=strat-target-1"]}>
+        <AuditPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(safeDateTime(initialIso))).toBeInTheDocument();
+    const listElements = screen.getAllByRole("list");
+    const timelineList = listElements[listElements.length - 1];
+    expect(within(timelineList).getByText("target.initial")).toBeInTheDocument();
+
+    await waitFor(() => {
+      const auditCall = (mockRealtime.on.mock.calls as unknown as Array<[string, (p: unknown) => void]>).find(
+        ([event]) => event === "audit",
+      );
+      expect(auditCall).toBeDefined();
+    });
+
+    const auditHandler = (mockRealtime.on.mock.calls as unknown as Array<[string, (p: unknown) => void]>).find(
+      ([event]) => event === "audit",
+    )![1];
+
+    act(() => {
+      auditHandler({
+        entry_id: "aud-live-occurred",
+        actor: "op-live-1",
+        action_type: "target.live_occurred",
+        target_id: "strat-target-1",
+        occurred_at: liveOccurredIso,
+      });
+      auditHandler({
+        entry_id: "aud-live-created",
+        actor: "op-live-2",
+        action_type: "target.live_created",
+        target_id: "strat-target-1",
+        created_at: liveCreatedIso,
+      });
+      auditHandler({
+        entry_id: "aud-live-missing",
+        actor: "op-live-3",
+        action_type: "target.live_missing",
+        target_id: "strat-target-1",
+      });
+      auditHandler({
+        entry_id: "aud-live-conflict",
+        actor: "op-live-4",
+        action_type: "target.live_conflict",
+        target_id: "strat-target-1",
+        timestamp: "2026-11-25T08:11:00Z",
+        occurred_at: "2026-11-25T08:12:00Z",
+      });
+    });
+
+    expect(await within(timelineList).findByText("target.live_occurred")).toBeInTheDocument();
+    expect(within(timelineList).getByText("target.live_created")).toBeInTheDocument();
+    expect(within(timelineList).getByText("target.live_missing")).toBeInTheDocument();
+    expect(within(timelineList).getByText("target.live_conflict")).toBeInTheDocument();
+
+    expect(within(timelineList).getByText(safeDateTime(liveOccurredIso))).toBeInTheDocument();
+    expect(within(timelineList).getByText(safeDateTime(liveCreatedIso))).toBeInTheDocument();
+    expect(within(timelineList).getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(container.textContent).not.toContain("Invalid Date");
   });
 });
