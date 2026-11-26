@@ -720,4 +720,100 @@ describe("LineageExplorerPage — registry lineage graph (FE-LINEAGE-REGISTRY-GR
       ]);
     });
   });
+
+  it("FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC4: pressing Enter on a name before the candidate list finishes loading shows a visible loading line, never sends non-ID text as root_id while loading, and resolves the name once the list arrives", async () => {
+    const lineageRequests: string[] = [];
+    let resolveStrategies!: (res: Response) => void;
+    const strategiesPromise = new Promise<Response>((resolve) => {
+      resolveStrategies = resolve;
+    });
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/bff/strategies")) {
+        return strategiesPromise;
+      }
+      if (url.startsWith("/bff/personas")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  id: LIVE_PERSONA_ID,
+                  persona_id: LIVE_PERSONA_ID,
+                  name: "衡岳",
+                  display_name: "衡岳",
+                  state: "paper_running",
+                  listScope: "current",
+                },
+              ],
+              page_info: { next_page_token: null, total: 1, page_size: 1 },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url.startsWith("/bff/lineage")) {
+        lineageRequests.push(url);
+        return Promise.resolve(
+          new Response(JSON.stringify(buildRealBffLineageEnvelope()), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [], items: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderLineageExplorer("/management/lineage");
+
+    // Visible loading line while GET /bff/strategies?exclude_state=draft&hide_retired_personas=true&page_size=200 is in flight
+    const loadingLine = screen.getByTestId("lineage-candidates-loading");
+    expect(loadingLine).toBeInTheDocument();
+    expect(loadingLine.textContent?.trim().length).toBeGreaterThan(0);
+
+    const rootInput = screen.getByTestId("lineage-root-input");
+    fireEvent.change(rootInput, { target: { value: "衡岳" } });
+    fireEvent.keyDown(rootInput, { key: "Enter", code: "Enter" });
+
+    // Non-ID text is never sent as root_id while names load; empty state is not shown
+    expect(lineageRequests).toEqual([]);
+    expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
+    expect(screen.getByTestId("lineage-candidates-loading")).toBeInTheDocument();
+
+    // Now the slow /bff/strategies response arrives
+    resolveStrategies(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: LIVE_STRATEGY_ID,
+              strategy_id: LIVE_STRATEGY_ID,
+              name: LIVE_STRATEGY_TITLE,
+              title: LIVE_STRATEGY_TITLE,
+              state: "approved",
+              operationalStatus: "running",
+              personaIds: [LIVE_PERSONA_ID],
+              persona_display_names: { [LIVE_PERSONA_ID]: "衡岳" },
+            },
+          ],
+          page_info: { next_page_token: null, total: 1, page_size: 1 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("lineage-candidates-loading")).not.toBeInTheDocument();
+      expect(lineageRequests).toEqual([`/bff/lineage?root_id=${LIVE_PERSONA_ID}`]);
+    });
+    expect(screen.getByTestId("lineage-selected-name")).toHaveTextContent("衡岳");
+    expect(screen.getByTestId("lineage-selected-id")).toHaveTextContent(LIVE_PERSONA_ID);
+  });
 });

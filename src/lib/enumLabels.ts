@@ -1676,6 +1676,7 @@ const KNOWN_METRICS_REASONS = new Set([
   "runtime_bindings_unavailable",
   "runtime_truth_unavailable",
   "scope_unavailable",
+  "source_unavailable",
 ]);
 
 /** Plain words for a recorded `metricsReason` such as `no_fills`. */
@@ -1689,7 +1690,7 @@ export function strategyMetricsReasonText(
   if (KNOWN_METRICS_REASONS.has(lower)) {
     return { text: t(`strategy.metricsReason.${lower}`), code };
   }
-  return { text: t("strategy.metricsReason.other"), code };
+  return { text: code, code };
 }
 
 export const REGISTRY_LIST_SCOPES = ["current", "test", "retired", "research", "unbound", "unknown"] as const;
