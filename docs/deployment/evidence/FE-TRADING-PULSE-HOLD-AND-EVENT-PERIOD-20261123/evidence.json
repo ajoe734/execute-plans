@@ -1,0 +1,154 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADING-PULSE-HOLD-AND-EVENT-PERIOD-20261123",
+  "title": "在既有交易脈動區分最新持有決策與區間成交",
+  "owner": "Codex2",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADING-PULSE-HOLD-AND-EVENT-PERIOD-20261123",
+  "base_commit": "ac7555ee0f4d2672c0325b00d4a08903e42baa61",
+  "anchor_commit": "1ec88a918",
+  "repair_anchor_commit": "bb278efbe",
+  "previous_review_head": "b756458afdb6f9f4e5852ba0c853dcfd4a87057a",
+  "review_repairs": {
+    "pre_broker_rejection": "An available outcome with submitted_to_broker=false needs an explicit rejection kind/focus stage, one of the ten enumerated cash/position/kill-switch/risk refusal reasons, or required>available. Missing/null/blank/reason_not_recorded and arbitrary non-rejection reasons cannot establish a refusal. A non-rejection kind, a known hold/partial-fill/reconciliation/variance/deferred/expression reason or positive filled quantity vetoes a pre-broker refusal even when other fields conflict. Unknown event fills remain unknown in both event cards and Persona details; recorded positive fills remain authoritative. The wire-shaped fixtures omit kind, use requested_quantity=10 and filled_quantity=null, and cover partially_filled and reconciliation_evidence_incomplete in both languages. All ten refusal reasons, unknown future reasons, contradictory non-rejection kinds and 4/10 (40%) and 12/10 (120%) recorded fills are covered without borrowing period telemetry.",
+    "fill_rate_period": "Use a complete fill-details window first, recognizing endExclusiveAt/end_exclusive_at, endAt/end_at and asOf/as_of. If that object has no complete range, try a complete metricPeriods.fill_rate range. Never combine bounds from different sources or borrow latest decision dates. Bilingual tests cover all six ending aliases, source precedence, fallback from asOf=null and complementary incomplete sources."
+  },
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-TRADING-PULSE-HOLD-AND-EVENT-PERIOD-20261123/evidence.json"
+  ],
+  "acceptance_verification": {
+    "latest_holds": {
+      "local_passed": true,
+      "summary": "Three named paper Personas with available latest hold_signal/no_trade outcomes, generated requested_quantity=1, null broker submission/side/order identities and null fills are omitted from notable events. Persona rows reuse tradeJourneys.reasons.hold_signal, preserve latest decision timestamps and scoped latest/history links, and do not present the generated quantity as an order or fill. Explicit submitted=false holds are also normal; contradictory submission, order identities, side, positive fill, cash shortfall, non-no_trade kind and unavailable outcome evidence remain traceable."
+    },
+    "event_and_period_quantities": {
+      "local_passed": true,
+      "summary": "Event display and full-fill classification use only latestOutcome requested/filled quantities. An explicit available pre-broker rejection may establish zero fills for that intent. Period telemetry never supplies an event quantity, rate or full-fill proof. A non-normal explicit outcome kind (e.g. no_trade or variance) cannot be classified as an ordinary full fill even when its quantities are equal. Partial/overfills use their own 4/10 (40%) and 12/10 (120%) quantities even while period telemetry is 1/1. Available executions lacking per-event fill evidence stay visible with an unconfirmed-event-fill message. Existing ledger fill counts, period 1/1 and 0/452 ratios, P&L, source-failure/staleness/unknown semantics, rankings and diagnostics remain available. The count header identifies ledger fills, while rate/P&L headers and the ratio basis identify period statistics; rate dates come only from its own window/metric period, otherwise the period is unverified."
+    },
+    "historical_navigation": {
+      "local_passed": true,
+      "summary": "The existing actual TradeJourneysPage and TradeJourneyDetailPage are exercised with API fixtures, not route stubs, in zh-TW/en-US at window width 390px. The Persona history link sends tenant-dev/paper/persona-6507750312870d03a241 to listTradeJourneys, opens original tj_79726064-4cc2-5510-8e11-7f5e59ff89bd, displays its 452-share insufficient_cash pre-broker refusal, and returns to Trading Pulse with current holds still normal. Existing PersonaDetail mobile/desktop origin return regression remains green."
+    }
+  },
+  "fixture_provenance": {
+    "original": "Existing TRADING_PULSE_HOSTED_WIRE_SAMPLE and existing readableJourneys rejection/producer-evidence fixtures are reused without modifying those fixture files.",
+    "new": "latestHoldOverview reproduces the latest projection shape and 2026-11-22T23:34:51-52Z decision timestamps described by the governed task packet. Its three latest journey IDs are explicitly synthetic test IDs. It preserves the original older telemetry rather than inventing new trades.",
+    "expectation_changes": "Original fixtures omit per-event filled_quantity for available latest executions. Tests now assert those executions remain traceable instead of inferring normal full fills from period 1/1; independently known event full fills are covered separately. Period-only labels and headers are updated in existing assertions."
+  },
+  "previous_head_verification_commands": [
+    {
+      "command": "timeout 240 npx vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/components/detail/OwnerFacts.test.tsx src/management/pages/PersonaDetail.test.ts src/management/pages/trade-journeys/TradeJourneysPage.readable.test.tsx src/management/pages/trade-journeys/TradeJourneysPage.recorded.test.tsx --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 9,
+      "passed_tests": 194
+    },
+    {
+      "command": "timeout 180 npx vitest run src/management/pages/oversight/TradingPulsePage.test.tsx --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 1,
+      "passed_tests": 15,
+      "note": "Final focused rerun includes non-available submission, partial-fill uncertainty and contradictory outcome-kind cases after the broader suite."
+    },
+    {
+      "command": "timeout 180 npx vitest run src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 2,
+      "passed_tests": 32,
+      "note": "Final refinement: non-normal explicit outcome kinds cannot be ordinary full fills; the count header names ledger fills without inventing their period."
+    },
+    {
+      "command": "timeout 60 node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed_tests": 77,
+      "note": "Acceptance-tool contract tests only; this is not a hosted browser acceptance run."
+    },
+    {
+      "command": "timeout 240 npm run typecheck && timeout 240 npm run typecheck:agora",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 240 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "note": "Build successful; Vite reports existing large chunk advisories. Generated dist is excluded from commits."
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 180 npx vitest run src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 2,
+      "passed_tests": 34,
+      "note": "Includes both bilingual review-repair regressions and existing hold/event/history coverage. Existing React act warnings are emitted."
+    },
+    {
+      "command": "timeout 240 npx vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/management/components/detail/OwnerFacts.test.tsx src/management/pages/PersonaDetail.test.ts src/management/pages/trade-journeys/TradeJourneysPage.readable.test.tsx src/management/pages/trade-journeys/TradeJourneysPage.recorded.test.tsx --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 7,
+      "passed_tests": 162
+    },
+    {
+      "command": "timeout 240 npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 240 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "note": "Built in 1m22s with existing chunk-size advisories; generated dist is excluded."
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "verification_commands": [
+    {
+      "command": "timeout 180 npx vitest run src/management/pages/oversight/TradingPulsePage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts --maxWorkers=2",
+      "exit_code": 0,
+      "passed_files": 2,
+      "passed_tests": 36,
+      "note": "19 TradingPulsePage tests plus 17 parity tests. Includes both bilingual wire-shape regressions, all refusal codes, non-rejection reasons/kinds, recorded positive fills, historical 2317 refusal and 390px return. Existing React act warnings remain."
+    },
+    {
+      "command": "timeout 240 npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 240 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "note": "Built in 57.71s with existing chunk-size advisories; generated dist is excluded."
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "review_protocol": {
+    "required": "Exact PR head, PR-context Component merge gate green, independent Antigravity review, then supervisor integration MERGE to execute-plans/dev.",
+    "manifest_binding": "This committed manifest is bound by REVIEW_PR/REVIEW_HEAD_SHA/REVIEW_FILE on governed owner handoff. It does not assert its own independent approval."
+  },
+  "hosted_behavior_claimed": false,
+  "handoff_to_e": {
+    "downstream_task_id": "TRADING-PULSE-HOSTED-ACCEPTANCE-20261122",
+    "delivery_state": "source_ready_for_independent_review_and_dev_merge",
+    "required_follow_up": "Same E verifies actual latest three holds and scoped original 2317 rejection from the deployed FE/BFF pair, including 390px return navigation. No hosted deployment, actual journey fetch or paired release acceptance is claimed here."
+  },
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "routine_daily_growth_bytes": 0,
+    "notes": "Existing frontend sections only; no new component family, API, trading rules, BFF writes, deployment or acceptance tooling."
+  },
+  "classifier_repair_anchor_commit": "5aa312a88b29a07775ca20f56360b3c9c8f8cc28",
+  "regression_demonstration": {
+    "before_repair": "After installing lockfile dependencies, the two focused classifier tests failed against the previous production classifier: a non-rejection reason inferred a refusal/zero fill, and positive event fills retained a refusal badge.",
+    "test_harness_adjustments": "Split the expanded reason matrix by language with a bounded 15-second case budget (matching npm test); assert recorded fill text on event cards and refusal/unknown semantics on both cards and Persona outcomes, consistent with their existing presentation."
+  }
+}

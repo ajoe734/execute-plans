@@ -58,7 +58,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
     if (pages.has(page)) return pages.get(page);
     const ready = (async () => {
       const session = await context.newCDPSession(page);
-      const documentNavigations = new Map(), network = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set(), parents = new Map(), detaching = new Set();
+      const documentNavigations = new Map(), network = new Map(), requestMeta = new Map(), loaders = new Map(), navigating = new Map(), interceptions = new Set(), parents = new Map(), detaching = new Set();
       // Arm before draining: renderer requests can arrive after an empty drain.
       // Keep new subrequests paused until the replacement document commits (or
       // browser closure completes). The top-level Document must still proceed.
@@ -107,13 +107,41 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       });
       const underDetach = (frameId) => { for (let id = frameId, hops = 0; id && hops < 64; id = parents.get(id), hops++) if (detaching.has(id)) return true; return false; };
       session.on("Network.requestWillBeSent", (event) => {
-        const bound = { frameId: event.frameId, url: event.request?.url, loaderId: event.loaderId, documentNavigations: documentNavigations.get(event.frameId) || 0, frameNavs: frameNavs.get(event.frameId) || 0, method: event.request?.method, type: event.type };
+        const method = event.request?.method;
+        const preflight = event.type === "Preflight" || event.initiator?.type === "preflight" ||
+          (String(method || "").toUpperCase() === "OPTIONS" && (!event.frameId || !event.loaderId));
+        if (event.frameId && event.loaderId && event.type !== "Document" && !loaders.has(event.frameId)) {
+          loaders.set(event.frameId, event.loaderId);
+        }
+        const parent = preflight && event.initiator?.requestId
+          ? (network.get(event.initiator.requestId) || requestMeta.get(event.initiator.requestId))
+          : undefined;
+        const frameId = event.frameId || (preflight ? (parent?.frameId || mainFrameId) : undefined);
+        const loaderId = event.loaderId || (preflight ? (parent?.loaderId || (frameId ? loaders.get(frameId) : undefined)) : undefined);
+        const bound = {
+          frameId, url: event.request?.url, loaderId,
+          documentNavigations: parent ? parent.documentNavigations : (documentNavigations.get(frameId) || 0),
+          frameNavs: parent ? parent.frameNavs : (frameNavs.get(frameId) || 0),
+          method, type: event.type, preflight, parent,
+          initiatorRequestId: preflight ? (event.initiator?.requestId || null) : null,
+        };
         const early = network.get(event.requestId);
         // Chromium may deliver Fetch.requestPaused before Network.requestWillBeSent
         // for the same network id. Bind the later event to the already-paused
         // interception (same object) instead of replacing it, so its lifecycle
         // proof is not lost. A redirect hop (already bound) still starts fresh.
-        if (early?.unbound) { Object.assign(early, bound); delete early.unbound; } else network.set(event.requestId, bound);
+        const recordEntry = early?.unbound ? (Object.assign(early, bound), delete early.unbound, early) : (network.set(event.requestId, bound), bound);
+        requestMeta.set(event.requestId, recordEntry);
+        for (const pendingReq of network.values()) {
+          if (pendingReq.preflight && pendingReq.initiatorRequestId === event.requestId && !pendingReq.parent) {
+            pendingReq.parent = recordEntry;
+            if (pendingReq.continued) recordEntry.preflightContinued = true;
+            pendingReq.frameId = pendingReq.frameId || recordEntry.frameId;
+            pendingReq.loaderId = pendingReq.loaderId || recordEntry.loaderId;
+            pendingReq.documentNavigations = recordEntry.documentNavigations;
+            pendingReq.frameNavs = recordEntry.frameNavs;
+          }
+        }
         if (event.type === "Document") navigating.set(event.frameId, [...(navigating.get(event.frameId) || []), { loaderId: event.loaderId, at: event.timestamp }]);
       });
       session.on("Network.loadingFinished", ({ requestId }) => network.delete(requestId));
@@ -124,18 +152,25 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // its frame's document: it stops being "in flight" at its own failure time.
         if (request?.type === "Document") for (const nav of navigating.get(request.frameId) || []) if (nav.loaderId === request.loaderId) nav.failedAt = timestamp;
         if (request) {
+          if (request.preflight && !request.parent && request.initiatorRequestId) {
+            request.parent = network.get(request.initiatorRequestId) || requestMeta.get(request.initiatorRequestId);
+          }
+          if (request.preflight && request.parent) {
+            if (!request.frameId && request.parent.frameId) request.frameId = request.parent.frameId;
+            if (!request.loaderId && request.parent.loaderId) request.loaderId = request.parent.loaderId;
+          }
           request.failed = true;
           request.canceled = canceled === true;
           request.canceledAt = timestamp;
           // Arrival order: a same-document navigation observed before the cancel.
-          request.sameDocument = (documentNavigations.get(request.frameId) || 0) > request.documentNavigations;
+          request.sameDocument = Boolean(request.parent?.sameDocument) || (documentNavigations.get(request.frameId) || 0) > request.documentNavigations;
           // Causal, not arrival-order: only a navigation Chromium had already started
           // by the cancellation's own timestamp was replacing this document.
-          request.navigationLoader = (navigating.get(request.frameId) || []).filter((nav) => nav.at <= timestamp && !(nav.failedAt < timestamp)).pop()?.loaderId;
+          request.navigationLoader = (navigating.get(request.frameId) || []).filter((nav) => nav.at <= timestamp && !(nav.failedAt < timestamp)).pop()?.loaderId || request.parent?.navigationLoader;
           // Causal, not arrival-order: Chromium announces the teardown
           // (frameSubtreeWillBeDetached) before it cancels the frame's requests.
           // A cancellation delivered before that announcement was live and stays one.
-          request.detached = underDetach(request.frameId);
+          request.detached = Boolean(request.parent?.detached) || underDetach(request.frameId);
           // Judge a BFF abort here, on THIS request's own record: the detach fact was
           // captured at the failure instant for this exact network id, so another
           // frame's teardown can never excuse it (and it can't excuse another's).
@@ -146,7 +181,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
             // A trailing frameNavigated excuses only a navigation already in flight at failure time.
             const replacing = request.navigationLoader && request.navigationLoader !== request.loaderId;
             const label = `${request.method || "GET"} ${new URL(url).pathname}`;
-            nativeAborted.set(url, (nativeAborted.get(url) || 0) + 1);
+            if (!request.preflight) nativeAborted.set(url, (nativeAborted.get(url) || 0) + 1);
             // The brief delay only lets same-document/detach facts land; the replacing commit is awaited causally.
             // A failed continuation never sent this paused request. Judge an
             // abort only after the browser accepted its continuation; the reply
@@ -156,7 +191,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
               const entry = { ok: () => committed(request), fail: () => record("net::ERR_ABORTED", page, label) };
               if (replacing) awaiting.add(entry); else entry.fail();
             }));
-            if (request.continued) judge(); else request.judgeFailure = judge;
+            if (request.continued || request.preflightContinued) judge(); else request.judgeFailure = judge;
           }
         }
         network.delete(requestId);
@@ -184,6 +219,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         // request that already failed while live cannot be excused by teardown.
         for (const request of interceptions) if (!request.failed) request.closed = true;
         network.clear();
+        requestMeta.clear();
       });
       const generations = new WeakMap(), requests = new WeakMap();
       page.on("framenavigated", (frame) => generations.set(frame, (generations.get(frame) || 0) + 1));
@@ -236,6 +272,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
           navigationLoader: request?.navigationLoader ?? null,
         })}`;
         const pinned = originOf(url) === bffOrigin;
+        const preflight = String(event.request?.method || "").toUpperCase() === "OPTIONS";
         // Fetch is enabled only at Request stage. Response pauses are never
         // eligible if a caller/session changes that configuration.
         const requestStage = event.responseStatusCode === undefined && event.responseErrorReason === undefined;
@@ -246,7 +283,7 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
         });
         const clean = Object.entries(headers).filter(([name, value]) =>
           !(["authorization", "x-tenant-id"].includes(name.toLowerCase()) && (pinned || value === bearer || name.toLowerCase() === "x-tenant-id")));
-        if (pinned) {
+        if (pinned && !preflight) {
           clean.push(["authorization", bearer]);
           if (tenantId) clean.push(["x-tenant-id", tenantId]);
         }
@@ -278,7 +315,15 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
             return session.send("Fetch.continueRequest", { requestId: event.requestId,
             headers: clean.map(([name, value]) => ({ name, value: String(value) }))
           }).then(() => {
-            if (request) { request.continued = true; request.judgeFailure?.(); }
+            if (request) {
+              request.continued = true;
+              request.judgeFailure?.();
+              const parentReq = request.parent || (request.initiatorRequestId ? (network.get(request.initiatorRequestId) || requestMeta.get(request.initiatorRequestId)) : undefined);
+              if (parentReq) {
+                parentReq.preflightContinued = true;
+                parentReq.judgeFailure?.();
+              }
+            }
           }).catch(async (error) => {
             rejectionPhase = phase;
             // Operator decision 2026-11-13: a Request-stage pause holds the
@@ -304,7 +349,14 @@ export async function installPinnedBffBearer(context, { token, feBase, bffBase, 
       await session.send("Network.enable");
       await session.send("Page.enable");
       await session.send("Performance.enable");
-      mainFrameId = (await session.send("Page.getFrameTree"))?.frameTree?.frame?.id;
+      const initialTree = (await session.send("Page.getFrameTree"))?.frameTree;
+      mainFrameId = initialTree?.frame?.id;
+      const seedLoaders = (node) => {
+        if (!node?.frame) return;
+        if (node.frame.id && node.frame.loaderId && !loaders.has(node.frame.id)) loaders.set(node.frame.id, node.frame.loaderId);
+        node.childFrames?.forEach(seedLoaders);
+      };
+      seedLoaders(initialTree);
       // Only BFF requests need header overrides. Intercepting FE assets and
       // unrelated origins creates continuation commands that can race their
       // independent cancellation. CDP overrides apply to this hop only; the

@@ -1,0 +1,124 @@
+{
+  "task_id": "FE-PERSONA-RISK-PROFILE-CHANGE-20261123",
+  "owner": "Codex",
+  "assigned_independent_reviewer": "Codex2",
+  "problem_register_class": "RC2 WP2.1 / RC6 operator touchpoint",
+  "backend_counterpart": "PAPER-PERSONA-RISK-PROFILE-CHANGE-20261123",
+  "evidence_kind": "local_validation_not_hosted_acceptance",
+  "joint_contract": {
+    "route": "GET /bff/personas/{id}, PATCH /bff/personas/{id}",
+    "read_field": "data.riskPolicyChange",
+    "read_properties": [
+      "requestedRisk",
+      "effectiveRisk",
+      "status",
+      "policyVersion",
+      "approvalId"
+    ],
+    "statuses": [
+      "effective",
+      "pending_approval",
+      "unavailable",
+      "failed"
+    ],
+    "patch_body": {
+      "risk": "low | medium | high"
+    },
+    "patch_headers": [
+      "Authorization / session credentials",
+      "Idempotency-Key"
+    ],
+    "authoritative_source": "GET /bff/personas/{id} refetch after PATCH",
+    "legacy_or_unsupported_guard": "When data.riskPolicyChange is absent or status is unavailable/unsupported, or persona is non-paper/live/retired/research_only, the Edit button remains a disabled NonProductionActionButton and no display-only PATCH is exposed."
+  },
+  "local_validation": [
+    {
+      "command": "timeout 100 npm test -- src/management/pages/PersonaDetail.test.ts src/lib/bff-v1/personas.test.ts src/lib/bff-v1/personasRiskWrite.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "result": "4 files and 82 tests passed: 52 PersonaDetail, 8 personas contract, 5 real live write-gate/transport, 17 i18n parity. Includes 13 save lifetime/navigation regressions plus the prior pending-hint, write-gate and contract cases.",
+      "tested_source_commit": "e7db4ebf39a5c8762b8daa0f5c53f78bd4550da0"
+    },
+    {
+      "command": "timeout 240 npm run typecheck",
+      "exit_code": 0,
+      "result": "TYPECHECK_OK (zero TypeScript errors)",
+      "tested_source_commit": "e7db4ebf39a5c8762b8daa0f5c53f78bd4550da0"
+    },
+    {
+      "command": "timeout 120 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "tested_source_commit": "e7db4ebf39a5c8762b8daa0f5c53f78bd4550da0",
+      "exit_code": 0,
+      "result": "BUILD_OK (strict live dev production bundle compiled cleanly)"
+    }
+  ],
+  "covered_operator_workflows": [
+    "Save and authoritative GET refetch on actual PATCH /bff/personas/{id} + GET /bff/personas/{id} request path with Idempotency-Key when policy is effective",
+    "Pending approval vs effectiveRisk display on save and reload without claiming unapproved requestedRisk is effective",
+    "Visible pending hint in zh-TW/en-US with effectiveRisk=low/null explains increases/new exposure are held while tiers differ or approval is pending, genuine reductions/closures may proceed under normal guards, and an older effective tier does not authorize new risk",
+    "Reload with null effectiveRisk (pending_approval) and explicit failed status with backend reason",
+    "Request loss/error on PATCH and post-PATCH authoritative GET refetch with stable Idempotency-Key reuse on same-tier retry",
+    "Rapid repeat protection blocking concurrent duplicate PATCH submissions while in flight",
+    "Older BFF payload lacking data.riskPolicyChange and status=unavailable disabling edit to prevent display-only PATCH",
+    "Read-only / viewer session enforcement keeping Edit disabled while displaying authoritative requested/effective status",
+    "Deployment write authority loading or revoked while editor is open denies editing/saving, even for an operator",
+    "VITE_BFF_REAL_WRITES=false refuses mutation before any HTTP; stub/unknown session and unavailable authority refuse PATCH; genuine bearer session dispatches scoped PATCH with Idempotency-Key",
+    "Canonical effectiveRisk null or missing stays unverified despite conflicting snake_case shadow; absent/null riskPolicyChange never inherits risk_policy_change capability",
+    "Identity tab Edit opens a visible modal and saves/refetches while preserving the original tab",
+    "GET failure preserves the last GET-verified policy state rather than adopting a PATCH response as authoritative",
+    "Route change during pending PATCH success/failure suppresses stale GET, error and toast; A-to-B-to-A navigation preserves the newer save lock and its same-tier retry Idempotency-Key",
+    "Route change during pending authoritative or recovery GET ignores stale effective/pending/unavailable/failed/absent/capability-missing/error results while the new persona is saving",
+    "Unmount during pending PATCH or GET invalidates completion and suppresses readback/toast"
+  ],
+  "review_revision": {
+    "supersedes_rejected_head": "33445ea721538f39591960eaac98ff70bb4c4cfa",
+    "anchor_commit": "af0cde29d",
+    "tested_source_commit": "b721b1d8facff0169271db0eb56f53d8841eca46",
+    "pr": 1076,
+    "resolved_findings": [
+      "P1 deployment/session write safety at both UI and mutation",
+      "P1 canonical camelCase capability and explicit unknown effective risk",
+      "P2 visible editor from ordinary detail tabs"
+    ],
+    "backend_source_candidate": "ajoe734/pantheon PR #7762 at c7aafbe575cce3b216fcbd94f8c7a16a28598678 (independent review pending when recorded)",
+    "hosted_pair_acceptance": "Pending backend integration and exact FE/backend deployed pair. No hosted risk mutation, business approval, real trading pool change or deployment was performed by this revision."
+  },
+  "pending_guidance_revision": {
+    "supersedes_rejected_head": "aabc2507992788e9d9c4809bc727962ce2351ac8",
+    "tested_source_commit": "c9a789ccc89d52a05663067cccb65ff5d63a9e8c",
+    "base_commit": "cd42fa8e8fdd084c472e6c442015b7d872b8cfc8",
+    "resolved_finding": "P2 pending-risk operator acceptance: both pending messages in both locales retain requested/effective facts and explain exposure holds, guarded reductions/closures and old-policy non-authorization.",
+    "regression_baseline": {
+      "command": "timeout 100 npm test -- src/management/pages/PersonaDetail.test.ts -t 'shows pending exposure guards'",
+      "result": "4 cases failed against pre-fix locale text at aabc2507992788e9d9c4809bc727962ce2351ac8 because visible pending hints lacked the required guidance; all four pass in the current 69-test suite.",
+      "exit_code": 1,
+      "expected_failure": true
+    },
+    "diff_check": {
+      "command": "git diff --check origin/dev HEAD",
+      "exit_code": 0
+    },
+    "scope": "Locale pending hints and focused visible-panel tests only; editor, transport and backend policy behavior retain the prior reviewed fixes.",
+    "hosted_pair_acceptance": "Not performed; no deployment or real pool mutation."
+  },
+  "delivery_state": "local_validated_ready_for_new_exact_head_review_not_deployed",
+  "navigation_revision": {
+    "supersedes_rejected_head": "2725a224d166ab8abfd999ae99ad70f09602533d",
+    "tested_source_commit": "e7db4ebf39a5c8762b8daa0f5c53f78bd4550da0",
+    "base_commit": "cd42fa8e8fdd084c472e6c442015b7d872b8cfc8",
+    "resolved_finding": "P2 route/save race: each save captures persona id and operation generation. Layout-effect route change/unmount invalidates old operations; each await continuation checks identity before state/ref/toast mutations, including PATCH failure recovery and GET errors.",
+    "regression_baseline": {
+      "command": "timeout 100 npm test -- src/management/pages/PersonaDetail.test.ts -t 'ignores stale|invalidates pending'",
+      "source_under_test": "2725a224d166ab8abfd999ae99ad70f09602533d PersonaDetail.tsx with current regression tests",
+      "result": "13 failed, 39 skipped, exit 1 before fix; all 13 pass within current 82-test focused suite. Baseline source substitution restored byte-for-byte before evidence commit.",
+      "exit_code": 1,
+      "expected_failure": true
+    },
+    "scope": "PersonaDetail risk save lifetime and focused route/unmount/supersession regressions only.",
+    "backend_pair_status": "Counterpart PR #7762 remains in_progress after independent rejection of ad7e7edd770e9a80eda860d27d7fc32b22dafb2c for UUID Idempotency-Key compatibility. Exact accepted/deployed FE/backend pair still pending.",
+    "hosted_pair_acceptance": "Not performed; no deployment, real pool mutation or business approval.",
+    "diff_check": {
+      "command": "git diff --check origin/dev HEAD",
+      "exit_code": 0
+    }
+  }
+}
