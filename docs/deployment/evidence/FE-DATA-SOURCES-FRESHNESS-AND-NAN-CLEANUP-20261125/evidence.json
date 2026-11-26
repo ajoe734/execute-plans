@@ -1,0 +1,68 @@
+{
+  "task_id": "FE-DATA-SOURCES-FRESHNESS-AND-NAN-CLEANUP-20261125",
+  "title": "資料來源頁顯示休市／交易日語意一致的新鮮度說明，並清除內部 nan 字串預設值",
+  "problem_register_ref": {
+    "root_cause_class": "RC6",
+    "work_package": "WP6.3",
+    "register_path": "docs/operations/problem-register.md"
+  },
+  "captured_at": "2026-11-25T09:22:00Z",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "acceptance_1_session_aware_freshness_and_human_readable_sla": {
+    "file": "src/management/pages/DataSourcesPage.tsx",
+    "helpers": [
+      "formatDuration",
+      "formatAgeVsSla",
+      "ageLabel",
+      "readinessExplanation"
+    ],
+    "behavior": "Formats both age_seconds and sla_seconds in human-readable units (seconds, minutes, or hours such as '2m old of 24h SLA' instead of raw '86400s SLA'). When freshness / freshness_status is 'fresh' or 'empty_fresh' while wall-clock age exceeds nominal SLA due to market session/holiday calendar semantics (or an explicit session/holiday freshness reason), renders session-aware freshness explanation ('<age> wall-clock age · session-fresh across non-trading session/holiday (<sla> trading-day SLA)') and matching top-level readiness explanation instead of contradicting the fresh badge. Genuinely stale sources (>SLA with freshness='stale') render '<age> old of <sla> SLA (exceeded)' without claiming session-fresh carry."
+  },
+  "acceptance_2_nan_fallback_removal_in_persona_fleet_data_sources": {
+    "file": "src/management/pages/oversight/personaFleetDataSources.ts",
+    "helpers": [
+      "UNAVAILABLE_DATA_SOURCE_PLACEHOLDER",
+      "normalizeDataSourceString",
+      "normalizeDataSourceNumber",
+      "normalizeSource",
+      "dataSourceProviderStatuses",
+      "dataSourceProviderStatusCounts",
+      "dataSourceProviderCount",
+      "dataSourceState",
+      "personaFleetDataSources",
+      "visibleDataSources"
+    ],
+    "behavior": "Removed all literal 'nan' fallback strings from connectorHealthSources and normalizeSource. Missing, null, empty, or nan-like strings map to null in normalizeDataSourceString (or 'unavailable' placeholder for required ManagementDataSource identity/status fields and undefined for optional fields), and missing/NaN numeric counts map to null in normalizeDataSourceNumber so 'nan' never leaks into rendered cells, badges, or labels."
+  },
+  "acceptance_3_focused_vitest_suites": {
+    "commands": [
+      "./node_modules/.bin/vitest run src/management/pages/DataSourcesPage.test.tsx src/management/pages/oversight/personaFleetDataSources.test.ts",
+      "./node_modules/.bin/vitest run src/management/pages/oversight/dataSources/DataSourceControlCenter.test.tsx src/management/pages/oversight/DataSourceManagement.test.tsx src/management/pages/oversight/PersonaFleetPage.test.tsx",
+      "./node_modules/.bin/tsc --noEmit -p tsconfig.app.json && ./node_modules/.bin/tsc --noEmit -p tsconfig.agora.json"
+    ],
+    "results": {
+      "DataSourcesPage.test.tsx": "5 passed (within-SLA human-readable 2m old of 24h SLA, session-fresh >24h market source on non-trading day/holiday, genuinely stale >24h source, helper unit tests for formatDuration/formatAgeVsSla/ageLabel/readinessExplanation with freshness_status and freshness_reason, and unavailable projection error handling)",
+      "personaFleetDataSources.test.ts": "4 passed (normalizeDataSourceString and normalizeDataSourceNumber null mapping, normalizeSource unavailable placeholder mapping, connector_health/dataSources/providerStatuses/live_source_connector_ids/providerStatusCounts/providerCount nan-free normalization, and snake_case data_source_summary handling)",
+      "DataSourceControlCenter.test.tsx": "7 passed",
+      "DataSourceManagement.test.tsx": "28 passed",
+      "PersonaFleetPage.test.tsx": "42 passed",
+      "typecheck": "0 errors"
+    }
+  },
+  "acceptance_4_runtime_budget_and_residuals": {
+    "runtime_budget": {
+      "recurring_jobs_added": 0,
+      "emitters_added": 0,
+      "persistent_writers_added": 0,
+      "notes": "Pure frontend presentation and data normalization logic; adds 0 recurring jobs, 0 emitters, and 0 persistent writers."
+    },
+    "residual_findings": [
+      {
+        "file": "src/management/pages/oversight/dataSources/DataSourceInstancesTable.tsx",
+        "lines": "328",
+        "description": "Out of scope for this task's artifact list: V2 DataSourceInstancesTable column 4 ('Observed Health / Freshness') renders 'Age: <formatAgeSeconds>' from dto.observed.freshness.age_seconds without market-session carry wording when a V2 instance row has health_state='healthy' across a weekend or holiday."
+      }
+    ]
+  }
+}

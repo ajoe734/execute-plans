@@ -132,9 +132,14 @@ export async function getIncident(id: string): Promise<Incident | undefined> {
 }
 
 const chk = (v: unknown): [string | undefined, boolean] => v === undefined ? [undefined, false] : typeof v === "string" && v.trim() ? [v.trim(), false] : [undefined, true];
-const pair = (a: unknown, b: unknown): [string | undefined, boolean] => {
-  const [v1, b1] = chk(a), [v2, b2] = chk(b);
-  return b1 || b2 || (v1 && v2 && v1 !== v2) ? [undefined, true] : [v1 ?? v2, false];
+const pair = (...vals: unknown[]): [string | undefined, boolean] => {
+  let out: string | undefined;
+  for (const v of vals) {
+    const [val, bad] = chk(v);
+    if (bad || (out && val && out !== val)) return [undefined, true];
+    out ??= val;
+  }
+  return [out, false];
 };
 
 /** Single read-boundary projection of Governance owner fields into the display DTO. */
@@ -202,7 +207,7 @@ export function normalizeAuditFields<T = AuditEvent>(raw: unknown): T {
   const [eid, bEid] = pair(r.entry_id, r.entryId), [id, bId] = pair(r.id, eid);
   const [tid, bTid] = pair(r.target_id, r.targetId), [target, bTarget] = pair(r.target, tid);
   const [aid, bAid] = pair(r.action_type, r.actionType), [action, bAction] = pair(r.action, aid);
-  const [ts, badTs] = pair(r.ts, r.timestamp), [actor, badActor] = chk(r.actor), badTarget = Boolean(bTid || bTarget || r.targetConflict), badId = Boolean(bEid || bId || r.idConflict);
+  const [ts, badTs] = pair(r.ts, r.timestamp, r.occurred_at, r.occurredAt, r.created_at, r.createdAt), [actor, badActor] = chk(r.actor), badTarget = Boolean(bTid || bTarget || r.targetConflict), badId = Boolean(bEid || bId || r.idConflict);
   const out: Record<string, unknown> = {
     ...r, id: badId ? undefined : id, target: badTarget ? undefined : target, action: bAid || bAction ? undefined : action,
     ts: badTs ? undefined : ts, actor: badActor ? undefined : actor, targetConflict: badTarget, idConflict: badId,
@@ -210,7 +215,7 @@ export function normalizeAuditFields<T = AuditEvent>(raw: unknown): T {
   if (badTarget) { delete out.target_id; delete out.targetId; }
   if (badId) { delete out.entry_id; delete out.entryId; delete out.id; }
   if (bAid || bAction) { delete out.action_type; delete out.actionType; }
-  if (badTs) delete out.timestamp;
+  if (badTs) { delete out.timestamp; delete out.occurred_at; delete out.occurredAt; delete out.created_at; delete out.createdAt; }
   return out as T;
 }
 

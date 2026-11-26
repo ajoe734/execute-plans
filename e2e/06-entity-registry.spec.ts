@@ -21,6 +21,10 @@
 
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
+  RECORDED_A81B_STRATEGY,
+  RECORDED_A81B_STRATEGY_ID,
+} from "../src/management/components/detail/__fixtures__/poolRules";
+import {
   bearerHeader,
   installContainedLoopbackAuth,
   installContainedLoopbackAuthAuthority,
@@ -1348,6 +1352,130 @@ test.describe("F07 entity registry", () => {
           `${registry.key} live detail error`,
         ),
       ).toBe("RESOURCE_NOT_FOUND");
+    }
+  });
+
+  test("renders StrategyDetail header and recorded pool rules within 2 s when secondary BFF reads take 15 s", async ({
+    page,
+  }) => {
+    const failures = collectPageFailures(page);
+    const secondaryPaths = new Set<string>();
+    const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
+
+    await installQuietEventSource(page);
+    await installContainedLoopbackAuth(page);
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+
+      if (request.method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: corsHeaders(route) });
+        return;
+      }
+
+      if (path === "/bff/events/stream") {
+        await route.fulfill({
+          status: 200,
+          headers: {
+            ...corsHeaders(route),
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache",
+          },
+          body: ": fixture keep-alive\n\n",
+        });
+        return;
+      }
+
+      if (path === "/health") {
+        await fulfillJson(route, { status: "ok", checked_at: SNAPSHOT_AT });
+        return;
+      }
+
+      if (path === "/bff/me") {
+        await fulfillJson(route, ME_RESPONSE);
+        return;
+      }
+
+      if (path === "/bff/actions") {
+        const catalog = REGISTRIES.map((registry) => actionDescriptor(registry));
+        await fulfillJson(route, {
+          data: catalog,
+          catalog,
+          items: catalog,
+          meta: { snapshot_at: SNAPSHOT_AT, totalCountExact: true },
+          totalCount: catalog.length,
+          totalCountExact: true,
+          version: "v1",
+        });
+        return;
+      }
+
+      if (path === `/bff/strategies/${RECORDED_A81B_STRATEGY_ID}` && request.method() === "GET") {
+        await fulfillJson(route, {
+          data: RECORDED_A81B_STRATEGY,
+          meta: {
+            snapshot_at: SNAPSHOT_AT,
+            surfaces: {
+              strategies_detail: { status: "ok", source: "fe-int-gate-b06" },
+            },
+          },
+        });
+        return;
+      }
+
+      if (path.startsWith("/bff/")) {
+        secondaryPaths.add(path);
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            pendingTimers.delete(timer);
+            resolve();
+          }, 15_000);
+          pendingTimers.add(timer);
+        });
+        await fulfillJson(route, emptyListEnvelope("ancillary")).catch(() => undefined);
+        return;
+      }
+
+      await route.continue();
+    });
+    await installContainedLoopbackAuthAuthority(page);
+
+    try {
+      const startedAt = Date.now();
+      await page.goto(frontendUrl(`/management/strategies/${RECORDED_A81B_STRATEGY_ID}`), {
+        waitUntil: "domcontentloaded",
+        timeout: 10_000,
+      });
+      await page.getByRole("heading", { name: RECORDED_A81B_STRATEGY.name }).waitFor({
+        state: "visible",
+        timeout: 2_000,
+      });
+      const headerVisibleMs = Date.now() - startedAt;
+      expect(headerVisibleMs, "StrategyDetail header must render within 2 s while secondary reads take 15 s").toBeLessThan(2_000);
+
+      await expect(page.getByTestId("strategy-rules-summary")).toBeVisible();
+      await expect(page.getByTestId("strategy-rule-combination")).toContainText("clipped_weighted_sum_v1");
+      await expect(
+        page.getByTestId("strategy-rule-member-artifact-persona-paper-a81b4fd15944698341aa"),
+      ).toHaveCount(1);
+      await expect(
+        page.getByTestId("strategy-rule-artifact-persona-paper-a81b4fd15944698341aa"),
+      ).toHaveCount(0);
+      await expect(
+        page.getByTestId("strategy-rule-artifact-persona-paper-baseline-a81b4fd15944698341aa"),
+      ).toBeVisible();
+      await expect(page.getByTestId("strategy-journal-section")).toHaveAttribute(
+        "data-section-status",
+        "loading",
+      );
+      expect(secondaryPaths.size).toBeGreaterThan(0);
+      expect(failures).toEqual([]);
+    } finally {
+      for (const timer of pendingTimers) {
+        clearTimeout(timer);
+      }
+      await page.unrouteAll({ behavior: "ignoreErrors" });
     }
   });
 });

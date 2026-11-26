@@ -8,8 +8,18 @@ import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref, shouldNavigateOnCreatedEntity } from "./ObjectListPage";
-import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList, StrategiesList } from "./Lists";
-import { ToolsList, McpServersList, SkillsList } from "./CapabilitiesLists";
+import {
+  ArtifactsList,
+  CapitalPoolsList,
+  DeploymentsList,
+  EvolutionList,
+  PersonasList,
+  RankingFormulasList,
+  RebalancesList,
+  ResearchList,
+  StrategiesList,
+} from "./Lists";
+import { ChannelsList, McpServersList, SkillsList, ToolsList } from "./CapabilitiesLists";
 import { StrategyDetail } from "./StrategyDetail";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
@@ -141,17 +151,20 @@ describe("ObjectListPage", () => {
     const { container } = renderObjectList();
 
     const pageBody = container.querySelector('[data-page-body-mode="fill"]');
-    expect(pageBody).toHaveClass("flex", "min-h-0", "flex-1", "overflow-hidden");
+    expect(pageBody).toHaveClass("flex", "min-h-0", "flex-1", "overflow-y-auto", "overflow-x-hidden");
+    expect(pageBody).not.toHaveClass("overflow-hidden");
 
     const dataTable = container.querySelector('[data-data-table-layout="fill"]');
-    expect(dataTable).toHaveClass("flex-1", "min-h-0", "overflow-hidden");
+    expect(dataTable).toHaveClass("flex-1", "min-h-[384px]", "overflow-hidden");
+    expect(dataTable).not.toHaveClass("min-h-0");
 
     const scrollRoot = container.querySelector('[data-management-table-scroll="pinned-horizontal"]');
     expect(scrollRoot).toHaveClass("h-full", "flex-1", "min-h-0");
 
     const native = container.querySelector('[data-management-table-scrollbar="native"]');
-    expect(native).toHaveClass("h-full", "min-h-0", "overflow-auto");
+    expect(native).toHaveClass("h-full", "min-h-[320px]", "overflow-auto");
     expect(native).not.toHaveClass("max-h-[calc(100dvh-10rem)]");
+    expect(native).not.toHaveClass("overscroll-contain");
   });
 
   it("visibly disables a legacy drawer without a durable create owner", () => {
@@ -828,7 +841,7 @@ describe("ObjectListPage", () => {
     expect(screen.getByTestId("location")).not.toHaveTextContent("/management/artifacts/undefined");
   });
 
-  it("renders GET /bff/research-tasks rows with name, status, latest run, run count, created by, and updated at; removes duplicate status, risk, metric, value, and owner columns; marks stub/manual runs as non-real; disables research create with workflow explanation in both locales; and navigates to /management/experiments/<task_id>", async () => {
+  it("renders a readable research list, marks test and manual records, and opens the canonical task detail", async () => {
     const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
     mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
 
@@ -940,18 +953,17 @@ describe("ObjectListPage", () => {
     );
 
     expect(await screen.findByText("VectorBT Factor Validation")).toBeInTheDocument();
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/research-tasks");
+    const researchUrls = fetchSpy.mock.calls.map((call) => String(call[0]));
+    expect(researchUrls.filter((u) => u.includes("/bff/research-tasks"))).toHaveLength(1);
+    expect(researchUrls.filter((u) => u.includes("/api/v1/research/tickets"))).toHaveLength(1);
 
     // Verify exact table column headers and removal of duplicate status, risk, metric, value, and owner columns
     const columnHeaders = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
     expect(columnHeaders).toEqual([
       "Name",
-      "Status",
       "Latest run",
-      "Run count",
-      "Created by",
       "Last updated",
+      "Overview",
     ]);
     expect(columnHeaders).not.toContain("State");
     expect(columnHeaders).not.toContain("Risk");
@@ -961,19 +973,16 @@ describe("ObjectListPage", () => {
 
     // Verify real vs stub/manual run rendering
     const realRow = screen.getByText("VectorBT Factor Validation").closest("tr");
-    expect(realRow).toHaveTextContent("rrun-20261023-002");
-    expect(realRow).toHaveTextContent("vectorbt / real");
-    expect(realRow).not.toHaveTextContent("Non-real execution");
+    expect(realRow).not.toHaveTextContent("rrun-20261023-002");
+    expect(realRow).not.toHaveTextContent("Test or manual record");
 
     const stubRow = screen.getByText("SIC Hypothesis Task").closest("tr");
-    expect(stubRow).toHaveTextContent("rrun-20261024-stub");
-    expect(stubRow).toHaveTextContent("stub / stub");
-    expect(stubRow).toHaveTextContent("Non-real execution (stub / stub)");
+    expect(stubRow).not.toHaveTextContent("rrun-20261024-stub");
+    expect(stubRow).toHaveTextContent("Test or manual record");
 
     const manualRow = screen.getByText("Manual Check Task").closest("tr");
-    expect(manualRow).toHaveTextContent("rrun-20261023-001");
-    expect(manualRow).toHaveTextContent("manual / manual");
-    expect(manualRow).toHaveTextContent("Non-real execution (manual / manual)");
+    expect(manualRow).not.toHaveTextContent("rrun-20261023-001");
+    expect(manualRow).toHaveTextContent("Test or manual record");
 
     // Verify research create button stays disabled with workflow reason and never mentions "no typed durable BFF owner"
     const createBtn = screen.getByRole("button", { name: /^create$/i });
@@ -2637,5 +2646,134 @@ describe("ObjectListPage", () => {
     expect(screen.getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
     const idCode = screen.getByText("persona-be19a1fac471247f2b2a");
     expect(idCode).toHaveClass("font-mono", "text-xs", "text-muted-foreground");
+  });
+
+  it("keeps scrollable fill PageBody, >=320px table min-height, filters, pager, empty and unavailable states across all 13 ObjectListPage pages", async () => {
+    await i18n.changeLanguage("en-US");
+    const pages = [
+      { name: "StrategiesList", path: "/management/strategies", Component: StrategiesList, hasPager: true, hasFilter: true },
+      { name: "PersonasList", path: "/management/personas", Component: PersonasList, hasPager: false, hasFilter: false },
+      { name: "CapitalPoolsList", path: "/management/governance-decisions?tab=capital&capital_scope=paper", Component: CapitalPoolsList, hasPager: false, hasFilter: true },
+      { name: "RankingFormulasList", path: "/management/governance-decisions?tab=policy", Component: RankingFormulasList, hasPager: false, hasFilter: false },
+      { name: "RebalancesList", path: "/management/governance-decisions?tab=capital", Component: RebalancesList, hasPager: false, hasFilter: false },
+      { name: "DeploymentsList", path: "/management/deployments", Component: DeploymentsList, hasPager: false, hasFilter: false },
+      { name: "EvolutionList", path: "/management/evolution", Component: EvolutionList, hasPager: false, hasFilter: false },
+      { name: "ResearchList", path: "/management/experiments", Component: ResearchList, hasPager: true, hasFilter: true },
+      { name: "ArtifactsList", path: "/management/artifacts", Component: ArtifactsList, hasPager: false, hasFilter: true },
+      { name: "ToolsList", path: "/management/tools", Component: ToolsList, hasPager: false, hasFilter: false },
+      { name: "McpServersList", path: "/management/mcp", Component: McpServersList, hasPager: false, hasFilter: false },
+      { name: "SkillsList", path: "/management/skills", Component: SkillsList, hasPager: false, hasFilter: false },
+      { name: "ChannelsList", path: "/management/channels", Component: ChannelsList, hasPager: false, hasFilter: false },
+    ] as const;
+
+    expect(pages).toHaveLength(13);
+
+    for (const entry of pages) {
+      // 1. Populated state
+      mocks.useLiveListV1.mockReturnValue({
+        items: [
+          {
+            id: `row-${entry.name}-1`,
+            name: `${entry.name} Row 1`,
+            state: "approved",
+            status: "active",
+            risk: "low",
+            owner: "tenant-dev",
+            updatedAt: "2026-11-25T07:00:00Z",
+            capitalScope: "paper",
+            source_kind: "registry",
+            kind: "execution_bundle",
+          },
+        ],
+        pending: 0,
+        refresh: vi.fn(),
+        meta: {
+          state_counts: { draft: 10, approved: 1, review: 0, retired: 0 },
+          hidden_non_real_count: 2,
+          page_info: { page_size: 20, total: 25, next_page_token: "20" },
+        },
+        estimatedTotal: 25,
+        pageSize: 20,
+        cursor: { next: "20" },
+        loading: false,
+      });
+
+      const { container, unmount } = render(
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <MemoryRouter initialEntries={[entry.path]}>
+              <entry.Component />
+            </MemoryRouter>
+          </TooltipProvider>
+        </I18nextProvider>,
+      );
+
+      const pageBody = container.querySelector('[data-page-body-mode="fill"]');
+      expect(pageBody).toHaveClass("overflow-y-auto", "overflow-x-hidden");
+      const dataTable = container.querySelector('[data-data-table-layout="fill"]');
+      expect(dataTable).toHaveClass("min-h-[384px]", "flex-1");
+      const scroller = container.querySelector('[data-management-table-scrollbar="native"]');
+      expect(scroller).toHaveClass("min-h-[320px]");
+      if (entry.hasFilter) {
+        expect(container.querySelector('[role="group"]')).not.toBeNull();
+      }
+      if (entry.hasPager) {
+        expect(container.querySelector('[data-testid$="-list-pagination"]')).not.toBeNull();
+      }
+      unmount();
+
+      // 2. Unavailable state
+      mocks.useLiveListV1.mockReturnValue({
+        items: [],
+        pending: 0,
+        refresh: vi.fn(),
+        meta: {
+          degradation: {
+            reason: `Upstream unavailable on ${entry.name}`,
+            strictFallbackBlocked: true,
+          },
+          surfaces: {
+            list: { status: "unavailable" },
+          },
+        },
+        loading: false,
+      });
+
+      const { unmount: unmountUnavail } = render(
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <MemoryRouter initialEntries={[entry.path]}>
+              <entry.Component />
+            </MemoryRouter>
+          </TooltipProvider>
+        </I18nextProvider>,
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(`Upstream unavailable on ${entry.name}`);
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+      unmountUnavail();
+
+      // 3. Empty state
+      mocks.useLiveListV1.mockReturnValue({
+        items: [],
+        pending: 0,
+        refresh: vi.fn(),
+        meta: {},
+        loading: false,
+      });
+
+      const { container: emptyContainer, unmount: unmountEmpty } = render(
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <MemoryRouter initialEntries={[entry.path]}>
+              <entry.Component />
+            </MemoryRouter>
+          </TooltipProvider>
+        </I18nextProvider>,
+      );
+      const hasEmptyStateBanner = emptyContainer.querySelector('[role="status"]') !== null;
+      const hasEmptyTableCell = emptyContainer.querySelector('[data-testid="data-table-empty"]') !== null;
+      expect(hasEmptyStateBanner || hasEmptyTableCell).toBe(true);
+      unmountEmpty();
+    }
   });
 });

@@ -1,0 +1,19 @@
+{
+  "task_id": "FE-RESEARCH-RESULT-READBACK-20261123",
+  "work_package": "RC6 WP6.4 / FE-RESEARCH-OPERATOR-READABILITY-20261122",
+  "hosted_reproduction": {
+    "root_run": 45079413888,
+    "frontend": "24fcc18f608b08317504098a2a92d7ead09ce668",
+    "bff": "0ceb6ca2b793d8ec601a4294ebb0a4c7da8086ca",
+    "observed": "Three completed imitation evaluations exposed generated candidate references that each returned HTTP 404 from the artifact catalog. Each run already held the three evaluation values.",
+    "browser_failure_sha256": "400130ac7b165b4e3bca5d28e4a1defc08bb05729c085f7828e8e630ef44c3a1",
+    "owner_read_sha256": "bffb3b7ab8ed14d8f16a16c435f9dda9c3f230db51eec6d126116736285749d2"
+  },
+  "local_validation": {
+    "tests": "16 focused tests passed, including zero-valued metrics, legacy lineage references and clear messaging for mixed available and missing artifact files",
+    "typecheck": "npm run typecheck passed",
+    "browser_candidate": "Local Chromium used the verified tenant-dev viewer against the actual BFF. It checked three real evaluations and all nine displayed values, confirmed the three invalid links were absent, and opened the collector check. Zero page errors or attempted product mutations.",
+    "browser_candidate_sha256": "abe8a7902c5dfd05c9ab97a093bb67f084e629650e264e4a266e3c9f1da90af8"
+  },
+  "hosted_acceptance": "Run the authenticated browser readback after the exact merged frontend is served. Existing EVOLUTION-RESEARCH-HOSTED-ACCEPT-20261104 retains the scoped proof. None of the three observed Dev evaluation runs has an openable saved file. The positive link case is covered by the local test."
+}

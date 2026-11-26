@@ -4,7 +4,8 @@ export type EnumCategory =
   | "action"
   | "risk"
   | "reason"
-  | "lineageEdge";
+  | "lineageEdge"
+  | "lineageNodeType";
 
 export type EnumTone =
   | "success"
@@ -207,6 +208,8 @@ export const BFF_STATUS_VALUES = [
   "disqualified",
   "not_running",
   "connecting",
+  "not_submitted",
+  "unverified",
 ] as const;
 
 export const BFF_OUTCOME_VALUES = [
@@ -385,6 +388,7 @@ export const BFF_REASON_CODES = [
 export const BFF_LINEAGE_EDGE_TYPES = [
   "parent",
   "source_strategy_spec",
+  "source_dataset",
   "source_run",
   "persona",
   "capital_pool",
@@ -402,6 +406,28 @@ export const BFF_LINEAGE_EDGE_TYPES = [
   "experiment",
   "dataset",
   "runtime",
+  "rebalance",
+  "binds",
+  "scaffolds",
+] as const;
+
+export const BFF_LINEAGE_NODE_TYPES = [
+  "strategy",
+  "strategy_spec",
+  "persona",
+  "artifact",
+  "execution_bundle",
+  "capital_pool",
+  "experiment",
+  "run",
+  "dataset",
+  "feature_set",
+  "model_weights",
+  "evaluation_report",
+  "rebalance",
+  "deployment",
+  "runtime",
+  "unknown",
 ] as const;
 
 const TONE_BADGE_CLASS: Record<EnumTone, string> = {
@@ -572,6 +598,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   no_proposal: "warning",
   no_action: "warning",
   no_candidate: "warning",
+  unverified: "warning",
 
   // Danger / Failed / Rejected / Critical
   failed: "danger",
@@ -612,6 +639,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   private_interpretation_withheld: "paused",
   raw_control_diff_withheld: "paused",
   management_persona_intent_public_summary: "paused",
+  not_submitted: "paused",
 };
 
 const KNOWN_STATUS_SET = new Set<string>(BFF_STATUS_VALUES);
@@ -620,6 +648,7 @@ const KNOWN_ACTION_SET = new Set<string>(BFF_ACTION_VALUES);
 const KNOWN_RISK_SET = new Set<string>(BFF_RISK_VALUES);
 const KNOWN_REASON_SET = new Set<string>(BFF_REASON_CODES);
 const KNOWN_LINEAGE_EDGE_SET = new Set<string>(BFF_LINEAGE_EDGE_TYPES);
+const KNOWN_LINEAGE_NODE_TYPE_SET = new Set<string>(BFF_LINEAGE_NODE_TYPES);
 
 /**
  * Fallback English labels used only when no `t` function is supplied or when a key is not present in a custom test mock.
@@ -763,6 +792,8 @@ const EN_FALLBACK_STATUS: Record<string, string> = {
   disqualified: "Disqualified",
   not_running: "Not Running",
   connecting: "Connecting",
+  not_submitted: "Not Submitted",
+  unverified: "Unverified",
 };
 
 const EN_FALLBACK_OUTCOMES: Record<string, string> = {
@@ -942,6 +973,7 @@ const EN_FALLBACK_REASONS: Record<string, string> = {
 const EN_FALLBACK_LINEAGE_EDGES: Record<string, string> = {
   parent: "Parent",
   source_strategy_spec: "Source Strategy Spec",
+  source_dataset: "Source Dataset",
   source_run: "Source Run",
   persona: "Persona",
   capital_pool: "Capital Pool",
@@ -959,6 +991,28 @@ const EN_FALLBACK_LINEAGE_EDGES: Record<string, string> = {
   experiment: "Experiment",
   dataset: "Dataset",
   runtime: "Runtime",
+  rebalance: "Rebalance",
+  binds: "Binds",
+  scaffolds: "Scaffolds",
+};
+
+const EN_FALLBACK_LINEAGE_NODE_TYPES: Record<string, string> = {
+  strategy: "Strategy",
+  strategy_spec: "Strategy",
+  persona: "Persona",
+  artifact: "Artifact",
+  execution_bundle: "Artifact",
+  capital_pool: "Capital Pool",
+  experiment: "Experiment",
+  run: "Experiment",
+  dataset: "Dataset",
+  feature_set: "Feature Set",
+  model_weights: "Model Weights",
+  evaluation_report: "Evaluation Report",
+  rebalance: "Rebalance",
+  deployment: "Deployment",
+  runtime: "Runtime",
+  unknown: "Object",
 };
 
 export function isNanLike(value: unknown): boolean {
@@ -1182,6 +1236,17 @@ export function resolveEnumLabel(
     return { label, code: raw, tone, badgeClass, isKnown };
   }
 
+  if (category === "lineageNodeType") {
+    const nodeTypeKey = raw
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+    const isKnown = KNOWN_LINEAGE_NODE_TYPE_SET.has(nodeTypeKey);
+    const fallback = EN_FALLBACK_LINEAGE_NODE_TYPES[nodeTypeKey] ?? humanizeEnumToken(raw);
+    const label = t ? t(`enumLabels.lineageNodeTypes.${nodeTypeKey}`, { defaultValue: fallback }) : fallback;
+    return { label, code: raw, tone, badgeClass, isKnown };
+  }
+
   // category === "reason"
   const i18nReasonKey = key.replace(/:/g, "__");
   const isKnown =
@@ -1247,6 +1312,60 @@ export function riskLabel(value: unknown, t?: TranslateFn): string {
 
 export function lineageEdgeLabel(value: unknown, t?: TranslateFn): string {
   return resolveEnumLabel("lineageEdge", value, t).label;
+}
+
+export function lineageNodeTypeLabel(value: unknown, t?: TranslateFn): string {
+  return resolveEnumLabel("lineageNodeType", value, t).label;
+}
+
+export function shortLineageNodeId(value: unknown): string {
+  const raw = sanitizeRawText(value);
+  if (!raw) return "";
+  const hexMatch = /(?:^|[-_:])([0-9a-f]{12,64})(?:[-_:](v\d+|[0-9]{1,4}))?$/i.exec(raw);
+  if (hexMatch) {
+    const shortHex = hexMatch[1].slice(0, 8);
+    const verSuffix = hexMatch[2] ? `-${hexMatch[2]}` : "";
+    const baselinePrefix = /(?:^|[-_:])baseline[-_:]/i.test(raw) ? "baseline-" : "";
+    return `${baselinePrefix}${shortHex}${verSuffix}`;
+  }
+  if (raw.length <= 16) return raw;
+  const parts = raw.split(/[-_:]/).filter(Boolean);
+  if (parts.length >= 2) {
+    const tail = parts.slice(-2).join("-");
+    if (tail.length <= 16) return tail;
+  }
+  return raw.slice(-12);
+}
+
+export interface LineageNodeDisplayInput {
+  id?: string | null;
+  label?: string | null;
+  type?: string | null;
+  display_name?: string | null;
+  displayName?: string | null;
+  name_missing?: boolean | null;
+  nameMissing?: boolean | null;
+}
+
+export function resolveLineageNodeLabel(
+  input: LineageNodeDisplayInput,
+  t?: TranslateFn,
+): string {
+  const rawId = sanitizeRawText(input.id) ?? "";
+  const displayName = sanitizeRawText(input.display_name ?? input.displayName);
+  const rawLabel = sanitizeRawText(input.label);
+  const isMissing = input.name_missing === true || input.nameMissing === true;
+
+  if (!isMissing && displayName && displayName !== rawId) {
+    return displayName;
+  }
+  if (!isMissing && rawLabel && rawLabel !== rawId) {
+    return rawLabel;
+  }
+
+  const kindLabel = lineageNodeTypeLabel(input.type || "unknown", t);
+  const shortId = shortLineageNodeId(rawId || rawLabel);
+  return shortId ? `${kindLabel} ${shortId}` : kindLabel;
 }
 
 export function reasonCodeLabel(value: unknown, t?: TranslateFn): string {

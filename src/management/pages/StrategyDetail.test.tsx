@@ -3,12 +3,16 @@
 // pool strategy and for a strat-tw-official synthetic stub (is_synthetic_or_stub).
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import i18n from "@/i18n";
 import { StrategyDetail } from "./StrategyDetail";
-import { bffV1, type Strategy } from "@/lib/bff-v1";
+import { bffV1, managementConsoleReads, realtime, type Strategy } from "@/lib/bff-v1";
+import {
+  RECORDED_A81B_POOL_MEMBER_RULE,
+  RECORDED_A81B_STRATEGY,
+} from "@/management/components/detail/__fixtures__/poolRules";
 
 const REAL_POOL_STRATEGY = {
   id: "strategy-persona-298e138c136c9840b0e4",
@@ -118,5 +122,116 @@ describe("StrategyDetail overview (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", () =
     expect(screen.getByTestId("strategy-stub-reason")).toHaveTextContent("尚未設定任何交易規則");
     expect(screen.queryByTestId("strategy-rules-summary")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId("strategy-discovery")).not.toBeInTheDocument());
+  });
+
+  it("recorded strategy-persona-a81b4fd15944698341aa: shows pool_envelope combination, pool_member rule once when listed twice, and labels rollback_baseline as not traded", async () => {
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValue(RECORDED_A81B_STRATEGY);
+    renderPage(RECORDED_A81B_STRATEGY.id);
+
+    const summary = await screen.findByTestId("strategy-rules-summary");
+    expect(screen.queryByTestId("strategy-rules-summary-empty")).not.toBeInTheDocument();
+
+    // pool_envelope combination & risk limits
+    const envelopeCard = screen.getByTestId("strategy-rule-artifact-persona-pool-a81b4fd15944698341aa-v2");
+    expect(envelopeCard).toHaveTextContent("策略池打包版");
+    expect(screen.getByTestId("strategy-rule-combination")).toHaveTextContent("clipped_weighted_sum_v1");
+    expect(screen.getByTestId("strategy-rule-risk-limits")).toHaveTextContent("max_net_strength=1");
+    expect(screen.getByTestId("strategy-rule-risk-limits")).toHaveTextContent("gross_weight_limit=1");
+
+    // pool_member listed both at top-level and inside pool_envelope.members is shown once
+    const memberItem = screen.getByTestId("strategy-rule-member-artifact-persona-paper-a81b4fd15944698341aa");
+    expect(memberItem).toHaveTextContent("策略池成員");
+    expect(memberItem).toHaveTextContent("權重 1");
+    expect(memberItem).toHaveTextContent(
+      "2330.TWSE：每根日K 收盤時，比較最新收盤價與 1 根前的收盤價：漲幅大於 0% 就買進 1 股，否則賣出 1 股。",
+    );
+    expect(screen.queryByTestId("strategy-rule-artifact-persona-paper-a81b4fd15944698341aa")).not.toBeInTheDocument();
+    expect(
+      summary.querySelectorAll('[data-testid="strategy-rule-member-artifact-persona-paper-a81b4fd15944698341aa"]'),
+    ).toHaveLength(1);
+
+    // rollback_baseline labeled as not traded (不送單回滾基準)
+    const baselineCard = screen.getByTestId("strategy-rule-artifact-persona-paper-baseline-a81b4fd15944698341aa");
+    expect(baselineCard).toHaveTextContent("不送單回滾基準");
+    expect(baselineCard).toHaveTextContent("不送單回滾基準（正負向皆不動作，下單數量 0）");
+  });
+
+  it("deduplicates a pool_member listed twice at top level and distinguishes null rules (unavailable) from empty rules (not reported) and absent new BFF fields", async () => {
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValueOnce({
+      ...RECORDED_A81B_STRATEGY,
+      rules: [RECORDED_A81B_POOL_MEMBER_RULE, RECORDED_A81B_POOL_MEMBER_RULE],
+    });
+    const dupRender = renderPage(RECORDED_A81B_STRATEGY.id);
+    await screen.findByTestId("strategy-rules-summary");
+    expect(
+      screen.getAllByTestId("strategy-rule-artifact-persona-paper-a81b4fd15944698341aa"),
+    ).toHaveLength(1);
+    dupRender.unmount();
+
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValueOnce({
+      ...RECORDED_A81B_STRATEGY,
+      rules: null,
+    });
+    const nullRender = renderPage(RECORDED_A81B_STRATEGY.id);
+    expect(await screen.findByTestId("strategy-rules-unavailable")).toHaveTextContent(
+      "無法讀取交易規則（執行套件讀取失敗）。",
+    );
+    expect(screen.queryByTestId("strategy-rules-summary-empty")).not.toBeInTheDocument();
+    nullRender.unmount();
+
+    const withoutNewFields = {
+      id: RECORDED_A81B_STRATEGY.id,
+      name: RECORDED_A81B_STRATEGY.name,
+      alpha: "",
+      state: "approved",
+      risk: "low",
+      owner: "persona-a81b4fd15944698341aa",
+      capitalPoolId: "pool-persona-paper-a81b4fd15944698341aa",
+      personaIds: ["persona-a81b4fd15944698341aa"],
+      updatedAt: "2026-11-25T06:35:00Z",
+    } as unknown as Strategy;
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValueOnce(withoutNewFields);
+    renderPage(RECORDED_A81B_STRATEGY.id);
+    expect(await screen.findByTestId("strategy-rules-summary-empty")).toHaveTextContent(
+      "此策略尚未回報交易規則。",
+    );
+    expect(screen.queryByTestId("strategy-rules-unavailable")).not.toBeInTheDocument();
+  });
+
+  it("renders immediately after the single strategy read while secondary reads remain unresolved and one rejects, and keeps shown data on refresh without blanking", async () => {
+    const never = <T,>() => new Promise<T>(() => {});
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValue(RECORDED_A81B_STRATEGY);
+    vi.spyOn(bffV1.jobs, "list").mockImplementation(never);
+    vi.spyOn(bffV1.audit, "list").mockImplementation(never);
+    vi.spyOn(bffV1.approvals, "list").mockImplementation(never);
+    vi.spyOn(bffV1.alerts, "list").mockImplementation(never);
+    vi.spyOn(bffV1.incidents, "list").mockImplementation(never);
+    vi.spyOn(bffV1.artifacts, "list").mockImplementation(never);
+    vi.spyOn(bffV1.research, "list").mockImplementation(never);
+    vi.spyOn(bffV1.evolution, "list").mockImplementation(never);
+    vi.spyOn(bffV1.watchers, "forSubject").mockImplementation(never);
+    vi.spyOn(managementConsoleReads, "lineage").mockImplementation(never);
+    vi.spyOn(bffV1.decisionJournal, "forSubject").mockRejectedValue(new Error("journal timeout"));
+
+    renderPage(RECORDED_A81B_STRATEGY.id);
+
+    // Primary strategy header and rules summary render without waiting for secondary reads
+    expect(await screen.findByText(RECORDED_A81B_STRATEGY.name)).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-rules-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-watchers-section")).toHaveAttribute("data-section-status", "loading");
+    expect(screen.getByTestId("strategy- watchers-section".replace(" ", ""))).toHaveTextContent("載入中…");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("strategy-journal-section")).toHaveAttribute("data-section-status", "unavailable");
+    });
+    expect(screen.getByTestId("strategy-journal-section")).toHaveTextContent("決策日誌暫時無法取得");
+
+    // Triggering a live refresh while the next strategy read is unresolved keeps the shown data on screen
+    vi.spyOn(bffV1.strategies, "get").mockImplementation(never);
+    await act(async () => {
+      realtime.emit("data", { kind: "strategies" });
+    });
+    expect(screen.getByText(RECORDED_A81B_STRATEGY.name)).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-rules-summary")).toBeInTheDocument();
   });
 });
