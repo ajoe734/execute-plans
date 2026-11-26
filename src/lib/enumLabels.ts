@@ -218,6 +218,14 @@ export const BFF_STATUS_VALUES = [
   "conditional",
   "approve_with_conditions",
   "hold",
+  "request_more_research",
+  "operator_decision",
+  "adopt_eligible",
+  "escalate",
+  "escalated",
+  "veto",
+  "vetoed",
+  "dead_lettered",
 ] as const;
 
 export const BFF_OUTCOME_VALUES = [
@@ -255,6 +263,13 @@ export const BFF_OUTCOME_VALUES = [
   "submit_reweight_proposal",
   "propose_harness_patch",
   "recorded",
+  "operator_decision",
+  "adopt_eligible",
+  "request_more_research",
+  "escalate",
+  "escalated",
+  "veto",
+  "vetoed",
 ] as const;
 
 export const BFF_ACTION_VALUES = [
@@ -402,6 +417,18 @@ export const BFF_REASON_CODES = [
   "no_trader_meetings",
   "no_current_rows",
   "workshop_store_unavailable",
+  "operator_decision",
+  "adopt_eligible",
+  "request_more_research",
+  "escalate",
+  "vetoed",
+  "no_panel_transcript",
+  "gate_decision_not_recorded",
+  "no_case_file_recorded",
+  "case_file_invalid",
+  "invalid_transcript_response",
+  "gate_panel_reader_unavailable",
+  "claim_uncited",
 ] as const;
 
 export const BFF_LINEAGE_EDGE_TYPES = [
@@ -555,6 +582,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   improved: "success",
   available: "success",
   support: "success",
+  adopt_eligible: "success",
   read_ok: "success",
   readback_ok: "success",
   smoke_ok: "success",
@@ -596,6 +624,10 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   conditional: "warning",
   approve_with_conditions: "warning",
   hold: "warning",
+  request_more_research: "warning",
+  operator_decision: "warning",
+  escalate: "warning",
+  escalated: "warning",
   warning: "warning",
   watch: "warning",
   degraded: "warning",
@@ -643,6 +675,9 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   disqualified: "danger",
   bad: "danger",
   oppose: "danger",
+  veto: "danger",
+  vetoed: "danger",
+  dead_lettered: "danger",
   evaluation_rejected: "danger",
   insufficient_participants: "danger",
 
@@ -829,6 +864,14 @@ const EN_FALLBACK_STATUS: Record<string, string> = {
   conditional: "Conditional",
   approve_with_conditions: "Approve with Conditions",
   hold: "Hold",
+  request_more_research: "Recommend More Research",
+  operator_decision: "Operator Decision Required",
+  adopt_eligible: "Eligible for Adoption",
+  escalate: "Escalate",
+  escalated: "Escalated",
+  veto: "Veto",
+  vetoed: "Vetoed",
+  dead_lettered: "Dead Lettered",
 };
 
 const EN_FALLBACK_OUTCOMES: Record<string, string> = {
@@ -866,6 +909,13 @@ const EN_FALLBACK_OUTCOMES: Record<string, string> = {
   submit_reweight_proposal: "Submit Reweight Proposal",
   propose_harness_patch: "Propose Harness Patch",
   recorded: "Recorded",
+  operator_decision: "Operator Decision Required",
+  adopt_eligible: "Eligible for Adoption",
+  request_more_research: "Recommend More Research",
+  escalate: "Escalate",
+  escalated: "Escalated",
+  veto: "Veto",
+  vetoed: "Vetoed",
 };
 
 const EN_FALLBACK_ACTIONS: Record<string, string> = {
@@ -1014,6 +1064,18 @@ const EN_FALLBACK_REASONS: Record<string, string> = {
   no_trader_meetings: "No meetings convened by this trader",
   no_current_rows: "No current rows",
   workshop_store_unavailable: "Strategy Workshop store unavailable",
+  operator_decision: "Operator decision required",
+  adopt_eligible: "Eligible for adoption (approved)",
+  request_more_research: "Recommend more research",
+  escalate: "Escalate for operator decision",
+  vetoed: "Vetoed by reviewer",
+  no_panel_transcript: "No review panel transcript recorded",
+  gate_decision_not_recorded: "Review panel conclusion not recorded",
+  no_case_file_recorded: "No decision case file recorded",
+  case_file_invalid: "Decision case file is invalid",
+  invalid_transcript_response: "Review panel transcript response is invalid",
+  gate_panel_reader_unavailable: "Review panel reader is unavailable",
+  claim_uncited: "Claim did not cite any case-file item",
 };
 
 const EN_FALLBACK_LINEAGE_EDGES: Record<string, string> = {

@@ -34,7 +34,18 @@ import {
   ParticipantCapabilities,
   PriorActionsSection,
 } from "./MeetingActionCards";
-import { isFailedMeeting, meetingLastError, meetingTopicText } from "./meetingDisplay";
+import { CaseFileViewPanel } from "@/management/components/case-file/CaseFileViewPanel";
+import {
+  collectGatePanelReviewers,
+  formatGatePanelConclusionText,
+  formatGatePanelDecisionLabel,
+  formatGatePanelRecommendationLabel,
+  formatGatePanelTitle,
+  isFailedMeeting,
+  isGatePanelMeeting,
+  meetingLastError,
+  meetingTopicText,
+} from "./meetingDisplay";
 
 function BffSubjectInline({
   id,
@@ -242,8 +253,14 @@ export const MeetingDetailPage = () => {
   }
 
   const m = stripPrivateMemory(read.data);
-  const typeLabel = t(`meetingsCenter.typeName.${m.meeting_type}`, { defaultValue: m.meeting_type });
-  const topic = meetingTopicText(m, t);
+  const isGatePanel = isGatePanelMeeting(m);
+  const gateReviewers = isGatePanel ? collectGatePanelReviewers(m, t) : [];
+  const gateMemos =
+    m.memos && m.memos.length > 0 ? m.memos : m.memo ? [m.memo] : [];
+  const typeLabel = isGatePanel
+    ? t("meetingsCenter.typeName.gate_panel")
+    : t(`meetingsCenter.typeName.${m.meeting_type}`, { defaultValue: m.meeting_type });
+  const topic = isGatePanel ? formatGatePanelTitle(m, t) : meetingTopicText(m, t);
   const agendaItems = formatAgenda(m.agenda).filter((item) => item !== m.topic?.trim() && item !== topic);
   const preReadItems = extractPreReadList(m.pre_read).filter(
     (item) => item.text?.trim() || item.summary?.trim() || item.citations?.length,
@@ -295,7 +312,7 @@ export const MeetingDetailPage = () => {
   const blockingReasonDisplay = reasonCodeDisplay("synthesis_review_required", t);
   const operatorReview = normalizeOperatorReview(m.operator_review, reviewCause);
   const isReviewed = operatorReview?.status === "reviewed";
-  const shownDate = m.closed_at ?? m.created_at;
+  const shownDate = m.completed_at ?? m.closed_at ?? m.created_at;
   const failed = isFailedMeeting(m);
   const executionError = meetingLastError(m);
   const rawOutcome = m.synthesis?.outcome ?? m.outcome;
@@ -305,9 +322,11 @@ export const MeetingDetailPage = () => {
   const referenceOnly = m.case_file_items.length > 0 && m.case_file_items.every((item) =>
     item.kind === "evidence_ref" && !caseItemContent(item),
   );
-  const outcomeText = isReview
-    ? t(`meetingsCenter.detail.review.${isReviewed ? "reviewedBadge" : "pendingBadge"}`)
-    : rawOutcome && t(`meetingsCenter.detail.outcomes.${outcomeKey}`, { defaultValue: reasonCodeDisplay(rawOutcome, t).text });
+  const outcomeText = isGatePanel
+    ? formatGatePanelDecisionLabel(m, t)
+    : isReview
+      ? t(`meetingsCenter.detail.review.${isReviewed ? "reviewedBadge" : "pendingBadge"}`)
+      : rawOutcome && t(`meetingsCenter.detail.outcomes.${outcomeKey}`, { defaultValue: reasonCodeDisplay(rawOutcome, t).text });
   const operatorWriteRoles = new Set([
     "operator",
     "approver",
@@ -440,32 +459,65 @@ export const MeetingDetailPage = () => {
         </div>
         <div className="space-y-2 rounded-md border-l-2 border-primary bg-muted/30 px-4 py-3" data-testid="meeting-detail-synthesis">
           <h2 className="text-sm font-semibold">{outcomeText || t("meetingsCenter.detail.synthesisTitle")}</h2>
-          {failed && executionError ? (
-            <p className="text-sm">{t("meetingsCenter.failureReason", { reason: reasonCodeDisplay(executionError, t).text })}</p>
-          ) : null}
-          {m.synthesis?.summary ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{m.synthesis.summary}</p> : null}
-          {!outcomeText && !m.synthesis?.summary && !failed ? (
-            <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noSynthesis")}</p>
-          ) : null}
-          {referenceOnly ? <p className="text-sm">{t("meetingsCenter.detail.referenceOnlyNote")}</p> : null}
-          {stanceCounts.length > 0 || typeof tally?.support === "number" || typeof tally?.dissent === "number" ? (
-            <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground" data-testid="meeting-synthesis-tally">
-              <span className="font-medium">{t("meetingsCenter.detail.stanceDistribution")}</span>
-              {stanceCounts.length > 0
-                ? stanceCounts.map(([stance, count]) => (
-                    <span key={stance}>{labelForStance(stance)} {count}</span>
-                  ))
-                : <>
-                    {typeof tally?.support === "number" ? <span>{t("meetingsCenter.detail.legacySupport")} {tally.support}</span> : null}
-                    {typeof tally?.dissent === "number" ? <span>{t("meetingsCenter.detail.legacyDissent")} {tally.dissent}</span> : null}
-                  </>}
-            </div>
-          ) : null}
-          {m.synthesis?.dissent_summary ? <p className="break-words text-sm">{m.synthesis.dissent_summary}</p> : null}
+          {isGatePanel ? (
+            <>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground" data-testid="meeting-detail-gate-conclusion">
+                {formatGatePanelConclusionText(m, t)}
+              </p>
+              {m.conclusion?.vetoed_by ? (
+                <p className="text-xs text-destructive" data-testid="meeting-detail-gate-vetoed-by">
+                  {t("meetingsCenter.detail.gatePanel.vetoedByFmt", {
+                    vetoedBy: Array.isArray(m.conclusion.vetoed_by)
+                      ? m.conclusion.vetoed_by.join(", ")
+                      : String(m.conclusion.vetoed_by),
+                  })}
+                </p>
+              ) : null}
+              {Array.isArray(m.conclusion?.reasons) && m.conclusion.reasons.length > 0 ? (
+                <p className="text-xs text-muted-foreground" data-testid="meeting-detail-gate-reasons">
+                  {t("meetingsCenter.detail.gatePanel.reasonsLabel")}: {m.conclusion.reasons.join(" · ")}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {failed && executionError ? (
+                <p className="text-sm">{t("meetingsCenter.failureReason", { reason: reasonCodeDisplay(executionError, t).text })}</p>
+              ) : null}
+              {m.synthesis?.summary ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{m.synthesis.summary}</p> : null}
+              {!outcomeText && !m.synthesis?.summary && !failed ? (
+                <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noSynthesis")}</p>
+              ) : null}
+              {referenceOnly ? <p className="text-sm">{t("meetingsCenter.detail.referenceOnlyNote")}</p> : null}
+              {stanceCounts.length > 0 || typeof tally?.support === "number" || typeof tally?.dissent === "number" ? (
+                <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground" data-testid="meeting-synthesis-tally">
+                  <span className="font-medium">{t("meetingsCenter.detail.stanceDistribution")}</span>
+                  {stanceCounts.length > 0
+                    ? stanceCounts.map(([stance, count]) => (
+                        <span key={stance}>{labelForStance(stance)} {count}</span>
+                      ))
+                    : <>
+                        {typeof tally?.support === "number" ? <span>{t("meetingsCenter.detail.legacySupport")} {tally.support}</span> : null}
+                        {typeof tally?.dissent === "number" ? <span>{t("meetingsCenter.detail.legacyDissent")} {tally.dissent}</span> : null}
+                      </>}
+                </div>
+              ) : null}
+              {m.synthesis?.dissent_summary ? <p className="break-words text-sm">{m.synthesis.dissent_summary}</p> : null}
+            </>
+          )}
         </div>
         <nav aria-label={t("meetingsCenter.detail.sections")} className="flex flex-wrap gap-x-4 gap-y-2 text-sm font-medium text-primary">
-          <a className="underline underline-offset-4" href="#meeting-discussion">{t("meetingsCenter.detail.roundsTitle")}</a>
-          <a className="underline underline-offset-4" href="#meeting-sources" onClick={openCaseFile}>{t("meetingsCenter.detail.caseFileTitle")}</a>
+          <a className="underline underline-offset-4" href="#meeting-discussion">
+            {t(isGatePanel ? "meetingsCenter.detail.gatePanel.reviewersTitle" : "meetingsCenter.detail.roundsTitle")}
+          </a>
+          {isGatePanel || gateMemos.length > 0 ? (
+            <a className="underline underline-offset-4" href="#meeting-memo">
+              {t("meetingsCenter.detail.gatePanel.memoTitle")}
+            </a>
+          ) : null}
+          <a className="underline underline-offset-4" href="#meeting-sources" onClick={openCaseFile}>
+            {t(isGatePanel ? "meetingsCenter.detail.gatePanel.caseFileTitle" : "meetingsCenter.detail.caseFileTitle")}
+          </a>
           {proposals.length > 0 ? (
             <a className="underline underline-offset-4" href="#meeting-proposals">{t("meetingsCenter.detail.proposalsTitle")}</a>
           ) : null}
@@ -854,262 +906,421 @@ export const MeetingDetailPage = () => {
       ) : null}
 
       {/* Follow-through first: previous decisions, then what this meeting adopted. */}
-      <Card className="space-y-4 p-4 sm:p-6" data-testid="meeting-detail-follow-through">
-        <PriorActionsSection read={m.prior_actions} focusedActionId={focusedActionId} />
-        <AdoptedActionsSection
-          actions={m.adopted_actions ?? []}
-          noActionReason={m.no_action_reason}
-          decisionKind={m.decision_kind}
-          focusedActionId={focusedActionId}
-        />
-        <ParticipantCapabilities
-          items={m.participant_capabilities ?? []}
-          revealed={m.anonymised_labels_revealed !== false}
-        />
-      </Card>
+      {!isGatePanel ? (
+        <Card className="space-y-4 p-4 sm:p-6" data-testid="meeting-detail-follow-through">
+          <PriorActionsSection read={m.prior_actions} focusedActionId={focusedActionId} />
+          <AdoptedActionsSection
+            actions={m.adopted_actions ?? []}
+            noActionReason={m.no_action_reason}
+            decisionKind={m.decision_kind}
+            focusedActionId={focusedActionId}
+          />
+          <ParticipantCapabilities
+            items={m.participant_capabilities ?? []}
+            revealed={m.anonymised_labels_revealed !== false}
+          />
+        </Card>
+      ) : null}
 
       <Card id="meeting-discussion" className="space-y-4 p-4 sm:p-6" data-testid="meeting-detail-rounds">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">{t("meetingsCenter.detail.roundsTitle")}</h2>
-          {canRevealLabels ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              aria-pressed={showReveal}
-              data-testid="meeting-label-reveal-toggle"
-              onClick={() => setShowReveal((prev) => !prev)}
-            >
-              {t(`meetingsCenter.detail.${showReveal ? "hideIdentities" : "showIdentities"}`)}
-            </Button>
-          ) : null}
-        </div>
-        {rounds.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noRounds")}</p>
-        ) : (
-          <ol className="space-y-5">
-            {rounds.map((round) => (
-              <li key={round.round} data-testid={`meeting-round-${round.round}`} className="space-y-3 border-l-2 border-primary/30 pl-3 sm:pl-4">
-                <div>
-                  <h3 className="font-semibold">
-                    {t("meetingsCenter.detail.roundLabel", { round: round.round })}
-                    {" · "}
-                    {t(`meetingsCenter.detail.${round.round === 1 ? "independentRound" : round.round === 2 ? "responseRound" : "evidenceRound"}`)}
-                  </h3>
-                  {round.evidence_note ? <p className="break-words text-sm text-muted-foreground">{round.evidence_note}</p> : null}
-                </div>
-                {round.positions.length === 0 ? <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noPositions")}</p> : null}
-                <ul className="divide-y divide-border rounded-md border border-border bg-muted/10">
-                  {round.positions.map((position, index) => {
-                    const revealedId = canRevealLabels && showReveal
-                      ? position.revealed_persona_id ?? labelReveal?.[position.label] ?? position.persona_id
-                      : undefined;
-                    const participant = revealedId ? m.participants.find((item) => item.persona_id === revealedId) : undefined;
-                    const name = revealedId ? position.persona_display_name ?? participant?.persona_display_name : undefined;
-                    const replies = round.round > 1
-                      ? [
-                          { label: "accepted", entries: position.accepted },
-                          { label: "disputed", entries: position.disputed },
-                        ]
-                      : [];
-                    return (
-                      <li
-                        key={`${position.label}-${index}`}
-                        data-testid={`round-${round.round}-position-${position.label}`}
-                        className="min-w-0 space-y-2 p-3 sm:p-4"
-                      >
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                          <strong data-testid={`round-${round.round}-anon-label-${position.label}`}>
-                            {speakerLabel(position.label, position.role)}
+        {isGatePanel ? (
+          <div className="space-y-4" data-testid="meeting-detail-reviewers">
+            <h2 className="text-lg font-semibold">
+              {t("meetingsCenter.detail.gatePanel.reviewersTitle")}
+            </h2>
+            {gateReviewers.length === 0 ? (
+              <p className="text-sm text-muted-foreground" data-testid="gate-panel-reviewers-empty">
+                {t("meetingsCenter.detail.gatePanel.noReviewers")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-border rounded-md border border-border bg-muted/10">
+                {gateReviewers.map((rev, index) => {
+                  const rowId = rev.personaId || rev.key || String(index + 1);
+                  return (
+                    <li
+                      key={`${rowId}-${index}`}
+                      data-testid={`gate-panel-reviewer-${rowId}`}
+                      className="min-w-0 space-y-2 p-3 sm:p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <strong
+                            className="font-semibold text-foreground"
+                            data-testid={`gate-panel-reviewer-name-${rowId}`}
+                          >
+                            {rev.displayName}
                           </strong>
-                          {revealedId ? (
-                            <span data-testid={`round-${round.round}-revealed-${position.label}`} className="break-all text-muted-foreground">
-                              {name || revealedId}
-                            </span>
+                          {rev.personaId && rev.displayName !== rev.personaId ? (
+                            <code
+                              className="font-mono text-xs text-muted-foreground"
+                              data-testid={`gate-panel-reviewer-id-${rowId}`}
+                            >
+                              ({rev.personaId})
+                            </code>
                           ) : null}
-                          {round.round > 1 && typeof position.changed === "boolean" ? (
-                            <Badge variant={position.changed ? "default" : "outline"}>
-                              {t(`meetingsCenter.detail.${position.changed ? "changedPosition" : "unchangedPosition"}`)}
-                            </Badge>
-                          ) : null}
+                          <Badge
+                            variant="outline"
+                            data-testid={`gate-panel-reviewer-role-${rowId}`}
+                          >
+                            {rev.roleLabel}
+                          </Badge>
                         </div>
-                        {position.stance ? <p className="break-words text-sm font-medium">{labelForStance(position.stance)}</p> : null}
-                        {position.rationale || position.summary ? (
-                          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">{position.rationale || position.summary}</p>
-                        ) : null}
-                        {replies.map(({ label, entries }) => {
-                          const text = Array.isArray(entries)
-                            ? entries.filter((entry) => typeof entry === "string" && entry.trim() && entry !== "baseline_case_facts")
-                            : [];
-                          return text.length > 0 ? (
-                            <div key={label} className="text-sm">
-                              <span className="font-medium">{t(`meetingsCenter.detail.${label}`)}</span>
-                              <ul className="ml-4 list-disc break-words">
-                                {text.map((entry, entryIndex) => <li key={entryIndex}>{entry}</li>)}
-                              </ul>
+                        <Badge
+                          variant={
+                            rev.recommendation === "approve" || rev.recommendation === "approved"
+                              ? "secondary"
+                              : "default"
+                          }
+                          data-testid={`gate-panel-reviewer-recommendation-${rowId}`}
+                        >
+                          {rev.recommendationLabel}
+                        </Badge>
+                      </div>
+                      {rev.rationale ? (
+                        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+                          {rev.rationale}
+                        </p>
+                      ) : null}
+                      {rev.claims.length > 0 ? (
+                        <ul className="ml-4 list-disc space-y-1 text-sm text-foreground">
+                          {rev.claims.map((cl, clIndex) => (
+                            <li
+                              key={clIndex}
+                              data-testid={`gate-panel-reviewer-${rowId}-claim-${clIndex}`}
+                            >
+                              <span>{cl.claim}</span>
+                              {cl.cited_item_ids.length > 0 ? (
+                                <span className="ml-2 font-mono text-xs text-muted-foreground">
+                                  ({cl.cited_item_ids.join(", ")})
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {rev.citations.length > 0 && rev.claims.length === 0 ? (
+                        <p className="text-xs font-mono text-muted-foreground">
+                          {rev.citations.join(", ")}
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">{t("meetingsCenter.detail.roundsTitle")}</h2>
+              {canRevealLabels ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-pressed={showReveal}
+                  data-testid="meeting-label-reveal-toggle"
+                  onClick={() => setShowReveal((prev) => !prev)}
+                >
+                  {t(`meetingsCenter.detail.${showReveal ? "hideIdentities" : "showIdentities"}`)}
+                </Button>
+              ) : null}
+            </div>
+            {rounds.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noRounds")}</p>
+            ) : (
+              <ol className="space-y-5">
+                {rounds.map((round) => (
+                  <li key={round.round} data-testid={`meeting-round-${round.round}`} className="space-y-3 border-l-2 border-primary/30 pl-3 sm:pl-4">
+                    <div>
+                      <h3 className="font-semibold">
+                        {t("meetingsCenter.detail.roundLabel", { round: round.round })}
+                        {" · "}
+                        {t(`meetingsCenter.detail.${round.round === 1 ? "independentRound" : round.round === 2 ? "responseRound" : "evidenceRound"}`)}
+                      </h3>
+                      {round.evidence_note ? <p className="break-words text-sm text-muted-foreground">{round.evidence_note}</p> : null}
+                    </div>
+                    {round.positions.length === 0 ? <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noPositions")}</p> : null}
+                    <ul className="divide-y divide-border rounded-md border border-border bg-muted/10">
+                      {round.positions.map((position, index) => {
+                        const revealedId = canRevealLabels && showReveal
+                          ? position.revealed_persona_id ?? labelReveal?.[position.label] ?? position.persona_id
+                          : undefined;
+                        const participant = revealedId ? m.participants.find((item) => item.persona_id === revealedId) : undefined;
+                        const name = revealedId ? position.persona_display_name ?? participant?.persona_display_name : undefined;
+                        const replies = round.round > 1
+                          ? [
+                              { label: "accepted", entries: position.accepted },
+                              { label: "disputed", entries: position.disputed },
+                            ]
+                          : [];
+                        return (
+                          <li
+                            key={`${position.label}-${index}`}
+                            data-testid={`round-${round.round}-position-${position.label}`}
+                            className="min-w-0 space-y-2 p-3 sm:p-4"
+                          >
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                              <strong data-testid={`round-${round.round}-anon-label-${position.label}`}>
+                                {speakerLabel(position.label, position.role)}
+                              </strong>
+                              {revealedId ? (
+                                <span data-testid={`round-${round.round}-revealed-${position.label}`} className="break-all text-muted-foreground">
+                                  {name || revealedId}
+                                </span>
+                              ) : null}
+                              {round.round > 1 && typeof position.changed === "boolean" ? (
+                                <Badge variant={position.changed ? "default" : "outline"}>
+                                  {t(`meetingsCenter.detail.${position.changed ? "changedPosition" : "unchangedPosition"}`)}
+                                </Badge>
+                              ) : null}
                             </div>
-                          ) : null;
-                        })}
-                        {Array.isArray(position.citations) && position.citations.length > 0 ? (
-                          <ul className="flex flex-wrap gap-2 text-xs">
-                            {position.citations.map((citation, citationIndex) => {
-                              const itemIndex = caseCitationIndex(m.case_file_items, citation);
-                              return (
-                                <li key={citationIndex} className="min-w-0">
-                                  {itemIndex >= 0 ? (
-                                    <a href={`#meeting-case-item-${itemIndex}`} onClick={openCaseFile} className="text-primary underline underline-offset-4">
-                                      {t("meetingsCenter.detail.citationLink", { number: itemIndex + 1 })}
-                                    </a>
-                                  ) : (
-                                    <span className="break-all text-muted-foreground">{t("meetingsCenter.detail.unmatchedCitation", { citation })}</span>
-                                  )}
-                                </li>
-                              );
+                            {position.stance ? <p className="break-words text-sm font-medium">{labelForStance(position.stance)}</p> : null}
+                            {position.rationale || position.summary ? (
+                              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">{position.rationale || position.summary}</p>
+                            ) : null}
+                            {replies.map(({ label, entries }) => {
+                              const text = Array.isArray(entries)
+                                ? entries.filter((entry) => typeof entry === "string" && entry.trim() && entry !== "baseline_case_facts")
+                                : [];
+                              return text.length > 0 ? (
+                                <div key={label} className="text-sm">
+                                  <span className="font-medium">{t(`meetingsCenter.detail.${label}`)}</span>
+                                  <ul className="ml-4 list-disc break-words">
+                                    {text.map((entry, entryIndex) => <li key={entryIndex}>{entry}</li>)}
+                                  </ul>
+                                </div>
+                              ) : null;
                             })}
-                          </ul>
-                        ) : null}
-                        {typeof position.confidence === "number" && Number.isFinite(position.confidence) ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t("meetingsCenter.detail.confidence", {
-                              value: new Intl.NumberFormat(i18n.resolvedLanguage, { style: "percent" }).format(position.confidence),
-                            })}
-                          </p>
-                        ) : null}
-                      </li>
-                    );
-                  })}
+                            {Array.isArray(position.citations) && position.citations.length > 0 ? (
+                              <ul className="flex flex-wrap gap-2 text-xs">
+                                {position.citations.map((citation, citationIndex) => {
+                                  const itemIndex = caseCitationIndex(m.case_file_items, citation);
+                                  return (
+                                    <li key={citationIndex} className="min-w-0">
+                                      {itemIndex >= 0 ? (
+                                        <a href={`#meeting-case-item-${itemIndex}`} onClick={openCaseFile} className="text-primary underline underline-offset-4">
+                                          {t("meetingsCenter.detail.citationLink", { number: itemIndex + 1 })}
+                                        </a>
+                                      ) : (
+                                        <span className="break-all text-muted-foreground">{t("meetingsCenter.detail.unmatchedCitation", { citation })}</span>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            ) : null}
+                            {typeof position.confidence === "number" && Number.isFinite(position.confidence) ? (
+                              <p className="text-xs text-muted-foreground">
+                                {t("meetingsCenter.detail.confidence", {
+                                  value: new Intl.NumberFormat(i18n.resolvedLanguage, { style: "percent" }).format(position.confidence),
+                                })}
+                              </p>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {canRevealLabels && showReveal && labelReveal ? (
+              <details className="rounded-md border border-border p-3 text-xs">
+                <summary className="cursor-pointer font-medium">{t("meetingsCenter.detail.operatorRevealTitle")}</summary>
+                <ul className="mt-2 space-y-1 break-all font-mono" data-testid="meeting-label-reveal">
+                  {Object.entries(labelReveal).map(([anonLabel, personaId]) => (
+                    <li key={anonLabel} data-testid={`label-reveal-${anonLabel}`}>{anonLabel} → {personaId}</li>
+                  ))}
                 </ul>
-              </li>
-            ))}
-          </ol>
+              </details>
+            ) : null}
+          </>
         )}
-        {canRevealLabels && showReveal && labelReveal ? (
-          <details className="rounded-md border border-border p-3 text-xs">
-            <summary className="cursor-pointer font-medium">{t("meetingsCenter.detail.operatorRevealTitle")}</summary>
-            <ul className="mt-2 space-y-1 break-all font-mono" data-testid="meeting-label-reveal">
-              {Object.entries(labelReveal).map(([anonLabel, personaId]) => (
-                <li key={anonLabel} data-testid={`label-reveal-${anonLabel}`}>{anonLabel} → {personaId}</li>
+      </Card>
+
+      {/* Gate Panel Memo Summary */}
+      {isGatePanel || gateMemos.length > 0 ? (
+        <Card id="meeting-memo" className="space-y-3 p-4 sm:p-6" data-testid="meeting-detail-memo">
+          <h2 className="text-lg font-semibold">
+            {t("meetingsCenter.detail.gatePanel.memoTitle")}
+          </h2>
+          {gateMemos.length === 0 ? (
+            <p className="text-sm text-muted-foreground" data-testid="meeting-memo-empty">
+              {t("meetingsCenter.detail.gatePanel.noMemo")}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {gateMemos.map((memo) => (
+                <li
+                  key={memo.memo_id}
+                  data-testid={`meeting-memo-${memo.memo_id}`}
+                  className="rounded-md border border-border bg-muted/10 p-3 space-y-1.5 text-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <code
+                      className="font-mono font-semibold text-foreground"
+                      data-testid="meeting-memo-id"
+                    >
+                      {memo.memo_id}
+                    </code>
+                    {memo.status ? (
+                      <Badge variant="outline">{statusLabel(memo.status, t)}</Badge>
+                    ) : null}
+                    {memo.recommendation ? (
+                      <Badge
+                        variant="secondary"
+                        data-testid={`meeting-memo-recommendation-${memo.memo_id}`}
+                      >
+                        {formatGatePanelRecommendationLabel(memo.recommendation, t)}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  {memo.summary ? (
+                    <p
+                      className="whitespace-pre-wrap break-words text-sm text-foreground"
+                      data-testid="meeting-memo-summary"
+                    >
+                      {memo.summary}
+                    </p>
+                  ) : null}
+                </li>
               ))}
             </ul>
-          </details>
-        ) : null}
-      </Card>
+          )}
+        </Card>
+      ) : null}
 
       {/* 8. Proposals with Live Downstream Links */}
-      <Card id="meeting-proposals" className="p-4 space-y-2" data-testid="meeting-detail-proposals">
-        <h2 className="text-sm font-semibold">
-          {t("meetingsCenter.detail.proposalsTitle", {
-            defaultValue: "Proposals & Live Downstream Status",
-          })}
-        </h2>
-        {proposals.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t("meetingsCenter.detail.noProposals")}</p>
-        ) : (
-          <ul className="space-y-2">
-            {proposals.map((p) => (
-              <li
-                key={p.proposal_id}
-                data-testid={`detail-proposal-${p.proposal_id}`}
-                className="rounded border border-border p-3 text-xs flex flex-wrap items-center justify-between gap-2"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono font-semibold">{p.proposal_id}</span>
-                  {p.kind ? <Badge variant="outline">{p.kind}</Badge> : null}
-                  <span className="inline-flex items-center gap-1">
-                    {t("meetingsCenter.detail.sponsor")}{" "}
-                    <BffSubjectInline
-                      id={p.sponsor_persona_id}
-                      displayName={p.sponsor_persona_display_name ?? p.persona_display_name}
-                      nameMissing={p.sponsor_persona_name_missing ?? p.persona_name_missing}
-                      testIdPrefix={`detail-proposal-sponsor-${p.proposal_id}`}
-                    />
-                  </span>
-                  {p.strategy_id || p.strategy_display_name ? (
+      {!isGatePanel || proposals.length > 0 ? (
+        <Card id="meeting-proposals" className="p-4 space-y-2" data-testid="meeting-detail-proposals">
+          <h2 className="text-sm font-semibold">
+            {t("meetingsCenter.detail.proposalsTitle", {
+              defaultValue: "Proposals & Live Downstream Status",
+            })}
+          </h2>
+          {proposals.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t("meetingsCenter.detail.noProposals")}</p>
+          ) : (
+            <ul className="space-y-2">
+              {proposals.map((p) => (
+                <li
+                  key={p.proposal_id}
+                  data-testid={`detail-proposal-${p.proposal_id}`}
+                  className="rounded border border-border p-3 text-xs flex flex-wrap items-center justify-between gap-2"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono font-semibold">{p.proposal_id}</span>
+                    {p.kind ? <Badge variant="outline">{p.kind}</Badge> : null}
                     <span className="inline-flex items-center gap-1">
-                      {t("meetingsCenter.detail.strategy")}{" "}
+                      {t("meetingsCenter.detail.sponsor")}{" "}
                       <BffSubjectInline
-                        id={p.strategy_id}
-                        displayName={p.strategy_display_name}
-                        nameMissing={p.strategy_name_missing}
-                        testIdPrefix={`detail-proposal-strategy-${p.proposal_id}`}
+                        id={p.sponsor_persona_id}
+                        displayName={p.sponsor_persona_display_name ?? p.persona_display_name}
+                        nameMissing={p.sponsor_persona_name_missing ?? p.persona_name_missing}
+                        testIdPrefix={`detail-proposal-sponsor-${p.proposal_id}`}
                       />
                     </span>
+                    {p.strategy_id || p.strategy_display_name ? (
+                      <span className="inline-flex items-center gap-1">
+                        {t("meetingsCenter.detail.strategy")}{" "}
+                        <BffSubjectInline
+                          id={p.strategy_id}
+                          displayName={p.strategy_display_name}
+                          nameMissing={p.strategy_name_missing}
+                          testIdPrefix={`detail-proposal-strategy-${p.proposal_id}`}
+                        />
+                      </span>
+                    ) : null}
+                    {p.downstream?.status ? (() => {
+                      const dsLabel = statusLabel(p.downstream.status, t);
+                      return (
+                        <Badge variant="secondary">
+                          <span>{dsLabel}</span>
+                          {dsLabel !== p.downstream.status ? (
+                            <>
+                              {" "}
+                              <code className="ml-1 font-mono text-[10px] opacity-80">{p.downstream.status}</code>
+                            </>
+                          ) : null}
+                        </Badge>
+                      );
+                    })() : null}
+                  </div>
+                  {p.downstream?.href ? (
+                    <Link
+                      to={p.downstream.href}
+                      className="font-mono underline text-primary"
+                      data-testid={`proposal-downstream-link-${p.proposal_id}`}
+                    >
+                      {t("meetingsCenter.detail.openProposal")} →
+                    </Link>
                   ) : null}
-                  {p.downstream?.status ? (() => {
-                    const dsLabel = statusLabel(p.downstream.status, t);
-                    return (
-                      <Badge variant="secondary">
-                        <span>{dsLabel}</span>
-                        {dsLabel !== p.downstream.status ? (
-                          <>
-                            {" "}
-                            <code className="ml-1 font-mono text-[10px] opacity-80">{p.downstream.status}</code>
-                          </>
-                        ) : null}
-                      </Badge>
-                    );
-                  })() : null}
-                </div>
-                {p.downstream?.href ? (
-                  <Link
-                    to={p.downstream.href}
-                    className="font-mono underline text-primary"
-                    data-testid={`proposal-downstream-link-${p.proposal_id}`}
-                  >
-                    {t("meetingsCenter.detail.openProposal")} →
-                  </Link>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
 
       <Card className="p-4 sm:p-6">
-        <details id="meeting-sources" ref={caseFileRef}>
-          <summary className="cursor-pointer text-base font-semibold">{t("meetingsCenter.detail.caseFileTitle")}</summary>
+        <details id="meeting-sources" ref={caseFileRef} open={isGatePanel || undefined}>
+          <summary className="cursor-pointer text-base font-semibold">
+            {t(isGatePanel ? "meetingsCenter.detail.gatePanel.caseFileTitle" : "meetingsCenter.detail.caseFileTitle")}
+          </summary>
           <div className="mt-4 space-y-4">
-            <section className="space-y-2" data-testid="meeting-detail-case-file">
-              {typeof m.private_items_withheld === "number" && m.private_items_withheld > 0 ? (
-                <p className="text-xs text-muted-foreground" data-testid="meeting-private-withheld-badge">
-                  {t("meetingsCenter.detail.withheldPrivate", { count: m.private_items_withheld })}
-                </p>
-              ) : null}
-              {m.case_file_items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noCaseItems")}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {m.case_file_items.map((item, index) => {
-                    const itemContent = caseItemContent(item);
-                    return (
-                      <li
-                        key={item.item_id}
-                        id={`meeting-case-item-${index}`}
-                        tabIndex={-1}
-                        data-testid={`case-file-item-${item.item_id}`}
-                        className="space-y-1 rounded-md border border-border p-3 text-sm target:border-primary"
-                      >
-                        <h3 className="font-medium">{t("meetingsCenter.detail.citationLink", { number: index + 1 })}</h3>
-                        {itemContent ? (
-                          <p className="whitespace-pre-wrap break-words">{itemContent}</p>
-                        ) : (
-                          <p>{item.status === "unavailable" ? t("meetingsCenter.detail.caseUnavailable") : t("meetingsCenter.detail.referenceOnlyNote")}</p>
-                        )}
-                        {item.unavailable_reason ? <p className="break-words">{reasonCodeDisplay(item.unavailable_reason, t).text}</p> : null}
-                        <details className="text-xs text-muted-foreground">
-                          <summary className="cursor-pointer">{t("meetingsCenter.detail.referenceDetails")}</summary>
-                          <p className="break-all font-mono">{[item.item_id, item.source_id, item.kind, item.source_owner, item.relevance_scope].filter(Boolean).join(" · ")}</p>
-                          {item.raw_text && item.raw_text !== itemContent ? <p className="whitespace-pre-wrap break-words">{item.raw_text}</p> : null}
-                          {item.agora_user_id || item.trader_id || item.account_id || item.broker_ids?.length ? (
-                            <p className="break-all font-mono">{[item.agora_user_id ?? item.trader_id, item.account_id, ...(Array.isArray(item.broker_ids) ? item.broker_ids : [])].filter(Boolean).join(" · ")}</p>
-                          ) : null}
-                        </details>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
+            {isGatePanel || m.case_file_view !== undefined ? (
+              <section data-testid="meeting-detail-case-file-view">
+                <CaseFileViewPanel
+                  view={m.case_file_view}
+                  scope={m.meeting_id}
+                  testId="meeting-case-file-view"
+                />
+              </section>
+            ) : null}
+            {!isGatePanel || m.case_file_items.length > 0 || (typeof m.private_items_withheld === "number" && m.private_items_withheld > 0) ? (
+              <section className="space-y-2" data-testid="meeting-detail-case-file">
+                {typeof m.private_items_withheld === "number" && m.private_items_withheld > 0 ? (
+                  <p className="text-xs text-muted-foreground" data-testid="meeting-private-withheld-badge">
+                    {t("meetingsCenter.detail.withheldPrivate", { count: m.private_items_withheld })}
+                  </p>
+                ) : null}
+                {m.case_file_items.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("meetingsCenter.detail.noCaseItems")}</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {m.case_file_items.map((item, index) => {
+                      const itemContent = caseItemContent(item);
+                      return (
+                        <li
+                          key={item.item_id}
+                          id={`meeting-case-item-${index}`}
+                          tabIndex={-1}
+                          data-testid={`case-file-item-${item.item_id}`}
+                          className="space-y-1 rounded-md border border-border p-3 text-sm target:border-primary"
+                        >
+                          <h3 className="font-medium">{t("meetingsCenter.detail.citationLink", { number: index + 1 })}</h3>
+                          {itemContent ? (
+                            <p className="whitespace-pre-wrap break-words">{itemContent}</p>
+                          ) : (
+                            <p>{item.status === "unavailable" ? t("meetingsCenter.detail.caseUnavailable") : t("meetingsCenter.detail.referenceOnlyNote")}</p>
+                          )}
+                          {item.unavailable_reason ? <p className="break-words">{reasonCodeDisplay(item.unavailable_reason, t).text}</p> : null}
+                          <details className="text-xs text-muted-foreground">
+                            <summary className="cursor-pointer">{t("meetingsCenter.detail.referenceDetails")}</summary>
+                            <p className="break-all font-mono">{[item.item_id, item.source_id, item.kind, item.source_owner, item.relevance_scope].filter(Boolean).join(" · ")}</p>
+                            {item.raw_text && item.raw_text !== itemContent ? <p className="whitespace-pre-wrap break-words">{item.raw_text}</p> : null}
+                            {item.agora_user_id || item.trader_id || item.account_id || item.broker_ids?.length ? (
+                              <p className="break-all font-mono">{[item.agora_user_id ?? item.trader_id, item.account_id, ...(Array.isArray(item.broker_ids) ? item.broker_ids : [])].filter(Boolean).join(" · ")}</p>
+                            ) : null}
+                          </details>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            ) : null}
             {agendaItems.length > 0 ? (
               <section className="space-y-2" data-testid="meeting-detail-agenda">
                 <h3 className="text-sm font-semibold">{t("meetingsCenter.detail.agendaTitle")}</h3>

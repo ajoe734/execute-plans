@@ -2151,4 +2151,413 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
     unmountZh();
     await i18n.changeLanguage("en-US");
   });
+
+  it("lists persona review panels (session_class gate_panel) in history and type filter with zh-TW title, date/time, and conclusion in words, and renders reviewers, memo summary, and case-file view on detail while keeping private text withheld (FE-MGMT-MEETINGS-GATE-PANELS-20261126)", async () => {
+    const panelId = "consult-envelope-publication-02695a7e4b41ea27d7db1138405bff6a-r2";
+    const failedPanelId = "consult-envelope-publication-02695a7e4b41ea27d7db1138405bff6a";
+    const gatePanelListRow = {
+      id: panelId,
+      meeting_id: panelId,
+      session_id: panelId,
+      request_id: panelId,
+      session_class: "gate_panel",
+      consultation_type: "persona_panel",
+      meeting_type: "gate_panel",
+      title:
+        "青禾 pool v6 envelope publication: 青禾 request_more_research, Risk Officer request_more_research -> operator_decision",
+      topic: "Risk review of paper envelope publication of pool v6 (live membership changed)",
+      status: "published",
+      effective_status: "published",
+      outcome: "operator_decision",
+      subject_persona_id: "persona-2448c7053e33ea48da47",
+      subject_persona_display_name: "青禾",
+      gated_decision: {
+        type: "envelope_publication",
+        id: "envelope-publication-02695a7e4b41ea27d7db1138405bff6a",
+        target_version: "6",
+      },
+      conclusion: {
+        gate_decision: "operator_decision",
+        operator_decision_required: true,
+        vetoed_by: null,
+        reasons: ["persona-risk-officer: risk did not support (request_more_research)"],
+        reviewers: [
+          {
+            persona_id: "persona-2448c7053e33ea48da47",
+            persona_display_name: "青禾",
+            role: "primary_reviewer",
+            recommendation: "request_more_research",
+          },
+          {
+            persona_id: "persona-risk-officer",
+            persona_display_name: "Risk Officer",
+            role: "risk_reviewer",
+            recommendation: "request_more_research",
+          },
+        ],
+        status: "ok",
+        reason: null,
+      },
+      participants: [
+        {
+          persona_id: "persona-2448c7053e33ea48da47",
+          persona_display_name: "青禾",
+          role: "primary_reviewer",
+          origin: "institutional",
+        },
+        {
+          persona_id: "persona-risk-officer",
+          persona_display_name: "Risk Officer",
+          role: "risk_reviewer",
+          origin: "institutional",
+        },
+      ],
+      participant_count: 2,
+      round: 1,
+      created_at: "2026-11-24T08:00:00Z",
+      completed_at: "2026-11-24T08:04:00Z",
+      closed_at: "2026-11-24T08:04:00Z",
+      href: `/management/meetings/${panelId}`,
+    };
+
+    const failedGatePanelRow = {
+      id: failedPanelId,
+      meeting_id: failedPanelId,
+      session_id: failedPanelId,
+      request_id: failedPanelId,
+      session_class: "gate_panel",
+      consultation_type: "persona_panel",
+      meeting_type: "gate_panel",
+      title: "persona-2448c7053e33ea48da47 pool v6 envelope publication: pending",
+      topic: "Risk review of paper envelope publication of pool v6 (live membership changed)",
+      status: "failed",
+      effective_status: "failed",
+      outcome: null,
+      subject_persona_id: "persona-2448c7053e33ea48da47",
+      subject_persona_display_name: "persona-2448c7053e33ea48da47",
+      subject_persona_name_missing: true,
+      gated_decision: {
+        type: "envelope_publication",
+        id: "envelope-publication-02695a7e4b41ea27d7db1138405bff6a",
+        target_version: 6,
+      },
+      conclusion: {
+        gate_decision: null,
+        operator_decision_required: null,
+        vetoed_by: null,
+        reasons: [],
+        reviewers: [
+          {
+            persona_id: "persona-2448c7053e33ea48da47",
+            persona_display_name: "persona-2448c7053e33ea48da47",
+            persona_name_missing: true,
+            role: "primary_reviewer",
+            recommendation: null,
+          },
+          {
+            persona_id: "persona-risk-officer",
+            persona_display_name: "persona-risk-officer",
+            persona_name_missing: true,
+            role: "risk_reviewer",
+            recommendation: null,
+          },
+        ],
+        status: "pending",
+        reason: "no_panel_transcript",
+      },
+      participants: [],
+      created_at: "2026-11-23T08:00:00Z",
+      completed_at: null,
+      closed_at: null,
+      href: `/management/meetings/${failedPanelId}`,
+    };
+
+    const gatePanelDetail = {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        ...gatePanelListRow,
+        rounds: [
+          {
+            round: 1,
+            mode: "independent",
+            positions: [
+              {
+                label: "primary_reviewer",
+                persona_id: "persona-2448c7053e33ea48da47",
+                persona_display_name: "青禾",
+                role: "primary_reviewer",
+                style: "independent_gate_panel",
+                stance: "request_more_research",
+                citations: ["cf-pool-v6", "cf-withheld-private"],
+                changed: false,
+                private_memory: "NEVER_LEAK_GATE_ROUND_PRIVATE_01",
+              },
+              {
+                label: "risk_reviewer",
+                persona_id: "persona-risk-officer",
+                persona_display_name: "Risk Officer",
+                role: "risk_reviewer",
+                style: "independent_gate_panel",
+                stance: "request_more_research",
+                citations: ["cf-pool-v6"],
+                changed: false,
+              },
+            ],
+          },
+        ],
+        positions: [
+          {
+            label: "primary_reviewer",
+            persona_id: "persona-2448c7053e33ea48da47",
+            persona_display_name: "青禾",
+            role: "primary_reviewer",
+            style: "independent_gate_panel",
+            stance: "request_more_research",
+            citations: ["cf-pool-v6", "cf-withheld-private"],
+            changed: false,
+            private_memory: "NEVER_LEAK_GATE_POS_PRIVATE_02",
+          },
+          {
+            label: "risk_reviewer",
+            persona_id: "persona-risk-officer",
+            persona_display_name: "Risk Officer",
+            role: "risk_reviewer",
+            style: "independent_gate_panel",
+            stance: "request_more_research",
+            citations: ["cf-pool-v6"],
+            changed: false,
+          },
+        ],
+        memo: {
+          memo_id: "mem-868b462cd4fe32838ccf",
+          request_id: panelId,
+          memo_type: "committee_summary",
+          author_type: "committee",
+          author_ref: `consult-panel:${panelId}`,
+          summary:
+            "兩位審查委員皆建議補充流動性與滑價研究後再發布策略池 v6，需操作者決定。",
+          recommendation: "request_more_research",
+          status: "published",
+          private_text: "NEVER_LEAK_GATE_MEMO_PRIVATE_03",
+        },
+        memos: [
+          {
+            memo_id: "mem-868b462cd4fe32838ccf",
+            request_id: panelId,
+            memo_type: "committee_summary",
+            author_type: "committee",
+            author_ref: `consult-panel:${panelId}`,
+            summary:
+              "兩位審查委員皆建議補充流動性與滑價研究後再發布策略池 v6，需操作者決定。",
+            recommendation: "request_more_research",
+            status: "published",
+            private_text: "NEVER_LEAK_GATE_MEMO_PRIVATE_03",
+          },
+        ],
+        case_file_view: {
+          status: "ok",
+          reason: null,
+          case_file: {
+            case_file_id: "cf-envelope-2448-v6",
+            digest: "sha256:02695a7e",
+            decision_type: "envelope_publication",
+            persona_id: "persona-2448c7053e33ea48da47",
+            composed_at: "2026-11-24T08:00:00Z",
+            private_items_withheld: 1,
+            groups: {
+              pool_membership: {
+                status: "ok",
+                reason: null,
+                truncated: false,
+                unavailable: [],
+                items: [
+                  {
+                    item_id: "cf-pool-v6",
+                    kind: "pool_envelope",
+                    source_owner: "strategy_pool",
+                    source_id: "pool-2448-v6",
+                    retrieval_mode: "direct",
+                    excerpt: "Pool v6 membership adds 2454.TW with 15% weight cap.",
+                  },
+                  {
+                    item_id: "cf-withheld-private",
+                    kind: "memory",
+                    relevance_scope: "persona_private",
+                    excerpt: "NEVER_LEAK_GATE_CASE_FILE_PRIVATE_04",
+                  },
+                ],
+              },
+            },
+          },
+          contributions: [
+            {
+              persona_id: "persona-2448c7053e33ea48da47",
+              event_id: "evt-panel-1",
+              role: "primary_reviewer",
+              recommendation: "request_more_research",
+              claims: [
+                {
+                  claim: "需補充 2454.TW 近 20 日滑價與換手率驗證。",
+                  cited_item_ids: ["cf-pool-v6"],
+                  unresolved_item_ids: [],
+                },
+              ],
+            },
+            {
+              persona_id: "persona-risk-officer",
+              event_id: "evt-panel-2",
+              role: "risk_reviewer",
+              recommendation: "request_more_research",
+              claims: [
+                {
+                  claim: "建議於補充壓力測試後再行發布策略池 v6。",
+                  cited_item_ids: ["cf-pool-v6"],
+                  unresolved_item_ids: [],
+                },
+              ],
+            },
+          ],
+          rejected_contributions: [],
+        },
+      },
+    };
+
+    on("GET", "/bff/management/meetings", {
+      status: "ok",
+      owner: "consultation",
+      data: {
+        items: [
+          gatePanelListRow,
+          failedGatePanelRow,
+          ...recordedListResponse.data.items,
+        ],
+        summary: {
+          total_items: 4,
+          returned_items: 4,
+          open_count: 1,
+          closed_count: 3,
+          review_count: 1,
+          gate_panel_count: 2,
+        },
+      },
+    });
+    on("GET", "/bff/management/meetings/proposals", recordedProposalsResponse);
+    on("GET", "/bff/management/meetings/catalogue", recordedCatalogueResponse);
+    on("GET", `/bff/management/meetings/${panelId}`, gatePanelDetail);
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/management/meetings?tab=history"]}>
+        <Routes>
+          <Route path="/management/meetings" element={<MeetingsCenterPage />} />
+          <Route path="/management/meetings/:id" element={<MeetingDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // 1. Type filter includes gate_panel next to the six deliberative types MT-1..MT-6
+    const typeFilterGroup = await screen.findByTestId("meetings-type-filter");
+    for (const typeId of ["MT-1", "MT-2", "MT-3", "MT-4", "MT-5", "MT-6", "gate_panel"]) {
+      expect(within(typeFilterGroup).getByTestId(`meetings-type-filter-${typeId}`)).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("meetings-type-filter-gate_panel")).toHaveTextContent(
+      "Persona 審查會議",
+    );
+
+    // 2. History tab lists the gate panel row alongside closed deliberative meetings
+    const panelRow = await screen.findByTestId(`meeting-history-row-${panelId}`);
+    expect(panelRow).toHaveAttribute("data-session-class", "gate_panel");
+    expect(screen.getByTestId(`meeting-title-${panelId}`)).toHaveTextContent(
+      "青禾 · 策略池 v6 發布審查（第 2 次重試）",
+    );
+    expect(screen.getByTestId(`meeting-datetime-${panelId}`)).toHaveTextContent(
+      "2026-11-24 08:04 UTC",
+    );
+    expect(screen.getByTestId(`meeting-conclusion-${panelId}`)).toHaveTextContent(
+      "各審查者建議：青禾（主審（發起 Persona））：建議補充研究、風控官（風險審查）：建議補充研究 · 結論：需操作者決定",
+    );
+
+    // Failed / missing-name gate panel never shows raw persona id or raw consult id as the only name
+    expect(screen.getByTestId(`meeting-title-${failedPanelId}`)).toHaveTextContent(
+      "受審 Persona（persona-2448c7053e33ea48da47） · 策略池 v6 發布審查",
+    );
+    expect(screen.getByTestId(`meeting-conclusion-${failedPanelId}`)).toHaveTextContent(
+      "各審查者建議：未完成審查（未產生對話紀錄） · 結論：審查未完成（需操作者決定）",
+    );
+
+    // 3. Clicking the gate_panel type filter filters out MT-4 and sends ?type=gate_panel
+    fireEvent.click(screen.getByTestId("meetings-type-filter-gate_panel"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("meeting-history-row-mtg-002")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId(`meeting-history-row-${panelId}`)).toBeInTheDocument();
+    expect(
+      calls.some(
+        (c) => c.method === "GET" && c.path === "/bff/management/meetings" && c.query.type === "gate_panel",
+      ),
+    ).toBe(true);
+
+    // 4. Navigate to the gate panel detail page
+    fireEvent.click(screen.getByTestId(`meeting-link-${panelId}`));
+
+    const detailHeader = await screen.findByTestId("meeting-detail-header");
+    expect(within(detailHeader).getByRole("heading", { level: 1 })).toHaveTextContent(
+      "青禾 · 策略池 v6 發布審查（第 2 次重試）",
+    );
+    expect(screen.getByTestId("meeting-detail-gate-conclusion")).toHaveTextContent(
+      "各審查者建議：青禾（主審（發起 Persona））：建議補充研究、風控官（風險審查）：建議補充研究 · 結論：需操作者決定",
+    );
+
+    // Reviewers with role, recommendation, and claims
+    const reviewersCard = screen.getByTestId("meeting-detail-reviewers");
+    expect(
+      within(reviewersCard).getByTestId("gate-panel-reviewer-name-persona-2448c7053e33ea48da47"),
+    ).toHaveTextContent("青禾");
+    expect(
+      within(reviewersCard).getByTestId("gate-panel-reviewer-role-persona-2448c7053e33ea48da47"),
+    ).toHaveTextContent("主審（發起 Persona）");
+    expect(
+      within(reviewersCard).getByTestId(
+        "gate-panel-reviewer-recommendation-persona-2448c7053e33ea48da47",
+      ),
+    ).toHaveTextContent("建議補充研究");
+    expect(
+      within(reviewersCard).getByTestId("gate-panel-reviewer-name-persona-risk-officer"),
+    ).toHaveTextContent("風控官");
+    expect(
+      within(reviewersCard).getByTestId("gate-panel-reviewer-role-persona-risk-officer"),
+    ).toHaveTextContent("風險審查");
+    expect(
+      within(reviewersCard).getByTestId("gate-panel-reviewer-recommendation-persona-risk-officer"),
+    ).toHaveTextContent("建議補充研究");
+    expect(reviewersCard).toHaveTextContent("需補充 2454.TW 近 20 日滑價與換手率驗證。");
+
+    // Memo summary
+    const memoCard = screen.getByTestId("meeting-detail-memo");
+    expect(within(memoCard).getByTestId("meeting-memo-id")).toHaveTextContent(
+      "mem-868b462cd4fe32838ccf",
+    );
+    expect(within(memoCard).getByTestId("meeting-memo-summary")).toHaveTextContent(
+      "兩位審查委員皆建議補充流動性與滑價研究後再發布策略池 v6，需操作者決定。",
+    );
+
+    // Case-file view rendered and open by default
+    const caseFileView = screen.getByTestId("meeting-case-file-view");
+    expect(caseFileView).toHaveTextContent("cf-envelope-2448-v6");
+    expect(caseFileView).toHaveTextContent(
+      "Pool v6 membership adds 2454.TW with 15% weight cap.",
+    );
+
+    // Private text stays withheld everywhere
+    const fullText = document.body.textContent ?? "";
+    expect(fullText).not.toContain("NEVER_LEAK_GATE_ROUND_PRIVATE_01");
+    expect(fullText).not.toContain("NEVER_LEAK_GATE_POS_PRIVATE_02");
+    expect(fullText).not.toContain("NEVER_LEAK_GATE_MEMO_PRIVATE_03");
+    expect(fullText).not.toContain("NEVER_LEAK_GATE_CASE_FILE_PRIVATE_04");
+    expect(fullText).not.toContain("cf-withheld-private");
+
+    unmount();
+    await i18n.changeLanguage("en-US");
+  });
 });

@@ -1311,4 +1311,240 @@ describe("BFF v1 meetings client (FE-MANAGEMENT-MEETINGS-20261115)", () => {
       expect(getRes.data.evidence_items?.[0]?.href).toBe("/management/artifacts/artifact-900");
     }
   });
+
+  it("normalizes gate_panel list and detail payloads (conclusion, gated_decision, positions, memo, case_file_view) and strips withheld private items and citations (FE-MGMT-MEETINGS-GATE-PANELS-20261126)", async () => {
+    const panelId = "consult-envelope-publication-02695a7e4b41ea27d7db1138405bff6a-r2";
+    setMockResolver((method, path) => {
+      if (method === "GET" && path === "/bff/management/meetings") {
+        return () => ({
+          kind: "json",
+          status: 200,
+          body: {
+            status: "ok",
+            owner: "consultation",
+            data: {
+              items: [
+                {
+                  id: panelId,
+                  meeting_id: panelId,
+                  session_id: panelId,
+                  request_id: panelId,
+                  session_class: "gate_panel",
+                  consultation_type: "persona_panel",
+                  meeting_type: "gate_panel",
+                  title:
+                    "青禾 pool v6 envelope publication: 青禾 request_more_research, Risk Officer request_more_research -> operator_decision",
+                  topic: "Risk review of paper envelope publication of pool v6 (live membership changed)",
+                  status: "published",
+                  effective_status: "published",
+                  outcome: "operator_decision",
+                  subject_persona_id: "persona-2448c7053e33ea48da47",
+                  subject_persona_display_name: "青禾",
+                  gated_decision: {
+                    type: "envelope_publication",
+                    id: "envelope-publication-02695a7e4b41ea27d7db1138405bff6a",
+                    target_version: "6",
+                  },
+                  conclusion: {
+                    gate_decision: "operator_decision",
+                    operator_decision_required: true,
+                    vetoed_by: null,
+                    reasons: ["persona-risk-officer: risk did not support (request_more_research)"],
+                    reviewers: [
+                      {
+                        persona_id: "persona-2448c7053e33ea48da47",
+                        persona_display_name: "青禾",
+                        role: "primary_reviewer",
+                        recommendation: "request_more_research",
+                      },
+                      {
+                        persona_id: "persona-risk-officer",
+                        persona_display_name: "Risk Officer",
+                        role: "risk_reviewer",
+                        recommendation: "request_more_research",
+                      },
+                    ],
+                  },
+                  participants: [
+                    {
+                      persona_id: "persona-2448c7053e33ea48da47",
+                      persona_display_name: "青禾",
+                      role: "primary_reviewer",
+                      origin: "institutional",
+                    },
+                    {
+                      persona_id: "persona-risk-officer",
+                      persona_display_name: "Risk Officer",
+                      role: "risk_reviewer",
+                      origin: "institutional",
+                    },
+                  ],
+                  created_at: "2026-11-24T08:00:00Z",
+                  completed_at: "2026-11-24T08:04:00Z",
+                  closed_at: "2026-11-24T08:04:00Z",
+                  private_memory: "SECRET_GATE_PANEL_LIST_PRIVATE",
+                },
+              ],
+              summary: {
+                total_items: 1,
+                returned_items: 1,
+                open_count: 0,
+                closed_count: 1,
+                gate_panel_count: 1,
+              },
+            },
+          },
+        });
+      }
+      if (method === "GET" && path === `/bff/management/meetings/${panelId}`) {
+        return () => ({
+          kind: "json",
+          status: 200,
+          body: {
+            status: "ok",
+            owner: "consultation",
+            data: {
+              id: panelId,
+              meeting_id: panelId,
+              request_id: panelId,
+              session_class: "gate_panel",
+              consultation_type: "persona_panel",
+              meeting_type: "gate_panel",
+              status: "published",
+              outcome: "operator_decision",
+              subject_persona_id: "persona-2448c7053e33ea48da47",
+              subject_persona_display_name: "青禾",
+              gated_decision: {
+                type: "envelope_publication",
+                id: "envelope-publication-02695a7e4b41ea27d7db1138405bff6a",
+                target_version: "6",
+              },
+              conclusion: {
+                gate_decision: "operator_decision",
+                operator_decision_required: true,
+                reviewers: [
+                  {
+                    persona_id: "persona-2448c7053e33ea48da47",
+                    persona_display_name: "青禾",
+                    role: "primary_reviewer",
+                    recommendation: "request_more_research",
+                  },
+                  {
+                    persona_id: "persona-risk-officer",
+                    persona_display_name: "Risk Officer",
+                    role: "risk_reviewer",
+                    recommendation: "request_more_research",
+                  },
+                ],
+              },
+              positions: [
+                {
+                  label: "primary_reviewer",
+                  persona_id: "persona-2448c7053e33ea48da47",
+                  persona_display_name: "青禾",
+                  role: "primary_reviewer",
+                  stance: "request_more_research",
+                  citations: ["cf-pool-v6", "cf-private-secret"],
+                  private_text: "SECRET_GATE_POSITION_PRIVATE_TEXT",
+                },
+                {
+                  label: "risk_reviewer",
+                  persona_id: "persona-risk-officer",
+                  persona_display_name: "Risk Officer",
+                  role: "risk_reviewer",
+                  stance: "request_more_research",
+                  citations: ["cf-pool-v6"],
+                },
+              ],
+              memo: {
+                memo_id: "mem-868b462cd4fe32838ccf",
+                request_id: panelId,
+                memo_type: "committee_summary",
+                summary: "Both reviewers requested additional research before publishing pool v6.",
+                recommendation: "request_more_research",
+                status: "published",
+                private_memory: "SECRET_MEMO_PRIVATE_MEMORY",
+              },
+              case_file_view: {
+                status: "ok",
+                reason: null,
+                case_file: {
+                  case_file_id: "cf-2448-v6",
+                  decision_type: "envelope_publication",
+                  persona_id: "persona-2448c7053e33ea48da47",
+                  composed_at: "2026-11-24T08:00:00Z",
+                  private_items_withheld: 1,
+                  groups: {
+                    pool_facts: {
+                      status: "ok",
+                      reason: null,
+                      truncated: false,
+                      unavailable: [],
+                      items: [
+                        {
+                          item_id: "cf-pool-v6",
+                          kind: "pool_envelope",
+                          source_owner: "strategy_pool",
+                          source_id: "pool-2448-v6",
+                          retrieval_mode: "direct",
+                          excerpt: "Pool v6 adds 2454.TW at 15% target weight.",
+                        },
+                        {
+                          item_id: "cf-private-secret",
+                          kind: "memory",
+                          relevance_scope: "persona_private",
+                          excerpt: "SECRET_CASE_FILE_VIEW_PRIVATE_EXCERPT",
+                        },
+                      ],
+                    },
+                  },
+                },
+                contributions: [
+                  {
+                    persona_id: "persona-2448c7053e33ea48da47",
+                    event_id: "evt-1",
+                    role: "primary_reviewer",
+                    recommendation: "request_more_research",
+                    claims: [
+                      {
+                        claim: "Need 20-day slippage check on 2454.TW before live paper shift.",
+                        cited_item_ids: ["cf-pool-v6", "cf-private-secret"],
+                        unresolved_item_ids: [],
+                      },
+                    ],
+                  },
+                ],
+                rejected_contributions: [],
+              },
+            },
+          },
+        });
+      }
+      return undefined;
+    });
+
+    const listRes = await getMeetings({ type: "gate_panel" });
+    expect(listRes.state).toBe("ok");
+    if (listRes.state === "ok") {
+      expect(listRes.data.items).toHaveLength(1);
+      expect(listRes.data.items[0].session_class).toBe("gate_panel");
+      expect(listRes.data.summary?.gate_panel_count).toBe(1);
+      expect(JSON.stringify(listRes.data)).not.toContain("SECRET_GATE_PANEL_LIST_PRIVATE");
+    }
+
+    const detailRes = await getMeetingDetail(panelId);
+    expect(detailRes.state).toBe("ok");
+    if (detailRes.state === "ok") {
+      expect(detailRes.data.session_class).toBe("gate_panel");
+      expect(detailRes.data.memo?.memo_id).toBe("mem-868b462cd4fe32838ccf");
+      expect(detailRes.data.positions).toHaveLength(2);
+      expect(detailRes.data.rounds).toHaveLength(1);
+      expect(detailRes.data.positions?.[0].citations).toEqual(["cf-pool-v6"]);
+      const serialized = JSON.stringify(detailRes.data);
+      expect(serialized).not.toContain("SECRET_GATE_POSITION_PRIVATE_TEXT");
+      expect(serialized).not.toContain("SECRET_MEMO_PRIVATE_MEMORY");
+      expect(serialized).not.toContain("SECRET_CASE_FILE_VIEW_PRIVATE_EXCERPT");
+      expect(serialized).not.toContain("cf-private-secret");
+    }
+  });
 });

@@ -523,4 +523,23 @@ describe("FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125 strategy triple state, transit
     expect(reasonCodeDisplay("no_workshop_strategies", tZh).text).toBe("你還沒有工坊策略");
     expect(reasonCodeDisplay("no_trader_meetings", tZh).text).toBe("你還沒有召開過會議");
   });
+
+  it("FE-MGMT-MEETINGS-GATE-PANELS-20261126: provides zh-TW and en-US labels for gate panel outcomes, recommendations, and reasons and maintains 1:1 locale parity across meetingsCenter", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.meetingsCenter).sort()).toEqual(keysOf(enUS.meetingsCenter).sort());
+    expect(statusLabel("operator_decision", tZh)).toBe("需操作者決定");
+    expect(statusLabel("operator_decision", tEn)).toBe("Operator Decision Required");
+    expect(statusLabel("adopt_eligible", tZh)).toBe("可採納（審查通過）");
+    expect(statusLabel("request_more_research", tZh)).toBe("建議補充研究");
+    expect(statusLabel("escalate", tZh)).toBe("建議升級裁決");
+    expect(statusLabel("vetoed", tZh)).toBe("已否決");
+    expect(outcomeLabel("operator_decision", tZh)).toBe("需操作者決定");
+    expect(outcomeLabel("adopt_eligible", tZh)).toBe("可採納（審查通過）");
+    expect(reasonCodeDisplay("no_panel_transcript", tZh).text).toBe("尚未記錄審查面板對話紀錄");
+    expect(reasonCodeDisplay("no_case_file_recorded", tZh).text).toBe("未記錄決策卷宗");
+    expect(reasonCodeDisplay("claim_uncited", tZh).text).toBe("主張未附卷宗引用");
+  });
 });
