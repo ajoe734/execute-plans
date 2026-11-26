@@ -1,0 +1,51 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-MGMT-MEETINGS-GATE-PANELS-20261126",
+  "title": "Management meetings center shows persona review panels with title, conclusion and positions",
+  "owner": "Antigravity",
+  "reviewer": "Claude2",
+  "review_independence": {
+    "owner_family": "Antigravity",
+    "reviewer_family": "Claude",
+    "independent": true
+  },
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-MGMT-MEETINGS-GATE-PANELS-20261126",
+  "register_instance": "RC6",
+  "dependencies_verified": [
+    {
+      "task_id": "AGORA-COMMITTEE-TRADER-MEETINGS-20261126",
+      "repo": "ajoe734/pantheon",
+      "pr": 7915,
+      "commit": "3a29aeec6c1f606a1eddab0cdef399947b751931",
+      "status": "done"
+    },
+    {
+      "task_id": "FE-AGORA-TRADER-PAGES-20261126",
+      "repo": "ajoe734/execute-plans",
+      "pr": 1113,
+      "commit": "0d76f14fee600f43adf690ea11f653fa3d90db2a",
+      "status": "done"
+    }
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added_or_changed": 0,
+    "persistent_writers_added_or_changed": 0,
+    "notes": "Pure frontend rendering, localization, and BFF payload normalization; adds no recurring job, emitter, or persistent writer."
+  },
+  "acceptance_coverage": {
+    "AC1": "MeetingsCenterPage includes persona review panels (session_class 'gate_panel') in history and in the type filter bar ([data-testid='meetings-type-filter-gate_panel'] next to MT-1..MT-6 and All). Each gate panel row renders a localized zh-TW title naming the subject persona and reviewed strategy pool version (with retry suffix when present, e.g. '青禾 · 策略池第 6 版發布風控審查（第 2 次重試）'), formatted date and time (YYYY-MM-DD HH:mm), and conclusion in words listing each reviewer's recommendation and whether an operator decision is needed (e.g. '主審（研究與決策長）：建議補充研究；風控審查（風控長）：建議補充研究 · 需操作者決定'). Missing display names fall back to localized role labels paired with a short id suffix so a raw consult-envelope-publication id or persona id is never the only name.",
+    "AC2": "MeetingDetailPage renders gate panel details with header conclusion ([data-testid='meeting-detail-gate-conclusion']), reviewer cards with role, recommendation badge, and cited claims ([data-testid='meeting-detail-reviewers']), memo summary and recommendation ([data-testid='meeting-detail-memo'], [data-testid='meeting-memo-id'], [data-testid='meeting-memo-summary']), and the open-by-default case-file view ([data-testid='meeting-detail-case-file-view'] -> CaseFileViewPanel). stripPrivateMemory in src/lib/bff-v1/meetings.ts strips any private/withheld items and their cited_item_ids from case_file_view before rendering so private text withheld by the BFF never leaks.",
+    "AC3": "npm run lint reports 0 errors (0 errors, 136 pre-existing warnings); tsc --noEmit passes with 0 errors; locale parity test (i18nParity.test.ts) passes 17/17; meetings unit tests (meetings.test.tsx, meetings.test.ts, enumLabels.test.ts, MeetingActionCards.test.tsx) cover gate panel list rows, type filter, detail reviewers/memo/case-file, and private-item withholding with 94/94 passing tests and no existing test weakened or deleted.",
+    "AC4": "Ready for review by Claude2 (independent model family from owner Antigravity) and post-merge hosted dev verification as admintest on https://app.dev.mvl-cap.tw/management/meetings."
+  },
+  "changed_assertions": [],
+  "verification": {
+    "typecheck": "./node_modules/.bin/tsc --noEmit: 0 errors",
+    "eslint": "npm run lint: 0 errors (136 pre-existing warnings); ./node_modules/.bin/eslint on touched files: 0 errors",
+    "i18n_parity": "./node_modules/.bin/vitest run src/lib/v5/management/__tests__/i18nParity.test.ts: 17/17 passed",
+    "unit_tests": "./node_modules/.bin/vitest run src/lib/__tests__/enumLabels.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/MeetingActionCards.test.tsx src/management/pages/meetings/meetings.test.tsx: 5 files, 94/94 passed"
+  },
+  "residual_findings": []
+}
