@@ -1,0 +1,80 @@
+{
+  "schema_version": "pantheon.management-hosted-acceptance.no-permission-state-evidence.v1",
+  "task_id": "FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126",
+  "owner": "Claude",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126",
+  "base_commit": "2b8318dfb",
+  "timestamp": "2026-11-26T17:20:00Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "source": "Post-switch viewer crawl: the BFF answers a viewer's approvals read with a typed 403 (FORBIDDEN, details.permission_state=no_permission, surface=approvals); approvals, governance and the rebalance/deployment/evolution/capital-pool detail pages treated it as a data failure."
+  },
+  "typed_no_permission_contract": {
+    "definition": "HTTP 403 whose error envelope ({error:{...}} or {detail:{error:{...}}}) has a string code and details.permission_state === \"no_permission\"; details.surface is carried when present.",
+    "fe_helper": "src/lib/bff-v1/permissionState.ts (isNoPermissionError, noPermissionSurface, sectionReadFailure). Not added to the bff-v1 public barrel (fullOperationAssembly allowlist unchanged).",
+    "fe_marker": "Rendered no-permission elements carry data-permission-state=\"no_permission\" and data-permission-surface=<surface>: NoPermissionState (section card) and NoPermissionBadge (tab trigger, so the state is visible while the tab is not selected). src/platform/components/NoPermissionState.tsx.",
+    "not_no_permission": "An untyped 403, a 401, a 5xx and a network error render SectionReadError (role=alert, 'Failed to load this section.' / '無法載入此區塊。') or, on /management/governance/:id, the existing 'Approval request unavailable' state."
+  },
+  "modified_surfaces": [
+    "scripts/accept-management-hosted-production.mjs",
+    "src/test/accept-management-honest-not-found.test.ts",
+    "docs/deployment/evidence/FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126/evidence.json",
+    "src/lib/bff-v1/permissionState.ts",
+    "src/platform/components/NoPermissionState.tsx",
+    "src/management/pages/ObjectDetailLayout.tsx",
+    "src/management/pages/Operations.tsx",
+    "src/management/pages/phase2/GovernanceQueue.tsx",
+    "src/management/pages/GovernanceReview.tsx",
+    "src/management/pages/RebalanceDetail.tsx",
+    "src/management/pages/DeploymentDetail.tsx",
+    "src/management/pages/EvolutionDetail.tsx",
+    "src/management/pages/CapitalPoolDetail.tsx",
+    "src/management/pages/approvalsNoPermission.test.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts"
+  ],
+  "acceptance_coverage": {
+    "AC1_pages_render_no_permission": {
+      "passed": true,
+      "pages": {
+        "/management/approvals": "ApprovalsPage: pending-list error -> sectionReadFallback (typed 403 -> NoPermissionState; otherwise SectionReadError, where it previously showed an empty table). 'All' tab decisions read: typed 403 -> NoPermissionState, otherwise the existing decisions error card.",
+        "/management/governance": "GovernanceQueuePage: reload records a SectionReadState; typed 403 -> NoPermissionState, otherwise SectionReadError (previously an unhandled rejection + empty table). Batch readback still sees the rejection.",
+        "/management/governance/:id": "GovernanceReview: typed 403 on approvals.get -> header + NoPermissionState; untyped 403/401/5xx -> existing 'Approval request unavailable'; 404 -> existing not-found.",
+        "rebalance/deployment/evolution detail": "Approvals read now gated on a loaded entity (const loadedId = entity ? id : undefined), so a not-found id issues no approvals read. Typed 403 -> NoPermissionBadge on the approvals tab + NoPermissionState in the tab; other failures -> SectionReadError. The rest of the page (header, other tabs, reads) is unchanged.",
+        "capital-pool detail": "Governance tab: typed 403 -> badge + NoPermissionState; other failures -> SectionReadError (previously swallowed to an empty table). Rebalances/audit reads unchanged."
+      },
+      "tests": "src/management/pages/approvalsNoPermission.test.tsx (39 tests): per detail page typed 403 -> badge + section with surface=approvals while the entity renders; untyped 403 / 401 / 5xx / network error -> SectionReadError and no marker; exactly one approvals read; not-found id -> no approvals read; governance queue, governance review and approvals page (approvals page through the real client fetch -> BffError parse) typed vs untyped/401/5xx."
+    },
+    "AC2_crawl_honest_no_permission": {
+      "passed": true,
+      "rule": "typedNoPermission(status, body) recognises the typed 403 body (body inspected only for 403 responses and existing route data reads; nothing is stored beyond {surface}). The snapshot collects visible [data-permission-state=no_permission] markers (getClientRects().length > 0) with their surface. honestNoPermission excuses a 403 only when it is typed AND a rendered marker matches its surface (or any marker when the body names no surface). Excused in apiFailure, counted as a valid read, and recorded in failedReads with honestNoPermission=true, counted=false. Mirrors honest-not-found (404 AND rendered not-found text).",
+      "still_fails": "untyped 403 (even with the marker rendered), typed 403 without the rendered state, typed 403 whose surface differs from the rendered one, 401, 5xx with a no-permission-shaped body.",
+      "mutation_check": "Removing the honestNoPermission exclusion from apiFailure makes exactly the two 'passes' crawl tests fail (verified, then restored)."
+    },
+    "AC3_tests": {
+      "passed": true,
+      "crawl": "src/test/accept-management-honest-not-found.test.ts: 39/39 (10 new in 'honest no-permission rule (typed 403 + rendered state)'; the existing 'viewer-only GET /bff/approvals 403 still fails' cases keep passing with an untyped body; the source assertion now checks the loaded-entity gate).",
+      "components": "src/management/pages/approvalsNoPermission.test.tsx: 39/39.",
+      "full_suite": "vitest run (all 293 files): 3651 passed, 1 failed (fullOperationAssembly public-export allowlist, caused by a barrel export of permissionState); export removed, the file then passed 16/16 together with the new component tests. typecheck (tsc -p tsconfig.app.json) exit 0; eslint on touched files 0 errors."
+    },
+    "AC4_runtime_budget": {
+      "passed": true,
+      "recurring_jobs": 0,
+      "persistent_writers": 0,
+      "requests": "No extra request per page. Each listed page still issues one approvals read when the entity is loaded; rebalance/deployment/evolution detail pages now issue zero approvals reads for a not-found id (one fewer). The crawl issues no new requests; it reads the JSON body of 403 responses it already observes."
+    },
+    "AC5_evidence_and_hosted": {
+      "passed": "partial",
+      "evidence_path": "docs/deployment/evidence/FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126/evidence.json",
+      "hosted_acceptance": "Pending: requires the next Dev release crawl (viewer) after merge to show these routes no longer listed for a 403. No hosted crawl was run from this worker (no viewer token here).",
+      "reviewer_family": "Owner Claude (Anthropic); reviewer Antigravity (different model family)."
+    }
+  },
+  "residual_findings": [
+    "StrategyDetail (out of the listed scope) reads approvals only on demand when its governance section opens (GOVERNANCE_SECTIONS), so the crawl does not issue that read; when opened as viewer it shows its generic 'unavailable' section state rather than NoPermissionState. Follow-up candidate.",
+    "Other approvals readers outside the listed scope (Operations runtimes/other tabs, v5 LoopRunDrawer, NotificationCenter) were not changed."
+  ]
+}
