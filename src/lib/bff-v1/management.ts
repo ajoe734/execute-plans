@@ -2322,6 +2322,8 @@ export interface ManagementCitedEvidenceList {
   sources: ManagementCitedEvidenceSource[];
   /** Number of cited references; null when the BFF could not count them. */
   total: number | null;
+  /** Total cited references across all sources before the BFF reference cap (summary.reference_total). */
+  referenceTotal: number | null;
   complete: boolean;
   incomplete: boolean;
   referencesTruncated: boolean;
@@ -2427,6 +2429,7 @@ export function adaptManagementCitedEvidence(raw: unknown): ManagementCitedEvide
       items: [],
       sources: [],
       total: null,
+      referenceTotal: null,
       complete: false,
       incomplete: true,
       referencesTruncated: false,
@@ -2451,17 +2454,31 @@ export function adaptManagementCitedEvidence(raw: unknown): ManagementCitedEvide
         : surfaceStatus === "ok" || surfaceStatus === ""
           ? "ok"
           : "degraded";
-  const total = status === "unavailable" ? null : citedNullableNumber(pageInfo.total ?? summary.reference_total);
-  const incomplete = status !== "ok" || asBoolean(summary.incomplete, false) || asBoolean(summary.references_truncated, false);
+  const total =
+    status === "unavailable"
+      ? null
+      : citedNullableNumber(pageInfo.total ?? summary.reference_total ?? summary.referenceTotal);
+  const referenceTotal =
+    status === "unavailable"
+      ? null
+      : citedNullableNumber(summary.reference_total ?? summary.referenceTotal ?? pageInfo.total);
+  const referencesTruncated = asBoolean(
+    summary.references_truncated ?? summary.referencesTruncated,
+    false,
+  );
+  const maxReferences = citedNullableNumber(summary.max_references ?? summary.maxReferences);
+  const incomplete =
+    status !== "ok" || asBoolean(summary.incomplete, false) || referencesTruncated;
   return {
     status,
     items,
     sources,
     total,
+    referenceTotal,
     complete: !incomplete && asBoolean(summary.complete, true),
     incomplete,
-    referencesTruncated: asBoolean(summary.references_truncated, false),
-    maxReferences: citedNullableNumber(summary.max_references),
+    referencesTruncated,
+    maxReferences,
     redactedCount: asFiniteNumber(summary.redacted_count ?? meta.redacted_evidence_count, 0),
     nextPageToken: status === "unavailable" ? null : nullableString(pageInfo.next_page_token ?? pageInfo.nextPageToken),
     pageSize: citedNullableNumber(pageInfo.page_size ?? pageInfo.pageSize),

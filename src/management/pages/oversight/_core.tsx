@@ -5408,17 +5408,7 @@ const CitedByList = ({ row }: { row: ManagementCitedEvidenceRow }) => {
 
 function citedReferenceTotal(model: ManagementCitedEvidenceList | undefined): number | null {
   if (!model) return null;
-  const withRefTotal = model as ManagementCitedEvidenceList & {
-    referenceTotal?: number | null;
-    reference_total?: number | null;
-    summary?: { reference_total?: number | null; referenceTotal?: number | null } | null;
-  };
-  const raw =
-    withRefTotal.referenceTotal ??
-    withRefTotal.reference_total ??
-    withRefTotal.summary?.reference_total ??
-    withRefTotal.summary?.referenceTotal ??
-    model.total;
+  const raw = model.referenceTotal ?? model.total;
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
 

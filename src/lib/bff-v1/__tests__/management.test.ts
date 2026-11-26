@@ -4279,7 +4279,62 @@ describe("cited evidence client (FE-EVIDENCE-CITED-20261125)", () => {
     answer.data.items = [];
     (answer.page_info as { total: number | null; next_page_token: string | null }).total = null;
     const out = adaptManagementCitedEvidence(answer);
-    expect(out).toMatchObject({ status: "unavailable", total: null, nextPageToken: null, incomplete: true });
+    expect(out).toMatchObject({
+      status: "unavailable",
+      total: null,
+      referenceTotal: null,
+      nextPageToken: null,
+      incomplete: true,
+    });
+  });
+
+  it("exposes summary.reference_total alongside page_info.total, max_references, and references_truncated when the BFF reference cap applies (FE-REGISTRY-ACCEPTANCE-WORDS-20261126)", () => {
+    const okSource = {
+      status: "ok",
+      reason: null,
+      read_count: 10,
+      truncated: false,
+      failed_count: 0,
+      citation_count: 250,
+      withheld_count: 0,
+    };
+    const sources = {
+      meeting_proposals: okSource,
+      meeting_positions: okSource,
+      governance_approvals: okSource,
+      evolution_proposals: okSource,
+      research_demands: okSource,
+      research_tickets: okSource,
+      persona_cycles: okSource,
+    };
+    const answer = citedAnswer(sources, "degraded");
+    answer.data.summary = {
+      scope: "cited",
+      complete: false,
+      incomplete: true,
+      reference_total: 1750,
+      references_truncated: true,
+      max_references: 500,
+      redacted_count: 0,
+    };
+    answer.page_info = {
+      next_page_token: "20",
+      total: 500,
+      page_size: 20,
+    };
+
+    const out = adaptManagementCitedEvidence(answer);
+    expect(out).toMatchObject({
+      status: "degraded",
+      total: 500,
+      referenceTotal: 1750,
+      referencesTruncated: true,
+      maxReferences: 500,
+      incomplete: true,
+      complete: false,
+      nextPageToken: "20",
+      pageSize: 20,
+    });
   });
 
   it("reads the item route answer for detail and never the list envelope id", () => {

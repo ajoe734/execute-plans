@@ -1459,6 +1459,12 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
         summary: Record<string, unknown>;
         items: Array<Record<string, unknown>>;
       };
+      page_info: Record<string, unknown>;
+    };
+    raw.page_info = {
+      next_page_token: "20",
+      total: 500,
+      page_size: 20,
     };
     raw.data.summary = {
       scope: "cited",
@@ -1617,7 +1623,11 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
         redacted: false,
       },
     ];
-    const adapted = Object.assign(adaptManagementCitedEvidence(raw)!, { referenceTotal: 1750 });
+    const adapted = adaptManagementCitedEvidence(raw)!;
+    expect(adapted.total).toBe(500);
+    expect(adapted.referenceTotal).toBe(1750);
+    expect(adapted.maxReferences).toBe(500);
+    expect(adapted.referencesTruncated).toBe(true);
 
     await i18n.changeLanguage("zh-TW");
     mocks.useV5Live.mockReturnValue({ data: adapted, loading: false, refresh: vi.fn() });
