@@ -1452,6 +1452,233 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
     expect(screen.getByRole("link", { name: "Paper Momentum Persona 第 1 個決策" })).toBeInTheDocument();
     await i18n.changeLanguage("en-US");
   });
+
+  it("FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC2 & AC3: renders reference_total 1750 and newest 500 notice when all 7 sources are ok and only the reference cap applies, and translates every recorded cited kind and approval decision type in zh-TW and en-US with kind-in-words as primary name when name_missing", async () => {
+    const raw = citedPayload({ status: "degraded" }) as {
+      data: {
+        summary: Record<string, unknown>;
+        items: Array<Record<string, unknown>>;
+      };
+    };
+    raw.data.summary = {
+      scope: "cited",
+      complete: false,
+      incomplete: true,
+      reference_total: 1750,
+      returned: 20,
+      references_truncated: true,
+      max_references: 500,
+      redacted_count: 0,
+      excluded: { meeting_topic: 0, private_or_trader: 0, memory_scope_unproven: 0, unparsed: 0 },
+      sources_ok: 7,
+      sources_not_ok: [],
+    };
+    raw.data.items = [
+      {
+        id: "dev-paper-grant:risk-policy-paper-pool:1b8a1afdc175d97d",
+        ref_id: "dev-paper-grant:risk-policy-paper-pool:1b8a1afdc175d97d",
+        ref_kind: "risk-policy-paper-pool",
+        source_owner: null,
+        label: "dev-paper-grant:risk-policy-paper-pool:1b8a1afdc175d97d",
+        name_missing: true,
+        label_parts: {},
+        source_class: "risk-policy-paper-pool",
+        resolved_link: null,
+        route_href: null,
+        cited_as: ["dev-paper-grant:risk-policy-paper-pool:1b8a1afdc175d97d"],
+        cited_by: [
+          {
+            entity_type: "approval",
+            entity_ref: "apr-pool-act-001",
+            label: null,
+            parts: {
+              decision_type: "capital_pool_activation",
+              target_id: "pool-persona-paper-a81b4fd15944698341aa",
+            },
+            route_href: "/management/approvals",
+            time: "2026-11-26T08:50:00Z",
+            source: "governance_approvals",
+          },
+        ],
+        citation_count: 1,
+        last_cited_at: "2026-11-26T08:50:00Z",
+        redacted: false,
+      },
+      {
+        id: "dev-paper-grant:persona-lifecycle-paper-ladder:2c9b2bged286e08e",
+        ref_id: "dev-paper-grant:persona-lifecycle-paper-ladder:2c9b2bged286e08e",
+        ref_kind: "persona-lifecycle-paper-ladder",
+        source_owner: null,
+        label: "dev-paper-grant:persona-lifecycle-paper-ladder:2c9b2bged286e08e",
+        name_missing: true,
+        label_parts: {},
+        source_class: "persona-lifecycle-paper-ladder",
+        resolved_link: null,
+        route_href: null,
+        cited_as: ["dev-paper-grant:persona-lifecycle-paper-ladder:2c9b2bged286e08e"],
+        cited_by: [
+          {
+            entity_type: "approval",
+            entity_ref: "apr-lifecycle-002",
+            label: null,
+            parts: {
+              decision_type: "persona_lifecycle_transition",
+              target_id: PERSONA,
+              target_display_name: "衡岳｜2330 台股 Paper 學習 R2",
+            },
+            route_href: "/management/approvals",
+            time: "2026-11-26T08:51:00Z",
+            source: "governance_approvals",
+          },
+        ],
+        citation_count: 1,
+        last_cited_at: "2026-11-26T08:51:00Z",
+        redacted: false,
+      },
+      {
+        id: "reg-strategy-spec-persona-715f5875971f2e342d8f",
+        ref_id: "reg-strategy-spec-persona-715f5875971f2e342d8f",
+        ref_kind: "registry_entry",
+        source_owner: "registry",
+        label: "reg-strategy-spec-persona-715f5875971f2e342d8f",
+        name_missing: true,
+        label_parts: {},
+        source_class: "registry_entry",
+        resolved_link: null,
+        route_href: null,
+        cited_as: ["reg-strategy-spec-persona-715f5875971f2e342d8f"],
+        cited_by: [
+          {
+            entity_type: "approval",
+            entity_ref: "apr-reg-003",
+            label: null,
+            parts: {
+              decision_type: "registry_entry",
+              target_id: "reg-strategy-spec-persona-715f5875971f2e342d8f",
+            },
+            route_href: "/management/approvals",
+            time: "2026-11-26T08:52:00Z",
+            source: "governance_approvals",
+          },
+        ],
+        citation_count: 1,
+        last_cited_at: "2026-11-26T08:52:00Z",
+        redacted: false,
+      },
+      {
+        id: "tel-summary-20261126-001",
+        ref_id: "tel-summary-20261126-001",
+        ref_kind: "telemetry_summary",
+        source_owner: "telemetry",
+        label: "tel-summary-20261126-001",
+        name_missing: true,
+        label_parts: {},
+        source_class: "telemetry_summary",
+        resolved_link: null,
+        route_href: null,
+        cited_as: ["tel-summary-20261126-001"],
+        cited_by: [],
+        citation_count: 1,
+        last_cited_at: "2026-11-26T08:53:00Z",
+        redacted: false,
+      },
+      {
+        id: "mrt-20261126-001",
+        ref_id: "mrt-20261126-001",
+        ref_kind: "manual_review_ticket",
+        source_owner: "governance",
+        label: "mrt-20261126-001",
+        name_missing: true,
+        label_parts: {},
+        source_class: "manual_review_ticket",
+        resolved_link: null,
+        route_href: null,
+        cited_as: ["mrt-20261126-001"],
+        cited_by: [],
+        citation_count: 1,
+        last_cited_at: "2026-11-26T08:54:00Z",
+        redacted: false,
+      },
+      {
+        id: "mat-20261126-001",
+        ref_id: "mat-20261126-001",
+        ref_kind: "meeting_action_ticket",
+        source_owner: null,
+        label: "mat-20261126-001",
+        name_missing: true,
+        label_parts: {},
+        source_class: "meeting_action_ticket",
+        resolved_link: null,
+        route_href: null,
+        cited_as: ["mat-20261126-001"],
+        cited_by: [],
+        citation_count: 1,
+        last_cited_at: "2026-11-26T08:55:00Z",
+        redacted: false,
+      },
+    ];
+    const adapted = Object.assign(adaptManagementCitedEvidence(raw)!, { referenceTotal: 1750 });
+
+    await i18n.changeLanguage("zh-TW");
+    mocks.useV5Live.mockReturnValue({ data: adapted, loading: false, refresh: vi.fn() });
+    const { unmount: unmountZh } = renderEvidence("/management/evidence");
+
+    const zhNotice = screen.getByTestId("evidence-cited-sources-incomplete");
+    expect(zhNotice).toHaveTextContent("共有 1750 筆被引用的證據；目前列出最新的 500 筆。");
+    expect(zhNotice).not.toHaveTextContent("有些來源讀不到");
+    const zhCards = screen.getAllByTestId("evidence-metric-card");
+    expect(zhCards[0]).toHaveTextContent("被引用的證據1750");
+    expect(zhCards[0]).not.toHaveTextContent("至少");
+    expect(zhCards[1]).toHaveTextContent("7 個中的 7 個");
+
+    const zhNames = screen.getAllByTestId("evidence-cited-name").map((el) => el.textContent);
+    expect(zhNames).toEqual([
+      "模擬資金池風控政策",
+      "Persona 模擬晉升階梯",
+      "登錄項目",
+      "遙測摘要",
+      "人工審核單",
+      "會議行動單",
+    ]);
+    const zhRefIds = screen.getAllByTestId("evidence-cited-ref-id").map((el) => el.textContent);
+    expect(zhRefIds[0]).toBe("dev-paper-grant:risk-policy-paper-pool:1b8a1afdc175d97d");
+    expect(zhRefIds[1]).toBe("dev-paper-grant:persona-lifecycle-paper-ladder:2c9b2bged286e08e");
+    expect(zhRefIds[2]).toBe("reg-strategy-spec-persona-715f5875971f2e342d8f");
+
+    expect(screen.getByRole("link", { name: "資金池啟用審批" })).toBeInTheDocument();
+    expect(screen.queryByText(/capital pool activation/i)).not.toBeInTheDocument();
+    const zhLifecycleLink = screen.getByRole("link", { name: "Persona 生命週期轉換審批" });
+    expect(zhLifecycleLink.closest("li")).toHaveTextContent("衡岳｜2330 台股 Paper 學習 R2");
+    expect(screen.getByRole("link", { name: "登錄項目審批" })).toBeInTheDocument();
+    unmountZh();
+
+    await i18n.changeLanguage("en-US");
+    mocks.useV5Live.mockReturnValue({ data: adapted, loading: false, refresh: vi.fn() });
+    const { unmount: unmountEn } = renderEvidence("/management/evidence");
+
+    const enNotice = screen.getByTestId("evidence-cited-sources-incomplete");
+    expect(enNotice).toHaveTextContent("1750 cited references exist; the newest 500 are listed.");
+    expect(enNotice).not.toHaveTextContent("Some sources could not be read");
+    const enCards = screen.getAllByTestId("evidence-metric-card");
+    expect(enCards[0]).toHaveTextContent("Cited references1750");
+    expect(enCards[0]).not.toHaveTextContent("At least");
+    expect(enCards[1]).toHaveTextContent("7 of 7");
+
+    const enNames = screen.getAllByTestId("evidence-cited-name").map((el) => el.textContent);
+    expect(enNames).toEqual([
+      "Paper pool risk policy",
+      "Persona paper lifecycle ladder",
+      "Registry entry",
+      "Telemetry summary",
+      "Manual review ticket",
+      "Meeting action ticket",
+    ]);
+    expect(screen.getByRole("link", { name: "Capital pool activation approval" })).toBeInTheDocument();
+    const enLifecycleLink = screen.getByRole("link", { name: "Persona lifecycle transition approval" });
+    expect(enLifecycleLink.closest("li")).toHaveTextContent("衡岳｜2330 台股 Paper 學習 R2");
+    expect(screen.getByRole("link", { name: "Registry entry approval" })).toBeInTheDocument();
+    unmountEn();
+  });
 });
 
 describe("Evidence page: detail and inbound links (FE-EVIDENCE-CITED-20261125)", () => {

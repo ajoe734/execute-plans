@@ -36,6 +36,34 @@ function asNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+export function looksLikeLineageEntityId(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/[^\p{ASCII}]/u.test(trimmed) || /\s/.test(trimmed)) return false;
+  return /^[a-z0-9]+(?:[-_:][a-z0-9_.:@-]+)+$/i.test(trimmed);
+}
+
+function resolveCandidateRoot(raw: string, candidateList: LineageLookupCandidate[]): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const lower = trimmed.toLowerCase();
+  const exactId = candidateList.find((c) => c.id.toLowerCase() === lower);
+  if (exactId) return exactId.id;
+  const exactName = candidateList.find((c) => c.name.toLowerCase() === lower);
+  if (exactName) return exactName.id;
+  const matches = candidateList.filter(
+    (c) =>
+      c.name.toLowerCase().includes(lower) ||
+      c.id.toLowerCase().includes(lower) ||
+      c.searchTokens.includes(lower),
+  );
+  const hasNonAscii = /[^\p{ASCII}]/u.test(trimmed);
+  if (matches.length === 1 || (hasNonAscii && matches.length > 0)) {
+    return matches[0].id;
+  }
+  return null;
+}
+
 function isLineageEdgeLike(record: Record<string, unknown>): boolean {
   return (
     typeof record.from_artifact_id === "string" ||
@@ -113,6 +141,8 @@ export const LineageExplorerPage = () => {
   const [isTypingQuery, setIsTypingQuery] = useState<boolean>(false);
   const [isPickerExpanded, setIsPickerExpanded] = useState<boolean>(false);
   const [candidates, setCandidates] = useState<LineageLookupCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState<boolean>(true);
+  const [pendingNameLookup, setPendingNameLookup] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<LineageNode | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
@@ -211,6 +241,7 @@ export const LineageExplorerPage = () => {
       }
 
       setCandidates(Array.from(byId.values()));
+      setCandidatesLoading(false);
     });
     return () => {
       cancelled = true;
@@ -239,6 +270,7 @@ export const LineageExplorerPage = () => {
 
   const commitRoot = (nextRootId: string, displayInput?: string) => {
     const trimmed = nextRootId.trim();
+    setPendingNameLookup(null);
     setActiveRootId(trimmed);
     setQueryInput(displayInput ?? trimmed);
     setIsTypingQuery(false);
@@ -253,6 +285,21 @@ export const LineageExplorerPage = () => {
     setParams(p, { replace: true });
   };
 
+  useEffect(() => {
+    if (candidatesLoading || pendingNameLookup === null) return;
+    const raw = pendingNameLookup;
+    setPendingNameLookup(null);
+    const resolved = resolveCandidateRoot(raw, candidates);
+    if (resolved !== null) {
+      commitRoot(resolved, resolved);
+      return;
+    }
+    if (looksLikeLineageEntityId(raw)) {
+      commitRoot(raw, raw);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidatesLoading, pendingNameLookup, candidates]);
+
   const handleSubmitLookup = (e?: FormEvent) => {
     e?.preventDefault();
     const raw = queryInput.trim();
@@ -260,23 +307,22 @@ export const LineageExplorerPage = () => {
       commitRoot("");
       return;
     }
-    const lower = raw.toLowerCase();
-    const exactId = candidates.find((c) => c.id.toLowerCase() === lower);
-    if (exactId) {
-      commitRoot(exactId.id, exactId.id);
+    if (candidatesLoading) {
+      if (looksLikeLineageEntityId(raw)) {
+        commitRoot(raw, raw);
+      } else {
+        setPendingNameLookup(raw);
+      }
       return;
     }
-    const exactName = candidates.find((c) => c.name.toLowerCase() === lower);
-    if (exactName) {
-      commitRoot(exactName.id, exactName.id);
+    const resolved = resolveCandidateRoot(raw, candidates);
+    if (resolved !== null) {
+      commitRoot(resolved, resolved);
       return;
     }
-    const hasNonAscii = /[^\p{ASCII}]/u.test(raw);
-    if (filteredCandidates.length === 1 || (hasNonAscii && filteredCandidates.length > 0)) {
-      commitRoot(filteredCandidates[0].id, filteredCandidates[0].id);
-      return;
+    if (looksLikeLineageEntityId(raw)) {
+      commitRoot(raw, raw);
     }
-    commitRoot(raw, raw);
   };
 
   const metaStatus = (
@@ -342,6 +388,7 @@ export const LineageExplorerPage = () => {
                   value={queryInput}
                   onChange={(e) => {
                     setQueryInput(e.target.value);
+                    setPendingNameLookup(null);
                     setIsTypingQuery(true);
                     setIsPickerExpanded(true);
                   }}
@@ -389,6 +436,15 @@ export const LineageExplorerPage = () => {
               </div>
             </div>
           </div>
+          {candidatesLoading && (
+            <div
+              role="status"
+              data-testid="lineage-candidates-loading"
+              className="pt-1 text-xs text-muted-foreground"
+            >
+              {t("lineageExplorer.loadingCandidates")}
+            </div>
+          )}
           {(candidates.length > 0 || isCandidatesCollapsed) && (
             <div className="space-y-1.5 pt-1" data-testid="lineage-lookup-candidates">
               {isCandidatesCollapsed ? (

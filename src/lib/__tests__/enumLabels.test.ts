@@ -299,7 +299,17 @@ describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 runtime status, metric reason
     expect(strategyMetricsReasonText("no_fills", tEn)).toEqual({ text: "No fills yet", code: "no_fills" });
     expect(strategyMetricsReasonText("no_fills", tZh)?.text).toBe("尚無成交");
     expect(strategyMetricsReasonText("marks_unavailable", tEn)?.text).toBe("Market prices unavailable");
-    expect(strategyMetricsReasonText("brand_new_reason", tEn)).toEqual({ text: "Not recorded", code: "brand_new_reason" });
+    expect(strategyMetricsReasonText("source_unavailable", tEn)).toEqual({
+      text: "Result could not be read now",
+      code: "source_unavailable",
+    });
+    expect(strategyMetricsReasonText("source_unavailable", tZh)).toEqual({
+      text: "目前無法讀取結果",
+      code: "source_unavailable",
+    });
+    // FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC1: unknown metricsReason shows its code instead of "Not recorded" / "未記錄".
+    expect(strategyMetricsReasonText("brand_new_reason", tEn)).toEqual({ text: "brand_new_reason", code: "brand_new_reason" });
+    expect(strategyMetricsReasonText("brand_new_reason", tZh)).toEqual({ text: "brand_new_reason", code: "brand_new_reason" });
   });
 
   it("reads listScope / list_scope and treats anything else as unknown", () => {
@@ -484,5 +494,15 @@ describe("FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125 strategy triple state, transit
         ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
         : [prefix];
     expect(keysOf(zhTW.strategyDetail).sort()).toEqual(keysOf(enUS.strategyDetail).sort());
+  });
+
+  it("FE-REGISTRY-ACCEPTANCE-WORDS-20261126: maintains 1:1 zh-TW and en-US key parity across strategy.metricsReason, mgmt.evidence.cited, and lineageExplorer", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.strategy.metricsReason).sort()).toEqual(keysOf(enUS.strategy.metricsReason).sort());
+    expect(keysOf(zhTW.mgmt.evidence.cited).sort()).toEqual(keysOf(enUS.mgmt.evidence.cited).sort());
+    expect(keysOf(zhTW.lineageExplorer).sort()).toEqual(keysOf(enUS.lineageExplorer).sort());
   });
 });

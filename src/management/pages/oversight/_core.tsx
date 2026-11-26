@@ -5269,7 +5269,19 @@ function citedKindLabel(t: (key: string, opts?: Record<string, unknown>) => stri
 
 function citedSourceClassLabel(t: (key: string, opts?: Record<string, unknown>) => string, sourceClass: string | null): string {
   if (!sourceClass) return "—";
-  return t(`mgmt.evidence.cited.sourceClass.${sourceClass}`, { defaultValue: humanizeEvidenceToken(sourceClass) });
+  return t(`mgmt.evidence.cited.sourceClass.${sourceClass}`, {
+    defaultValue: t(`mgmt.evidence.cited.kind.${sourceClass}`, { defaultValue: humanizeEvidenceToken(sourceClass) }),
+  });
+}
+
+function citedRowDisplayName(
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  row: Pick<ManagementCitedEvidenceRow, "label" | "refId" | "refKind" | "nameMissing" | "labelParts">,
+): string {
+  const targetDisplayName = citedPart(row.labelParts, "target_display_name");
+  if (!row.nameMissing && row.label && row.label !== row.refId) return row.label;
+  if (targetDisplayName) return targetDisplayName;
+  return citedKindLabel(t, row.refKind);
 }
 
 function citedEntityLabel(t: (key: string, opts?: Record<string, unknown>) => string, entityType: string): string {
@@ -5317,7 +5329,9 @@ export function citedRowHref(row: Pick<ManagementCitedEvidenceRow, "routeHref" |
 /** Plain words for who cites a reference; the BFF sends recorded titles and parts, never sentences. */
 function citationName(t: EvidenceT, citation: ManagementCitedEvidenceCitation): { text: string; secondary: string | null } {
   if (!citation.label && citation.entityType === "approval") return approvalCitationName(t, citation);
-  return { text: citationText(t, citation), secondary: null };
+  const text = citationText(t, citation);
+  const targetDisplayName = citedPart(citation.parts, "target_display_name");
+  return { text, secondary: targetDisplayName && targetDisplayName !== text ? targetDisplayName : null };
 }
 
 function citationText(t: (key: string, opts?: Record<string, unknown>) => string, citation: ManagementCitedEvidenceCitation): string {
@@ -5392,26 +5406,63 @@ const CitedByList = ({ row }: { row: ManagementCitedEvidenceRow }) => {
   );
 };
 
+function citedReferenceTotal(model: ManagementCitedEvidenceList | undefined): number | null {
+  if (!model) return null;
+  const withRefTotal = model as ManagementCitedEvidenceList & {
+    referenceTotal?: number | null;
+    reference_total?: number | null;
+    summary?: { reference_total?: number | null; referenceTotal?: number | null } | null;
+  };
+  const raw =
+    withRefTotal.referenceTotal ??
+    withRefTotal.reference_total ??
+    withRefTotal.summary?.reference_total ??
+    withRefTotal.summary?.referenceTotal ??
+    model.total;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
 const CitedSourcesNotice = ({ model }: { model: ManagementCitedEvidenceList }) => {
   const { t } = useTranslation();
-  const problems = model.sources.filter((source) => source.status !== "ok" || source.truncated);
+  const notOkSources = model.sources.filter((source) => source.status !== "ok");
+  const truncatedSources = model.sources.filter((source) => source.status === "ok" && source.truncated);
+  const problems = [...notOkSources, ...truncatedSources];
   if (problems.length === 0 && !model.referencesTruncated) return null;
+  const referenceTotal = citedReferenceTotal(model);
+  const capLine =
+    referenceTotal !== null
+      ? t("mgmt.evidence.cited.referenceCapNoticeFmt", {
+          total: referenceTotal,
+          max: model.maxReferences ?? "—",
+        })
+      : t("mgmt.evidence.cited.referencesTruncatedFmt", { max: model.maxReferences ?? "—" });
+  if (problems.length === 0 && model.referencesTruncated) {
+    return (
+      <div
+        className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        role="status"
+        data-testid="evidence-cited-sources-incomplete"
+      >
+        <div className="font-medium">{capLine}</div>
+      </div>
+    );
+  }
   return (
     <div
       className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
       role="status"
       data-testid="evidence-cited-sources-incomplete"
     >
-      <div className="font-medium">{t("mgmt.evidence.cited.incompleteTitle")}</div>
-      <ul className="mt-1 space-y-0.5 text-xs">
+      {notOkSources.length > 0 && (
+        <div className="font-medium">{t("mgmt.evidence.cited.incompleteTitle")}</div>
+      )}
+      <ul className={notOkSources.length > 0 ? "mt-1 space-y-0.5 text-xs" : "space-y-0.5 text-xs"}>
         {problems.map((source) => (
           <li key={source.key} data-testid={`evidence-cited-source-${source.key}`}>
             {citedSourceName(t, source.key)}: {citedSourceProblem(t, source)}
           </li>
         ))}
-        {model.referencesTruncated && (
-          <li>{t("mgmt.evidence.cited.referencesTruncatedFmt", { max: model.maxReferences ?? "—" })}</li>
-        )}
+        {model.referencesTruncated && <li>{capLine}</li>}
       </ul>
     </div>
   );
@@ -5444,12 +5495,14 @@ const EvidenceCitedList = () => {
   const status = model?.status ?? "unavailable";
   const rows = model?.items ?? [];
   const unavailableValue = t("mgmt.evidence.unavailableValue");
+  const hasSourceProblem = model?.sources.some((source) => source.status !== "ok" || source.truncated) ?? false;
+  const referenceTotal = citedReferenceTotal(model);
   const totalLabel: ReactNode =
-    !model || status === "unavailable" || status === "unsupported" || model.total === null
+    !model || status === "unavailable" || status === "unsupported" || referenceTotal === null
       ? unavailableValue
-      : model.incomplete
-        ? t("mgmt.evidence.cited.totalIncompleteFmt", { count: model.total })
-        : model.total;
+      : hasSourceProblem
+        ? t("mgmt.evidence.cited.totalIncompleteFmt", { count: referenceTotal })
+        : referenceTotal;
   const sourcesOk = model?.sources.filter((source) => source.status === "ok" && !source.truncated).length ?? 0;
   const sourcesTotal = model?.sources.length ?? 0;
   const nextPageToken = model?.nextPageToken ?? null;
@@ -5507,20 +5560,20 @@ const EvidenceCitedList = () => {
                 <tr key={row.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
                   <td className="min-w-0 px-3 py-3 [overflow-wrap:anywhere]">
                     {citedRowHref(row) ? (
-                      <Link to={citedRowHref(row) ?? ""} className="break-words font-medium text-primary underline-offset-4 hover:underline">
-                        {row.label}
+                      <Link to={citedRowHref(row) ?? ""} className="break-words font-medium text-primary underline-offset-4 hover:underline" data-testid="evidence-cited-name">
+                        {citedRowDisplayName(t, row)}
                       </Link>
                     ) : (
-                      <span className="break-words font-medium text-foreground">{row.label}</span>
+                      <span className="break-words font-medium text-foreground" data-testid="evidence-cited-name">
+                        {citedRowDisplayName(t, row)}
+                      </span>
                     )}
                     <div className="mt-1 text-xs text-muted-foreground">
                       <span data-testid="evidence-cited-kind" title={t("mgmt.evidence.cited.kindHeader")}>{citedKindLabel(t, row.refKind)}</span>
                       {" · "}
                       <span data-testid="evidence-cited-source-class" title={t("mgmt.evidence.cited.sourceClassHeader")}>{citedSourceClassLabel(t, row.sourceClass)}</span>
                     </div>
-                    {!row.nameMissing && (
-                      <div className="mt-1 truncate font-mono text-xs text-muted-foreground" title={row.refId}>{row.refId}</div>
-                    )}
+                    <div className="mt-1 truncate font-mono text-xs text-muted-foreground" data-testid="evidence-cited-ref-id" title={row.refId}>{row.refId}</div>
                     {row.nameMissing && (
                       <div className="mt-1 text-xs text-muted-foreground">{t("mgmt.evidence.cited.nameMissing")}</div>
                     )}

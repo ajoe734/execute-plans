@@ -815,6 +815,82 @@ describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 strategy table", () => {
       expect(cols.map((c) => c.header)).toEqual(["名稱", "狀態", "執行狀態", "標的", "累計模擬損益", "回撤", "成交筆數", "Persona"]);
     });
   });
+
+  it("FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC1: shows source_unavailable as a plain phrase in zh-TW and en-US and shows unknown reason codes directly instead of 未記錄 / Not recorded", async () => {
+    const slowRequestRows: Strategy[] = [
+      {
+        ...LIVE_STRATEGIES[0],
+        pnl: null,
+        drawdown: null,
+        metricsAsOf: null,
+        metricsResolution: "unavailable",
+        metricsReason: "source_unavailable",
+      },
+      {
+        ...LIVE_STRATEGIES[1],
+        pnl: null,
+        drawdown: null,
+        metricsAsOf: null,
+        metricsResolution: "unavailable",
+        metricsReason: "upstream_telemetry_timeout",
+      },
+    ] as unknown as Strategy[];
+
+    await withLanguage("zh-TW", async () => {
+      vi.spyOn(lists, "strategies").mockResolvedValue({
+        items: slowRequestRows,
+        cursor: {},
+        pageSize: 2,
+        estimatedTotal: 2,
+        totalCountExact: true,
+        meta: {
+          visible_state_counts: { draft: 4205, approved: 14, retired: 2 },
+          page_info: { page_size: 20, total: 2, next_page_token: null },
+        },
+      });
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/strategies"]}>
+          <StrategiesList />
+        </MemoryRouter>,
+      );
+      const missingCells = await screen.findAllByTestId("strategy-result-missing");
+      expect(missingCells).toHaveLength(2);
+      expect(missingCells[0]).toHaveTextContent("目前無法讀取結果");
+      expect(missingCells[0]).toHaveAttribute("data-metrics-reason", "source_unavailable");
+      expect(missingCells[0]).not.toHaveTextContent("未記錄");
+      expect(missingCells[1]).toHaveTextContent("upstream_telemetry_timeout");
+      expect(missingCells[1]).toHaveAttribute("data-metrics-reason", "upstream_telemetry_timeout");
+      expect(missingCells[1]).not.toHaveTextContent("未記錄");
+      unmount();
+    });
+
+    await withLanguage("en-US", async () => {
+      vi.spyOn(lists, "strategies").mockResolvedValue({
+        items: slowRequestRows,
+        cursor: {},
+        pageSize: 2,
+        estimatedTotal: 2,
+        totalCountExact: true,
+        meta: {
+          visible_state_counts: { draft: 4205, approved: 14, retired: 2 },
+          page_info: { page_size: 20, total: 2, next_page_token: null },
+        },
+      });
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/strategies"]}>
+          <StrategiesList />
+        </MemoryRouter>,
+      );
+      const missingCells = await screen.findAllByTestId("strategy-result-missing");
+      expect(missingCells).toHaveLength(2);
+      expect(missingCells[0]).toHaveTextContent("Result could not be read now");
+      expect(missingCells[0]).toHaveAttribute("data-metrics-reason", "source_unavailable");
+      expect(missingCells[0]).not.toHaveTextContent("Not recorded");
+      expect(missingCells[1]).toHaveTextContent("upstream_telemetry_timeout");
+      expect(missingCells[1]).not.toHaveTextContent("Not recorded");
+      unmount();
+    });
+  });
 });
 
 describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 persona list opens on current", () => {
