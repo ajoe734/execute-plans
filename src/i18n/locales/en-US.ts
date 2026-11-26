@@ -1287,6 +1287,12 @@ export default {
   permission: {
     requireAction: "Requires permission: {{action}}",
     requireRoles: "Requires role: {{roles}}",
+    noPermission: {
+      title: "No permission",
+      description: "Your role cannot view this section.",
+      badge: "No permission",
+    },
+    sectionReadError: "Failed to load this section.",
   },
   inspector: {
     metadata: "Metadata",

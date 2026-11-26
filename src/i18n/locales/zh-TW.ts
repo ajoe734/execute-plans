@@ -1277,6 +1277,12 @@ export default {
   permission: {
     requireAction: "需要權限：{{action}}",
     requireRoles: "需要角色：{{roles}}",
+    noPermission: {
+      title: "無權限",
+      description: "你的角色無權檢視此區塊。",
+      badge: "無權限",
+    },
+    sectionReadError: "無法載入此區塊。",
   },
   inspector: {
     metadata: "中繼資料",

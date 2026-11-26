@@ -112,3 +112,4 @@ export {
   type ShadowArm,
   type ShadowComparisonData,
 } from "./attribution";
+export * from "./permissionState";

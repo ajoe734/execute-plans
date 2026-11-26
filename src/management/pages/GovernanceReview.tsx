@@ -1,4 +1,6 @@
 import { bffV1 } from "@/lib/bff-v1";
+import { isNoPermissionError, noPermissionSurface } from "@/lib/bff-v1/permissionState";
+import { NoPermissionState } from "@/platform/components/NoPermissionState";
 // Governance Review — Spec Part 3 §17.
 // Layout: left summary / center evidence + validator results / right decision panel /
 // bottom audit timeline. Decisions require a memo (HighRiskConfirm enforces it).
@@ -36,14 +38,19 @@ export const GovernanceReview = () => {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [loading, setLoading] = useState(true), [loadError, setLoadError] = useState(false), [auditError, setAuditError] = useState(false);
+  const [noPermission, setNoPermission] = useState<string | null | undefined>(undefined);
 
   const reload = () => bffV1.approvals.get(id).then((r) => setReq(r ?? null));
 
   useEffect(() => {
     let active = true;
-    setLoading(true); setLoadError(false); setAuditError(false);
+    setLoading(true); setLoadError(false); setAuditError(false); setNoPermission(undefined);
     bffV1.approvals.get(id).then((r) => { if (active) setReq(r ?? null); }, (err) => {
-      if (active) { setReq(null); if (!(err instanceof BffError && err.status === 404)) setLoadError(true); }
+      if (!active) return;
+      setReq(null);
+      // A typed no-permission 403 is an honest answer, not a load failure.
+      if (isNoPermissionError(err)) setNoPermission(noPermissionSurface(err) ?? null);
+      else if (!(err instanceof BffError && err.status === 404)) setLoadError(true);
     }).finally(() => { if (active) setLoading(false); });
     bffV1.audit.list().then((a) => { if (active) setAudit(a.map((x) => normalizeAuditFields(x))); }, () => { if (active) { setAudit([]); setAuditError(true); } });
     return () => { active = false; };
@@ -55,6 +62,7 @@ export const GovernanceReview = () => {
   );
 
   if (loading) return <><PageHeader title={t("common.loading", { defaultValue: "Loading..." })} /><PageBody><Card className="p-6 text-sm text-muted-foreground">{t("common.loading", { defaultValue: "Loading..." })}</Card></PageBody></>;
+  if (noPermission !== undefined) return <><PageHeader title={t("nav.approvals")} subtitle={id} /><PageBody><NoPermissionState surface={noPermission ?? undefined} /></PageBody></>;
   if (loadError) return <><PageHeader title={t("common.error", { defaultValue: "Error" })} /><PageBody><Card className="p-6 text-sm text-destructive">{t("governance.unavailable", { defaultValue: "Approval request unavailable" })}</Card></PageBody></>;
 
   if (!req) {

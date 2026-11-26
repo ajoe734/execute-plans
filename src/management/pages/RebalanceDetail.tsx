@@ -20,6 +20,8 @@ import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { rebalanceMachine, type RebalanceState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { usePermissions } from "@/lib/usePermissions";
+import { sectionReadFailure, type SectionReadState } from "@/lib/bff-v1/permissionState";
+import { sectionReadBadge, sectionReadFallback } from "@/platform/components/NoPermissionState";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
 import { ConstraintChecker } from "../components/detail/ConstraintChecker";
 
@@ -48,6 +50,7 @@ export const RebalanceDetail = () => {
   );
   const [pool, setPool] = useState<CapitalPool | undefined>();
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [approvalsRead, setApprovalsRead] = useState<SectionReadState>({ status: "idle" });
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [activeTr, setActiveTr] = useState<Transition<RebalanceState> | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -63,9 +66,23 @@ export const RebalanceDetail = () => {
     bffV1.capitalPools.get(r.targetPoolId).then(setPool).catch(() => {});
   }, [r]);
 
+  // Approvals belong to a loaded rebalance: a not-found id issues no approvals
+  // read. A typed no-permission 403 renders a no-permission section.
+  const loadedId = r ? id : undefined;
+  useEffect(() => {
+    if (!loadedId) return;
+    let active = true;
+    setApprovalsRead({ status: "idle" });
+    bffV1.approvals.list().then((all) => {
+      if (!active) return;
+      setApprovals(all.filter((a) => (a.subject ?? "").includes(loadedId) || (a.kind ?? "").includes("rebalance")));
+      setApprovalsRead({ status: "ok" });
+    }, (err) => { if (active) { setApprovals([]); setApprovalsRead(sectionReadFailure(err)); } });
+    return () => { active = false; };
+  }, [loadedId]);
+
   useEffect(() => {
     if (!id) return;
-    bffV1.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance")))).catch(() => {});
     bffV1.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance.")))).catch(() => {});
     bffV1.strategies.listNonDraft().then(setStrategies).catch(() => {});
   }, [id]);
@@ -202,17 +219,17 @@ export const RebalanceDetail = () => {
           { value: "workflow", label: t("phase13.rebalance.tabs.workflow"), content: <RebalanceWorkflowTab rebalanceId={r.id} /> },
           { value: "freezeMetrics", label: t("phase13.rebalance.tabs.freezeMetrics"), content: <MetricFreezeManager rebalanceId={r.id} /> },
           { value: "overrides", label: t("rebalance.tabs.overrides"), content: <OverrideManager rebalanceId={r.id} strategies={strategies.filter((s) => s.capitalPoolId === r.targetPoolId)} /> },
-          { value: "approvals", label: t("rebalance.tabs.approval"), content: (
+          { value: "approvals", label: t("rebalance.tabs.approval"), badge: sectionReadBadge(approvalsRead), content: (
             <div className="space-y-4">
               <Section title={t("section.approvalStages")}>
                 <LifecycleStepper machine={rebalanceMachine} current={machineState} i18nPrefix="lifecycle.rebalance" />
               </Section>
-              <DataTable rows={approvals} onRowClick={(row) => navigate(`/management/governance/${row.id}`)} columns={[
+              {sectionReadFallback(approvalsRead) ?? <DataTable rows={approvals} onRowClick={(row) => navigate(`/management/governance/${row.id}`)} columns={[
                 { key: "kind", header: t("table.kind"), cell: (row) => <span className="text-mono text-xs">{row.kind}</span> },
                 { key: "subject", header: t("table.subject"), cell: (row) => <div className="font-medium">{row.subject}</div> },
                 { key: "risk", header: t("table.risk"), cell: (row) => <RiskBadge level={row.riskLevel} /> },
                 { key: "state", header: t("table.state"), cell: (row) => <StatusBadge state={row.state} /> },
-              ]} empty={t("empty.none")} />
+              ]} empty={t("empty.none")} />}
             </div>
           ) },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
