@@ -840,12 +840,9 @@ export function TradeJourneyDetailPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">{t("tradeJourneys.detail.evidenceUnavailable")}</p>
               )}
-              <Link
-                className="mt-3 inline-flex items-center gap-1 text-sm text-primary"
-                to={`/management/evidence?journey_id=${encodeURIComponent(journeyId)}`}
-              >
-                {t("tradeJourneys.detail.openEvidenceExplorer")} <ExternalLink size={14} />
-              </Link>
+              <p className="mt-3 text-xs text-muted-foreground" data-testid="trade-journey-evidence-location">
+                {t("tradeJourneys.detail.evidenceOnPage")}
+              </p>
             </aside>
           </div>
         </>

@@ -1216,7 +1216,7 @@ export default {
       lineageUnlinked: "上游研究到部署階段未連結到此旅程（僅供參考，不需處理）。",
       evidence: "證據",
       evidenceUnavailable: "暫無證據。",
-      openEvidenceExplorer: "開啟證據瀏覽器",
+      evidenceOnPage: "此旅程若有證據，皆顯示於本頁的「旅程階段」、「時間軸」與上方「原始資料」中。",
     },
   },
   detail: {

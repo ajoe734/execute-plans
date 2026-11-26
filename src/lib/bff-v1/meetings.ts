@@ -1117,20 +1117,26 @@ export function resolveMeetingActionEvidenceHref(
   artifactId?: string | null,
   explicitHref?: string | null,
 ): string | null {
+  const normKind = (kind ?? "").trim().toLowerCase();
+  const id = optText(artifactId);
+  if (normKind === "research_note" || id?.startsWith("note-") || explicitHref?.trim().startsWith("note-")) {
+    return null;
+  }
   if (explicitHref && (explicitHref.startsWith("/management/") || /^https?:\/\//i.test(explicitHref))) {
     return explicitHref;
   }
-  const id = optText(artifactId);
   if (!id) return explicitHref ?? null;
   if (id.startsWith("/management/") || /^https?:\/\//i.test(id)) {
     return id;
   }
-  const normKind = (kind ?? "").trim().toLowerCase();
-  if (normKind === "research_note" || id.startsWith("note-") || id.startsWith("evref-")) {
+  if (id.startsWith("evref-")) {
     return `/management/evidence?ref_id=${encodeURIComponent(id)}`;
   }
   if (normKind === "research_artifact" || id.startsWith("artifact-") || id.startsWith("rart-")) {
     return `/management/artifacts/${encodeURIComponent(id)}`;
+  }
+  if (normKind === "meeting" || id.startsWith("mtg-")) {
+    return `/management/meetings/${encodeURIComponent(id)}`;
   }
   return `/management/evidence?ref_id=${encodeURIComponent(id)}`;
 }
