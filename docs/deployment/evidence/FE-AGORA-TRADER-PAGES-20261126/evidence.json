@@ -1,0 +1,73 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-AGORA-TRADER-PAGES-20261126",
+  "title": "Agora pages: dark theme tokens and plain empty states for a trader with no workshop strategy",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "review_independence": {
+    "owner_family": "Antigravity",
+    "reviewer_family": "Claude",
+    "independent": true
+  },
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-AGORA-TRADER-PAGES-20261126",
+  "register_instance": "RC6",
+  "dependencies_verified": [
+    {
+      "task_id": "AGORA-TRADER-SCOPE-EMPTY-STATE-20261126",
+      "repo": "ajoe734/pantheon",
+      "pr": 7916,
+      "commit": "d767988645bff7517eb3513da8dd3eac4042a2cb",
+      "status": "done"
+    },
+    {
+      "task_id": "AGORA-COMMITTEE-TRADER-MEETINGS-20261126",
+      "repo": "ajoe734/pantheon",
+      "pr": 7915,
+      "commit": "3a29aeec6c1f606a1eddab0cdef399947b751931",
+      "status": "done"
+    }
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added_or_changed": 0,
+    "persistent_writers_added_or_changed": 0,
+    "notes": "Pure frontend rendering, localization, and dark-theme token scoping; adds no recurring job, emitter, or persistent writer."
+  },
+  "acceptance_coverage": {
+    "AC1": "TradingDeskLayout applies the .dark class on [data-testid='trading-desk-shell'], on the ServantDrawer SheetContent portal, and syncs document.documentElement.classList.add('dark') while mounted so every /agora route resolves dark theme tokens in one place. Replaced all bg-white and slate-* light-palette classes across WorkshopListView, WorkshopSessionView, StrategyPerformancePage, and CommitteePage with dark theme tokens (bg-card, bg-background, bg-muted, border-border, text-foreground, text-muted-foreground). Browser contrast test in e2e/13-agora.spec.ts measures WCAG relative luminance contrast >= 4.5 for Strategy Workshop list header ([data-testid='workshop-list-header']), Strategy Workshop session header ([data-testid='strategy-workshop-runtime-header']), Committee selected filter button ([data-testid='committee-filter-all']), and Committee meeting code chip ([data-testid='committee-meeting-type-mtg-1']).",
+    "AC2": "TradingRoomPage: when aggregate.strategies.length === 0 and no explicit route strategyId is requested, renders one zh-TW empty state '你還沒有工坊策略' ([data-testid='trading-room-workshop-empty-entry']) with explanation '交易操盤室會顯示你在策略工坊完成並加入的策略。' and button '前往策略工坊' ([data-testid='trading-room-open-workshop']); renders no operational readiness banner, no producer or binding line, and no candidate or queue sections; readiness not_configured with reason no_workshop_strategies is never drawn as a red UNAVAILABLE badge.",
+    "AC3": "TradingRoomPage operational readiness banner uses zh-TW labels without word duplication (no 'snapshot snapshot'); missing source identity renders as one plain phrase '資料來源：未回報'.",
+    "AC4": "StrategyPerformancePage: when the trader has no workshop strategy (rows.length === 0), renders the zh-TW empty state '你還沒有工坊策略' ([data-testid='strategy-performance-workshop-empty']) with explanation '策略執行與績效會顯示你在策略工坊完成並加入的策略。' and link '前往策略工坊' ([data-testid='strategy-performance-open-workshop']) as soon as the BFF answers; internal names strategy_directory, telemetry, trade_journeys, and read_only_performance_attribution are translated to zh-TW labels and never appear as visible text; a request still pending after 10 s shows a timeout message ('載入績效資料逾時（超過 10 秒），請重試。') with a retry button ([data-testid='strategy-performance-retry']); data-testid='strategy-performance-page' is preserved across loading, timeout/error, empty, and loaded states.",
+    "AC5": "CommitteePage: orders BFF-returned trader sessions newest first by created_at with formatted date and time (YYYY-MM-DD HH:mm); builds session title from topic/agenda/question/title or reviewed target (subject_ref / target_type:target_id) with persona display names (translating 'Your servant' / caller servant to '私人交易僕人' and pairing fallback IDs with localized role names so a raw persona id is never the only name); translates statuses and outcomes via src/lib/enumLabels.ts in zh-TW; renders paper and execution_authority as plain zh-TW words ('模擬交易 · 執行權限：無' and '執行權限：無'); renders empty state '你還沒有召開過會議' ([data-testid='committee-empty-state']) with link '前往策略工坊' ([data-testid='committee-open-workshop']) when the BFF returns reason 'no_trader_meetings' or an empty list.",
+    "AC6": "tsc --noEmit passes with 0 errors; eslint reports 0 errors; locale parity test (i18nParity.test.ts) passes; all 9 scoped unit test files (254 tests) and e2e/13-agora.spec.ts (4 browser tests) pass. All updated assertions are justified below.",
+    "AC7": "Ready for review by Claude (independent model family from owner Antigravity2) and post-merge hosted dev verification as admintest."
+  },
+  "changed_assertions": [
+    {
+      "file": "src/agora/pages/trading-room/TradingRoomPage.test.tsx",
+      "change": "Updated default empty-aggregate test and operational-readiness banner tests from legacy English/duplicate strings ('No strategy is ready to enter Trading Room', 'UNAVAILABLE', 'snapshot snapshot not reported') to the new zh-TW empty state ('你還沒有工坊策略', '交易操盤室會顯示你在策略工坊完成並加入的策略。', '前往策略工坊', no readiness banner when strategies=[]) and zh-TW readiness labels ('部分可用', '資料來源：未回報') when strategies are present.",
+      "reason": "Acceptance 2 and Acceptance 3 require the zh-TW empty state without readiness banner when strategies=[] and zh-TW readiness labels without 'snapshot snapshot' when the banner is shown."
+    },
+    {
+      "file": "src/agora/pages/learning/CommitteePage.test.tsx",
+      "change": "Updated dissent memo status/recommendation assertions from raw English enum codes ('published', 'approve_with_conditions') to their zh-TW shared enum labels ('已發佈', '附條件核准').",
+      "reason": "Acceptance 5 requires Committee statuses and recommendations to use the shared enum label helper (src/lib/enumLabels.ts) in zh-TW."
+    },
+    {
+      "file": "src/agora/pages/learning/learning.pages.test.tsx",
+      "change": "Updated deliberative round stance ('conditional' -> '條件式'), synthesis outcome ('completed' -> '已完成'), downstream status ('(open)' -> '(未結案)'), candidate approval status ('draft' -> '草稿', 'rejected' -> '已駁回', 'state=review_requested' -> '已請求審核', 'validation=passed' -> '通過'), and proposal execution_authority ('execution_authority' -> '執行權限：無').",
+      "reason": "Acceptance 5 requires Committee statuses to use src/lib/enumLabels.ts in zh-TW and execution_authority/paper to read as plain zh-TW words."
+    }
+  ],
+  "verification": {
+    "typecheck": "./node_modules/.bin/tsc --noEmit: 0 errors",
+    "eslint": "./node_modules/.bin/eslint src e2e/13-agora.spec.ts e2e/agora-narrow-responsive-hosted.spec.ts: 0 errors",
+    "i18n_parity": "./node_modules/.bin/vitest run src/lib/v5/management/__tests__/i18nParity.test.ts: 17/17 passed",
+    "unit_tests": "./node_modules/.bin/vitest run src/lib/__tests__/enumLabels.test.ts src/agora/TradingDeskLayout.test.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx src/agora/pages/learning/CommitteePage.test.tsx src/agora/pages/learning/learning.pages.test.tsx src/routes/agora.test.tsx: 9 files, 254/254 passed",
+    "playwright_e2e": "PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 ./node_modules/.bin/playwright test e2e/13-agora.spec.ts: 4/4 passed (including real Chromium contrast >= 4.5 verification and zh-TW empty states)"
+  },
+  "residual_findings": [
+    "src/agora/pages/strategy-workshop/ResearchPlanPanel.tsx and src/agora/components/StrategyCompletenessRail.tsx (outside this task's declared artifact contract) still contain slate-* utility classes and should be migrated to dark theme tokens in a follow-up RC6 cleanup."
+  ]
+}

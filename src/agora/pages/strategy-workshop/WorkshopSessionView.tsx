@@ -672,20 +672,20 @@ function WorkshopDeliberativeMeetingsSection({
 
   return (
     <section
-      className="space-y-2 border-t border-slate-100 pt-2"
+      className="space-y-2 border-t border-border pt-2"
       data-testid="workshop-deliberative-meetings"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Deliberative Persona Meetings
           </span>
-          <span className="text-[10px] text-slate-400">
+          <span className="text-[10px] text-muted-foreground">
             paper · execution_authority: none · M9 cap ≤ 5
           </span>
         </div>
         <a
-          className="text-[11px] font-medium text-indigo-600 underline"
+          className="text-[11px] font-medium text-indigo-400 underline"
           data-testid="workshop-committee-link"
           href="/agora/committee"
         >
@@ -694,10 +694,10 @@ function WorkshopDeliberativeMeetingsSection({
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
-        <label className="flex flex-col gap-1 text-[11px] text-slate-600">
+        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
           <span>Meeting Type</span>
           <select
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800"
+            className="h-7 rounded border border-border bg-card px-2 text-xs text-foreground"
             data-testid="workshop-meeting-type-select"
             value={meetingType}
             onChange={(e) => setMeetingType(e.target.value as DeliberativeMeetingType)}
@@ -710,11 +710,11 @@ function WorkshopDeliberativeMeetingsSection({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-[11px] text-slate-600 sm:col-span-2">
+        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground sm:col-span-2">
           <span>Meeting Topic / Agenda</span>
           <input
             type="text"
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800"
+            className="h-7 rounded border border-border bg-card px-2 text-xs text-foreground"
             data-testid="workshop-meeting-topic-input"
             placeholder="Discuss strategy evolution, parameters, or attribution..."
             value={meetingTopic}
@@ -723,8 +723,8 @@ function WorkshopDeliberativeMeetingsSection({
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded border border-slate-100 bg-slate-50 p-2 text-xs">
-        <label className="flex items-center gap-1.5 font-medium text-indigo-800 cursor-pointer">
+      <div className="flex flex-wrap items-center gap-3 rounded border border-border bg-muted/40 p-2 text-xs">
+        <label className="flex items-center gap-1.5 font-medium text-indigo-300 cursor-pointer">
           <input
             type="checkbox"
             checked={includePrivateServant}
@@ -743,7 +743,7 @@ function WorkshopDeliberativeMeetingsSection({
             return (
               <label
                 key={persona.persona_id}
-                className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer"
+                className="flex items-center gap-1 text-xs text-foreground cursor-pointer"
                 data-testid={`workshop-meeting-participant-label-${persona.persona_id}`}
               >
                 <input
@@ -770,7 +770,7 @@ function WorkshopDeliberativeMeetingsSection({
         <input
           type="text"
           aria-label="Additional participant IDs"
-          className="h-6 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700"
+          className="h-6 rounded border border-border bg-card px-2 text-[11px] text-foreground"
           data-testid="workshop-meeting-custom-participant-input"
           placeholder="Participant ID override (optional)"
           value={customParticipantId}
@@ -780,7 +780,7 @@ function WorkshopDeliberativeMeetingsSection({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-xs font-medium bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+          className="h-7 text-xs font-medium bg-indigo-500/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/25"
           data-testid="workshop-convene-meeting-btn"
           disabled={!canConvene}
           type="button"
@@ -793,7 +793,7 @@ function WorkshopDeliberativeMeetingsSection({
       {conveneRefusal ? (
         <div
           role="alert"
-          className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700"
+          className="rounded border border-rose-500/35 bg-rose-500/10 p-2 text-xs text-rose-200"
           data-testid="workshop-meeting-refusal"
         >
           <span className="font-semibold">Meeting convening refused: </span>
@@ -804,7 +804,7 @@ function WorkshopDeliberativeMeetingsSection({
 
       {conveneReceipt ? (
         <div
-          className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900 space-y-1"
+          className="rounded border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-200 space-y-1"
           data-testid="workshop-meeting-receipt"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -820,7 +820,7 @@ function WorkshopDeliberativeMeetingsSection({
       {meetingsUnavailable ? (
         <div
           role="status"
-          className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800"
+          className="rounded border border-amber-500/35 bg-amber-500/10 p-2 text-xs text-amber-200"
           data-testid="workshop-meetings-unavailable"
         >
           Meetings read unavailable: <code>{meetingsUnavailable.reason}</code>
@@ -832,22 +832,22 @@ function WorkshopDeliberativeMeetingsSection({
           {convenedMeetings.map((m) => (
             <li
               key={m.meeting_id}
-              className="rounded border border-slate-200 bg-slate-50/70 p-2 text-xs space-y-1"
+              className="rounded border border-border bg-muted/30 p-2 text-xs space-y-1"
               data-testid={`workshop-convened-meeting-${m.meeting_id}`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <code className="font-semibold text-slate-800">{m.meeting_id}</code>
-                  <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
+                  <code className="font-semibold text-foreground">{m.meeting_id}</code>
+                  <span className="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
                     {m.meeting_type}
                   </span>
-                  <span className="text-slate-600">{m.status}</span>
-                  {m.outcome ? <span className="text-slate-500">· {m.outcome}</span> : null}
+                  <span className="text-muted-foreground">{m.status}</span>
+                  {m.outcome ? <span className="text-muted-foreground">· {m.outcome}</span> : null}
                   {m.topic || m.agenda ? (
-                    <span className="font-medium text-slate-800">· {m.topic ?? m.agenda}</span>
+                    <span className="font-medium text-foreground">· {m.topic ?? m.agenda}</span>
                   ) : null}
                 </div>
-                <span className="text-[10px] text-slate-500">
+                <span className="text-[10px] text-muted-foreground">
                   paper · execution_authority: {m.execution_authority ?? "none"}
                 </span>
               </div>
@@ -855,7 +855,7 @@ function WorkshopDeliberativeMeetingsSection({
                 className="flex flex-wrap items-center gap-1.5"
                 data-testid={`workshop-convened-meeting-${m.meeting_id}-participants`}
               >
-                <span className="text-[11px] text-slate-500">Participants:</span>
+                <span className="text-[11px] text-muted-foreground">Participants:</span>
                 {(m.participants ?? []).map((p) => {
                   const pid = participantIdOf(p);
                   const servant = isServantParticipant(p);
@@ -865,8 +865,8 @@ function WorkshopDeliberativeMeetingsSection({
                       className={cn(
                         "rounded border px-1.5 py-0.5 text-[11px] font-mono",
                         servant
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                          : "border-slate-200 bg-white text-slate-700",
+                          ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                          : "border-border bg-card text-foreground",
                       )}
                     >
                       {pid}
@@ -879,7 +879,7 @@ function WorkshopDeliberativeMeetingsSection({
           ))}
         </ul>
       ) : (
-        <p className="text-[11px] text-slate-400" data-testid="workshop-convened-meetings-empty">
+        <p className="text-[11px] text-muted-foreground" data-testid="workshop-convened-meetings-empty">
           No deliberative meetings convened in this workshop session yet.
         </p>
       )}
@@ -1459,15 +1459,15 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
     <div
       data-testid="strategy-workshop-page-session"
       data-mobile-workshop-pane={mobilePane}
-      className="flex h-full w-full overflow-hidden bg-slate-50"
+      className="flex h-full w-full overflow-hidden bg-background text-foreground"
     >
       <div
-        className="agora-mobile-only shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2"
+        className="agora-mobile-only shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-2"
         data-testid="workshop-mobile-pane-selector"
       >
         <button
           aria-pressed={mobilePane === "conversation"}
-          className={mobilePane === "conversation" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white" : "rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"}
+          className={mobilePane === "conversation" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-[#f0ece4]" : "rounded border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground"}
           onClick={() => setMobilePane("conversation")}
           type="button"
         >
@@ -1475,7 +1475,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         </button>
         <button
           aria-pressed={mobilePane === "readiness"}
-          className={mobilePane === "readiness" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white" : "rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"}
+          className={mobilePane === "readiness" ? "rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-[#f0ece4]" : "rounded border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground"}
           onClick={() => setMobilePane("readiness")}
           type="button"
         >
@@ -1485,7 +1485,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
 
       {/* Left: conversation + composer */}
       <div
-        className="flex flex-1 flex-col overflow-hidden bg-white border-r border-slate-200"
+        className="flex flex-1 flex-col overflow-hidden bg-background border-r border-border"
         data-mobile-pane-hidden={mobilePane !== "conversation"}
         data-testid="workshop-conversation-pane"
       >
@@ -1493,40 +1493,40 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         {/* Session header */}
         <div
           aria-label={`${workshopTitle(workshop)} status`}
-          className="flex h-auto min-h-12 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 bg-white z-10"
+          className="flex h-auto min-h-12 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2 bg-card text-foreground z-10"
           data-testid="strategy-workshop-runtime-header"
         >
           <div className="flex flex-wrap items-center gap-3">
             <a
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium transition-colors"
+              className="flex items-center gap-1 text-xs text-foreground hover:text-indigo-400 font-medium transition-colors"
               href="/agora/strategy-workshop"
             >
               <ArrowLeft className="h-4 w-4" /> 工坊列表
             </a>
-            <span className="text-slate-300">|</span>
-            <span className="text-xs text-slate-500" data-testid="workshop-readiness-summary">
+            <span className="text-muted-foreground">|</span>
+            <span className="text-xs text-muted-foreground" data-testid="workshop-readiness-summary">
               {readinessSummary(readiness)}
             </span>
-            <span className="text-xs text-slate-500" data-testid="workshop-card-summary">
+            <span className="text-xs text-muted-foreground" data-testid="workshop-card-summary">
               Cards: {cardState.cards.length}
             </span>
-            <span className="text-xs text-slate-500" data-testid="workshop-event-summary">
+            <span className="text-xs text-muted-foreground" data-testid="workshop-event-summary">
               Events: {workshopEvents.length}
             </span>
           </div>
           <div className="flex items-center gap-2">
             {entry?.returnTo ? (
-              <a className="text-xs font-medium text-indigo-600 underline" data-testid="workshop-return-link" href={entry.returnTo}>
+              <a className="text-xs font-medium text-indigo-400 underline" data-testid="workshop-return-link" href={entry.returnTo}>
                 {entry.returnLabel ?? "Back to source"}
               </a>
             ) : null}
             <span className={cn(
               "rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider",
               workshop?.status === "open"
-                ? "bg-green-50 text-green-700 border border-green-100"
+                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
                 : workshop?.status === "in_review"
-                  ? "bg-amber-50 text-amber-700 border border-amber-100"
-                  : "bg-slate-100 text-slate-600 border border-slate-200"
+                  ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                  : "bg-muted text-foreground border border-border"
             )}>
               {workshop?.status ?? "Loading"}
             </span>
@@ -1537,21 +1537,21 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         {workshop?.metadata?.decision_event_id && (
           <div
             data-testid="consultation-context-banner"
-            className="bg-indigo-50 border-b border-indigo-200 px-4 py-3 text-xs text-indigo-900 shrink-0 flex flex-col gap-1.5"
+            className="bg-indigo-500/10 border-b border-indigo-500/30 px-4 py-3 text-xs text-foreground shrink-0 flex flex-col gap-1.5"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-indigo-600 shrink-0" />
+                <Bot className="h-4 w-4 text-indigo-400 shrink-0" />
                 <span className="font-semibold text-sm">Contextual Consultation Active</span>
               </div>
               <a
                 href={`/agora/trading-room/${workshop.metadata.strategy_id || ""}`}
-                className="text-indigo-600 hover:text-indigo-800 underline font-medium"
+                className="text-indigo-400 hover:text-indigo-300 underline font-medium"
               >
                 Back to Trading Room
               </a>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 bg-white/60 p-2.5 rounded border border-indigo-100/50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 bg-card p-2.5 rounded border border-border">
               <div>
                 <strong>Decision Event ID:</strong> <span className="font-mono" data-testid="consultation-event-id">{workshop.metadata.decision_event_id as string}</span>
               </div>
@@ -1561,7 +1561,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               {workshop.metadata.position_snapshot && (
                 <div className="col-span-1 sm:col-span-2">
                   <strong>Position/Risk Snapshot:</strong>{" "}
-                  <code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded font-mono block mt-1 overflow-x-auto whitespace-pre" data-testid="consultation-position-snapshot">
+                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono block mt-1 overflow-x-auto whitespace-pre" data-testid="consultation-position-snapshot">
                     {JSON.stringify(workshop.metadata.position_snapshot, null, 2)}
                   </code>
                 </div>
@@ -1571,7 +1571,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                   <strong>Evidence References:</strong>
                   <div className="flex flex-wrap gap-1.5 mt-1" data-testid="consultation-evidence-refs">
                     {(workshop.metadata.evidence_refs as { ref_type: string; ref_id: string }[]).map((ref, idx) => (
-                      <span key={idx} className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-700">
+                      <span key={idx} className="bg-muted border border-border px-1.5 py-0.5 rounded text-[10px] text-foreground">
                         {ref.ref_type}: {ref.ref_id}
                       </span>
                     ))}
@@ -1584,22 +1584,22 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
 
         {/* Lifecycle warnings */}
         {(dailyInteractions.some((item) => item.status === "degraded" || item.status === "failed") || !writeAccess.interactionAllowed || workshop?.status === "concluded") && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex flex-col gap-1.5 text-xs text-amber-800 shrink-0">
+          <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2 flex flex-col gap-1.5 text-xs text-amber-200 shrink-0">
             {dailyInteractions.some((item) => item.status === "degraded" || item.status === "failed") && (
               <div className="flex items-center gap-1.5" data-testid="warning-degraded">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                 <span><strong>Provider degradation:</strong> One or more selected Personas failed. Successful independent opinions remain visible; no fallback opinion was fabricated.</span>
               </div>
             )}
             {!writeAccess.interactionAllowed && (
-              <div className="flex items-center gap-1.5 text-red-800 bg-red-50 p-1.5 rounded border border-red-100" data-testid="warning-denied">
-                <ShieldAlert className="h-3.5 w-3.5 text-red-600 shrink-0" />
+              <div className="flex items-center gap-1.5 text-rose-200 bg-rose-500/10 p-1.5 rounded border border-rose-500/30" data-testid="warning-denied">
+                <ShieldAlert className="h-3.5 w-3.5 text-rose-400 shrink-0" />
                 <span><strong>Access restricted:</strong> {writeAccess.interactionDisabledReason ?? "The authenticated BFF session does not permit Persona interaction writes."}</span>
               </div>
             )}
             {workshop?.status === "concluded" && (
-              <div className="flex items-center gap-1.5 text-slate-800 bg-slate-50 p-1.5 rounded border border-slate-100">
-                <XCircle className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+              <div className="flex items-center gap-1.5 text-foreground bg-muted p-1.5 rounded border border-border">
+                <XCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <span>This workshop has been concluded. No further messages can be posted.</span>
               </div>
             )}
@@ -1607,10 +1607,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         )}
 
         <div
-          className="agora-mobile-only shrink-0 flex-col gap-1 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-indigo-950"
+          className="agora-mobile-only shrink-0 flex-col gap-1 border-b border-border bg-card px-3 py-2 text-foreground"
           data-testid="workshop-mobile-priority"
         >
-          <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-500">Next question</span>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">Next question</span>
           <span className="line-clamp-2 text-xs font-medium leading-5">
             {nextQuestionText ?? "Awaiting the next highest-value question."}
           </span>
@@ -1619,10 +1619,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         {/* Conversation flow */}
         <div
           data-testid="workshop-conversation"
-          className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-slate-50/50"
+          className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-background"
         >
           {sessionLoading && dailyRuntimeState === "loading" && (
-            <div data-testid="workshop-session-loading" className="flex items-center justify-center py-20 text-slate-400 gap-2">
+            <div data-testid="workshop-session-loading" className="flex items-center justify-center py-20 text-muted-foreground gap-2">
               <span className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent" />
               Loading session cards…
             </div>
@@ -1663,10 +1663,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         </div>
 
         {/* Composer section */}
-        <div data-testid="servant-composer" className="border-t border-slate-200 bg-white p-4 shrink-0 flex flex-col gap-3">
+        <div data-testid="servant-composer" className="border-t border-border bg-card p-4 shrink-0 flex flex-col gap-3">
           <button
             aria-expanded={mobileComposerOptionsOpen}
-            className="agora-mobile-only items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"
+            className="agora-mobile-only items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-xs font-semibold text-foreground"
             data-testid="workshop-composer-options-toggle"
             onClick={() => setMobileComposerOptionsOpen((open) => !open)}
             type="button"
@@ -1682,37 +1682,37 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           >
           
           {/* Context Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-600 border border-slate-100 shrink-0" data-testid="context-bar">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 p-2.5 text-[11px] text-muted-foreground border border-border shrink-0" data-testid="context-bar">
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1">
-                <Layers className="h-3.5 w-3.5 text-slate-400" />
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                 <strong>Focused object:</strong> {resolvedContext ? `${resolvedContext.focusedObject.kind}:${resolvedContext.focusedObject.id}` : "resolving"}
               </span>
-              <span className="text-slate-300">•</span>
+              <span className="text-muted-foreground">•</span>
               <span>
                 <strong>Strategy version:</strong> {resolvedContext?.strategyRef?.version_id ?? "not supplied"}
               </span>
-              <span className="text-slate-300">•</span>
+              <span className="text-muted-foreground">•</span>
               <span className="flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                 <strong>Environment:</strong> {resolvedContext?.environment ?? "resolving"}
               </span>
             </div>
-            <div className="flex items-center gap-3 text-slate-400">
+            <div className="flex items-center gap-3 text-muted-foreground">
               <span className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 Evidence cutoff: {resolvedContext?.evidenceCutoff ?? "resolving"}
               </span>
             </div>
           </div>
-          {contextError ? <p className="rounded border border-red-200 bg-red-50 p-2 text-xs font-semibold text-red-700" data-testid="context-resolution-error" role="alert">{contextError}</p> : null}
+          {contextError ? <p className="rounded border border-rose-500/35 bg-rose-500/10 p-2 text-xs font-semibold text-rose-200" data-testid="context-resolution-error" role="alert">{contextError}</p> : null}
 
           {/* Mode Selector & Participant Picker Row */}
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
             <div className="flex flex-wrap items-center gap-4">
               {/* Mode Selector */}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400" htmlFor="daily-interaction-mode">Interaction Mode</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground" htmlFor="daily-interaction-mode">Interaction Mode</label>
                 <Select
                   value={selectedMode}
                   onValueChange={(val: string) => {
@@ -1722,10 +1722,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                     void refreshEligibility(mode, selectedParticipants, pickerSelectionType);
                   }}
                 >
-                  <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector" id="daily-interaction-mode">
+                  <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-card border-border text-foreground" data-testid="mode-selector" id="daily-interaction-mode">
                     <SelectValue placeholder="Select mode" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
+                  <SelectContent className="bg-popover border-border text-popover-foreground">
                     <SelectItem value="ask" className="text-xs">Ask (Explain & Analyse)</SelectItem>
                     <SelectItem value="challenge" className="text-xs">Challenge (Attack assumptions)</SelectItem>
                     <SelectItem value="compare" className="text-xs">Compare (Independent Views)</SelectItem>
@@ -1737,7 +1737,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
 
               {/* Participant Picker */}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400" htmlFor="daily-interaction-participants">Participants</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground" htmlFor="daily-interaction-participants">Participants</label>
                 <Select
                   value={pickerSelectionType}
                   onValueChange={(val: string) => {
@@ -1753,10 +1753,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                     }
                   }}
                 >
-                  <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="participant-picker" id="daily-interaction-participants">
+                  <SelectTrigger className="w-[200px] h-8 text-xs font-semibold bg-card border-border text-foreground" data-testid="participant-picker" id="daily-interaction-participants">
                     <SelectValue placeholder="Select panel" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
+                  <SelectContent className="bg-popover border-border text-popover-foreground">
                     <SelectItem value="recommended" className="text-xs">Recommended-or-Eligible Panel</SelectItem>
                     <SelectItem value="eligible-one" className="text-xs">First Eligible Persona</SelectItem>
                     <SelectItem value="eligible-two" className="text-xs">First Two Eligible Personas</SelectItem>
@@ -1768,7 +1768,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             </div>
 
             {/* Explanation box */}
-            <div className="flex-1 min-w-[200px] max-w-[400px] bg-slate-50 border border-slate-100 p-2 rounded text-[11px] text-slate-500 leading-normal" data-testid="eligibility-explanation">
+            <div className="flex-1 min-w-[200px] max-w-[400px] bg-muted/40 border border-border p-2 rounded text-[11px] text-muted-foreground leading-normal" data-testid="eligibility-explanation">
               {eligibilityLoading ? "Checking Persona eligibility…" : eligibilityError ? `Eligibility unavailable: ${eligibilityError}` : (() => {
                 const selected = selectedParticipants.length;
                 const excluded = excludedParticipants.length;
@@ -1792,21 +1792,21 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           {selectedParticipants.length > 0 && (
             <div className="flex flex-wrap gap-2" aria-label="Selected Persona participants">
               {selectedParticipants.map((id) => (
-                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-800" key={id}>
+                <span className="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-2 py-1 text-[11px] font-medium text-indigo-300" key={id}>
                   {eligibleParticipants.find((persona) => persona.persona_id === id)?.display_name ?? id}
                 </span>
               ))}
               {pickerSelectionType !== "named" && (
-                <span className="self-center text-[11px] text-slate-500">Choose Named Personas above to adjust this panel.</span>
+                <span className="self-center text-[11px] text-muted-foreground">Choose Named Personas above to adjust this panel.</span>
               )}
             </div>
           )}
 
           {/* Named Persona check boxes when Named is selected */}
           {pickerSelectionType === "named" && (
-            <div className="flex flex-wrap gap-4 border border-slate-100 bg-slate-50 p-2.5 rounded shrink-0" data-testid="named-checkbox-panel">
+            <div className="flex flex-wrap gap-4 border border-border bg-muted/40 p-2.5 rounded shrink-0" data-testid="named-checkbox-panel">
               {eligibleParticipants.map((persona) => (
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer" key={persona.persona_id}>
+                <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer" key={persona.persona_id}>
                   <input
                     type="checkbox"
                     checked={selectedParticipants.includes(persona.persona_id)}
@@ -1819,13 +1819,13 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                       if (!original || persona.persona_id === original) return current;
                       return event.target.checked ? [original, persona.persona_id] : current.filter((id) => id !== persona.persona_id);
                     })}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-border text-indigo-500 focus:ring-indigo-500"
                   />
                   <span title={`Capability snapshot: ${persona.capability_snapshot_id ?? "verified"}`}>{persona.display_name}</span>
                 </label>
               ))}
               {excludedParticipants.map((persona) => (
-                <span className="text-xs text-slate-400" key={persona.persona_id} title={persona.reasons.join(", ")}>
+                <span className="text-xs text-muted-foreground" key={persona.persona_id} title={persona.reasons.join(", ")}>
                   {persona.display_name} (Unavailable: {persona.reasons.join(", ")})
                 </span>
               ))}
@@ -1840,10 +1840,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               <div
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold shrink-0",
-                  messageReceiptState === "accepted" && "bg-blue-50 text-blue-700 border border-blue-200",
-                  messageReceiptState === "processing" && "bg-amber-50 text-amber-700 border border-amber-200 animate-pulse",
-                  messageReceiptState === "succeeded" && "bg-green-50 text-green-700 border border-green-200",
-                  messageReceiptState === "failed" && "bg-red-50 text-red-700 border border-red-200",
+                  messageReceiptState === "accepted" && "bg-sky-500/15 text-sky-300 border border-sky-500/30",
+                  messageReceiptState === "processing" && "bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse",
+                  messageReceiptState === "succeeded" && "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30",
+                  messageReceiptState === "failed" && "bg-rose-500/15 text-rose-300 border border-rose-500/30",
                 )}
                 data-message-receipt={messageReceiptState}
                 data-testid="message-receipt-state"
@@ -1857,10 +1857,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               <div
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold shrink-0",
-                  personaReceiptState === "submitting" && "bg-indigo-50 text-indigo-700 border border-indigo-200 animate-pulse",
-                  personaReceiptState === "succeeded" && "bg-green-50 text-green-700 border border-green-200",
-                  personaReceiptState === "degraded" && "bg-amber-50 text-amber-700 border border-amber-200",
-                  personaReceiptState === "failed" && "bg-red-50 text-red-700 border border-red-200",
+                  personaReceiptState === "submitting" && "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 animate-pulse",
+                  personaReceiptState === "succeeded" && "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30",
+                  personaReceiptState === "degraded" && "bg-amber-500/15 text-amber-300 border border-amber-500/30",
+                  personaReceiptState === "failed" && "bg-rose-500/15 text-rose-300 border border-rose-500/30",
                 )}
                 data-persona-receipt={personaReceiptState}
                 data-testid="persona-receipt-state"
@@ -1874,9 +1874,9 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               <div
                 className={cn(
                   "inline-flex flex-wrap items-center gap-1.5 rounded border px-2.5 py-1 text-xs font-semibold shrink-0",
-                  reconstructionState === "admitted" && "border-amber-200 bg-amber-50 text-amber-700 animate-pulse",
-                  reconstructionState === "completed" && "border-green-200 bg-green-50 text-green-700",
-                  reconstructionState === "failed" && "border-red-200 bg-red-50 text-red-700",
+                  reconstructionState === "admitted" && "border-amber-500/30 bg-amber-500/15 text-amber-300 animate-pulse",
+                  reconstructionState === "completed" && "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+                  reconstructionState === "failed" && "border-rose-500/30 bg-rose-500/15 text-rose-300",
                 )}
                 data-reconstruction-state={reconstructionState}
                 data-reconstruction-id={reconstructionId ?? undefined}
@@ -1918,12 +1918,12 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           />
 
           {/* Workshop Command Shortcuts */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2 shrink-0" data-testid="workshop-command-buttons">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Workshop Commands:</span>
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2 shrink-0" data-testid="workshop-command-buttons">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mr-1">Workshop Commands:</span>
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100"
+              className="h-7 text-xs font-medium bg-muted/50 hover:bg-muted text-foreground border-border"
               data-testid="cmd-consult-btn"
               disabled={composerInputDisabled}
               onClick={async () => {
@@ -1953,7 +1953,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100"
+              className="h-7 text-xs font-medium bg-muted/50 hover:bg-muted text-foreground border-border"
               data-testid="cmd-version-btn"
               disabled={composerInputDisabled}
               onClick={async () => {
@@ -1982,7 +1982,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-red-700"
+              className="h-7 text-xs font-medium bg-muted/50 hover:bg-muted text-foreground hover:text-rose-300 border-border"
               data-testid="cmd-conclude-btn"
               disabled={composerInputDisabled}
               onClick={async () => {
@@ -2015,7 +2015,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           <div className="flex gap-2">
             <label className="sr-only" htmlFor="daily-interaction-request">Persona interaction request</label>
             <textarea
-              className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
+              className="flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
               data-testid="servant-composer-input"
               disabled={composerInputDisabled}
               id="daily-interaction-request"
@@ -2031,7 +2031,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               }}
             />
             <Button
-              className="self-end bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
+              className="self-end bg-indigo-600 hover:bg-indigo-500 text-[#f0ece4] flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
               data-testid="servant-composer-submit"
               disabled={!canSubmitInteraction}
               title={writeAccess.interactionDisabledReason ?? undefined}
@@ -2039,7 +2039,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               type="button"
             >
               {sendLoading ? (
-                <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                <span className="animate-spin rounded-full h-3 w-3 border-2 border-[#f0ece4] border-t-transparent" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
@@ -2048,7 +2048,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           </div>
           {composerSubmitBlock ? (
             <div
-              className="flex items-center justify-between gap-3 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-800"
+              className="flex items-center justify-between gap-3 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs font-semibold text-amber-200"
               data-reason-code={composerSubmitBlock.code}
               data-testid="servant-composer-submit-disabled-reason"
               role="status"
@@ -2070,12 +2070,12 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             </div>
           ) : null}
           {writeAccess.interactionDisabledReason ? (
-            <p className="text-xs font-semibold text-amber-700" data-testid="interaction-disabled-reason">
+            <p className="text-xs font-semibold text-amber-300" data-testid="interaction-disabled-reason">
               {writeAccess.interactionDisabledReason}
             </p>
           ) : null}
           {sendError && (
-            <p className="text-xs text-red-500 font-semibold" data-testid="servant-composer-error">{sendError}</p>
+            <p className="text-xs text-rose-400 font-semibold" data-testid="servant-composer-error">{sendError}</p>
           )}
         </div>
       </div>
@@ -2086,12 +2086,12 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         data-mobile-pane-hidden={mobilePane !== "readiness"}
         style={{
           width: 240,
-          borderLeft: "1px solid #e2e8f0",
+          borderLeft: "1px solid #2a2e38",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
         }}
-        className="shrink-0 bg-slate-50"
+        className="shrink-0 bg-card"
       >
         <div style={{ flex: 1, overflow: "auto" }}>
           <StrategyCompletenessRail
@@ -2106,10 +2106,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         <div
           style={{
             padding: "10px 12px",
-            borderTop: "1px solid #e2e8f0",
+            borderTop: "1px solid #2a2e38",
             flexShrink: 0,
           }}
-          className="bg-white"
+          className="bg-card"
         >
           {(() => {
             const handoff = tradingRoomHandoffFromReadiness(readiness);
@@ -2131,8 +2131,8 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: isActive ? "pointer" : "not-allowed",
-                    background: isActive ? "#1d4ed8" : "#e5e7eb",
-                    color: isActive ? "#fff" : "#9ca3af",
+                    background: isActive ? "#1d4ed8" : "#2a2e38",
+                    color: isActive ? "#f0ece4" : "#8c96a6",
                     transition: "background 0.15s",
                   }}
                 >

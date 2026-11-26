@@ -60,4 +60,340 @@ test.describe("F13 retained Agora journal and canonical postmortems", () => {
     expect(requests).toContain("/api/v1/postmortems/pm-f13");
     expect(requests).not.toContain("/bff/agora/postmortems");
   });
+
+  test("Agora dark theme contrast >= 4.5 and zh-TW empty states for trader with no workshop strategy (FE-AGORA-TRADER-PAGES-20261126)", async ({
+    page,
+  }) => {
+    await installContainedLoopbackAuth(page);
+    await installQuietEventSource(page);
+
+    let committeeMode: "populated" | "empty" = "populated";
+
+    await page.route(/\/(?:bff|api\/v1)\//, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const headers = {
+        "Access-Control-Allow-Origin": request.headers().origin || "*",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Headers": request.headers()["access-control-request-headers"] || "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      };
+      if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+
+      const respond = (body: unknown, status = 200) =>
+        route.fulfill({
+          status,
+          headers,
+          contentType: "application/json",
+          body: JSON.stringify(body),
+        });
+
+      if (path === "/bff/agora/workshops") {
+        return respond({
+          data: {
+            items: [
+              {
+                spec_version: "1.0",
+                workshop_id: "ws-001",
+                operator_id: "operator-001",
+                status: "open",
+                subject: {
+                  kind: "free_form",
+                  ref: "strategy-draft-001",
+                  title: "Momentum draft",
+                },
+                created_at: "2026-11-26T10:00:00Z",
+              },
+            ],
+            total: 1,
+          },
+        });
+      }
+      if (path === "/bff/agora/workshops/ws-001") {
+        return respond({
+          data: {
+            spec_version: "1.0",
+            workshop_id: "ws-001",
+            operator_id: "operator-001",
+            status: "open",
+            subject: {
+              kind: "free_form",
+              ref: "strategy-draft-001",
+              title: "Momentum draft",
+            },
+            created_at: "2026-11-26T10:00:00Z",
+          },
+        });
+      }
+      if (path === "/bff/agora/workshops/ws-001/completeness") {
+        return respond({
+          data: {
+            snapshot_id: "snap-1",
+            workshop_id: "ws-001",
+            overall_score: 0.5,
+            dimensions: [],
+            updated_at: "2026-11-26T10:00:00Z",
+          },
+        });
+      }
+      if (path === "/bff/agora/workshops/ws-001/readiness") {
+        return respond({
+          data: {
+            spec_version: "1.0",
+            assessment_id: "ready-001",
+            assessed_at: "2026-11-26T10:00:00Z",
+            assessment_version: 1,
+            gates: [{ gate: "trading_room", state: "blocked", requirements: [] }],
+            highest_ready_gate: "full_validation",
+            workshop_id: "ws-001",
+          },
+        });
+      }
+      if (path === "/bff/agora/workshops/ws-001/cards") {
+        return respond({ data: { items: [] } });
+      }
+      if (path === "/bff/agora/workshops/ws-001/events") {
+        return respond({ data: { items: [] } });
+      }
+      if (path === "/bff/agora/workshops/ws-001/versions") {
+        return respond({
+          data: { versions: [], selected_version_id: null, active_strategy_spec_registry_id: null },
+        });
+      }
+      if (path === "/bff/agora/workshops/ws-001/daily-interactions") {
+        return respond({ data: { items: [] } });
+      }
+      if (path === "/bff/agora/workshops/ws-001/research-plans") {
+        return respond({ data: { items: [] } });
+      }
+      if (path === "/bff/agora/interaction/participants") {
+        return respond({ data: { included: [], excluded: [] } });
+      }
+      if (path === "/bff/agora/interaction/resolve-context") {
+        return respond({
+          data: {
+            workshop_id: "ws-001",
+            context_refs: [],
+            context_digest: "digest-1",
+            environment: "paper",
+            verified: true,
+            resolved_at: "2026-11-26T10:00:00Z",
+            context_binding: {
+              binding_id: "binding-ws-001",
+              workshop_id: "ws-001",
+              tenant_id: "tenant-1",
+              source_route: "/agora/strategy-workshop/ws-001",
+              focused_object: { kind: "workshop", id: "ws-001" },
+              context_refs: [],
+              strategy_ref: null,
+              decision_ref: null,
+              journal_ref: null,
+              position_risk_snapshot_refs: [],
+              evidence_cutoff: "2026-11-26T10:00:00Z",
+              selected_persona_ids: [],
+              initial_mode: "ask",
+              return_route: "/agora/strategy-workshop/ws-001",
+              advice_environment: "paper",
+              context_digest: "digest-1",
+              resolved_at: "2026-11-26T10:00:00Z",
+            },
+          },
+        });
+      }
+      if (path === "/bff/agora/committee/sessions") {
+        if (committeeMode === "empty") {
+          return respond({
+            status: "unavailable",
+            reason: "no_trader_meetings",
+            owner: "consultation",
+            data: [],
+            fallback_used: false,
+            environment_ceiling: "paper",
+            execution_authority: "none",
+          });
+        }
+        return respond({
+          status: "ok",
+          reason: null,
+          owner: "consultation",
+          data: [
+            {
+              session_id: "mtg-1",
+              meeting_id: "mtg-1",
+              request_id: "mtg-1",
+              meeting_type: "MT-2",
+              consultation_type: "persona_meeting",
+              session_class: "deliberative_meeting",
+              status: "closed",
+              outcome: "completed",
+              created_at: "2026-11-26T14:30:00Z",
+              topic: "波動率門檻收斂檢討",
+              chair_persona_id: "persona-inst-1",
+              chair_display_name: "趨勢首席顧問",
+              participants: [
+                { persona_id: "persona-inst-1", display_name: "趨勢首席顧問", role: "chair" },
+                {
+                  persona_id: "agora-servant-admintest",
+                  display_name: "Your servant",
+                  is_caller_servant: true,
+                  role: "servant",
+                },
+              ],
+            },
+          ],
+          fallback_used: false,
+          environment_ceiling: "paper",
+          execution_authority: "none",
+        });
+      }
+      if (path === "/bff/agora/trading-room") {
+        return respond({
+          data: {
+            data_cutoff: "2026-11-26T15:00:00Z",
+            queue_summary: { add: 0, entry: 0, exit: 0, reduce: 0, review: 0 },
+            risk_summary: { alerts: [], state: "normal" },
+            snapshot_at: "2026-11-26T15:00:00Z",
+            spec_version: "1.0",
+            strategies: [],
+            user_scope_ref: "tenant:test",
+            operational_readiness: {
+              readiness: "not_configured",
+              reason: "no_workshop_strategies",
+            },
+          },
+          meta: {
+            operational_readiness: {
+              readiness: "not_configured",
+              reason: "no_workshop_strategies",
+            },
+          },
+        });
+      }
+      if (path.startsWith("/bff/agora/trading-room/performance-attribution")) {
+        return respond({
+          data: {
+            dimensions: ["strategy"],
+            id: "perf-empty",
+            items: [],
+            period: "latest",
+            summary: {
+              basis: "live_telemetry",
+              dimensions: ["strategy"],
+              holding_count: 0,
+              period: "latest",
+              returned_row_count: 0,
+              row_count: 0,
+              runtime_count: 0,
+              supported_dimensions: ["strategy"],
+              telemetry_runtime_count: 0,
+              total_exposure: 0,
+              total_notional: 0,
+              total_pnl: 0,
+              total_trades: 0,
+              worst_drawdown: 0,
+            },
+          },
+          meta: {
+            composition_sources: ["strategy_directory", "telemetry", "trade_journeys"],
+            policy: "read_only_performance_attribution",
+            snapshot_at: "2026-11-26T15:00:00Z",
+            surfaces: {
+              strategy_directory: { status: "empty_fresh", reason: "no_workshop_strategies" },
+              telemetry: { status: "empty_fresh", reason: "no_workshop_strategies" },
+              trade_journeys: { status: "empty_fresh", reason: "no_workshop_strategies" },
+            },
+          },
+          page_info: { next_page_token: null, page_size: 50, total: 0 },
+        });
+      }
+      return respond({ data: [] });
+    });
+
+    await installContainedLoopbackAuthAuthority(page);
+
+    const measureContrast = async (selector: string): Promise<number> => {
+      return page.evaluate((sel) => {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (!el) throw new Error(`Element not found: ${sel}`);
+
+        const parseRgba = (color: string): [number, number, number, number] => {
+          const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+          if (!m) return [0, 0, 0, 1];
+          return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] !== undefined ? Number(m[4]) : 1];
+        };
+
+        const resolveBg = (node: HTMLElement | null): [number, number, number] => {
+          let cur: HTMLElement | null = node;
+          while (cur) {
+            const bg = getComputedStyle(cur).backgroundColor;
+            const [r, g, b, a] = parseRgba(bg);
+            if (a > 0.05) return [r, g, b];
+            cur = cur.parentElement;
+          }
+          return [17, 20, 23];
+        };
+
+        const lum = ([r, g, b]: [number, number, number]): number => {
+          const channel = (v: number) => {
+            const s = v / 255;
+            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+          };
+          return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+        };
+
+        const fgRgba = parseRgba(getComputedStyle(el).color);
+        const fg: [number, number, number] = [fgRgba[0], fgRgba[1], fgRgba[2]];
+        const bg = resolveBg(el);
+        const l1 = lum(fg);
+        const l2 = lum(bg);
+        const lighter = Math.max(l1, l2);
+        const darker = Math.min(l1, l2);
+        return Number(((lighter + 0.05) / (darker + 0.05)).toFixed(2));
+      }, selector);
+    };
+
+    // 1. Strategy Workshop list header contrast >= 4.5
+    await page.goto("/agora/strategy-workshop");
+    await expect(page.getByTestId("workshop-list-header")).toBeVisible();
+    const listHeaderContrast = await measureContrast('[data-testid="workshop-list-header"]');
+    expect(listHeaderContrast).toBeGreaterThanOrEqual(4.5);
+
+    // 2. Strategy Workshop session header contrast >= 4.5
+    await page.goto("/agora/strategy-workshop/ws-001");
+    await expect(page.getByTestId("strategy-workshop-runtime-header")).toBeVisible();
+    const sessionHeaderContrast = await measureContrast('[data-testid="strategy-workshop-runtime-header"]');
+    expect(sessionHeaderContrast).toBeGreaterThanOrEqual(4.5);
+
+    // 3. Committee selected filter button and meeting code chip contrast >= 4.5
+    await page.goto("/agora/committee");
+    await expect(page.getByTestId("committee-filter-all")).toBeVisible();
+    await expect(page.getByTestId("committee-meeting-type-mtg-1")).toBeVisible();
+    const filterContrast = await measureContrast('[data-testid="committee-filter-all"]');
+    const chipContrast = await measureContrast('[data-testid="committee-meeting-type-mtg-1"]');
+    expect(filterContrast).toBeGreaterThanOrEqual(4.5);
+    expect(chipContrast).toBeGreaterThanOrEqual(4.5);
+
+    // 4. Committee empty state when trader has no meetings
+    committeeMode = "empty";
+    await page.goto("/agora/committee");
+    await expect(page.getByTestId("committee-empty-state")).toContainText("你還沒有召開過會議");
+    await expect(page.getByTestId("committee-open-workshop")).toContainText("前往策略工坊");
+
+    // 5. Trading Room empty state when trader has no workshop strategies
+    await page.goto("/agora/trading-room");
+    await expect(page.getByTestId("trading-room-workshop-empty-entry")).toContainText("你還沒有工坊策略");
+    await expect(page.getByTestId("trading-room-open-workshop")).toContainText("前往策略工坊");
+    await expect(page.getByTestId("trading-room-operational-readiness")).toHaveCount(0);
+
+    // 6. Strategy Performance empty state when trader has no workshop strategies
+    await page.goto("/agora/strategy-performance");
+    await expect(page.getByTestId("strategy-performance-page")).toBeVisible();
+    await expect(page.getByTestId("strategy-performance-workshop-empty")).toContainText("你還沒有工坊策略");
+    await expect(page.getByTestId("strategy-performance-open-workshop")).toContainText("前往策略工坊");
+    const perfText = await page.getByTestId("strategy-performance-page").innerText();
+    expect(perfText).not.toContain("strategy_directory");
+    expect(perfText).not.toContain("telemetry");
+    expect(perfText).not.toContain("trade_journeys");
+    expect(perfText).not.toContain("read_only_performance_attribution");
+  });
 });

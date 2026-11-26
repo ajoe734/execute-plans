@@ -169,6 +169,16 @@ describe("TradingDeskLayout", () => {
     expect(screen.getByTestId("trading-desk-shell")).toBeDefined();
   });
 
+  it("applies the dark theme class on the Agora shell in one place across /agora routes", () => {
+    for (const path of ["/agora/trading-room", "/agora/strategy-workshop", "/agora/strategy-performance"]) {
+      const view = renderTradingDesk(path);
+      const shell = screen.getByTestId("trading-desk-shell");
+      expect(shell.classList.contains("dark")).toBe(true);
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      view.unmount();
+    }
+  });
+
   it("marks the shell as desktop viewport by default", () => {
     setViewportWidth(DESKTOP_WIDTH);
     renderTradingDesk();

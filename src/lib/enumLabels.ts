@@ -210,6 +210,14 @@ export const BFF_STATUS_VALUES = [
   "connecting",
   "not_submitted",
   "unverified",
+  "empty_fresh",
+  "available",
+  "review_requested",
+  "support",
+  "oppose",
+  "conditional",
+  "approve_with_conditions",
+  "hold",
 ] as const;
 
 export const BFF_OUTCOME_VALUES = [
@@ -390,6 +398,10 @@ export const BFF_REASON_CODES = [
   "raw_control_diff_withheld",
   "sd_persona_meetings_12_2_private_memory_boundary",
   "management_persona_intent_public_summary",
+  "no_workshop_strategies",
+  "no_trader_meetings",
+  "no_current_rows",
+  "workshop_store_unavailable",
 ] as const;
 
 export const BFF_LINEAGE_EDGE_TYPES = [
@@ -541,6 +553,8 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   registered: "success",
   good: "success",
   improved: "success",
+  available: "success",
+  support: "success",
   read_ok: "success",
   readback_ok: "success",
   smoke_ok: "success",
@@ -574,9 +588,14 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   declared: "pending",
   not_checked: "pending",
   proposal_waiting_for_operator: "pending",
+  review_requested: "pending",
 
   // Warning / Degraded / Mitigating
   canary_running: "warning",
+  empty_fresh: "warning",
+  conditional: "warning",
+  approve_with_conditions: "warning",
+  hold: "warning",
   warning: "warning",
   watch: "warning",
   degraded: "warning",
@@ -623,6 +642,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   invalidated: "danger",
   disqualified: "danger",
   bad: "danger",
+  oppose: "danger",
   evaluation_rejected: "danger",
   insufficient_participants: "danger",
 
@@ -801,6 +821,14 @@ const EN_FALLBACK_STATUS: Record<string, string> = {
   connecting: "Connecting",
   not_submitted: "Not Submitted",
   unverified: "Unverified",
+  empty_fresh: "Fresh (0 signals)",
+  available: "Available",
+  review_requested: "Review Requested",
+  support: "Support",
+  oppose: "Oppose",
+  conditional: "Conditional",
+  approve_with_conditions: "Approve with Conditions",
+  hold: "Hold",
 };
 
 const EN_FALLBACK_OUTCOMES: Record<string, string> = {
@@ -982,6 +1010,10 @@ const EN_FALLBACK_REASONS: Record<string, string> = {
   raw_control_diff_withheld: "Raw trainer control diff is withheld from audit summary",
   sd_persona_meetings_12_2_private_memory_boundary: "Only session facts are shown; private memory and private interpretations are withheld (SD §12.2)",
   management_persona_intent_public_summary: "Public summary policy applied",
+  no_workshop_strategies: "No Strategy Workshop strategies",
+  no_trader_meetings: "No meetings convened by this trader",
+  no_current_rows: "No current rows",
+  workshop_store_unavailable: "Strategy Workshop store unavailable",
 };
 
 const EN_FALLBACK_LINEAGE_EDGES: Record<string, string> = {

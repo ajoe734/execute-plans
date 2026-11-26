@@ -126,10 +126,11 @@ export function WriteGateNote({ reason }: { reason: string | null }) {
 }
 
 export function PageShell({ title, testId, children }: { title: string; testId: string; children: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <div className="h-full min-h-0 overflow-y-auto p-4" data-testid={testId}>
       <h1 className="mb-1 text-lg font-semibold">{title}</h1>
-      <p className="mb-4 text-xs text-muted-foreground">paper · execution_authority: none</p>
+      <p className="mb-4 text-xs text-muted-foreground">{t("agora.learning.paperBoundary")}</p>
       <div className="space-y-6">{children}</div>
     </div>
   );

@@ -374,7 +374,7 @@ function ServantDrawer({
         <SheetContent
           aria-describedby="servant-drawer-description"
           aria-label="Servant drawer"
-          className="agora-narrow-drawer flex h-[100dvh] w-full max-w-none flex-col gap-0 border-l border-[#2a2e38] bg-[#171b22] p-0 text-[#f0ece4] sm:max-w-none"
+          className="dark agora-narrow-drawer flex h-[100dvh] w-full max-w-none flex-col gap-0 border-l border-[#2a2e38] bg-[#171b22] p-0 text-[#f0ece4] sm:max-w-none"
           data-testid="trading-desk-servant-drawer"
           onCloseAutoFocus={(event) => {
             if (triggerRef.current?.isConnected) {
@@ -488,6 +488,19 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
   const servant = useServantStatus();
 
   useEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains("dark");
+    if (!hadDark) {
+      root.classList.add("dark");
+    }
+    return () => {
+      if (!hadDark) {
+        root.classList.remove("dark");
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const mainRegion = mainRegionRef.current;
     if (!mainRegion) return;
     if (isNarrow && drawerOpen) {
@@ -515,7 +528,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
 
   return (
     <div
-      className={cn("flex flex-1 flex-col overflow-hidden min-h-0 bg-[#111417] text-[#f0ece4]", className)}
+      className={cn("dark flex flex-1 flex-col overflow-hidden min-h-0 bg-[#111417] text-[#f0ece4]", className)}
       data-testid="trading-desk-shell"
       data-viewport={isNarrow ? "mobile" : "desktop"}
     >
