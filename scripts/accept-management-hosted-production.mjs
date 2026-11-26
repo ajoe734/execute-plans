@@ -235,6 +235,108 @@ function resolveNoDataReadReason(routePath, snapshot) {
   return null;
 }
 
+// FE-CRAWL-FAILED-READ-DETAIL-20261126: explicit stream rule. The live event
+// stream is a long-lived transport, never a finite route data read (isDataUrl
+// excludes it). When a Last-Event-ID falls outside the BFF replay window the
+// BFF answers 409 replay_unavailable, and the FE contract (liveSse fetchSse)
+// drops the id and reconnects. That 409 is a handled resync, not a page data
+// failure. Only the listed method/path/status is excused; every other stream
+// status >= 400 (401/403/5xx) and any 409 on another path still fails.
+const STREAM_RESPONSE_RULES = Object.freeze({
+  "/bff/events/stream": Object.freeze({ method: "GET", excusedStatuses: Object.freeze([409]), rule: "stream_replay_resync" }),
+});
+
+function streamResponseRule(method, pathname, status) {
+  if (!Object.hasOwn(STREAM_RESPONSE_RULES, pathname)) return null;
+  const rule = STREAM_RESPONSE_RULES[pathname];
+  return method === rule.method && rule.excusedStatuses.includes(status) ? rule.rule : null;
+}
+
+// Per-route failed-read detail is bounded so a bad release cannot balloon the
+// crawl artifact: at most FAILED_READ_CAP_PER_ROUTE entries per route (counted
+// failures first) and FAILED_READ_CAP_PER_RUN entries across the whole run.
+const FAILED_READ_CAP_PER_ROUTE = 12;
+const FAILED_READ_CAP_PER_RUN = 300;
+
+// Keep the pathname and query keys only; query values, tokens, cookies and
+// response bodies are never recorded in the failed-read detail.
+function sanitizeReadPath(url) {
+  try {
+    const parsed = new URL(url);
+    const keys = [...new Set(parsed.searchParams.keys())];
+    const query = keys.length ? `?${keys.map((key) => `${encodeURIComponent(key)}=`).join("&")}` : "";
+    return `${parsed.pathname}${query}`.slice(0, 200);
+  } catch {
+    return "(unparseable)";
+  }
+}
+
+// Classify one attributed request of the current document at the verdict
+// boundary. Returns null when the request did not fail and is not incomplete.
+// `counted` mirrors the verdict: true only when the read contributed to
+// api_data_failure or data_reads_incomplete.
+function readProblem({ entry, isDataRead, read, honestNotFound, atMs }) {
+  let reason = null;
+  let counted = false;
+  let notFoundExcused = false;
+  let streamRule = null;
+  let pathname = "";
+  try { pathname = new URL(entry.url).pathname; } catch { /* keep empty */ }
+  if (typeof entry.status === "number" && entry.status >= 400) {
+    reason = "http_status";
+    notFoundExcused = entry.status === 404 && honestNotFound;
+    streamRule = streamResponseRule(entry.method, pathname, entry.status);
+    counted = !notFoundExcused && !streamRule;
+  } else if (entry.failedAtMs !== null && entry.failedAtMs !== undefined) {
+    reason = "network_error";
+    counted = isDataRead; // a failed data read leaves data_reads_incomplete
+  } else if (isDataRead) {
+    if (entry.status === null || entry.status === undefined) reason = "pending_response";
+    else if (!read || !read.complete) reason = "pending_body";
+    else if (!(entry.status >= 200 && entry.status < 300)) reason = "unexpected_status";
+    else if (!read.valid) reason = "invalid_body";
+    counted = reason !== null;
+  }
+  if (!reason) return null;
+  const endAt = entry.responseAtMs ?? entry.failedAtMs;
+  return {
+    method: entry.method,
+    path: sanitizeReadPath(entry.url),
+    status: typeof entry.status === "number" ? entry.status : null,
+    error: reason === "network_error" ? String(entry.failure || "request failed").replace(/\s+/g, " ").slice(0, 120) : null,
+    elapsedMs: Math.max(0, Math.round((endAt ?? atMs) - entry.startedAtMs)),
+    pending: endAt === null || endAt === undefined,
+    reason,
+    honestNotFound: notFoundExcused,
+    streamRule,
+    counted,
+  };
+}
+
+function failedReadDetail(inputs, { honestNotFound, atMs, cap = FAILED_READ_CAP_PER_ROUTE }) {
+  const problems = inputs.map((input) => readProblem({ ...input, honestNotFound, atMs })).filter(Boolean);
+  // Stable: counted failures first, then excused/diagnostic entries in request order.
+  const ordered = [...problems.filter((p) => p.counted), ...problems.filter((p) => !p.counted)];
+  return { reads: ordered.slice(0, cap), omitted: Math.max(0, ordered.length - cap) };
+}
+
+// Apply the per-run cap in crawl order; truncated routes keep an omitted count.
+function capFailedReadsPerRun(routes, cap = FAILED_READ_CAP_PER_RUN) {
+  let remaining = cap;
+  let omitted = 0;
+  for (const route of routes) {
+    const reads = route.failedReads || [];
+    const keep = Math.min(reads.length, remaining);
+    if (keep < reads.length) {
+      route.failedReadsOmitted = (route.failedReadsOmitted || 0) + (reads.length - keep);
+      route.failedReads = reads.slice(0, keep);
+    }
+    remaining -= keep;
+    omitted += route.failedReadsOmitted || 0;
+  }
+  return { capPerRoute: FAILED_READ_CAP_PER_ROUTE, capPerRun: cap, recorded: cap - remaining, omitted };
+}
+
 async function crawlRoute(page, route, { source, transport }) {
   const requests = [];
   const responses = [];
@@ -242,6 +344,7 @@ async function crawlRoute(page, route, { source, transport }) {
   const consoleErrors = [];
   const routeRequests = new Set();
   const dataReads = [];
+  const readByRequest = new Map();
   const startedAt = Date.now();
   const requestTimeline = new Map();
   const navigationAttempts = [];
@@ -255,6 +358,7 @@ async function crawlRoute(page, route, { source, transport }) {
     }
     requests.length = responses.length = failedRequests.length = dataReads.length = 0;
     routeRequests.clear();
+    readByRequest.clear();
   };
   const beforeAttempt = (number) => {
     attempt = number;
@@ -315,6 +419,7 @@ async function crawlRoute(page, route, { source, transport }) {
     if (!routeRequests.has(req)) return;
     const read = { path: new URL(url).pathname, status: res.status(), complete: false, valid: false };
     dataReads.push(read);
+    readByRequest.set(req, read);
     // Do not keep response bodies or credentials. A response header alone does
     // not establish that finite route data arrived; open streams are excluded.
     void res.json().then((body) => {
@@ -355,9 +460,16 @@ async function crawlRoute(page, route, { source, transport }) {
   let noDataReadReason = NO_ROUTE_DATA_READS[requestedPathname] || null;
   let verdictReads = [];
   let verdictRequests = [];
-  const freezeEvidence = () => {
+  let verdictFailedReads = { reads: [], omitted: 0 };
+  const freezeEvidence = (honestNotFound = false) => {
     verdictReads = dataReads.map((read) => ({ ...read }));
     verdictRequests = [...requestTimeline.values()].map((entry) => ({ ...entry }));
+    const inputs = [];
+    for (const [req, entry] of requestTimeline) {
+      if (!entry.attributed || entry.attempt !== attempt) continue;
+      inputs.push({ entry: { ...entry }, isDataRead: routeRequests.has(req), read: readByRequest.get(req) && { ...readByRequest.get(req) } });
+    }
+    verdictFailedReads = failedReadDetail(inputs, { honestNotFound, atMs: elapsed() });
   };
 
   try {
@@ -400,7 +512,7 @@ async function crawlRoute(page, route, { source, transport }) {
       noDataReadReason = resolveNoDataReadReason(route.path, snapshot);
       // Freeze reads and request evidence at this verdict boundary; a pending
       // res.json() or later navigation must not mutate the returned result.
-      freezeEvidence();
+      freezeEvidence(honestNotFound);
       const validReads = verdictReads.filter((read) => read.complete &&
         ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
       const failedReads = verdictReads.filter((read) => read.complete && !validReads.includes(read));
@@ -414,7 +526,9 @@ async function crawlRoute(page, route, { source, transport }) {
       const entityDataReady = !entityEndpoint || validReads.some((read) =>
         read.path.startsWith(`${entityEndpoint}/`) && !read.path.slice(entityEndpoint.length + 1).includes("/") &&
         decodeSegment(read.path.slice(entityEndpoint.length + 1)) === expectedSegment);
-      const apiFailure = responses.some((response) => response.status >= 400 && !(response.status === 404 && honestNotFound));
+      const apiFailure = responses.some((response) => response.status >= 400 &&
+        !(response.status === 404 && honestNotFound) &&
+        !streamResponseRule(response.method, new URL(response.url).pathname, response.status));
       dataReasons = [
         snapshot.path !== expectedPath && "route_or_redirect_unresolved",
         snapshot.login && "auth_unresolved",
@@ -497,6 +611,9 @@ async function crawlRoute(page, route, { source, transport }) {
     controls,
     dataCheck: { pass: status === "ok", reasons: dataReasons, reads: verdictReads,
       noDataReadReason },
+    // Which reads made a non-ok route fail (sanitized, bounded; see caps above).
+    failedReads: status === "ok" ? [] : verdictFailedReads.reads,
+    failedReadsOmitted: status === "ok" ? 0 : verdictFailedReads.omitted,
     timing: { startedAt: new Date(startedAt).toISOString(), elapsedMs: elapsed(), navigationAttempts },
     bffRequests: verdictRequests,
     bffRequestCount: requests.length,
@@ -515,6 +632,13 @@ async function crawlRoute(page, route, { source, transport }) {
     // typeof guard: the attribution harness evaluates this file with imports stripped.
     readability: typeof readabilityResult === "function" ? readabilityResult(route.path, bodyText) : null,
   };
+}
+
+function failedReadsSummary(route) {
+  const counted = (route.failedReads || []).filter((read) => read.counted);
+  if (!counted.length) return "";
+  const parts = counted.map((read) => `${read.method} ${read.path} ${read.status ?? read.error ?? read.reason} ${read.elapsedMs}ms`);
+  return ` — failed reads: ${parts.join("; ")}${route.failedReadsOmitted ? ` (+${route.failedReadsOmitted} omitted)` : ""}`;
 }
 
 function requestTimingReport(routes) {
@@ -855,6 +979,7 @@ async function main() {
   const sourceScan = fs.existsSync(SRC_SCAN_DIR) ? sourceScanWriteCtas(SRC_SCAN_DIR) : { scannedFiles: 0, totalToastSuccess: 0, ungoverned: [], findings: [], note: `${SRC_SCAN_DIR} not found in cwd; run from the frontend-checkout root` };
 
   const allResults = [...results, ...liveIdResults];
+  const failedReadDetailSummary = capFailedReadsPerRun(allResults);
   const crashRoutes = allResults.filter((r) => r.status === "crash" || r.status === "blank" || r.status === "navfail");
   const dataFailRoutes = allResults.filter((r) => !r.dataCheck.pass);
   const liveIdDataFailures = liveIdResolution.filter((r) => r.error);
@@ -919,6 +1044,7 @@ async function main() {
       liveIdDetailRoutesCrawled: liveIdResults.length,
     },
     totals,
+    failedReadDetail: failedReadDetailSummary,
     liveIdResolution,
     sessionRbac,
     loadGate,
@@ -976,7 +1102,7 @@ async function main() {
     `## Route and detail data failures`,
     ``,
     dataFailRoutes.length || liveIdDataFailures.length ? [
-      ...dataFailRoutes.map((r) => `- \`${r.path}\`: ${r.dataCheck.reasons.join(", ")}`),
+      ...dataFailRoutes.map((r) => `- \`${r.path}\`: ${r.dataCheck.reasons.join(", ")}${failedReadsSummary(r)}`),
       ...liveIdDataFailures.map((r) => `- entity discovery \`${r.entity}\`: status ${r.status}, invalid or missing list data`),
     ].join("\n") : "None",
     ``,
