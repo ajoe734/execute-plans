@@ -151,6 +151,8 @@ export const DELIBERATIVE_MEETING_TYPE_OPTIONS: ReadonlyArray<{ value: Deliberat
 
 export interface CommitteeParticipant {
   persona_id: string;
+  display_name?: string | null;
+  is_caller_servant?: boolean;
   role?: string;
   origin?: "institutional" | "agora_advisor" | "private_servant" | string;
   agora_user_id?: string;
@@ -160,6 +162,7 @@ export interface CommitteeParticipant {
 export interface CommitteePosition {
   label?: string | null;
   persona_id?: string | null;
+  display_name?: string | null;
   role?: string | null;
   style?: string | null;
   stance?: string | null;
@@ -181,6 +184,7 @@ export interface CommitteeMeetingProposal {
   meeting_id?: string;
   kind?: string;
   sponsor_persona_id?: string | null;
+  sponsor_display_name?: string | null;
   approval_path?: "agora_candidate_decision" | "governed_owner_entry_point" | string;
   approval_status?: string;
   status?: string;
@@ -219,14 +223,18 @@ export interface CommitteeSession {
   meeting_type?: string;
   status?: string;
   outcome?: string | null;
+  title?: string;
   topic?: string;
   agenda?: string;
   question?: string;
   requester_persona_id?: string;
   from_persona_id?: string;
   chair_persona_id?: string | null;
+  chair_display_name?: string | null;
   convened_by?: { kind?: string; id?: string } | null;
   subject_ref?: string | null;
+  target_type?: string | null;
+  target_id?: string | null;
   workshop_id?: string | null;
   participants?: Array<string | CommitteeParticipant>;
   round?: number;

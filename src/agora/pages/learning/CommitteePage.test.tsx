@@ -148,9 +148,9 @@ describe("CommitteePage deliberative meeting and gate-panel memo case-file views
 
     const memoRow = await screen.findByTestId("dissent-memo-mem-859108aab82a9ef57033");
     expect(memoRow.textContent).toContain("mem-859108aab82a9ef57033");
-    expect(memoRow.textContent).toContain("published");
+    expect(memoRow.textContent).toContain("已發佈");
     expect(memoRow.textContent).toContain("Minority/adversarial perspective recorded for mtg-0f7fa4993625ca47 (no vote).");
-    expect(memoRow.textContent).toContain("approve_with_conditions");
+    expect(memoRow.textContent).toContain("附條件核准");
 
     const unavailablePanel = within(memoRow).getByTestId("memo-mem-859108aab82a9ef57033-case-file-unavailable");
     expect(unavailablePanel.textContent).toContain("決策卷宗");
@@ -329,5 +329,98 @@ describe("CommitteePage deliberative meeting and gate-panel memo case-file views
     const receipt = await screen.findByTestId("learning-receipt");
     expect(receipt.textContent).toContain('"status": "published"');
     expect(calls.find((c) => c.method === "POST")?.headers["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("shows the zh-TW empty state 你還沒有召開過會議 with a link to Strategy Workshop when the BFF returns no_trader_meetings", async () => {
+    on("GET", "/bff/agora/committee/sessions", {
+      ...ownerEnvelope("consultation", []),
+      status: "unavailable",
+      reason: "no_trader_meetings",
+    });
+
+    renderCommittee();
+
+    const empty = await screen.findByTestId("committee-empty-state");
+    expect(empty.textContent).toContain("你還沒有召開過會議");
+    const workshopLink = screen.getByTestId("committee-open-workshop");
+    expect(workshopLink).toHaveTextContent("前往策略工坊");
+    expect(workshopLink.getAttribute("href")).toBe("/agora/strategy-workshop");
+    expect(screen.queryByTestId("learning-unavailable")).toBeNull();
+  });
+
+  it("lists trader meetings newest first with date and time, topic or reviewed target title, persona display names, zh-TW enum statuses, and plain zh-TW paper/authority words", async () => {
+    const olderMeeting = {
+      session_id: "mtg-older",
+      meeting_id: "mtg-older",
+      request_id: "mtg-older",
+      meeting_type: "MT-4",
+      consultation_type: "persona_meeting",
+      session_class: "deliberative_meeting",
+      status: "closed",
+      outcome: "completed",
+      created_at: "2026-11-25T09:15:00Z",
+      subject_ref: "strat-momentum-v1",
+      chair_persona_id: "persona-inst-1",
+      chair_display_name: "趨勢首席顧問",
+      participants: [
+        { persona_id: "persona-inst-1", display_name: "趨勢首席顧問", role: "chair", origin: "institutional" },
+        {
+          persona_id: "agora-servant-admintest",
+          display_name: "Your servant",
+          is_caller_servant: true,
+          role: "servant",
+          origin: "private_servant",
+        },
+      ],
+      environment_ceiling: "paper",
+      execution_authority: "none",
+    };
+
+    const newerMeeting = {
+      session_id: "mtg-newer",
+      meeting_id: "mtg-newer",
+      request_id: "mtg-newer",
+      meeting_type: "MT-2",
+      consultation_type: "persona_meeting",
+      session_class: "deliberative_meeting",
+      status: "open",
+      created_at: "2026-11-26T14:30:00Z",
+      topic: "波動率門檻收斂檢討",
+      chair_persona_id: "persona-macro-2",
+      chair_display_name: "總經策略顧問",
+      participants: [
+        { persona_id: "persona-macro-2", display_name: "總經策略顧問", role: "chair", origin: "institutional" },
+        { persona_id: "persona-risk-3", display_name: "風控研究顧問", role: "advisor", origin: "agora_advisor" },
+      ],
+      environment_ceiling: "paper",
+      execution_authority: "none",
+    };
+
+    on("GET", "/bff/agora/committee/sessions", ownerEnvelope("consultation", [olderMeeting, newerMeeting]));
+    on("GET", "/bff/agora/committee/meetings/mtg-newer", ownerEnvelope("consultation", newerMeeting));
+    on("GET", "/bff/agora/committee/meetings/mtg-newer/proposals", ownerEnvelope("consultation", []));
+    on("GET", "/bff/agora/committee/sessions/mtg-newer/memos", ownerEnvelope("consultation", []));
+
+    renderCommittee();
+
+    const list = await screen.findByTestId("committee-sessions");
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].getAttribute("data-testid")).toBe("committee-session-mtg-newer");
+    expect(items[1].getAttribute("data-testid")).toBe("committee-session-mtg-older");
+
+    expect(screen.getByTestId("committee-session-title-mtg-newer").textContent).toBe("波動率門檻收斂檢討");
+    expect(screen.getByTestId("committee-session-datetime-mtg-newer").textContent).toBe("2026-11-26 14:30");
+    expect(screen.getByTestId("committee-session-status-mtg-newer").textContent).toBe("未結案");
+    expect(screen.getByTestId("committee-session-personas-mtg-newer").textContent).toBe("總經策略顧問、風控研究顧問");
+
+    expect(screen.getByTestId("committee-session-title-mtg-older").textContent).toBe("審查標的：strat-momentum-v1");
+    expect(screen.getByTestId("committee-session-datetime-mtg-older").textContent).toBe("2026-11-25 09:15");
+    expect(screen.getByTestId("committee-session-status-mtg-older").textContent).toBe("已關閉");
+    expect(screen.getByTestId("committee-session-personas-mtg-older").textContent).toBe("趨勢首席顧問、私人交易僕人");
+
+    const pageEl = screen.getByTestId("agora-committee-page");
+    expect(pageEl.textContent).toContain("模擬交易 · 執行權限：無");
+    expect(pageEl.textContent).not.toContain("execution_authority");
   });
 });

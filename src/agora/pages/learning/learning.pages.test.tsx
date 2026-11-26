@@ -369,7 +369,7 @@ describe("committee page", () => {
     expect(round1.textContent).toContain("chair_trend");
     expect(round1.textContent).toContain("0.84");
     expect(round1.textContent).toContain("servant_operator_guided");
-    expect(round1.textContent).toContain("conditional");
+    expect(round1.textContent).toContain("條件式");
 
     expect(round2.textContent).toContain("0.86");
     expect(round2.textContent).toContain("0.79");
@@ -377,7 +377,7 @@ describe("committee page", () => {
 
     const synthesis = screen.getByTestId("committee-synthesis");
     expect(synthesis.textContent).toContain("persona-inst-1");
-    expect(synthesis.textContent).toContain("completed");
+    expect(synthesis.textContent).toContain("已完成");
     expect(screen.getByTestId("committee-synthesis-tally").textContent).toContain("2.45");
 
     const dissent = screen.getByTestId("committee-dissent");
@@ -435,25 +435,25 @@ describe("committee page", () => {
     const sponsored = await screen.findByTestId("committee-proposal-prop-sponsored-1");
     expect(sponsored.textContent).toContain("persona-inst-1");
     expect(sponsored.textContent).toContain("governed_owner_entry_point");
-    expect(screen.getByTestId("proposal-downstream-prop-sponsored-1").textContent).toContain("research_demand:rd-101 (open)");
+    expect(screen.getByTestId("proposal-downstream-prop-sponsored-1").textContent).toContain("research_demand:rd-101 (未結案)");
     expect(screen.queryByTestId("agora-candidate-decision-prop-sponsored-1")).toBeNull();
 
     const unsponsored = screen.getByTestId("committee-proposal-prop-unsponsored-1");
     expect(screen.getByTestId("agora-candidate-decision-prop-unsponsored-1").textContent).toMatch(
       /Agora candidate decision|Agora 候選決策/,
     );
-    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("draft");
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("草稿");
     expect(unsponsored.textContent).toContain("agora_candidate_decision");
-    expect(unsponsored.textContent).toContain("execution_authority");
+    expect(unsponsored.textContent).toContain("執行權限：無");
 
     fireEvent.click(screen.getByTestId("route-candidate-decision-prop-unsponsored-1"));
 
     const receipt = await screen.findByTestId("learning-receipt");
     expect(receipt.textContent).toContain('"proposal_id": "prop-unsponsored-1"');
     expect(receipt.textContent).toContain('"execution_authority": "none"');
-    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("rejected");
-    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("state=review_requested");
-    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("validation=passed");
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("已駁回");
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("已請求審核");
+    expect(screen.getByTestId("candidate-approval-status-prop-unsponsored-1").textContent).toContain("通過");
 
     const postCall = calls.find((c) => c.method === "POST" && c.path === "/bff/agora/meetings/mtg-delib-1/proposals/prop-unsponsored-1/candidates");
     expect(postCall).toBeTruthy();

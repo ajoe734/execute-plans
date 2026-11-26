@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
+import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import {
   acceptTradingRoomWorkspaceProposalWithMeta,
   createTradingRoomWorkspaceProposal,
@@ -435,9 +437,40 @@ function TradingRoomDefaultEntry({
 }): JSX.Element {
   const { t } = useTranslation();
   const strategies = aggregate.strategies;
+  if (strategies.length === 0) {
+    return (
+      <div
+        data-entry-state="empty"
+        data-testid="trading-room-default-entry"
+        style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "auto" }}
+      >
+        <section
+          data-testid="trading-room-workshop-empty-entry"
+          style={{ margin: 16, maxWidth: 680, padding: 16, background: "#171b22", border: "1px solid #2a2e38", borderRadius: 8 }}
+        >
+          <h2 style={{ color: "#f0ece4", fontSize: 15, fontWeight: 700, margin: 0 }}>
+            {t("agora.tradingRoom.page.noWorkshopStrategiesTitle", { defaultValue: "你還沒有工坊策略" })}
+          </h2>
+          <p style={{ color: "#aab1bc", fontSize: 12, lineHeight: 1.5, margin: "8px 0 12px" }}>
+            {t("agora.tradingRoom.page.noWorkshopStrategiesDescription", {
+              defaultValue: "交易操盤室會顯示你在策略工坊完成並加入的策略。",
+            })}
+          </p>
+          <button
+            data-testid="trading-room-open-workshop"
+            onClick={onOpenWorkshop}
+            style={{ background: "#e8b750", border: "none", borderRadius: 4, color: "#111417", cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "6px 10px" }}
+            type="button"
+          >
+            {t("agora.tradingRoom.page.goToWorkshop", { defaultValue: "前往策略工坊" })}
+          </button>
+        </section>
+      </div>
+    );
+  }
   return (
     <div
-      data-entry-state={strategies.length === 0 ? "empty" : "no-ready-strategy"}
+      data-entry-state="no-ready-strategy"
       data-testid="trading-room-default-entry"
       style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "auto" }}
     >
@@ -445,11 +478,10 @@ function TradingRoomDefaultEntry({
       <RiskBanner state={aggregate.risk_summary.state} summary={aggregate.risk_summary.summary} alerts={aggregate.risk_summary.alerts} />
       <section style={{ margin: 16, maxWidth: 680, padding: 16, background: "#171b22", border: "1px solid #2a2e38", borderRadius: 8 }}>
         <h2 style={{ color: "#f0ece4", fontSize: 15, fontWeight: 700, margin: 0 }}>
-          {strategies.length === 0 ? "No Trading Room StrategySpec records" : "No ready StrategySpec workspace"}
+          {t("agora.tradingRoom.page.noReadyStrategy")}
         </h2>
         <p style={{ color: "#aab1bc", fontSize: 12, lineHeight: 1.5 }}>
-          Candidate review is available only after the BFF resolves a pool for a canonical StrategySpec.
-          No sample candidate data or presentation-lens fallback is used.
+          {t("agora.tradingRoom.page.notReadyDescription")}
         </p>
         <button
           data-testid="trading-room-open-workshop"
@@ -457,7 +489,7 @@ function TradingRoomDefaultEntry({
           style={{ background: "#e8b750", border: "none", borderRadius: 4, color: "#111417", cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "6px 10px" }}
           type="button"
         >
-          {t("agora.tradingRoom.page.openWorkshop", { defaultValue: "Open Strategy Workshop" })}
+          {t("agora.tradingRoom.page.goToWorkshop", { defaultValue: "前往策略工坊" })}
         </button>
       </section>
       <div style={{ display: "none" }}>
@@ -469,7 +501,6 @@ function TradingRoomDefaultEntry({
             </div>
           ))}
         </div>
-        {strategies.length === 0 && <div data-testid="trading-room-workshop-empty-entry">{t("agora.tradingRoom.page.noStrategyRecords")}</div>}
       </div>
     </div>
   );
@@ -481,26 +512,85 @@ type OperationalReadinessLoadState = "loading" | "ready" | "unavailable";
 
 const TRADING_ROOM_READINESS_SURFACES = ["signals", "decision_events", "candidates"];
 
-function operationalReadinessMessage(readiness: AgoraOperationalReadiness): string {
+function isNoWorkshopStrategiesReadiness(readiness: AgoraOperationalReadiness | null): boolean {
+  if (!readiness) return false;
+  if (readiness.signal_producer.reason === "no_workshop_strategies") return true;
+  return Object.values(readiness.surfaces).some((surface) => surface.reason === "no_workshop_strategies");
+}
+
+function operationalReadinessMessage(readiness: AgoraOperationalReadiness, t: TFunction): string {
   switch (readiness.source.freshness) {
     case "stale":
-      return "Source snapshot is stale. Dependent Trading Room data is unavailable until a fresh snapshot arrives.";
+      return t("agora.tradingRoom.page.readiness.messages.stale");
     case "empty_fresh":
-      return "Source is fresh but produced zero qualifying signals. Empty queues are expected, not an outage.";
-    case "unavailable":
+      return t("agora.tradingRoom.page.readiness.messages.empty_fresh");
     case "not_configured":
-      return "Source availability cannot be confirmed. The downstream reasons identify the blocked dependency.";
+      return t("agora.tradingRoom.page.readiness.messages.not_configured");
+    case "unavailable":
+      return t("agora.tradingRoom.page.readiness.messages.unavailable");
     case "degraded":
-      return "The source or signal producer is degraded. Treat dependent values as incomplete.";
+      return t("agora.tradingRoom.page.readiness.messages.degraded");
     default:
-      return "Source snapshot and producer identity are current in the operational readiness projection.";
+      return t("agora.tradingRoom.page.readiness.messages.fresh");
   }
 }
 
 function operationalReadinessColor(readiness: AgoraOperationalReadiness): string {
   if (readiness.source.freshness === "fresh") return "#56d98b";
   if (readiness.source.freshness === "empty_fresh") return "#e8b750";
+  if (
+    readiness.source.freshness === "not_configured" ||
+    readiness.status === "not_configured" ||
+    isNoWorkshopStrategiesReadiness(readiness)
+  ) {
+    return "#8c96a6";
+  }
   return "#f87171";
+}
+
+function operationalReadinessFreshnessLabel(readiness: AgoraOperationalReadiness, t: TFunction): string {
+  if (isNoWorkshopStrategiesReadiness(readiness) || readiness.source.freshness === "not_configured") {
+    return t("agora.tradingRoom.page.readiness.freshness.not_configured");
+  }
+  return t(`agora.tradingRoom.page.readiness.freshness.${readiness.source.freshness}`, {
+    defaultValue: statusLabel(readiness.source.freshness, t),
+  });
+}
+
+function operationalReadinessSourceLine(
+  source: AgoraOperationalReadiness["source"],
+  t: TFunction,
+): string {
+  const instanceId = source.source_instance_id?.trim() || null;
+  const snapshotId = source.snapshot_id?.trim() || null;
+  if (instanceId && snapshotId && instanceId !== snapshotId) {
+    return t("agora.tradingRoom.page.readiness.sourceWithSnapshot", {
+      source: instanceId,
+      snapshot: snapshotId,
+    });
+  }
+  if (instanceId) {
+    return t("agora.tradingRoom.page.readiness.sourceOnly", { source: instanceId });
+  }
+  if (snapshotId) {
+    return t("agora.tradingRoom.page.readiness.snapshotOnly", { snapshot: snapshotId });
+  }
+  return t("agora.tradingRoom.page.readiness.sourceMissing");
+}
+
+function operationalReadinessProducerLine(
+  producer: AgoraOperationalReadiness["signal_producer"],
+  t: TFunction,
+): string {
+  if (producer.active_binding) {
+    return t("agora.tradingRoom.page.readiness.producerWithBinding", {
+      producer: producer.producer_id,
+      binding: producer.active_binding,
+    });
+  }
+  return t("agora.tradingRoom.page.readiness.producer", {
+    producer: producer.producer_id,
+  });
 }
 
 function TradingRoomOperationalReadiness({
@@ -509,14 +599,15 @@ function TradingRoomOperationalReadiness({
 }: {
   readiness: AgoraOperationalReadiness | null;
   state: OperationalReadinessLoadState;
-}): JSX.Element {
+}): JSX.Element | null {
+  const { t } = useTranslation();
   if (state === "loading") {
     return (
       <div
         data-testid="trading-room-operational-readiness-loading"
         style={{ background: "#171b22", borderBottom: "1px solid #2a2e38", color: "#8c96a6", fontSize: 12, padding: "7px 16px" }}
       >
-        Loading source and producer readiness…
+        {t("agora.tradingRoom.page.readiness.loading")}
       </div>
     );
   }
@@ -527,15 +618,18 @@ function TradingRoomOperationalReadiness({
         data-testid="trading-room-operational-readiness-unavailable"
         style={{ background: "#2a1d1d", borderBottom: "1px solid #5c3232", color: "#f3b1b1", fontSize: 12, padding: "7px 16px" }}
       >
-        Operational readiness could not be read. Source freshness and downstream causes are not inferred from this failure.
+        {t("agora.tradingRoom.page.readiness.unavailable")}
       </div>
     );
   }
 
+  if (readiness.status === "not_configured" && isNoWorkshopStrategiesReadiness(readiness)) {
+    return null;
+  }
+
   const source = readiness.source;
   const producer = readiness.signal_producer;
-  const sourceIdentity = source.source_instance_id ?? source.snapshot_id ?? "source not reported";
-  const sourceSnapshot = source.snapshot_id ?? "snapshot not reported";
+  const badgeColor = operationalReadinessColor(readiness);
   return (
     <section
       data-operational-status={readiness.status}
@@ -544,28 +638,40 @@ function TradingRoomOperationalReadiness({
       style={{ background: "#171b22", borderBottom: "1px solid #2a2e38", display: "grid", gap: 6, padding: "8px 16px" }}
     >
       <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <strong style={{ color: "#f0ece4", fontSize: 12 }}>Operational readiness</strong>
+        <strong style={{ color: "#f0ece4", fontSize: 12 }}>
+          {t("agora.tradingRoom.page.readiness.title")}
+        </strong>
         <span
-          style={{ border: `1px solid ${operationalReadinessColor(readiness)}`, borderRadius: 999, color: operationalReadinessColor(readiness), fontSize: 11, fontWeight: 700, padding: "2px 7px", textTransform: "uppercase" }}
+          data-testid="trading-room-readiness-badge"
+          style={{ border: `1px solid ${badgeColor}`, borderRadius: 999, color: badgeColor, fontSize: 11, fontWeight: 700, padding: "2px 7px" }}
         >
-          {source.freshness}
+          {operationalReadinessFreshnessLabel(readiness, t)}
         </span>
         <span data-testid="trading-room-readiness-source" style={{ color: "#c4ccda", fontSize: 12 }}>
-          Source: {sourceIdentity} · snapshot {sourceSnapshot}
+          {operationalReadinessSourceLine(source, t)}
         </span>
         <span data-testid="trading-room-readiness-producer" style={{ color: "#c4ccda", fontSize: 12 }}>
-          Producer: {producer.producer_id}{producer.active_binding ? ` · ${producer.active_binding}` : ""}
+          {operationalReadinessProducerLine(producer, t)}
         </span>
-        <span style={{ color: "#8c96a6", fontSize: 11, marginLeft: "auto" }}>Read-only BFF projection</span>
+        <span style={{ color: "#8c96a6", fontSize: 11, marginLeft: "auto" }}>
+          {t("agora.tradingRoom.page.readiness.readOnlyProjection")}
+        </span>
       </div>
-      <div style={{ color: "#aab1bc", fontSize: 12 }}>{operationalReadinessMessage(readiness)}</div>
+      <div style={{ color: "#aab1bc", fontSize: 12 }}>{operationalReadinessMessage(readiness, t)}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
         {TRADING_ROOM_READINESS_SURFACES.map((name) => {
           const surface = readiness.surfaces[name];
           if (!surface) return null;
+          const surfaceLabel = t(`agora.tradingRoom.page.readiness.surfaces.${name}`, {
+            defaultValue: name.replace(/_/g, " "),
+          });
+          const surfaceStatus = statusLabel(surface.status, t);
+          const surfaceReason = surface.reason && surface.reason !== "healthy"
+            ? reasonCodeDisplay(surface.reason, t).text
+            : null;
           return (
             <span data-testid={`trading-room-readiness-surface-${name}`} key={name} style={{ color: "#c4ccda", fontSize: 11 }}>
-              {name.replace(/_/g, " ")}: {surface.status} ({surface.count}){surface.reason ? ` · ${surface.reason}` : ""}
+              {surfaceLabel}：{surfaceStatus}（{surface.count}）{surfaceReason ? ` · ${surfaceReason}` : ""}
             </span>
           );
         })}
@@ -594,6 +700,8 @@ export function TradingRoomPage({
   onStrategySelect,
 }: TradingRoomPageProps): JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const handleOpenWorkshop = onOpenWorkshop ?? (() => navigate("/agora/strategy-workshop"));
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [aggregate, setAggregate] = useState<TradingRoomAggregate | null>(null);
   const [events, setEvents] = useState<TradingDecisionEvent[]>([]);
@@ -745,6 +853,22 @@ export function TradingRoomPage({
   const activeStrategy = effectiveStrategyId
     ? aggregate.strategies.find((s) => s.strategy_id === effectiveStrategyId)
     : undefined;
+  const hasNoWorkshopStrategies = aggregate.strategies.length === 0 && !effectiveStrategyId;
+
+  if (hasNoWorkshopStrategies) {
+    return (
+      <div
+        data-testid="trading-room-page"
+        style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "#111417", color: "#f0ece4" }}
+      >
+        <TradingRoomDefaultEntry
+          aggregate={aggregate}
+          onOpenWorkshop={handleOpenWorkshop}
+          onStrategySelect={(id) => handleStrategySelect(id)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -861,7 +985,7 @@ export function TradingRoomPage({
       ) : (
         <TradingRoomDefaultEntry
           aggregate={aggregate}
-          onOpenWorkshop={onOpenWorkshop}
+          onOpenWorkshop={handleOpenWorkshop}
           onStrategySelect={(id) => handleStrategySelect(id)}
         />
       )}
