@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ObjectListPage } from "./ObjectListPage";
+import { collectorCheckStatus, isNonRealRun, researchTitle } from "./researchPresentation";
 import { ServerPager, freshServerPageCursor, useServerPageCursor } from "@/platform/components/ServerPager";
 import {
   bffFetch,
@@ -20,7 +21,6 @@ import {
   normalizeStrategyOperationalStatus,
   rebalanceWorkflowLabel,
   resolveBffSubjectDisplay,
-  statusLabel,
   strategyOperationalStatusClass,
 } from "@/lib/enumLabels";
 import { useT } from "@/platform/hooks";
@@ -1274,12 +1274,6 @@ export const EvolutionList = () => {
   );
 };
 
-function isNonRealRun(adapter?: string, dispatchMode?: string): boolean {
-  const a = String(adapter ?? "").trim().toLowerCase();
-  const d = String(dispatchMode ?? "").trim().toLowerCase();
-  return a === "stub" || a === "manual" || d === "stub" || d === "manual";
-}
-
 const UNRECORDED_RUN_VALUES = new Set(["", "unknown", "none", "null", "nan"]);
 
 function recordedRunValue(v: string | null | undefined): string {
@@ -1297,74 +1291,79 @@ export function extractHiddenNonRealCount(meta: unknown): number | undefined {
   return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
 }
 
-function researchDisplaySummary(r: ResearchTask): string {
-  const raw = r.display_summary;
-  if (typeof raw === "string") return raw.trim();
-  if (!raw) return "";
-  return [raw.symbol, raw.dataset_ref, raw.subject_ref]
-    .map((part) => (typeof part === "string" ? part.trim() : ""))
-    .filter(Boolean)
-    .join(" · ");
-}
-
 export const ResearchList = () => {
   const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
-  const includeNonReal = searchParams.get("include_non_real") === "true";
+  const isCollectorView = searchParams.get("view") === "collector_checks";
+  const view = isCollectorView ? "collector_checks" : "research";
+  const includeNonReal = !isCollectorView && searchParams.get("include_non_real") === "true";
+  const filterKey = view + ":" + includeNonReal;
+  const [pageCursor, setPageCursor] = useServerPageCursor(filterKey);
+  const pageToken = pageCursor.currentToken;
   const loader = useCallback(
-    () => listResearchTasksEnvelope({ includeNonReal }),
-    [includeNonReal],
+    () => listResearchTasksEnvelope({ view, includeNonReal, pageToken }),
+    [view, includeNonReal, pageToken],
   );
+
+  const selectView = (collector: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    if (collector) next.set("view", "collector_checks");
+    else next.delete("view");
+    const nextKey = collector ? "collector_checks:false" : "research:" + (next.get("include_non_real") === "true");
+    if (nextKey !== filterKey) setPageCursor(freshServerPageCursor(nextKey));
+    setSearchParams(next);
+  };
+
   const toggleIncludeNonReal = () => {
     const next = new URLSearchParams(searchParams);
     if (includeNonReal) next.delete("include_non_real");
     else next.set("include_non_real", "true");
+    setPageCursor(freshServerPageCursor("research:" + !includeNonReal));
     setSearchParams(next);
   };
-  const taskTypeLabel = (raw: string | null | undefined): string => {
-    const type = String(raw ?? "").trim();
-    if (!type) return "";
-    return t(`research.taskTypes.${type}`, { defaultValue: type.replace(/_/g, " ") });
-  };
+
   return (
     <ObjectListPage<ResearchTask>
       title={t("nav.research")}
       loader={loader}
-      reloadKey={`research:${includeNonReal ? "include_non_real" : "default"}`}
+      reloadKey={filterKey + ":" + (pageToken ?? "")}
       basePath="/management/experiments"
       liveKinds={["Research"]}
       createBehavior={{ kind: "disabled", reasonI18nKey: "research.createDisabledReason" }}
-      emptyState={{
+      emptyState={isCollectorView ? {
+        title: t("research.collector.empty"),
+        description: t("research.collector.emptyDescription"),
+      } : {
         title: t("research.emptyState.title"),
         description: t("research.emptyState.description"),
       }}
       topControls={(ctx) => {
-        const hiddenCount = extractHiddenNonRealCount(ctx.meta);
-        const hasCount = typeof hiddenCount === "number";
-        if (ctx.isInitialLoading || (!hasCount && !includeNonReal)) return null;
+        const hiddenCount = extractHiddenNonRealCount(ctx.meta) ?? 0;
         return (
-          <Card
-            data-testid="research-non-real-banner"
-            className="mb-3 flex flex-wrap items-center justify-between gap-2 border-border/70 bg-muted/20 p-3 text-sm"
-          >
-            <span data-testid="research-non-real-text">
-              {includeNonReal
-                ? t("research.showingNonReal")
-                : t("research.hiddenNonRealWithCount", { count: hiddenCount })}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant={includeNonReal ? "default" : "outline"}
-              aria-pressed={includeNonReal}
-              data-testid="research-toggle-non-real-button"
-              onClick={toggleIncludeNonReal}
-            >
-              {includeNonReal
-                ? t("research.hideNonReal")
-                : t("research.showNonRealWithCount", { count: hiddenCount })}
-            </Button>
-          </Card>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("research.list.views")}>
+              <Button size="sm" variant={isCollectorView ? "outline" : "default"} aria-pressed={!isCollectorView} onClick={() => selectView(false)}>
+                {t("research.list.research")}
+              </Button>
+              <Button size="sm" variant={isCollectorView ? "default" : "outline"} aria-pressed={isCollectorView} onClick={() => selectView(true)}>
+                {t("research.collector.title")}
+              </Button>
+            </div>
+            {!isCollectorView && (includeNonReal || hiddenCount > 0) && (
+              <Button type="button" size="sm" variant="outline" aria-pressed={includeNonReal}
+                data-testid="research-toggle-non-real-button" onClick={toggleIncludeNonReal}>
+                {includeNonReal ? t("research.hideNonReal") : t("research.showNonRealWithCount", { count: hiddenCount })}
+              </Button>
+            )}
+          </div>
+        );
+      }}
+      bottomControls={(ctx) => {
+        if (ctx.isInitialLoading || ctx.isDegradedEmpty || (!ctx.cursor?.next && !pageToken)) return null;
+        return (
+          <ServerPager cursor={pageCursor} setCursor={setPageCursor} pageSize={ctx.pageSize || 20}
+            total={ctx.estimatedTotal} visibleCount={ctx.visibleRows.length} nextToken={ctx.cursor?.next}
+            loading={ctx.loading} testIdPrefix="research" ariaLabel={t("research.list.views")} />
         );
       }}
       columns={[
@@ -1372,85 +1371,54 @@ export const ResearchList = () => {
           key: "name",
           header: t("common.name"),
           cell: (r) => {
-            if (r.name_is_fallback_id === true) {
-              const primary = [taskTypeLabel(r.taskType ?? r.task_type), researchDisplaySummary(r)]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <div data-testid="research-row-title" data-fallback-title="true">
-                  <div className="font-medium">{primary || r.task_id || r.taskId || r.name}</div>
-                  <div className="text-mono text-xs text-muted-foreground" data-testid="research-row-task-id">
-                    {r.task_id ?? r.taskId ?? r.id}
-                  </div>
-                </div>
-              );
-            }
-            return <div className="font-medium">{r.name}</div>;
-          },
-        },
-        {
-          key: "status",
-          header: t("table.status"),
-          cell: (r) => <StatusBadge state={r.status || r.state} />,
-        },
-        {
-          key: "latestRun",
-          header: t("research.table.latestRun"),
-          cell: (r) => {
-            const latest = r.latestRun ?? r.latest_run;
-            const runId = latest?.runId ?? latest?.run_id ?? "";
-            const runStatus = recordedRunValue(latest?.status);
-            const adapter = recordedRunValue(latest?.adapter);
-            const dispatchMode = recordedRunValue(latest?.dispatchMode ?? latest?.dispatch_mode);
-            if (!runId && !runStatus && !adapter && !dispatchMode && !latest) {
-              return <span className="text-xs text-muted-foreground">{t("research.noRunsYet")}</span>;
-            }
-            const nonReal = isNonRealRun(adapter, dispatchMode);
+            const summary = r.display_summary;
+            const hasSubject = typeof summary === "string" ? Boolean(summary) : Boolean(summary?.symbol || summary?.subject_ref || summary?.dataset_ref);
+            const showMissingSubject = !isCollectorView && !hasSubject && (r.taskType ?? r.task_type) === "rapid_eval";
             return (
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                {runId && <span className="text-mono">{runId}</span>}
-                {runStatus && <span className="text-muted-foreground">{statusLabel(runStatus, t)}</span>}
-                {adapter || dispatchMode ? (
-                  <Badge variant="outline" className="font-mono text-[11px]">
-                    {[adapter, dispatchMode].filter(Boolean).join(" / ")}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[11px] text-muted-foreground" data-testid="research-runner-unrecorded">
-                    {t("research.runnerUnrecorded")}
-                  </Badge>
-                )}
-                {nonReal && (
-                  <Badge
-                    variant="outline"
-                    className="border-status-warning/40 bg-status-warning/10 text-status-warning text-[11px]"
-                  >
-                    {t("research.nonRealRunBadge", {
-                      adapter: adapter || t("research.runnerUnrecorded"),
-                      dispatchMode: dispatchMode || t("research.runnerUnrecorded"),
-                    })}
-                  </Badge>
-                )}
+              <div data-testid="research-row-title" className="space-y-0.5">
+                <div className="font-medium">{researchTitle(r, t)}</div>
+                {showMissingSubject && <div className="text-xs text-muted-foreground">{t("research.list.subjectNotRecorded")}</div>}
               </div>
             );
           },
         },
         {
-          key: "runCount",
-          header: t("research.table.runCount"),
-          cell: (r) => <span className="text-mono text-xs">{r.runCount ?? r.run_count ?? 0}</span>,
-        },
-        {
-          key: "createdBy",
-          header: t("research.table.createdBy"),
-          cell: (r) => <span className="text-mono text-xs">{r.createdBy || r.created_by || "—"}</span>,
+          key: "status",
+          header: isCollectorView ? t("table.status") : t("research.table.latestRun"),
+          cell: (r) => {
+            if (isCollectorView) return <span>{collectorCheckStatus(r, t)}</span>;
+            const latest = r.latestRun ?? r.latest_run;
+            const adapter = recordedRunValue(latest?.adapter);
+            const dispatchMode = recordedRunValue(latest?.dispatchMode ?? latest?.dispatch_mode);
+            const runStatus = recordedRunValue(latest?.status);
+            const nonReal = r.is_non_real === true || isNonRealRun(adapter, dispatchMode);
+            return (
+              <div className="flex flex-wrap items-center gap-2">
+                {latest
+                  ? (runStatus ? <StatusBadge state={runStatus} /> : <span>{t("research.list.runStatusUnknown")}</span>)
+                  : <span>{t("research.noRunsYet")}</span>}
+                {latest && !adapter && !dispatchMode && (
+                  <span className="text-xs text-muted-foreground" data-testid="research-runner-unrecorded">{t("research.runnerUnrecorded")}</span>
+                )}
+                {nonReal && <Badge variant="outline">{t("research.list.testOrManualRecord")}</Badge>}
+              </div>
+            );
+          },
         },
         {
           key: "updated",
           header: t("common.updated"),
+          cell: (r) => <span className="text-xs text-muted-foreground">{safeDateTime(r.updatedAt || r.updated_at)}</span>,
+        },
+        {
+          key: "detail",
+          header: t("section.overview"),
           cell: (r) => (
-            <span className="text-mono text-xs text-muted-foreground">
-              {safeDateTime(r.updatedAt || r.updated_at)}
-            </span>
+            <Button variant="link" size="sm" asChild>
+              <Link to={"/management/experiments/" + encodeURIComponent(r.id)} onClick={(event) => event.stopPropagation()}>
+                {t(isCollectorView ? "research.collector.view" : "research.list.viewResearch")}
+              </Link>
+            </Button>
           ),
         },
       ]}

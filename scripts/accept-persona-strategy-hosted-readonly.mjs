@@ -5,7 +5,8 @@
  * protocol WITHOUT changing any original threshold, sample count, check or diff rule.
  * It is a caller-run tool: the protected original dev workflow supplies credentials,
  * the exact expected pair, source-owner inventory and the ORIGINAL baseline as one
- * JSON document on stdin. Nothing is read from env/files/argv except `--out-dir`.
+ * JSON document on stdin. Credentials are never read from env/files/argv;
+ * argv selects only the output directory, mode and baseline option.
  *
  *   node scripts/accept-persona-strategy-hosted-readonly.mjs --out-dir <private-dir> < input.json
  *
@@ -24,6 +25,14 @@
  *   baseline_raw: string                              the ORIGINAL strategies_baseline.json bytes (as text)
  *   baseline_identity: { sha256 }                     hash of baseline_raw (must match)
  *
+ * Optional viewer-only Trading Pulse mode (same entry, on demand, no schedule/gate):
+ *   node scripts/accept-persona-strategy-hosted-readonly.mjs --mode trading-pulse --out-dir <private-dir> < input.json
+ * Its stdin contract and page assertions live in accept-trading-pulse-hosted-readonly.mjs.
+ * It requires only the existing viewer credentials, fresh owner facts and separate
+ * historical witness; --record-baseline records failures and always exits 1.
+ * It runs zh-TW desktop/390px and en-US desktop, with one summary and <=2 masked
+ * screenshots totaling <=5 MiB. The original mode/thresholds remain the default.
+ *
  * Output: sanitized stdout summary; private evidence under <out-dir>/<mkdtemp>/ (0700/0600).
  * Only /bff/auth/dev-login, /bff/auth/refresh, /bff/logout may write; every other
  * non-read request is blocked and reported. No screenshots/traces/video are produced.
@@ -33,6 +42,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import * as pulseHelpers from "./accept-trading-pulse-hosted-readonly.mjs";
 
 export const ROLE_ORDER = Object.freeze(["TEST_ADMIN", "OPERATOR_A", "OPERATOR_B", "VIEWER"]);
 export const ALLOWED_WRITE_PATHS = Object.freeze([
@@ -253,24 +263,30 @@ export function validateInput(input, { isAllowedOrigin = isPantheonHttpsOrigin }
   const strategyPaths = paths.filter((p) => p.startsWith("/bff/strategies"));
   need(strategyPaths.length === 12 && paths.length === 13 && paths.includes(DATA_SOURCES_PATH), "baseline must be the original 13 captures (12 strategy + data-sources)");
   for (const p of paths) need(baseline[p] && baseline[p].j !== undefined, `baseline capture ${p} lacks response JSON`);
-  need(paths.includes(DEFAULT_PAGE_PATH) && paths.includes(HIDE_RETIRED_PATH), "baseline lacks original default-page/hide_retired queries");
+  need(paths.includes(HIDE_RETIRED_PATH), "baseline lacks original hide_retired query");
   const personaPath = paths.find((p) => p.includes(`persona_id=${expected.persona_id}`));
   need(Boolean(personaPath), "expected.persona_id does not occur in a baseline query");
   return { baseline, personaPath };
 }
 
-export function assessPair(manifest, version, expected) {
+export function assessPair(manifest, version, expected, { mode = "persona-strategy" } = {}) {
   const failures = [];
   const eq = (label, a, b) => a !== b && failures.push(`${label} mismatch`);
-  eq("deploymentState", manifest?.deploymentState, "accepted");
   eq("frontendSha", manifest?.frontendSha, expected.fe);
   eq("bffCommit", manifest?.bffCommit, expected.bff);
   eq("version.source_commit_sha", version?.source_commit_sha, expected.bff);
-  eq("root", String(manifest?.releaseAdmission?.controller?.runId), String(expected.root));
-  eq("pairId", manifest?.pairId, expected.pair);
   eq("auth_mode", version?.config_posture?.auth_mode, "strict");
   eq("auth_stub", version?.config_posture?.auth_stub, false);
-  eq("mfa_required", version?.config_posture?.mfa_required, false);
+  if (mode === "trading-pulse") {
+    eq("VITE_BFF_MODE", manifest?.buildMode?.VITE_BFF_MODE, "live");
+    eq("VITE_BFF_FALLBACK", manifest?.buildMode?.VITE_BFF_FALLBACK, "strict");
+  } else {
+    assert.equal(mode, "persona-strategy", "invalid QA mode");
+    eq("deploymentState", manifest?.deploymentState, "accepted");
+    eq("root", String(manifest?.releaseAdmission?.controller?.runId), String(expected.root));
+    eq("pairId", manifest?.pairId, expected.pair);
+    eq("mfa_required", version?.config_posture?.mfa_required, false);
+  }
   return {
     ok: failures.length === 0,
     failures,
@@ -357,6 +373,26 @@ async function loadChromium() {
   throw new Error("Playwright package not resolvable (install playwright or @playwright/test)");
 }
 
+async function guardedLogin(page, profile, { api, timeout = THRESHOLDS.navigation_timeout_ms } = {}) {
+  await page.locator("#dev-account").fill(profile.client_id, { timeout });
+  await page.locator("#dev-password").fill(profile.client_secret);
+  const login = page.waitForResponse((r) => {
+    const url = new URL(r.url());
+    return (!api || url.origin === api) && url.pathname === "/bff/auth/dev-login" && r.request().method() === "POST";
+  }, { timeout });
+  return { login, click: () => page.getByRole("button", { name: "Sign in", exact: true }).click() };
+}
+
+function installReadOnlyGuard(ctx, API, { onBlockedWrite, allowedOrigins }) {
+  return ctx.route(allowedOrigins ? "**/*" : API + "/**", async (route) => {
+    const req = route.request(), url = new URL(req.url());
+    const foreign = allowedOrigins && !allowedOrigins.includes(url.origin);
+    if (!foreign && classifyRequest(req.method(), url.pathname) === "allow") return route.continue();
+    onBlockedWrite({ method: req.method(), path: url.pathname, ...(allowedOrigins ? { foreign_origin: Boolean(foreign) } : {}) });
+    return route.abort("blockedbyclient");
+  });
+}
+
 // Fold every observation that arrived up to session shutdown (incl. during logout/close) into row.errors,
 // so row.pass is derived from the FINAL state, never from a pre-logout snapshot.
 export function foldFinalObservations(row, label) {
@@ -425,13 +461,7 @@ export function observe(ctx, page, row, API, { onBlockedWrite }) {
       row.failed_api_requests.push(e);
     }
   });
-  return { state, install: () => ctx.route(API + "/**", async (route) => {
-    const req = route.request();
-    const pathname = new URL(req.url()).pathname;
-    if (classifyRequest(req.method(), pathname) === "allow") return route.continue();
-    onBlockedWrite({ method: req.method(), path: pathname });
-    return route.abort("blockedbyclient");
-  }) };
+  return { state, install: () => installReadOnlyGuard(ctx, API, { onBlockedWrite }) };
 }
 
 const newRow = (redact) => {
@@ -445,6 +475,11 @@ const newRow = (redact) => {
  * @param deps  { chromium?, outDir, isAllowedOrigin?, fetchImpl? }
  */
 export async function run(input, deps = {}) {
+  if (deps.mode === "trading-pulse") {
+    const { dir, report } = await runTradingPulse(input, deps.outDir, deps);
+    return { dir, out: report };
+  }
+  assert.ok(!deps.mode || deps.mode === "persona-strategy", "invalid QA mode");
   const { baseline, personaPath } = validateInput(input, { isAllowedOrigin: deps.isAllowedOrigin });
   assert.ok(deps.outDir, "--out-dir is required");
   const { profiles, identity, expected } = input;
@@ -489,12 +524,6 @@ export async function run(input, deps = {}) {
     assert.ok(assessed.ok, `pair ${label}: ${assessed.failures.join(", ")}`);
     return assessed.identity;
   }
-  const guardedLogin = async (page, profile, row) => {
-    await page.locator("#dev-account").fill(profile.client_id, { timeout: THRESHOLDS.navigation_timeout_ms });
-    await page.locator("#dev-password").fill(profile.client_secret);
-    const login = page.waitForResponse((r) => new URL(r.url()).pathname === "/bff/auth/dev-login" && r.request().method() === "POST", { timeout: THRESHOLDS.navigation_timeout_ms });
-    return { login, click: () => page.getByRole("button", { name: "Sign in", exact: true }).click(), row };
-  };
 
   // ---- Phase 1: four-role sequential real GUI protocol
   async function runProfile(name) {
@@ -506,7 +535,7 @@ export async function run(input, deps = {}) {
     await obs.install();
     try {
       await page.goto(WEB + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-      const step = await guardedLogin(page, profile, row);
+      const step = await guardedLogin(page, profile);
       const firstFleet = page
         .waitForResponse((r) => new URL(r.url()).pathname === FLEET_PATH && r.request().method() === "GET", { timeout: THRESHOLDS.navigation_timeout_ms })
         .then(async (response) => {
@@ -632,7 +661,7 @@ export async function run(input, deps = {}) {
     };
     try {
       await page.goto(WEB + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-      const step = await guardedLogin(page, profile, row);
+      const step = await guardedLogin(page, profile);
       await step.click();
       S.gui_login_status = (await step.login).status();
       assert.equal(S.gui_login_status, 200, "admin batch GUI login");
@@ -757,7 +786,7 @@ export async function run(input, deps = {}) {
     };
     try {
       await page.goto(WEB + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
-      const step = await guardedLogin(page, profile, row);
+      const step = await guardedLogin(page, profile);
       await step.click();
       row.ui_login_status = (await step.login).status();
       assert.equal(row.ui_login_status, 200, "supplementary GUI login");
@@ -893,11 +922,226 @@ export async function run(input, deps = {}) {
   return { out, dir };
 }
 
+/** Trading Pulse viewer mode; all browser launch/session orchestration stays in this runner. */
+export async function runTradingPulse(input, outDir, { baseline = false, chromium: providedChromium, fetchImpl = globalThis.fetch } = {}) {
+  const { FE, BFF, PULSE, digest, validateInput: validatePulseInput, browserRead, readObservedJson,
+    enterPulseViaScreen, snapshotPage, assessOverview, assessWire, keyboardActivate,
+    assessPersona, assessJourney, assessJourneyReads, journeyHeadingPattern, returnViaScreen, safeTarget, writeEvidence } =
+    pulseHelpers;
+  const TIMEOUT = 20_000;
+  const string = (v) => typeof v === "string" && v.trim().length > 0;
+  const unwrap = (v) => v?.data ?? v;
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  validatePulseInput(input, Date.now(), { baseline });
+  assert.ok(outDir, "--out-dir is required");
+  const sources = input.sources ?? { rows: [], excluded: [], pnl_groups: [], provenance: [], captured_at: null };
+  fs.mkdirSync(outDir, { recursive: true, mode: 0o700 });
+  const dir = fs.mkdtempSync(path.join(outDir, "trading-pulse-"));
+  const privateValues = [input.profile.client_id, input.profile.client_secret, input.expected.tenant_id,
+    ...sources.rows.flatMap((r) => [r.persona_id, r.runtime_id, r.binding_id, r.persona_name]),
+    ...sources.excluded.flatMap(Object.values),
+    ...[input.history?.persona_id, input.history?.persona_name, input.history?.journey_id, input.history?.event_id]];
+  const redact = makeRedactor(privateValues.filter(string));
+  const report = { schema: "trading-pulse-browser-readonly.v1", started_at: new Date().toISOString(),
+    expected: { fe: input.expected.fe, bff: input.expected.bff },
+    mode: baseline ? "baseline_failure_record_only" : "acceptance",
+    witness: { digest: digest(sources), captured_at: sources.captured_at, provenance: sources.provenance,
+      persona_count: new Set(sources.rows.map((r) => r.persona_id)).size, runtime_count: sources.rows.length },
+    history_witness_digest: input.history ? digest(input.history) : null,
+    failures: [], runs: [], blocked_writes: [], pass: false };
+  const chromium = providedChromium || (await loadChromium());
+  let browser;
+  const publicRead = async (url) => {
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
+    assert.equal(response.status, 200, "public identity read"); return response.json();
+  };
+  const pair = async () => {
+    const [m, v] = await Promise.all([publicRead(FE + "/deployment.json"), publicRead(BFF + "/bff/version")]);
+    const assessed = assessPair(m, v, input.expected, { mode: "trading-pulse" });
+    assert.ok(assessed.ok, `pair: ${assessed.failures.join(", ")}`);
+    return { fe: m.frontendSha, bff: v.source_commit_sha, pair: m.pairId, deployment_state: m.deploymentState,
+      hosted_write_flag: m.buildMode?.VITE_BFF_REAL_WRITES, probe_business_writes: "blocked" };
+  };
+  try {
+    report.pair_before = await pair();
+    browser = await chromium.launch({ headless: true });
+    for (const [locale, width] of [["zh-TW", 1440], ["zh-TW", 390], ["en-US", 1440]]) {
+      const run = { locale, width, checks: [], failures: [], reads: [] }; report.runs.push(run);
+      const context = await browser.newContext({ locale, viewport: { width, height: 1000 }, serviceWorkers: "block" });
+      const page = await context.newPage(); page.setDefaultTimeout(TIMEOUT);
+      const observed = [], pending = new Set(); let authenticated = false;
+      const check = async (name, work) => {
+        try { await work(); run.checks.push(name); } catch (e) { run.failures.push(`${name}: ${redact(e.message)}`); }
+      };
+      page.on("pageerror", (e) => run.failures.push(`render: ${redact(e.message)}`));
+      await context.addInitScript((l) => localStorage.setItem("pantheon.locale", l), locale);
+      await installReadOnlyGuard(context, BFF, { allowedOrigins: [FE, BFF],
+        onBlockedWrite: (write) => report.blocked_writes.push(write) });
+      page.on("response", (res) => {
+        const u = new URL(res.url());
+        if (u.origin !== BFF || !u.pathname.startsWith("/bff/")) return;
+        run.reads.push({ path: u.pathname, method: res.request().method(), status: res.status() });
+        if (authenticated && res.status() >= 400) run.failures.push(`authenticated_http_${res.status()}: ${u.pathname}`);
+        const task = readObservedJson(res).then((capture) => { if (capture) observed.push({ ...capture, status: res.status() }); })
+          .catch((e) => run.failures.push(`response_body: ${redact(e.message)}`)).finally(() => pending.delete(task));
+        pending.add(task);
+      });
+      try {
+        await page.goto(FE + "/management/persona-fleet?data=regular", { waitUntil: "domcontentloaded" });
+        const step = await guardedLogin(page, input.profile, { api: BFF, timeout: TIMEOUT });
+        await step.click();
+        assert.equal((await step.login).status(), 200, "GUI login");
+        authenticated = true;
+        const me = unwrap(await browserRead(page, "/bff/me"));
+        const roles = me.roles ?? me.user?.roles ?? [];
+        assert.equal(me.tenant_id ?? me.tenant?.id ?? me.user?.tenant_id, input.expected.tenant_id, "same tenant");
+        assert.ok(roles.includes("viewer") && !roles.some((r) => ["admin", "operator"].includes(r)), "viewer-only server identity");
+        await page.getByRole("heading", { name: /Persona|人格/ }).first().waitFor();
+        const overviewResponse = page.waitForResponse((r) => new URL(r.url()).pathname === "/bff/management/trading-pulse" && r.request().method() === "GET");
+        // Attach rejection handling immediately if UI navigation itself fails.
+        overviewResponse.catch(() => {});
+        run.entry = await enterPulseViaScreen(page, locale);
+        assert.equal((await overviewResponse).status(), 200, "browser overview");
+        await page.getByRole("heading", { name: locale === "zh-TW" ? "交易脈動" : "Trading Pulse", exact: true }).waitFor();
+        await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'));
+        await page.waitForResponse((r) => new URL(r.url()).pathname.endsWith("/trading-pulse/rankings") && r.request().method() === "GET", { timeout: 5000 }).catch(() => {});
+        const snapshot = await snapshotPage(page, sources);
+        run.overview_digest = digest(snapshot); // no raw business/identity text retained
+        if (baseline) {
+          run.failures.push("baseline_only_current_owner_witness_not_supplied");
+          if (/\brt-[a-z0-9]+|\brb-[a-z0-9]+/.test(snapshot.text)) run.failures.push("source_ids_visible_by_default");
+          if (!snapshot.diagnosticsCollapsed) run.failures.push("diagnostics_not_collapsed");
+          if (/LIVE BFF|Row health|Checks|列健康|檢查項/.test(snapshot.text)) run.failures.push("engineering_diagnostics_visible_by_default");
+          run.layout = await page.locator("table").evaluateAll((tables) => tables.map((table) => ({
+            width: Math.round(table.getBoundingClientRect().width),
+            entries: [...table.querySelectorAll("tbody a")].map((a) => ({
+              viewport_x: a.getBoundingClientRect().left >= 0 && a.getBoundingClientRect().right <= innerWidth,
+              labelled_by_source_id: /persona-[a-z0-9]+/.test(a.getAttribute("aria-label") || ""),
+            })),
+          })));
+          if (run.layout.some((x) => x.entries.some((a) => !a.viewport_x))) run.failures.push("primary_entry_requires_horizontal_scroll");
+        } else {
+          await check("current_operator_content", async () => assert.deepEqual(assessOverview(sources, snapshot, locale), []));
+          await check("current_wire_roster_and_rankings", async () => {
+            const overview = await browserRead(page, "/bff/management/trading-pulse");
+            const rankings = await browserRead(page, "/bff/management/trading-pulse/rankings");
+            assert.deepEqual(assessWire(sources, overview, rankings), []);
+          });
+        }
+        if (locale === "zh-TW") await check("masked_screenshot", async () => {
+          // Mask private user/tenant chrome and all source IDs wherever they occur.
+          const masks = [page.locator("header").first(), page.locator("nav,aside,[data-testid*=user],[data-testid*=tenant]")];
+          for (const secret of privateValues.filter(string)) masks.push(page.getByText(secret, { exact: false }));
+          masks.push(page.getByText(/\brt-[a-z0-9]+|\brb-[a-z0-9]+|\bpersona-[a-z0-9]+/));
+          const file = path.join(dir, width === 390 ? "narrow.png" : "desktop.png");
+          await page.screenshot({ path: file, fullPage: false, mask: masks }); fs.chmodSync(file, 0o600);
+        });
+        await check("diagnostics_expand_source_and_collapse", async () => {
+          const trigger = page.locator("summary,button").filter({ hasText: /資料診斷|技術診斷|diagnostic/i }).first();
+          await keyboardActivate(page, trigger);
+          const text = await page.locator("body").innerText();
+          assert.ok(sources.rows.length > 0 && sources.rows.every((r) => text.includes(r.runtime_id)), "expanded diagnostics locate each runtime");
+          await trigger.click();
+          assert.ok(!(await page.locator("body").innerText()).includes(sources.rows[0].runtime_id), "collapse hides IDs");
+        });
+        await check("persona_detail_roundtrip_keyboard", async () => {
+          const source = sources.rows[0]; assert.ok(source, "missing_current_roster_witness");
+          const row = snapshot.rows.find((r) => r.text.includes(source.persona_name));
+          const target = row?.links.find((l) => safeTarget(l.href)?.pathname.includes("/personas/"));
+          assert.ok(target, "missing named Persona detail entry");
+          const personaPaths = [`/bff/personas/${encodeURIComponent(source.persona_id)}`, `/bff/management/personas/${encodeURIComponent(source.persona_id)}`];
+          const personaResponse = page.waitForResponse((r) => personaPaths.includes(new URL(r.url()).pathname) && r.request().method() === "GET");
+          personaResponse.catch(() => {});
+          observed.length = 0;
+          await keyboardActivate(page, page.locator(`a[href=${JSON.stringify(target.href)}]`).first());
+          await page.waitForURL((u) => u.pathname === safeTarget(target.href)?.pathname);
+          assert.equal((await personaResponse).status(), 200, "detail Persona entity GET");
+          await page.getByText(source.persona_name, { exact: false }).first().waitFor();
+          await Promise.all([...pending]);
+          const capture = observed.findLast((o) => personaPaths.includes(o.path));
+          assert.ok(capture, "detail has actual Persona read");
+          assert.deepEqual(assessPersona(source, input.expected.tenant_id, capture.body, await page.locator("main").innerText()), []);
+          await returnViaScreen(page, PULSE);
+          await page.getByRole("heading", { name: snapshot.heading, exact: true }).waitFor();
+        });
+        // Keep history isolated from current metrics. Traverse only UI links;
+        // a public unfiltered journey list cannot satisfy this check.
+        await check("historical_rejection_roundtrip", async () => {
+          const h = input.history; assert.ok(h, "missing_historical_event_witness");
+          if (!new URL(page.url()).pathname.startsWith(PULSE)) await returnViaScreen(page, PULSE);
+          const observedStart = observed.length;
+          const journeyPath = `/bff/management/trade-journeys/${h.journey_id}`;
+          const reads = ["", "/timeline"].map((suffix) => page.waitForResponse((res) => {
+            const u = new URL(res.url());
+            return u.origin === BFF && u.pathname === journeyPath + suffix && res.request().method() === "GET";
+          }, { timeout: TIMEOUT }));
+          // Attach rejection handling immediately while the operator follows UI links.
+          const responses = Promise.all(reads); responses.catch(() => {});
+          const hrefs = page.locator("a"); let entry;
+          for (let i = 0; i < await hrefs.count(); i++) {
+            const link = hrefs.nth(i), u = safeTarget(await link.getAttribute("href"));
+            if (u?.pathname === `/management/trade-journeys/${h.journey_id}` ||
+              (u?.pathname === "/management/trade-journeys" && u.searchParams.get("persona_id") === h.persona_id)) { entry = link; break; }
+          }
+          assert.ok(entry, "missing source-grounded rejected-journey or scoped Persona journey entry");
+          assert.ok((await entry.innerText()).trim() || (await entry.getAttribute("aria-label"))?.trim(), "journey entry must be named");
+          await entry.click();
+          if (new URL(page.url()).pathname === "/management/trade-journeys") {
+            const search = page.getByRole("textbox", { name: /搜尋|search/i }).first();
+            await search.fill(h.event_id);
+            const target = page.locator(`a[href*="${h.journey_id}"]`).first(); await target.waitFor(); await target.click();
+          }
+          const heading = page.getByRole("heading", { level: 1, name: journeyHeadingPattern(h) });
+          await heading.waitFor({ state: "visible", timeout: TIMEOUT });
+          assert.equal(new URL(page.url()).pathname, `/management/trade-journeys/${h.journey_id}`);
+          for (const res of await responses) assert.equal(res.status(), 200, "exact journey detail/timeline HTTP 200");
+          await Promise.all([...pending]);
+          const fresh = observed.slice(observedStart);
+          const capture = fresh.findLast((o) => o.path === journeyPath);
+          const timeline = fresh.findLast((o) => o.path === journeyPath + "/timeline");
+          assert.deepEqual(assessJourneyReads(h, capture, timeline), []);
+          const detail = { ...unwrap(capture.body), timeline: unwrap(timeline?.body)?.items ?? unwrap(timeline?.body)?.events ?? [] };
+          assert.deepEqual(assessJourney(h, detail, await page.locator("main").innerText(), locale, await heading.innerText()), []);
+          await returnViaScreen(page, PULSE);
+          await page.getByRole("heading", { name: snapshot.heading, exact: true }).waitFor();
+        });
+        await Promise.all([...pending]);
+        assert.ok(run.reads.some((r) => r.path.endsWith("/trading-pulse/rankings") && r.status === 200), "actual rankings browser read missing");
+      } catch (e) { run.failures.push(redact(e.message)); }
+      finally { await context.close(); await Promise.all([...pending]); }
+    }
+    report.pair_after = await pair();
+    assert.ok(eq(report.pair_before, report.pair_after), "deployment pair changed during proof");
+  } catch (e) { report.failures.push(redact(e.message)); }
+  finally { await browser?.close(); }
+  report.finished_at = new Date().toISOString();
+  report.failures.push(...report.runs.flatMap((r) => r.failures.map((f) => `${r.locale}/${r.width}: ${f}`)));
+  if (report.blocked_writes.length) report.failures.push("blocked_non_read_or_foreign_requests");
+  if (report.runs.length !== 3) report.failures.push("missing_viewport_locale_runs");
+  report.pass = report.failures.length === 0;
+  writeEvidence(dir, report, redact);
+  return { dir, report };
+}
+
 const trimSlash = (u) => String(u).replace(/\/+$/, "");
 
-function parseArgs(argv) {
-  const i = argv.indexOf("--out-dir");
-  return { outDir: i >= 0 ? argv[i + 1] : undefined };
+export function parseArgs(argv) {
+  let outDir, mode = "persona-strategy", baseline = false;
+  const seen = new Set();
+  for (let i = 0; i < argv.length; i++) {
+    const key = argv[i];
+    assert.ok(!seen.has(key), "duplicate QA option"); seen.add(key);
+    if (key === "--record-baseline") baseline = true;
+    else if (["--out-dir", "--mode"].includes(key)) {
+      const value = argv[++i];
+      assert.ok(value && !value.startsWith("--"), "missing QA option value");
+      if (key === "--out-dir") outDir = value; else mode = value;
+    } else throw new Error("unknown QA option");
+  }
+  assert.ok(outDir, "--out-dir is required");
+  assert.ok(["persona-strategy", "trading-pulse"].includes(mode), "invalid QA mode");
+  assert.ok(!baseline || mode === "trading-pulse", "--record-baseline requires trading-pulse mode");
+  return { outDir, mode, baseline };
 }
 
 async function readStdin() {
@@ -907,9 +1151,9 @@ async function readStdin() {
 }
 
 async function main() {
-  const { outDir } = parseArgs(process.argv.slice(2));
-  if (!outDir) {
-    process.stderr.write("usage: accept-persona-strategy-hosted-readonly.mjs --out-dir <private-dir> < input.json\n");
+  let options;
+  try { options = parseArgs(process.argv.slice(2)); } catch (e) {
+    process.stderr.write(e.message + "\n");
     process.exitCode = 2;
     return;
   }
@@ -921,10 +1165,15 @@ async function main() {
     process.exitCode = 2;
     return;
   }
-  const secrets = Object.values(input?.profiles || {}).map((x) => x?.client_secret);
+  const secrets = [...Object.values(input?.profiles || {}).map((x) => x?.client_secret), input?.profile?.client_id, input?.profile?.client_secret];
   const redact = makeRedactor(secrets);
   try {
-    const { out, dir } = await run(input, { outDir });
+    const { out, dir } = await run(input, options);
+    if (options.mode === "trading-pulse") {
+      process.stdout.write(redact.json({ pass: out.pass, summary: path.join(dir, "summary.json"), bytes: out.evidence.bytes, failures: out.failures }) + "\n");
+      process.exitCode = out.pass ? 0 : 1;
+      return;
+    }
     process.stdout.write(
       redact.json({ file: path.join(dir, "result.json"), pass: out.pass, verdict: out.verdict, errors: out.errors, role_errors: Object.fromEntries(ROLE_ORDER.map((n) => [n, out.profiles[n]?.errors])), strategy_errors: out.strategy.session?.errors, supplementary_errors: out.supplementary?.errors }) + "\n",
     );

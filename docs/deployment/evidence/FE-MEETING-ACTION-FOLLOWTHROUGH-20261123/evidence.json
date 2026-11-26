@@ -1,0 +1,156 @@
+{
+  "task_id": "FE-MEETING-ACTION-FOLLOWTHROUGH-20261123",
+  "owner": "Codex",
+  "assigned_independent_reviewer": "Codex2",
+  "backend_counterparts": [
+    "RESEARCH-MEETING-ACTION-TICKETS-20261123",
+    "MEETING-ACTION-ADOPTION-AND-REVIEW-20261123",
+    "PERSONA-MEETING-ACTION-EXECUTION-20261123",
+    "BFF-MEETING-ACTION-HUMAN-INBOX-20261123"
+  ],
+  "evidence_kind": "local_validation_not_hosted_acceptance",
+  "tested_source_commit": "f31a17b886327a3a8a1d0315f0e691c9a3b0206b",
+  "joint_contract": {
+    "routes": [
+      "GET /bff/management/meetings/{meeting_id}",
+      "GET /bff/management/human-inbox",
+      "PATCH /api/v1/research/tickets/{ticket_id}",
+      "GET /api/v1/research/tickets/{ticket_id}"
+    ],
+    "meeting_detail_fields": [
+      "prior_actions",
+      "prior_action_reviews",
+      "action_read",
+      "prior_actions_source",
+      "adopted_actions",
+      "decision_kind",
+      "no_action_reason",
+      "participant_capabilities",
+      "participant_action_capabilities"
+    ],
+    "human_inbox_item_fields": [
+      "kind=meeting_action",
+      "ticket_id",
+      "meeting_id",
+      "meeting_type",
+      "owner_kind",
+      "owner_id",
+      "deliverable",
+      "requested_material",
+      "acceptance_criterion",
+      "human_requirement",
+      "reason",
+      "review_reason",
+      "status",
+      "action_state",
+      "response_action",
+      "resumes_with",
+      "required_actor",
+      "can_respond",
+      "revision",
+      "due_at",
+      "next_review",
+      "overdue",
+      "evidence_refs",
+      "links.ticket",
+      "links.meeting"
+    ],
+    "patch_body": {
+      "action": "submit | provide_input",
+      "expected_revision": "integer",
+      "evidence_note": {
+        "title": "string (1..120)",
+        "body": "string (1..2000)",
+        "source_refs": "string[] (optional)"
+      },
+      "evidence_refs": "Array<{ kind, artifact_id }> (optional)"
+    },
+    "patch_headers": [
+      "Authorization / session credentials",
+      "Idempotency-Key"
+    ],
+    "authoritative_ticket_readback": "GET /api/v1/research/tickets/{ticket_id} after PATCH and on reload after the ticket leaves the human_actionable=true inbox queue"
+  },
+  "local_validation": [
+    {
+      "command": "npx vitest run --maxWorkers=2 src/management/pages/meetings/MeetingActionCards.test.tsx src/lib/bff-v1/meetings.test.ts src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/meetings/meetings.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "exit_code": 0,
+      "result": "7 files, 108 tests passed: MeetingActionCards 16, BFF meetings 19, HumanInboxPage 16, meeting routes 19, i18nParity 17, management v5 10, contract drift 11."
+    },
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "result": "TYPECHECK_OK (zero TypeScript errors across app and agora configs)"
+    },
+    {
+      "command": "node scripts/build-e2e-server.mjs (Playwright webServer prerequisite)",
+      "exit_code": 0,
+      "result": "Production Vite build passed; SAFE_BUILD_MODE enforces live/strict and real writes false, BFF base https://api.dev.mvl-cap.tw. Browser traffic intercepted with contained contract fixtures."
+    },
+    {
+      "command": "MEETING_ACTION_EVIDENCE_DIR=docs/deployment/evidence/FE-MEETING-ACTION-FOLLOWTHROUGH-20261123/browser npx playwright test e2e/meeting-action-followthrough.spec.ts --project=chromium",
+      "exit_code": 0,
+      "result": "4 passed: en-US/zh-TW at 1440x1000 and 390x1000. Three original product routes, 20 screenshots and four per-case outcome records."
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "result": "No whitespace errors."
+    }
+  ],
+  "covered_operator_workflows": [
+    "Meeting detail (/management/meetings/:id) in zh-TW and en-US displays previous decisions (PriorActionsSection) first, followed by adopted tasks (AdoptedActionsSection) and participant capability limits (ParticipantCapabilities), above the deliberation rounds",
+    "Each meeting action displays accountable owner, expected deliverable, acceptance criterion, due/review schedule, execution result, navigable evidence links (/management/artifacts/:id and /management/evidence?ref_id=:id), resolved evidence_notes body, review decision/reason, live owner status separate from frozen meeting state, and next step",
+    "Distinguishes round discussion (participant stance unchanged) from chair decision to retain the strategy pool (decision_kind=retain_pool), and submitted (awaiting chair review) from accepted",
+    "Distinguishes prior_actions owner unavailable (action_read.status=unavailable), permission denied (action_read.status=denied), partial/degraded page reads, and genuine zero prior obligations (legacy W47 records) even when prior_actions is an empty array []",
+    "Displays dispatch_pending action receipts truthfully with dispatch_error and no fake ticket link when ticket_id is null",
+    "Translates participant capability statuses (allowed, advisory_only, restricted_data, suspended, no_workflow, expired_access, downgraded_access, owner_unavailable) in plain language without leaking persona_id or persona_display_name when anonymised_labels_revealed=false",
+    "Human Inbox (/management/human-inbox and /management/human-inbox/:id) consumes verbatim BFF _human_input_ticket_items fields (response_action, can_respond, resumes_with, human_requirement, reason, requested_material, acceptance_criterion, required_actor, ticket_id, revision, status, evidence_refs, links.ticket, links.meeting)",
+    "Enforces authentic operator (can_respond=true) vs read-only viewer (can_respond=false) permissions while preserving direct-human requirement/reason separate from requested deliverable",
+    "Submits human response via canonical PATCH /api/v1/research/tickets/{ticket_id} with action (submit | provide_input), expected_revision, evidence_note, and Idempotency-Key (reused on same-content retry)",
+    "Reads back canonical GET /api/v1/research/tickets/{ticket_id} after PATCH and on reload after the ticket leaves the human_actionable=true inbox list, rendering updated ticket status and resolved evidence_notes body on the same ticket_id"
+  ],
+  "delivery_state": "local_validated_pending_independent_review_not_merged_or_deployed",
+  "source_binding_note": "Tests and browser build ran before the source commit was created; f31a17b88 commits the same tested source bytes. The fixture build manifest reports predecessor anchor 15df32329. No deployed SHA claim.",
+  "review_rework": {
+    "AC1": "Normalize flat and meeting_action nested owner_kind/owner_id/owner_display_name plus legacy assignee forms. Use accountable ID over service owner. Persona owners in unrevealed meetings use existing round labels; missing mapping uses #?. Revealed meetings retain display names.",
+    "AC2": "Preserve incomplete status across raw/read/source/page metadata. Empty degraded, partial, unknown and paginated reads never claim priorEmpty. Known unavailable/denied remain distinct; historical genuine empty still supported.",
+    "shared_evidence_authority": "Deleted resolveInboxMeetingActionEvidenceHref; adaptInboxMeetingAction now uses existing resolveMeetingActionEvidenceHref. Adapter regressions cover absolute/path references with supplied kind; browser asserts the same existing artifact href on normal meeting, Inbox and detail routes.",
+    "AC3": "Saved normal-route Chromium outcomes and screenshots for both locales and viewports."
+  },
+  "browser_evidence": {
+    "directory": "browser/",
+    "cases": [
+      "en-US-1440.json",
+      "en-US-390.json",
+      "zh-TW-1440.json",
+      "zh-TW-390.json"
+    ],
+    "screenshots_per_case": [
+      "meeting",
+      "inbox",
+      "detail-viewer",
+      "detail-readback",
+      "degraded"
+    ],
+    "assertions": [
+      "Previous decisions precede discussion",
+      "Recorded owner and anonymous Persona label visible",
+      "Same existing evidence href across meeting/inbox/detail",
+      "No horizontal overflow on all three normal routes",
+      "Required input and same meeting/ticket links",
+      "Field validation, read-only write-gate failure and same-content retry preserve text with zero network writes",
+      "Source can_respond=false hides response form",
+      "Reload reads canonical same-ID ticket after leaving actionable queue",
+      "Empty degraded history never displays no-prior-decisions"
+    ],
+    "write_coverage_boundary": "Successful submit/provide_input, canonical PATCH payload, idempotency, failure/retry and readback are mock unit/component coverage. Browser runs use real writes false and make zero mutation requests; submitted state is independently advanced fixture data, not a successful browser write.",
+    "artifact_hashes": "browser-sha256.json"
+  },
+  "residual_ownership": [
+    {
+      "owner": "MEETING-ACTION-TWO-MEETING-PROOF-20261123 / MEETING-HOSTED-ACCEPTANCE-20261115",
+      "pending": "Real-owner two-meeting, genuine authorized human input, and served FE/BFF browser acceptance; local fixture proof does not satisfy those observations."
+    }
+  ]
+}

@@ -207,6 +207,8 @@ export const BFF_STATUS_VALUES = [
   "disqualified",
   "not_running",
   "connecting",
+  "not_submitted",
+  "unverified",
 ] as const;
 
 export const BFF_OUTCOME_VALUES = [
@@ -572,6 +574,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   no_proposal: "warning",
   no_action: "warning",
   no_candidate: "warning",
+  unverified: "warning",
 
   // Danger / Failed / Rejected / Critical
   failed: "danger",
@@ -612,6 +615,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   private_interpretation_withheld: "paused",
   raw_control_diff_withheld: "paused",
   management_persona_intent_public_summary: "paused",
+  not_submitted: "paused",
 };
 
 const KNOWN_STATUS_SET = new Set<string>(BFF_STATUS_VALUES);
@@ -763,6 +767,8 @@ const EN_FALLBACK_STATUS: Record<string, string> = {
   disqualified: "Disqualified",
   not_running: "Not Running",
   connecting: "Connecting",
+  not_submitted: "Not Submitted",
+  unverified: "Unverified",
 };
 
 const EN_FALLBACK_OUTCOMES: Record<string, string> = {

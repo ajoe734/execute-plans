@@ -550,12 +550,15 @@ const GENERIC_ID_KEYS = ["id", "itemId", "entityId", "refId", "ref_id", "strateg
 const ENTITY_ID_KEYS = {
   evolution: ["id", "program_id", "programId", "evolution_program_id"],
   deployments: ["id", "plan_id", "planId", "deployment_id"],
+  experiments: ["task_id", "taskId", "id"],
 };
 
 function firstLiveId(body, entity) {
   const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data || [];
   if (!Array.isArray(items) || items.length === 0) return null;
-  const first = items[0];
+  const first = entity === "experiments"
+    ? items.find((item) => item?.task_type !== "collector_query_plan")
+    : items[0];
   for (const key of ENTITY_ID_KEYS[entity] || GENERIC_ID_KEYS) {
     if (first && typeof first[key] === "string" && first[key]) return first[key];
   }
@@ -572,7 +575,8 @@ async function resolveLiveIdRoutes() {
   }
   for (const [entity, fixturePath] of entities) {
     const endpoint = ENTITY_LIST_ENDPOINTS[entity];
-    const { status, body, error } = await fetchJson(`${BFF_BASE}${endpoint}`, authHeaders(BEARER_TOKEN, TENANT_ID));
+    const query = entity === "experiments" ? "?view=research" : "";
+    const { status, body, error } = await fetchJson(`${BFF_BASE}${endpoint}${query}`, authHeaders(BEARER_TOKEN, TENANT_ID));
     const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data;
     if (status !== 200 || !body || body.error || body.ok === false || body.success === false || !Array.isArray(items)) {
       results.push({ entity, endpoint, status, error: error || "non-200 or invalid list data", liveId: null });

@@ -1,9 +1,12 @@
-import type { Persona } from "./dto";
+import type { PaperRiskTier, Persona, PersonaRiskPolicyChange, PersonaRiskPolicyChangeStatus } from "./dto";
 import { bffFetch } from "./client";
-import { BffError } from "./errors";
+import { BffError, makeBffError } from "./errors";
+import { liveWriteGated } from "./writeGate";
 import { paths } from "./paths";
 import { strictLivePaginatedListNormalized } from "./domainReads";
 import { runAction } from "./writes";
+
+export type { PaperRiskTier, PersonaRiskPolicyChange, PersonaRiskPolicyChangeStatus };
 
 type BffEnvelope<T> = { data?: T; meta?: unknown } | T;
 
@@ -307,17 +310,118 @@ export interface PersonaManagementEnvelope {
   };
 }
 
+export interface PersonaRiskPatchPayload {
+  risk: PaperRiskTier;
+}
+
+export function normalizePaperRiskTier(value: unknown): PaperRiskTier | null {
+  const clean = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (clean === "low" || clean === "medium" || clean === "high") {
+    return clean;
+  }
+  return null;
+}
+
+export function normalizePersonaRiskPolicyChange(raw: unknown): PersonaRiskPolicyChange | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  const requestedRisk = normalizePaperRiskTier(record.requestedRisk);
+  const effectiveRisk = normalizePaperRiskTier(record.effectiveRisk);
+  const rawStatus = typeof record.status === "string" ? record.status.trim() : "";
+  const lowerStatus = rawStatus.toLowerCase();
+  const status: PersonaRiskPolicyChangeStatus =
+    lowerStatus === "effective"
+      ? "effective"
+      : lowerStatus === "pending_approval" || lowerStatus === "pending"
+        ? "pending_approval"
+        : lowerStatus === "unavailable"
+          ? "unavailable"
+          : lowerStatus === "failed" || lowerStatus === "error"
+            ? "failed"
+            : rawStatus || "unavailable";
+  const rawPolicyVersion = record.policyVersion;
+  const policyVersion =
+    typeof rawPolicyVersion === "string" && rawPolicyVersion.trim()
+      ? rawPolicyVersion.trim()
+      : typeof rawPolicyVersion === "number" && Number.isFinite(rawPolicyVersion)
+        ? String(rawPolicyVersion)
+        : null;
+  const rawApprovalId = record.approvalId;
+  const approvalId =
+    typeof rawApprovalId === "string" && rawApprovalId.trim() ? rawApprovalId.trim() : null;
+  const rawReason = record.reason;
+  const reason = typeof rawReason === "string" && rawReason.trim() ? rawReason.trim() : null;
+
+  return {
+    requestedRisk,
+    effectiveRisk,
+    status,
+    policyVersion,
+    approvalId,
+    ...(reason ? { reason } : {}),
+  };
+}
+
+function normalizePersonaDetail(persona: Persona | undefined): Persona | undefined {
+  if (!persona || typeof persona !== "object") return persona;
+  const rawChange = persona.riskPolicyChange;
+  if (rawChange === undefined) {
+    return persona;
+  }
+  return {
+    ...persona,
+    riskPolicyChange: normalizePersonaRiskPolicyChange(rawChange),
+  };
+}
+
 export async function getPersona(id: string): Promise<Persona | undefined> {
   try {
     const raw = await bffFetch<BffEnvelope<Persona>>({
       method: "GET",
       path: paths.persona(id),
     });
-    return unwrapData<Persona>(raw);
+    return normalizePersonaDetail(unwrapData<Persona>(raw));
   } catch (err) {
     if (err instanceof BffError && err.status === 404) return undefined;
     throw err;
   }
+}
+
+export async function patchPersonaRisk(
+  id: string,
+  payload: PersonaRiskPatchPayload,
+  opts: PersonaWriteOptions = {},
+): Promise<Persona> {
+  const personaId = id.trim();
+  if (!personaId) {
+    throw new Error("Persona id is required.");
+  }
+  const tier = normalizePaperRiskTier(payload?.risk);
+  if (!tier) {
+    throw new Error(`Invalid paper risk tier: ${String(payload?.risk ?? "")}`);
+  }
+  if (!(await liveWriteGated())) {
+    throw makeBffError({
+      code: "FEATURE_DISABLED",
+      message: "Persona risk writes are disabled by deployment policy or session authority.",
+      correlationId: opts.correlationId,
+      details: { reason: "write_unavailable" },
+    });
+  }
+  const raw = await bffFetch<BffEnvelope<Persona>>({
+    method: "PATCH",
+    path: paths.persona(personaId),
+    body: { risk: tier },
+    idempotencyKey: opts.idempotencyKey,
+    correlationId: opts.correlationId,
+  });
+  const persona = normalizePersonaDetail(unwrapData<Persona>(raw));
+  if (!persona || typeof persona !== "object") {
+    throw new Error("Persona risk update returned no Persona payload.");
+  }
+  return persona;
 }
 
 export async function getPersonaManagement(
@@ -381,6 +485,7 @@ export const personas = {
   get: getPersona,
   getManagement: getPersonaManagement,
   create: createPersona,
+  patchRisk: patchPersonaRisk,
   runAction: runPersonaAction,
   testPrompt: testPersonaPrompt,
 };

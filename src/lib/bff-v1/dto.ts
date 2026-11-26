@@ -424,11 +424,37 @@ export interface Strategy extends BaseObject {
   metricsPersonaId?: string | null;
 }
 
+export type PaperRiskTier = "low" | "medium" | "high";
+export const PAPER_RISK_TIERS: readonly PaperRiskTier[] = ["low", "medium", "high"] as const;
+
+export type PersonaRiskPolicyChangeStatus =
+  | "effective"
+  | "pending_approval"
+  | "unavailable"
+  | "failed"
+  | (string & {});
+
+export interface PersonaRiskPolicyChange {
+  requestedRisk: PaperRiskTier | null;
+  effectiveRisk: PaperRiskTier | null;
+  status: PersonaRiskPolicyChangeStatus;
+  policyVersion?: string | null;
+  approvalId?: string | null;
+  reason?: string | null;
+}
+
 export interface Persona extends BaseObject {
   archetype: string;
   routedStrategies: number;
   successRate: number;
   lifecycleStatus?: PersonaStatus | "research_only" | "consultable" | "paper_owner" | "live_owner" | "frozen" | string;
+  capitalMode?: "paper" | "canary" | "live" | string | null;
+  deploymentStage?: "research" | "paper" | "canary" | "live" | string | null;
+  paperLedgerId?: string | null;
+  runtimeBindingId?: string | null;
+  runtimeId?: string | null;
+  deploymentPlanId?: string | null;
+  riskPolicyChange?: PersonaRiskPolicyChange | null;
   mandate?: string;
   strategyFamily?: string;
   traits?: {
@@ -812,6 +838,7 @@ export interface ResearchTaskRun {
   createdAt?: string;
   created_at?: string | null;
   parameters?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   inputRefs?: Record<string, unknown>;
   input_refs?: Record<string, unknown>;
   artifactRefs?: string[];
@@ -887,6 +914,11 @@ export interface ResearchTaskDisplaySummary {
   [key: string]: unknown;
 }
 
+export interface CollectorQueryPlan {
+  week?: string;
+  changes: Record<string, { before: string[]; after: string[] }>;
+}
+
 export interface ResearchTask extends ResearchExperiment {
   taskId: string;
   task_id?: string;
@@ -910,6 +942,7 @@ export interface ResearchTask extends ResearchExperiment {
   is_non_real?: boolean | null;
   name_is_fallback_id?: boolean | null;
   display_summary?: ResearchTaskDisplaySummary | string | null;
+  query_plan?: CollectorQueryPlan;
   constraints?: Record<string, unknown>;
   idempotencyKey?: string | null;
   idempotency_key?: string | null;
