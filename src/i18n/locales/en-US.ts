@@ -1225,7 +1225,7 @@ export default {
       lineageUnlinked: "Upstream research-to-deployment stages are not linked to this journey (informational; no action needed).",
       evidence: "Evidence",
       evidenceUnavailable: "Evidence unavailable.",
-      openEvidenceExplorer: "Open Evidence Explorer",
+      evidenceOnPage: "Any evidence for this journey is shown on this page under Journey stages, Timeline, and Raw data above.",
     },
   },
   detail: {

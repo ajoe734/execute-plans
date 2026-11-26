@@ -2099,9 +2099,10 @@ describe("MeetingDetailPage review disposition (FE-MEETING-REVIEW-DISPOSITION-20
     expect(
       within(humanActionRow).getByTestId("meeting-action-live-status"),
     ).toHaveTextContent("Submitted, not yet accepted");
-    expect(
-      within(humanActionRow).getByRole("link", { name: "note-fee-2026" }),
-    ).toHaveAttribute("href", "/management/evidence?ref_id=note-fee-2026");
+    expect(within(humanActionRow).getByTestId("meeting-action-evidence")).toHaveTextContent(
+      "note-fee-2026",
+    );
+    expect(within(humanActionRow).queryByRole("link", { name: "note-fee-2026" })).toBeNull();
     expect(adoptedSection).toHaveTextContent("Queued factor stress test");
     expect(adoptedSection).toHaveTextContent("research_ticket_writer_busy");
 

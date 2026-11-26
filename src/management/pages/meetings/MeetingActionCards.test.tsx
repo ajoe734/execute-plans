@@ -6,6 +6,7 @@ import i18n from "@/i18n";
 import {
   normalizeMeetingAction,
   normalizePriorActions,
+  resolveMeetingActionEvidenceHref,
   validateMeetingActionResponse,
 } from "@/lib/bff-v1/meetings";
 import { adaptHumanInboxList } from "@/lib/bff-v1/management";
@@ -133,7 +134,7 @@ describe("meeting action follow-through", () => {
         id: "note-action-1",
         kind: "research_note",
         checksum: "c2",
-        href: "/management/evidence?ref_id=note-action-1",
+        href: null,
       },
     ]);
 
@@ -228,8 +229,9 @@ describe("meeting action follow-through", () => {
     expect(screen.getAllByTestId("meeting-action-result")[0]).toHaveTextContent(/not accepted yet/i);
     expect(screen.getAllByTestId("meeting-action-result")[1]).toHaveTextContent(/dispatch pending/i);
     const links = screen.getByTestId("meeting-action-evidence").querySelectorAll("a");
+    expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute("href", "/management/artifacts/artifact-fee-1");
-    expect(links[1]).toHaveAttribute("href", "/management/evidence?ref_id=note-action-fee-1");
+    expect(screen.getByTestId("meeting-action-evidence")).toHaveTextContent("note-action-fee-1");
     expect(screen.getByText("Needs sources")).toBeInTheDocument();
     expect(screen.getByTestId("meeting-action-live-status")).toHaveTextContent("Accepted");
     expect(screen.getByTestId("meeting-action-dispatch-error")).toHaveTextContent(
@@ -513,5 +515,72 @@ describe("meeting action follow-through", () => {
     wrap(<MeetingActionResponseCard work={work({ canRespond: false })} />);
     expect(screen.getByTestId("inbox-meeting-action-view-only")).toBeInTheDocument();
     expect(screen.queryByTestId("inbox-meeting-action-form")).toBeNull();
+  });
+
+  it("returns no link for note- ids while keeping artifact, meeting, and evidence targets and rendering note title or id as text", () => {
+    expect(resolveMeetingActionEvidenceHref("research_note", "note-action-1")).toBeNull();
+    expect(resolveMeetingActionEvidenceHref(null, "note-fee-2026", "note-fee-2026")).toBeNull();
+    expect(
+      resolveMeetingActionEvidenceHref("research_artifact", "artifact-persona-paper-a81b4fd15944698341aa"),
+    ).toBe("/management/artifacts/artifact-persona-paper-a81b4fd15944698341aa");
+    expect(resolveMeetingActionEvidenceHref(null, "rart-20260615-001")).toBe(
+      "/management/artifacts/rart-20260615-001",
+    );
+    expect(resolveMeetingActionEvidenceHref("meeting", "mtg-6edaff7d0ff76275")).toBe(
+      "/management/meetings/mtg-6edaff7d0ff76275",
+    );
+    expect(
+      resolveMeetingActionEvidenceHref(
+        null,
+        "mtg-6edaff7d0ff76275",
+        "/management/meetings/mtg-6edaff7d0ff76275",
+      ),
+    ).toBe("/management/meetings/mtg-6edaff7d0ff76275");
+    expect(resolveMeetingActionEvidenceHref(null, "evi-1217cd1c8ccc7274")).toBe(
+      "/management/evidence?ref_id=evi-1217cd1c8ccc7274",
+    );
+    expect(resolveMeetingActionEvidenceHref(null, "evref-rart-20260615-002")).toBe(
+      "/management/evidence?ref_id=evref-rart-20260615-002",
+    );
+
+    const action = normalizeMeetingAction({
+      ticket_id: "rt-action-mixed-targets",
+      state: "submitted",
+      assignee_label: "澄川",
+      deliverable: "Cross-target evidence check",
+      evidence_refs: [
+        { kind: "research_note", artifact_id: "note-fee-2026" },
+        { kind: "research_artifact", artifact_id: "artifact-persona-paper-a81b4fd15944698341aa" },
+        { kind: "meeting", artifact_id: "mtg-6edaff7d0ff76275" },
+        { kind: "evidence_item", artifact_id: "evi-1217cd1c8ccc7274" },
+      ],
+      evidence_notes: [
+        {
+          note_id: "note-fee-2026",
+          title: "Exchange fee schedule review note",
+          body: "Verified tiered maker/taker schedule for 2026.",
+          source_refs: ["artifact-persona-paper-a81b4fd15944698341aa"],
+        },
+      ],
+    })!;
+
+    wrap(<PriorActionsSection read={{ state: "ok", items: [action] }} />);
+    const evidenceList = screen.getByTestId("meeting-action-evidence");
+    expect(evidenceList).toHaveTextContent("note-fee-2026");
+    expect(screen.queryByRole("link", { name: "note-fee-2026" })).toBeNull();
+    expect(screen.getByTestId("meeting-action-evidence-notes")).toHaveTextContent(
+      "Exchange fee schedule review note",
+    );
+    expect(
+      screen.getByRole("link", { name: "artifact-persona-paper-a81b4fd15944698341aa" }),
+    ).toHaveAttribute("href", "/management/artifacts/artifact-persona-paper-a81b4fd15944698341aa");
+    expect(screen.getByRole("link", { name: "mtg-6edaff7d0ff76275" })).toHaveAttribute(
+      "href",
+      "/management/meetings/mtg-6edaff7d0ff76275",
+    );
+    expect(screen.getByRole("link", { name: "evi-1217cd1c8ccc7274" })).toHaveAttribute(
+      "href",
+      "/management/evidence?ref_id=evi-1217cd1c8ccc7274",
+    );
   });
 });
