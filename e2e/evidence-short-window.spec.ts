@@ -7,7 +7,7 @@
  * scroll and keeps a table area of at least 320 px. This spec measures that
  * on the cited list (default, scope=cited), the ingested list
  * (scope=ingested) and Persona Fleet, and captures browser screenshots into
- * the task evidence folder.
+ * $E2E_EVIDENCE_DIR when that variable is set.
  *
  * Row shapes: the cited rows follow GET /bff/management/evidence?scope=cited
  * (BFF-EVIDENCE-CITED-LIST-20261125, ajoe734/pantheon 381f1ea88) with the
@@ -27,7 +27,25 @@ import {
 test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
-const SCREENSHOT_DIR = "docs/deployment/evidence/FE-EVIDENCE-CITED-20261125/screenshots";
+const SCREENSHOT_SUBDIR = "FE-EVIDENCE-CITED-20261125/screenshots";
+
+/**
+ * Evidence capture is opt-in: screenshots are written only when
+ * E2E_EVIDENCE_DIR is set, so a plain run never touches committed files
+ * (FE-E2E-NO-TRACKED-EVIDENCE-WRITES-20261126).
+ */
+async function captureEvidence(
+  page: Page,
+  subdir: string,
+  file: string,
+  options: { fullPage?: boolean } = {},
+): Promise<void> {
+  const evidenceDir = process.env.E2E_EVIDENCE_DIR;
+  if (!evidenceDir) return;
+  const dir = `${evidenceDir}/${subdir}`;
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: `${dir}/${file}`, ...options });
+}
 
 function frontendUrl(path: string): string {
   const base =
@@ -433,10 +451,6 @@ test.describe("FE-EVIDENCE-CITED-20261125 evidence and persona fleet in a short 
   test.setTimeout(120_000);
   test.skip(targetsExternalE2eEnvironment(), "fixture BFF layout regression runs on loopback");
 
-  test.beforeAll(() => {
-    mkdirSync(SCREENSHOT_DIR, { recursive: true });
-  });
-
   for (const vp of VIEWPORTS) {
     for (const target of PAGES) {
       test(`${target.key} at ${vp.width}x${vp.height} keeps a table area >= 320 px with page scroll and real scrollbars`, async ({ browser }) => {
@@ -464,10 +478,10 @@ test.describe("FE-EVIDENCE-CITED-20261125 evidence and persona fleet in a short 
         });
         expect(scrollbarWidth, "real scrollbars must take layout space").toBeGreaterThan(0);
 
-        await page.screenshot({ path: `${SCREENSHOT_DIR}/${target.key}-${vp.width}x${vp.height}-top.png` });
+        await captureEvidence(page, SCREENSHOT_SUBDIR, `${target.key}-${vp.width}x${vp.height}-top.png`);
         const m = await measure(page, target.section);
         console.log(`MEASUREMENT ${target.key}@${vp.width}x${vp.height} ${JSON.stringify({ ...m, scrollbarWidth })}`);
-        await page.screenshot({ path: `${SCREENSHOT_DIR}/${target.key}-${vp.width}x${vp.height}-scrolled.png` });
+        await captureEvidence(page, SCREENSHOT_SUBDIR, `${target.key}-${vp.width}x${vp.height}-scrolled.png`);
 
         expect(m.scrollerClientHeight).toBeGreaterThanOrEqual(320);
         expect(m.scrollerHeight).toBeGreaterThanOrEqual(320);
@@ -514,7 +528,7 @@ test.describe("FE-EVIDENCE-CITED-20261125 evidence and persona fleet in a short 
       };
     });
     console.log(`MEASUREMENT evidence-cited-fit@1274x627 ${JSON.stringify(fit)}`);
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/evidence-cited-fit-1274x627.png` });
+    await captureEvidence(page, SCREENSHOT_SUBDIR, `evidence-cited-fit-1274x627.png`);
     expect(fit.tableWidth).toBeLessThanOrEqual(fit.mainWidth);
     expect(fit.horizontalScrollers, "no horizontal scrolling for the cited table").toEqual([]);
     expect(fit.lastCitedCount).toBeGreaterThan(0);
@@ -536,7 +550,7 @@ test.describe("FE-EVIDENCE-CITED-20261125 evidence and persona fleet in a short 
     await expect(page.getByTestId("evidence-detail")).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[title="tw_price_daily"]').first()).toBeVisible();
     expect(await page.locator("main").innerText()).not.toMatch(RAW);
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/evidence-detail-codes-1274x627.png`, fullPage: true });
+    await captureEvidence(page, SCREENSHOT_SUBDIR, `evidence-detail-codes-1274x627.png`, { fullPage: true });
     await context.close();
   });
 
@@ -548,7 +562,7 @@ test.describe("FE-EVIDENCE-CITED-20261125 evidence and persona fleet in a short 
     await expect(page.getByTestId("evidence-cited-sources-incomplete")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("evidence-cited-source-governance_approvals")).toBeVisible();
     await expect(page.getByTestId("evidence-metric-card").first()).toContainText(/11/);
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/evidence-cited-incomplete-1274x627.png` });
+    await captureEvidence(page, SCREENSHOT_SUBDIR, `evidence-cited-incomplete-1274x627.png`);
     await context.close();
   });
 
@@ -570,11 +584,11 @@ test.describe("FE-EVIDENCE-CITED-20261125 evidence and persona fleet in a short 
     );
     const mainText = await page.locator("main").innerText();
     expect(mainText).not.toMatch(/management-evidence|\bunknown\b/);
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/evidence-detail-cited-1274x627.png`, fullPage: true });
+    await captureEvidence(page, SCREENSHOT_SUBDIR, `evidence-detail-cited-1274x627.png`, { fullPage: true });
 
     await page.goto(frontendUrl("/management/evidence/evi-does-not-exist"), { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("evidence-detail-not-found")).toBeVisible({ timeout: 30_000 });
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/evidence-detail-not-found-1274x627.png` });
+    await captureEvidence(page, SCREENSHOT_SUBDIR, `evidence-detail-not-found-1274x627.png`);
     await context.close();
   });
 });

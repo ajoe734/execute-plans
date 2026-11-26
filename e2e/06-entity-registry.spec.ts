@@ -32,6 +32,25 @@ import {
 } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
+
+/**
+ * Evidence capture is opt-in: screenshots are written only when
+ * E2E_EVIDENCE_DIR is set, so a plain run never touches committed files
+ * (FE-E2E-NO-TRACKED-EVIDENCE-WRITES-20261126).
+ */
+async function captureEvidence(
+  page: Page,
+  subdir: string,
+  file: string,
+  options: { fullPage?: boolean } = {},
+): Promise<void> {
+  const evidenceDir = process.env.E2E_EVIDENCE_DIR;
+  if (!evidenceDir) return;
+  const dir = `${evidenceDir}/${subdir}`;
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: `${dir}/${file}`, ...options });
+}
+
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
 const RUN_LIVE_BFF_CONTRACT =
@@ -1530,12 +1549,12 @@ test.describe("F07 entity registry", () => {
         /clipped_weighted_sum_v1|max_net_strength=1|gross_weight_limit=1|promote_paper|STRATEGY STATE|invariant ok/i,
       );
 
-      const evidenceDir = "docs/deployment/evidence/FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125";
-      mkdirSync(evidenceDir, { recursive: true });
-      await page.screenshot({
-        path: `${evidenceDir}/strategy-detail-overview-1274x627.png`,
-        fullPage: false,
-      });
+      await captureEvidence(
+        page,
+        "FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125",
+        "strategy-detail-overview-1274x627.png",
+        { fullPage: false },
+      );
 
       await expect(page.getByTestId("strategy-journal-section")).toHaveAttribute(
         "data-section-status",

@@ -7,7 +7,25 @@ import {
 } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
-const LINEAGE_EVIDENCE_DIR = "./docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125";
+const LINEAGE_EVIDENCE_SUBDIR = "FE-LINEAGE-LOOKUP-20261125";
+
+/**
+ * Evidence capture is opt-in: screenshots are written only when
+ * E2E_EVIDENCE_DIR is set, so a plain run never touches committed files
+ * (FE-E2E-NO-TRACKED-EVIDENCE-WRITES-20261126).
+ */
+async function captureEvidence(
+  page: Page,
+  subdir: string,
+  file: string,
+  options: { fullPage?: boolean } = {},
+): Promise<void> {
+  const evidenceDir = process.env.E2E_EVIDENCE_DIR;
+  if (!evidenceDir) return;
+  const dir = `${evidenceDir}/${subdir}`;
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: `${dir}/${file}`, ...options });
+}
 const LIVE_TOKEN = "a81b4fd15944698341aa";
 const LIVE_PERSONA_ID = "persona-ee7112a829d38b9135ac";
 const LIVE_STRATEGY_ID = `strategy-persona-${LIVE_TOKEN}`;
@@ -605,8 +623,6 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       token: LOCAL_FIXTURE_AUTH_TOKEN,
     });
 
-    mkdirSync(LINEAGE_EVIDENCE_DIR, { recursive: true });
-
     const assertGraphGeometry = async (contextLabel: string) => {
       const report = await page.evaluate(() => {
         const nodeGroups = Array.from(document.querySelectorAll<SVGGElement>("svg [data-node-id]"));
@@ -694,12 +710,12 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       /^(策略|Strategy) · (已核准|Approved)$/,
     );
     await assertGraphGeometry("lineage-page-1274x627");
-    await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/lineage-page-1274x627.png` });
+    await captureEvidence(page, LINEAGE_EVIDENCE_SUBDIR, "lineage-page-1274x627.png");
 
     // Mobile 390px wide on /management/lineage
     await page.setViewportSize({ width: 390, height: 844 });
     await assertGraphGeometry("lineage-page-390w");
-    await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/lineage-page-390w.png` });
+    await captureEvidence(page, LINEAGE_EVIDENCE_SUBDIR, "lineage-page-390w.png");
 
     // 2. Strategy Detail Lineage tab at 1274x627 and 390px wide
     await page.setViewportSize({ width: 1274, height: 627 });
@@ -712,12 +728,12 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     await expect(page.getByTestId(`lineage-node-${spec}`)).toBeVisible();
     await expect(page.getByTestId(`lineage-node-${spec}`)).toHaveAttribute("data-node-highlight", "true");
     await assertGraphGeometry("strategy-detail-lineage-1274x627");
-    await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/strategy-detail-lineage-1274x627.png` });
+    await captureEvidence(page, LINEAGE_EVIDENCE_SUBDIR, "strategy-detail-lineage-1274x627.png");
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo({ left: 0, top: 0 }));
     await assertGraphGeometry("strategy-detail-lineage-390w");
-    await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/strategy-detail-lineage-390w.png` });
+    await captureEvidence(page, LINEAGE_EVIDENCE_SUBDIR, "strategy-detail-lineage-390w.png");
 
     // 3. Artifact Detail Lineage tab at 1274x627 and 390px wide
     await page.setViewportSize({ width: 1274, height: 627 });
@@ -730,11 +746,11 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     await expect(page.getByTestId(`lineage-node-${LIVE_ARTIFACT_ID}`)).toBeVisible();
     await expect(page.getByTestId(`lineage-node-${LIVE_ARTIFACT_ID}`)).toHaveAttribute("data-node-highlight", "true");
     await assertGraphGeometry("artifact-detail-lineage-1274x627");
-    await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/artifact-detail-lineage-1274x627.png` });
+    await captureEvidence(page, LINEAGE_EVIDENCE_SUBDIR, "artifact-detail-lineage-1274x627.png");
 
     await page.setViewportSize({ width: 390, height: 844 });
     await assertGraphGeometry("artifact-detail-lineage-390w");
-    await page.screenshot({ path: `${LINEAGE_EVIDENCE_DIR}/artifact-detail-lineage-390w.png` });
+    await captureEvidence(page, LINEAGE_EVIDENCE_SUBDIR, "artifact-detail-lineage-390w.png");
   });
 
   test("FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125: knowledge inbox leaves sidebar and command palette, lists unconnected sources from meta.surfaces, and postmortems show plain titles, hidden_infrastructure_count toggle, collapsed technical key=value, and <=80px row height with 1 vertical scroll area at 1274x627", async ({
@@ -745,9 +761,7 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
       "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
     );
 
-    const KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR =
-      "./docs/deployment/evidence/FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125";
-    mkdirSync(KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR, { recursive: true });
+    const KNOWLEDGE_POSTMORTEM_EVIDENCE_SUBDIR = "FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125";
 
     const DRIFT_SAMPLE_KINDS = [
       "drift:runtime_state",
@@ -949,9 +963,7 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     await expect(cmdList.getByText(/^(Knowledge Inbox|知識收件匣)$/)).toHaveCount(0);
     await page.keyboard.press("Escape");
 
-    await page.screenshot({
-      path: `${KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR}/knowledge-inbox-1274x627.png`,
-    });
+    await captureEvidence(page, KNOWLEDGE_POSTMORTEM_EVIDENCE_SUBDIR, "knowledge-inbox-1274x627.png");
 
     // 2. Postmortem Library at 1274x627
     await page.goto(frontendUrl("/management/postmortems"), {
@@ -1033,9 +1045,7 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     expect(layoutMetrics.verticalScrollAreaCount).toBe(1);
     expect(layoutMetrics.verticalScrollAreas[0]?.tag).toBe("main");
 
-    await page.screenshot({
-      path: `${KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR}/postmortems-list-1274x627.png`,
-    });
+    await captureEvidence(page, KNOWLEDGE_POSTMORTEM_EVIDENCE_SUBDIR, "postmortems-list-1274x627.png");
 
     // 3. Open Postmortem detail sheet and verify plain root cause, translated labels (incl. drift:runtime_state), and collapsed technical key=value section
     await firstPlainTitle.click();
@@ -1051,9 +1061,7 @@ test.describe("MGMT-GAP-002 canonical management reads", () => {
     expect(await techDetails.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(false);
     await page.waitForTimeout(550);
 
-    await page.screenshot({
-      path: `${KNOWLEDGE_POSTMORTEM_EVIDENCE_DIR}/postmortems-detail-1274x627.png`,
-    });
+    await captureEvidence(page, KNOWLEDGE_POSTMORTEM_EVIDENCE_SUBDIR, "postmortems-detail-1274x627.png");
 
     // Close detail sheet and toggle system incidents on
     await page.keyboard.press("Escape");
