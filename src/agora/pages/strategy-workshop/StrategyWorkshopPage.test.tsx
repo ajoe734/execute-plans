@@ -2727,7 +2727,6 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.click(screen.getByTestId("cmd-version-btn"));
     await waitFor(() => {
       expect(workshopsModule.createWorkshopVersion).toHaveBeenCalledWith("ws-abc", {
-        summary: "調整停損至 20 日均線",
         reason: "調整停損至 20 日均線",
         patch: [{ op: "replace", path: "/notes", value: "調整停損至 20 日均線" }],
       });

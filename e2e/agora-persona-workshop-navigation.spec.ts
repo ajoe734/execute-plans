@@ -437,6 +437,7 @@ test("creating a Workshop from a zh-TW strategy description reconstructs the str
           route,
           {
             data: {
+              reconstruction_id: decisionConfirmed ? "recon-v10-2" : "recon-v10-1",
               card_id: "card-recon-v10-1",
               card_type: "strategy_reconstruction",
               version: 1,
@@ -444,6 +445,7 @@ test("creating a Workshop from a zh-TW strategy description reconstructs the str
               summary: "已根據您的策略描述完成 12 塊策略重建與缺口盤點。",
               created_at: NOW,
               payload: {
+                reconstruction_id: decisionConfirmed ? "recon-v10-2" : "recon-v10-1",
                 archetype: "momentum_breakout",
                 market_scope: "TWSE Semis",
                 horizon: "swing_5_20d",
@@ -495,61 +497,56 @@ test("creating a Workshop from a zh-TW strategy description reconstructs the str
           route,
           {
             data: {
+              event_id: "ev-dec-sizing-v10",
+              sequence_no: 2,
               workshop_id: createdWorkshopId,
               decision_id: "dec-sizing-v10",
-              block_id: "position_sizing",
-              block_state: "confirmed",
-              confirmed_value: "單筆風險上限 1%，依 5% 停損距離計算部位",
-              completeness: {
-                workshop_id: createdWorkshopId,
-                version: 2,
-                overall_grade: "B+",
-                ready_for_backtest: true,
-                ready_for_governance: false,
-                dimensions: [],
-                twelve_blocks: [
-                  {
-                    block_id: "strategy_thesis",
-                    title: "策略核心命題",
-                    state: "confirmed",
-                    summary: "台股大型權值與半導體龍頭波段動能",
-                    note: null,
-                  },
-                  {
-                    block_id: "position_sizing",
-                    title: "部位規模與加碼",
-                    state: "confirmed",
-                    summary: "固定風險比例 1%",
-                    note: null,
-                  },
-                ],
-                next_high_value_decision: null,
-                next_question: null,
-              },
+              question_id: "dec-sizing-v10",
+              question: "請確認此策略的單筆部位規模配置方式：",
+              option_id: "opt-fixed-risk",
+              option_label: "固定風險比例 1%",
+              used_servant_default: false,
+              resolves: ["position_sizing"],
+              target_blocks: ["position_sizing"],
             },
           },
-          { status: 201 },
+          {
+            headers: { ETag: `W/"workshop:${createdWorkshopId}:v2"` },
+            status: 201,
+          },
         );
       }
 
       if (method === "GET" && path === `/bff/agora/workshops/${createdWorkshopId}`) {
-        return json(route, {
-          data: {
-            spec_version: "1.0",
-            workshop_id: createdWorkshopId,
-            operator_id: "op-fe-gate",
-            status: "open",
-            title: createdTitle,
-            subject: { kind: "strategy_spec", ref: createdWorkshopId, title: createdTitle },
-            metadata: {
-              strategy_name: createdTitle,
-              description:
-                "台股大型權值與半導體龍頭波段動能策略，於月營收年增且法人連買時進場，跌破 20 日均線或單筆虧損 5% 停損出場。",
+        const currentEtag = `W/"workshop:${createdWorkshopId}:${decisionConfirmed ? "v2" : "v1"}"`;
+        return json(
+          route,
+          {
+            data: {
+              spec_version: "1.0",
+              workshop_id: createdWorkshopId,
+              operator_id: "op-fe-gate",
+              status: "open",
+              title: createdTitle,
+              subject: { kind: "strategy_spec", ref: createdWorkshopId, title: createdTitle },
+              metadata: {
+                strategy_name: createdTitle,
+                description:
+                  "台股大型權值與半導體龍頭波段動能策略，於月營收年增且法人連買時進場，跌破 20 日均線或單筆虧損 5% 停損出場。",
+              },
+              participant_persona_ids: [],
+              created_at: NOW,
             },
-            participant_persona_ids: [],
-            created_at: NOW,
+            meta: {
+              etag: currentEtag,
+            },
           },
-        });
+          {
+            headers: {
+              ETag: currentEtag,
+            },
+          },
+        );
       }
 
       if (method === "GET" && path === `/bff/agora/workshops/${createdWorkshopId}/cards`) {
@@ -639,19 +636,18 @@ test("creating a Workshop from a zh-TW strategy description reconstructs the str
                 note: decisionConfirmed ? null : "尚未定義單筆風險上限與部位配置方式",
               },
             ],
-            next_high_value_decision: decisionConfirmed
+            next_decision: decisionConfirmed
               ? null
               : {
                   decision_id: "dec-sizing-v10",
-                  block_id: "position_sizing",
-                  prompt: "請確認此策略的單筆部位規模配置方式：",
-                  rationale: "目前進出場規則已明確，但尚缺單筆風險上限",
+                  question_id: "dec-sizing-v10",
+                  question: "請確認此策略的單筆部位規模配置方式：",
+                  why_high_value: "目前進出場規則已明確，但尚缺單筆風險上限",
                   options: [
                     {
                       option_id: "opt-fixed-risk",
                       label: "固定風險比例 1%",
-                      description: "依停損距離反推部位大小",
-                      patch_value: "單筆風險上限 1%，依 5% 停損距離計算部位",
+                      summary: "依停損距離反推部位大小",
                     },
                   ],
                 },
@@ -677,9 +673,9 @@ test("creating a Workshop from a zh-TW strategy description reconstructs the str
   await page.getByTestId("create-workshop-submit").click();
 
   await expect(page).toHaveURL(new RegExp(`/agora/strategy-workshop/${createdWorkshopId}$`));
-  await expect(page.getByTestId("workshop-card-strategy_reconstruction")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("workshop-card-card-recon-v10-1")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("v10-twelve-blocks-section")).toBeVisible();
-  await expect(page.getByTestId("rail-next-high-value-decision")).toBeVisible();
+  await expect(page.getByTestId("next-question-section")).toBeVisible();
   await expect(page.getByTestId("servant-default-composer-badge")).toBeVisible();
 
   await page.getByTestId("rail-decision-option-opt-fixed-risk").click();
