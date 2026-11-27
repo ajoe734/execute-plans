@@ -9,6 +9,7 @@ import {
   type TradingRoomStrategyEntry,
   type TradingDecisionEvent,
   type TradingRoomWorkspaceResult,
+  type TradingRoomStreamMode,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import { BffError } from "@/lib/bff-v1/errors";
 import type { TradingRoomWorkspaceProposal } from "@/lib/bff-v1/agora/tradingRoomTypes";
@@ -144,35 +145,23 @@ export function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPan
 
 // ── Trading Event Queue ───────────────────────────────────────────────────────
 
-const EVENT_KIND_LABEL: Record<string, string> = {
-  add: "Add",
-  entry: "Entry",
-  exit: "Exit",
-  reduce: "Reduce",
-  review: "Review",
-};
-
-const STATE_LABEL: Record<string, string> = {
-  approaching: "Approaching",
-  decided: "Decided",
-  expired: "Expired",
-  invalidated: "Invalidated",
-  pending_review: "Pending Review",
-  superseded: "Superseded",
-  triggered: "Triggered",
-};
-
 export interface TradingEventQueueProps {
   events: TradingDecisionEvent[];
   loading: boolean;
   /** ETag from listDecisionEvents — forwarded to each DecisionEventDetailPanel as If-Match. */
   eventsEtag?: string | null;
   onSelectEvent?: (decisionEventId: string) => void;
+  /** Expands this event when chosen elsewhere (e.g. the in-view decision queue widget). */
+  focusEventId?: string | null;
 }
 
-export function TradingEventQueue({ events, loading, eventsEtag, onSelectEvent }: TradingEventQueueProps): JSX.Element {
+export function TradingEventQueue({ events, loading, eventsEtag, onSelectEvent, focusEventId }: TradingEventQueueProps): JSX.Element {
   const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (focusEventId) setExpandedId(focusEventId);
+  }, [focusEventId]);
 
   function toggleExpand(id: string) {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -203,7 +192,7 @@ export function TradingEventQueue({ events, loading, eventsEtag, onSelectEvent }
               <th style={{ color: "#8c96a6", fontWeight: 500, padding: "6px 8px", textAlign: "left" }}>{t("agora.tradingRoom.page.kind")}</th>
               <th style={{ color: "#8c96a6", fontWeight: 500, padding: "6px 8px", textAlign: "left" }}>{t("agora.tradingRoom.page.state")}</th>
               <th style={{ color: "#8c96a6", fontWeight: 500, padding: "6px 8px", textAlign: "right" }}>{t("agora.tradingRoom.page.confidence")}</th>
-              <th style={{ color: "#8c96a6", fontWeight: 500, padding: "6px 16px", textAlign: "right" }}>EV (net)</th>
+              <th style={{ color: "#8c96a6", fontWeight: 500, padding: "6px 16px", textAlign: "right" }}>{t("agora.tradingRoom.candidateContext.evNet")}</th>
             </tr>
           </thead>
           <tbody>
@@ -220,8 +209,8 @@ export function TradingEventQueue({ events, loading, eventsEtag, onSelectEvent }
                   }}
                 >
                   <td style={{ padding: "6px 16px" }}>{ev.subject.symbol}</td>
-                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.eventKinds.${ev.event_kind}`, { defaultValue: EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind })}</td>
-                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.states.${ev.state}`, { defaultValue: STATE_LABEL[ev.state] ?? ev.state })}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.eventKinds.${ev.event_kind}`, { defaultValue: ev.event_kind })}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.states.${ev.state}`, { defaultValue: ev.state })}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>
                     {(ev.confidence.value * 100).toFixed(0)}%
                   </td>
@@ -256,11 +245,11 @@ export function PositionActionQueue({ positionSummaries }: PositionActionQueuePr
       style={{ background: "#171b22", borderLeft: "1px solid #2a2e38", flexShrink: 0, overflow: "auto", width: 240 }}
     >
       <div style={{ borderBottom: "1px solid #2a2e38", fontSize: 13, fontWeight: 600, padding: "8px 12px" }}>
-        {t("agora.tradingRoom.page.positionActions", { defaultValue: "Position Actions" })}
+        {t("agora.tradingRoom.page.positionActions")}
       </div>
       {positionSummaries.length === 0 ? (
         <div style={{ color: "#737d8e", fontSize: 13, padding: 12 }}>
-          {t("agora.tradingRoom.page.noPositions", { defaultValue: "No position actions" })}
+          {t("agora.tradingRoom.page.noPositions")}
         </div>
       ) : (
         <ul style={{ listStyle: "none", margin: 0, padding: "8px 12px" }}>
@@ -302,12 +291,12 @@ export function TradingRoomGenerationProgress({
       }}
     >
       <div>
-        <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.servant", { defaultValue: "Agora Servant" })}</div>
+        <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.servant")}</div>
         <h2 style={{ color: "#f0ece4", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
-          {t("agora.tradingRoom.page.generatingTitle", { defaultValue: `Generating Workspace Proposal for ${strategyTitle || strategyVersion}`, strategy: strategyTitle || strategyVersion })}
+          {t("agora.tradingRoom.page.generatingTitle", { strategy: strategyTitle || strategyVersion })}
         </h2>
         <p style={{ color: "#8c96a6", fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 840 }}>
-          {t("agora.tradingRoom.page.generatingDescription", { defaultValue: "Synthesizing widgets and layout proposal from active signals, candidate pools, and decision events." })}
+          {t("agora.tradingRoom.page.generatingDescription")}
         </p>
       </div>
       <ol
@@ -375,6 +364,9 @@ export interface TradingRoomWorkspaceProps {
   strategyVersion?: string;
   onBackToWorkshop?: () => void;
   onSwitchStrategy?: () => void;
+  /** Live decision-queue transport state from the page-level stream subscription. */
+  streamMode?: TradingRoomStreamMode;
+  queueUpdatedAt?: string | null;
 }
 
 export function TradingRoomWorkspace({
@@ -389,6 +381,8 @@ export function TradingRoomWorkspace({
   strategyVersion,
   onBackToWorkshop,
   onSwitchStrategy,
+  streamMode,
+  queueUpdatedAt,
 }: TradingRoomWorkspaceProps): JSX.Element {
   const { t } = useTranslation();
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
@@ -403,6 +397,9 @@ export function TradingRoomWorkspace({
   const [selectedPreviewViewId, setSelectedPreviewViewId] = useState<string | null>(null);
   const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
   const [accepting, setAccepting] = useState(false);
+  // 先調整版面: accept the reviewed preview, then open the grid editor in edit mode.
+  const [openInEditMode, setOpenInEditMode] = useState(false);
+  const [focusedDecisionEventId, setFocusedDecisionEventId] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<"decisions" | "workspace">("decisions");
   const [selectedDecisionEventId, setSelectedDecisionEventId] = useState<string | null>(
     () => filteredEvents[0]?.decision_event_id ?? null,
@@ -418,6 +415,7 @@ export function TradingRoomWorkspace({
 
   useEffect(() => {
     setWorkspaceResult(null);
+    setOpenInEditMode(false);
     setSelectedPreviewViewId(null);
     setMobilePane("decisions");
     setSelectedDecisionEventId(filteredEvents[0]?.decision_event_id ?? null);
@@ -484,7 +482,7 @@ export function TradingRoomWorkspace({
       })
       .catch((err) => {
         if (cancelled) return;
-        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.", t);
+        const nextError = toTradingRoomUiError(err, t("agora.tradingRoom.page.proposalUnavailable"), t);
         if (shouldClearStaleWorkspaceState(nextError)) {
           setProposal(null);
           setWorkspaceResult(null);
@@ -508,8 +506,9 @@ export function TradingRoomWorkspace({
     t,
   ]);
 
-  async function handleAcceptProposal() {
+  async function handleAcceptProposal(options: { openEditMode?: boolean } = {}) {
     if (!proposal) return;
+    setOpenInEditMode(Boolean(options.openEditMode));
     setAccepting(true);
     setProposalError(null);
     try {
@@ -521,7 +520,8 @@ export function TradingRoomWorkspace({
       );
       setWorkspaceResult(nextWorkspace);
     } catch (err) {
-      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.", t);
+      setOpenInEditMode(false);
+      const nextError = toTradingRoomUiError(err, t("agora.tradingRoom.layoutProposal.applyFailed"), t);
       if (shouldClearStaleWorkspaceState(nextError)) {
         setProposal(null);
         setWorkspaceResult(null);
@@ -533,7 +533,14 @@ export function TradingRoomWorkspace({
     }
   }
 
+  function handleSelectDecisionEvent(decisionEventId: string) {
+    setSelectedDecisionEventId(decisionEventId);
+    setFocusedDecisionEventId(decisionEventId);
+    setMobilePane("decisions");
+  }
+
   function retryProposal() {
+    setOpenInEditMode(false);
     setWorkspaceResult(null);
     setProposal(null);
     setSelectedPreviewViewId(null);
@@ -577,7 +584,7 @@ export function TradingRoomWorkspace({
           onClick={() => setMobilePane("decisions")}
           type="button"
         >
-          Decisions ({filteredEvents.length})
+          {t("agora.tradingRoom.mobile.decisions", { count: filteredEvents.length })}
         </button>
         <button
           aria-pressed={mobilePane === "workspace"}
@@ -585,7 +592,7 @@ export function TradingRoomWorkspace({
           onClick={() => setMobilePane("workspace")}
           type="button"
         >
-          Workspace
+          {t("agora.tradingRoom.mobile.workspace")}
         </button>
       </div>
 
@@ -613,14 +620,21 @@ export function TradingRoomWorkspace({
           ) : workspaceResult ? (
             <WorkspaceGridEditor
               dataCutoff={aggregate?.data_cutoff}
+              initialEditMode={openInEditMode}
               initialEtag={workspaceResult.etag}
               initialWorkspace={workspaceResult.workspace}
               onBackToWorkshop={onBackToWorkshop}
               onSwitchStrategy={onSwitchStrategy}
-              onWorkspaceChange={setWorkspaceResult}
+              onSelectDecisionEvent={handleSelectDecisionEvent}
+              onWorkspaceChange={(next) => {
+                setOpenInEditMode(false);
+                setWorkspaceResult(next);
+              }}
+              queueUpdatedAt={queueUpdatedAt}
               riskSummary={aggregate?.risk_summary}
               strategy={strategy}
-              workspaceEvents={events}
+              streamMode={streamMode}
+              workspaceEvents={filteredEvents}
             />
           ) : proposalLoading ? (
             <TradingRoomGenerationProgress
@@ -632,8 +646,8 @@ export function TradingRoomWorkspace({
               <WorkspaceProposalPreview
                 busy={accepting}
                 error={proposalError?.message ?? null}
-                onAccept={handleAcceptProposal}
-                onAdjustLayout={() => setSelectedPreviewViewId(proposal.views[0]?.id ?? null)}
+                onAccept={() => handleAcceptProposal()}
+                onAdjustLayout={() => handleAcceptProposal({ openEditMode: true })}
                 onBackToWorkshop={onBackToWorkshop}
                 onPreviewView={(view) => setSelectedPreviewViewId(view.id)}
                 onRegenerate={regenerateProposal}
@@ -681,6 +695,7 @@ export function TradingRoomWorkspace({
             <TradingEventQueue
               events={filteredEvents}
               eventsEtag={eventsEtag}
+              focusEventId={focusedDecisionEventId}
               loading={eventsLoading}
               onSelectEvent={setSelectedDecisionEventId}
             />

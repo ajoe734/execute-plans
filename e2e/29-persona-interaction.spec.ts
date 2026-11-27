@@ -1111,7 +1111,7 @@ test("Trading Room Ask Personas preserves context and modify preserves proposal 
     .fill("Reduce paper size until the red-team liquidity concern is resolved.");
   await page.getByTestId(`modify-linkage-submit-${DECISION_EVENT_ID}`).click();
   await expect(page.getByTestId("detail-decision-confirmed")).toHaveText(
-    "Decision recorded: modify",
+    "已記錄裁示：修改部位",
   );
 
   const decisionRequest = mutationRequests(

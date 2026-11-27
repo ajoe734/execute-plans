@@ -24,6 +24,7 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   patchTradingRoomWorkspaceLayout: vi.fn(),
   rollbackTradingRoomWorkspaceVersion: vi.fn(),
   decideOnEvent: vi.fn(),
+  subscribeTradingRoomStream: vi.fn(() => () => undefined),
 }));
 
 vi.mock("@/lib/bff-v1/agora/operationalReadiness", () => ({
@@ -1178,14 +1179,14 @@ describe("TradingRoomPage", () => {
     await screen.findByTestId("workspace-proposal-preview");
 
     expect(screen.getByTestId("trading-room-mobile-priority").textContent).toContain("Alpha Momentum");
-    expect(screen.getByTestId("trading-room-mobile-priority").textContent).toContain("Pending 4");
+    expect(screen.getByTestId("trading-room-mobile-priority").textContent).toContain("待處理 4");
     expect(screen.getByTestId("trading-room-navigation").getAttribute("data-mobile-collapsed")).toBe("true");
     expect(screen.getByTestId("trading-room-workspace-layout").getAttribute("data-mobile-workspace-pane")).toBe("workspace");
     expect(screen.getByTestId("trading-room-workspace-surface").getAttribute("data-mobile-pane-hidden")).toBe("false");
     expect(screen.getByTestId("trading-room-decision-surface").getAttribute("data-mobile-pane-hidden")).toBe("true");
     expect(screen.getByTestId("workspace-proposal-actions").className).toContain("workspace-proposal-actions");
 
-    fireEvent.click(screen.getByRole("button", { name: "Decisions (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "裁示（1）" }));
     expect(screen.getByTestId("trading-room-workspace-layout").getAttribute("data-mobile-workspace-pane")).toBe("decisions");
     expect(screen.getByTestId("trading-room-workspace-surface").getAttribute("data-mobile-pane-hidden")).toBe("true");
     expect(screen.getByTestId("trading-room-decision-surface").getAttribute("data-mobile-pane-hidden")).toBe("false");
@@ -1227,6 +1228,49 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("mock-chart-spec-renderer").textContent).toBe("metric");
   });
 
+  it("先調整版面 accepts the reviewed preview and opens the workspace in edit mode", async () => {
+    render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
+    await screen.findByTestId("workspace-proposal-preview");
+    fireEvent.click(screen.getByTestId("workspace-proposal-adjust-layout"));
+    await screen.findByTestId("trading-room-workspace-shell");
+
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).toHaveBeenCalledWith(
+      "strat-001",
+      "proposal-001",
+      { expectedStatus: "preview" },
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+    expect(screen.getByTestId("workspace-edit-toolbar")).toBeDefined();
+    expect(screen.getByTestId("workspace-edit-mode-toggle").textContent).toBe("完成調整");
+  });
+
+  it("subscribes to the trading-room stream and refreshes the decision queue without reload", async () => {
+    let streamOptions: Parameters<typeof tradingRoomModule.subscribeTradingRoomStream>[0] | undefined;
+    const unsubscribe = vi.fn();
+    vi.mocked(tradingRoomModule.subscribeTradingRoomStream).mockImplementation((options) => {
+      streamOptions = options;
+      return unsubscribe;
+    });
+    const { unmount } = render(<TradingRoomPage />);
+    await screen.findByTestId("event-queue-table");
+    expect(tradingRoomModule.subscribeTradingRoomStream).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("event-row-evt-new")).toBeNull();
+
+    vi.mocked(tradingRoomModule.listDecisionEvents).mockResolvedValue({
+      items: [MOCK_DECISION_EVENT, { ...MOCK_DECISION_EVENT, decision_event_id: "evt-new" }],
+      etag: '"events-etag-v2"',
+    });
+    act(() => {
+      streamOptions?.onModeChange?.("live");
+      streamOptions?.onChange({ id: "e2", type: "trading_room.decision.recorded", data: { decision_event_id: "evt-new" } });
+    });
+
+    expect(await screen.findByTestId("event-row-evt-new")).toBeDefined();
+    expect(tradingRoomModule.getTradingRoom).toHaveBeenCalledTimes(2);
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the accepted workspace shell and widgets on the dark Trading Room surface", async () => {
     render(<TradingRoomPage strategyId="strat-001" strategyVersion="winner-branch-v4" />);
     await screen.findByTestId("workspace-proposal-preview");
@@ -1248,7 +1292,7 @@ describe("TradingRoomPage", () => {
     act(() => {
       gridCallbacks.onLayoutChange?.([{ i: "w-status", x: 1, y: 2, w: 5, h: 4 }]);
     });
-    expect(screen.getByTestId("workspace-unsaved-bar").textContent).toContain("2 unsaved layout operations");
+    expect(screen.getByTestId("workspace-unsaved-bar").textContent).toContain("2 項未儲存的版面調整");
 
     fireEvent.click(screen.getByTestId("workspace-save-layout"));
 
@@ -1919,7 +1963,7 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage />);
 
     expect(await screen.findByTestId("candidate-pool-unavailable")).toHaveTextContent(
-      "unavailable",
+      "此策略規格沒有可用的候選池。",
     );
     expect(screen.getByTestId("open-candidate-review")).toBeDisabled();
   });

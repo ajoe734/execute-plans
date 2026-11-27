@@ -3261,6 +3261,7 @@ export default {
         pendingDecisions: "Pending decisions",
         riskState: "Risk state",
         dataCutoff: "Data cutoff",
+        closeLibrary: "Close widget library",
       },
       live: {
         title: "Decision queue",

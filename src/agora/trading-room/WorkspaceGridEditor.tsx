@@ -23,6 +23,7 @@ import {
   type TradingDecisionEvent,
   type TradingRoomRiskSummary,
   type TradingRoomStrategyEntry,
+  type TradingRoomStreamMode,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import {
   CHART_SPEC_KINDS,
@@ -32,6 +33,7 @@ import {
   type WidgetRegistryEntry,
 } from "@/agora/widgets/registry";
 import ChartSpecRenderer from "@/agora/widgets/ChartSpecRenderer";
+import { DecisionQueueWidget, isDecisionQueueWidget } from "@/agora/widgets/DecisionQueueWidget";
 import {
   formatSensitivityLabel,
   safeWarningText,
@@ -72,6 +74,13 @@ export interface WorkspaceGridEditorProps {
   dataCutoff?: string;
   onBackToWorkshop?: () => void;
   onSwitchStrategy?: () => void;
+  /** Open directly in edit mode (e.g. from 先調整版面 on the proposal preview). */
+  initialEditMode?: boolean;
+  /** Live decision-queue transport state (SSE or bounded polling). */
+  streamMode?: TradingRoomStreamMode;
+  /** When the decision queue last changed. */
+  queueUpdatedAt?: string | null;
+  onSelectDecisionEvent?: (decisionEventId: string) => void;
 }
 
 function newUUID(): string {
@@ -159,9 +168,9 @@ function affectedWidgets(operations: WorkspaceLayoutOperation[]): string[] {
   return operations.flatMap((operation) => operation.widgetId ? [operation.widgetId] : []);
 }
 
-function mutationErrorMessage(error: unknown): string {
+function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
-  return "Workspace update failed.";
+  return fallback;
 }
 
 function AddWidgetLibrary({
@@ -228,7 +237,7 @@ function AddWidgetLibrary({
               <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.addWidget")}</strong>
             </DialogPrimitive.Title>
             <DialogPrimitive.Close asChild>
-              <button aria-label="Close widget library" style={plainButtonStyle} type="button">
+              <button aria-label={t("agora.tradingRoom.editor.closeLibrary")} style={plainButtonStyle} type="button">
                 ×
               </button>
             </DialogPrimitive.Close>
@@ -272,6 +281,11 @@ function AddWidgetLibrary({
 
 function WorkspaceWidgetCard({
   editMode,
+  selected = false,
+  onSelect,
+  streamMode,
+  queueUpdatedAt,
+  onSelectDecisionEvent,
   menuOpen,
   onChangeChart,
   onDuplicate,
@@ -290,6 +304,11 @@ function WorkspaceWidgetCard({
   onRequestRevision: () => void;
   widget: TradingRoomWidgetSpec;
   workspaceEvents?: TradingDecisionEvent[];
+  selected?: boolean;
+  onSelect?: () => void;
+  streamMode?: TradingRoomStreamMode;
+  queueUpdatedAt?: string | null;
+  onSelectDecisionEvent?: (decisionEventId: string) => void;
 }) {
   const { t } = useTranslation();
   const validation = validateTradingRoomWidgetSpec(widget);
@@ -298,13 +317,17 @@ function WorkspaceWidgetCard({
 
   return (
     <section
+      aria-label={t("agora.tradingRoom.editor.selectWidget", { title: agoraCopy(t, undefined, widget.title) })}
+      data-selected={selected ? "true" : "false"}
       data-testid={`workspace-widget-${widget.id}`}
       onClick={(event) => {
+        onSelect?.();
         if (editMode) return;
         const target = event.target;
         if (target instanceof HTMLElement && target.closest("button")) return;
         onRequestRevision();
       }}
+      onFocus={() => onSelect?.()}
       onKeyDown={(event) => {
         if (editMode) return;
         if (event.key === "Enter" || event.key === " ") {
@@ -315,8 +338,9 @@ function WorkspaceWidgetCard({
       role={editMode ? undefined : "button"}
       style={{
         background: COLORS.panel,
-        border: `1px solid ${COLORS.border}`,
+        border: `1px solid ${selected ? COLORS.accent : COLORS.border}`,
         borderRadius: 8,
+        boxShadow: selected ? "0 0 0 1px rgba(232, 183, 80, 0.45)" : undefined,
         cursor: editMode ? "default" : "pointer",
         display: "flex",
         flexDirection: "column",
@@ -363,11 +387,11 @@ function WorkspaceWidgetCard({
               padding: "3px 7px",
             }}
           >
-            {validation.ok ? "validated" : "review"}
+            {validation.ok ? t("agora.tradingRoom.editor.validated") : t("agora.tradingRoom.editor.needsReview")}
           </span>
           {editMode ? (
             <button
-              aria-label={`Open widget menu for ${agoraCopy(t, undefined, widget.title)}`}
+              aria-label={t("agora.tradingRoom.editor.widgetMenu", { title: agoraCopy(t, undefined, widget.title) })}
               data-testid={`workspace-widget-menu-${widget.id}`}
               onClick={onMenuToggle}
               style={plainButtonStyle}
@@ -431,7 +455,14 @@ function WorkspaceWidgetCard({
         <span>{chartSpecSummary(widget.chartSpec)}</span>
       </div>
       <div style={{ minHeight: 0, flex: 1, padding: "0 10px 10px" }}>
-        {validation.ok ? (
+        {validation.ok && isDecisionQueueWidget(widget.widgetType) ? (
+          <DecisionQueueWidget
+            events={workspaceEvents}
+            onSelectEvent={onSelectDecisionEvent}
+            streamMode={streamMode}
+            updatedAt={queueUpdatedAt}
+          />
+        ) : validation.ok ? (
           <ChartSpecRenderer
             data={widget.dataAvailability === "unavailable" ? [] : getWidgetData(widget.widgetType, workspaceEvents)}
             height={170}
@@ -506,6 +537,10 @@ export function WorkspaceGridEditor({
   dataCutoff,
   onBackToWorkshop,
   onSwitchStrategy,
+  initialEditMode = false,
+  streamMode,
+  queueUpdatedAt,
+  onSelectDecisionEvent,
 }: WorkspaceGridEditorProps) {
   const { t } = useTranslation();
   const isNarrowViewport = useIsNarrowViewport();
@@ -513,7 +548,8 @@ export function WorkspaceGridEditor({
   const [draftWorkspace, setDraftWorkspace] = useState(() => cloneWorkspace(initialWorkspace));
   const [currentEtag, setCurrentEtag] = useState<string | null>(initialEtag ?? null);
   const [activeViewId, setActiveViewId] = useState(initialWorkspace.activeViewId || initialWorkspace.views[0]?.id || "");
-  const [editMode, setEditMode] = useState(false);
+  const [editMode, setEditMode] = useState(initialEditMode);
+  const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   const [pendingOps, setPendingOps] = useState<WorkspaceLayoutOperation[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -529,7 +565,8 @@ export function WorkspaceGridEditor({
     setDraftWorkspace(cloneWorkspace(initialWorkspace));
     setCurrentEtag(initialEtag ?? null);
     setActiveViewId(initialWorkspace.activeViewId || initialWorkspace.views[0]?.id || "");
-    setEditMode(false);
+    setEditMode(initialEditMode);
+    setSelectedWidgetId(null);
     setPendingOps([]);
     setSaveState("idle");
     setError(null);
@@ -547,7 +584,7 @@ export function WorkspaceGridEditor({
       })
       .catch((err) => {
         if (cancelled) return;
-        setVersionError(mutationErrorMessage(err));
+        setVersionError(mutationErrorMessage(err, t("agora.tradingRoom.editor.updateFailed")));
       });
     return () => {
       cancelled = true;
@@ -559,6 +596,7 @@ export function WorkspaceGridEditor({
   const visibleWidgets = activeView?.widgets.filter((widget) => widget.visible !== false) ?? [];
   const removedWidgets = activeView?.widgets.filter((widget) => widget.visible === false) ?? [];
   const dirty = pendingOps.length > 0;
+  const selectedWidget = visibleWidgets.find((widget) => widget.id === selectedWidgetId) ?? null;
   const revisionView = revisionTarget
     ? draftWorkspace.views.find((view) => view.id === revisionTarget.viewId) ?? null
     : null;
@@ -756,7 +794,7 @@ export function WorkspaceGridEditor({
   async function handleSave() {
     if (!dirty) return;
     if (!currentEtag) {
-      setError("Workspace ETag is required before saving layout changes.");
+      setError(t("agora.tradingRoom.editor.etagRequiredSave"));
       setSaveState("error");
       return;
     }
@@ -776,7 +814,7 @@ export function WorkspaceGridEditor({
       setSaveState("idle");
       onWorkspaceChange?.(result);
     } catch (err) {
-      setError(mutationErrorMessage(err));
+      setError(mutationErrorMessage(err, t("agora.tradingRoom.editor.updateFailed")));
       setSaveState("error");
     }
   }
@@ -792,7 +830,7 @@ export function WorkspaceGridEditor({
 
   async function handleRollback(version: TradingRoomDashboardVersion) {
     if (!currentEtag) {
-      setError("Workspace ETag is required before rollback.");
+      setError(t("agora.tradingRoom.editor.etagRequiredRollback"));
       return;
     }
     setSaveState("saving");
@@ -812,7 +850,7 @@ export function WorkspaceGridEditor({
       setSaveState("idle");
       onWorkspaceChange?.(result);
     } catch (err) {
-      setError(mutationErrorMessage(err));
+      setError(mutationErrorMessage(err, t("agora.tradingRoom.editor.updateFailed")));
       setSaveState("error");
     }
   }
@@ -838,6 +876,11 @@ export function WorkspaceGridEditor({
       >
         <WorkspaceWidgetCard
           editMode={editMode}
+          onSelect={() => setSelectedWidgetId(widget.id)}
+          onSelectDecisionEvent={onSelectDecisionEvent}
+          queueUpdatedAt={queueUpdatedAt}
+          selected={selectedWidgetId === widget.id}
+          streamMode={streamMode}
           menuOpen={menuWidgetId === widget.id}
           onChangeChart={(kind) => handleChangeChart(widget, kind)}
           onDuplicate={() => handleDuplicate(widget)}
@@ -857,7 +900,7 @@ export function WorkspaceGridEditor({
   if (!activeView) {
     return (
       <div data-testid="trading-room-workspace-empty" style={{ color: COLORS.muted, fontSize: 13, padding: 16 }}>
-        Workspace contains no views.
+        {t("agora.tradingRoom.editor.noViews")}
       </div>
     );
   }
@@ -882,7 +925,7 @@ export function WorkspaceGridEditor({
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
             <div>
               <div style={{ color: COLORS.accent, fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>
-                Trading Room Workspace
+                {t("agora.tradingRoom.editor.workspaceEyebrow")}
               </div>
               <h2 style={{ color: COLORS.text, fontSize: 18, fontWeight: 900, margin: 0 }}>
                 {draftWorkspace.strategyId}
@@ -895,7 +938,7 @@ export function WorkspaceGridEditor({
               data-testid="workspace-dashboard-version"
               style={{ background: "rgba(232, 183, 80, 0.14)", border: "1px solid rgba(232, 183, 80, 0.42)", borderRadius: 999, color: COLORS.accent, fontSize: 11, fontWeight: 800, padding: "3px 8px" }}
             >
-              dashboard v{draftWorkspace.dashboardVersion}
+              {t("agora.tradingRoom.editor.dashboardVersion", { version: draftWorkspace.dashboardVersion })}
             </span>
             <span style={{ background: COLORS.panelElevated, border: `1px solid ${COLORS.borderStrong}`, borderRadius: 999, color: COLORS.good, fontSize: 11, fontWeight: 700, padding: "3px 8px" }}>
               {draftWorkspace.status}
@@ -909,7 +952,7 @@ export function WorkspaceGridEditor({
               style={secondaryButtonStyle}
               type="button"
             >
-              切換策略 (Switch Strategy)
+              {t("agora.tradingRoom.editor.switchStrategy")}
             </button>
             <button
               data-testid="workspace-back-to-workshop"
@@ -917,21 +960,27 @@ export function WorkspaceGridEditor({
               style={secondaryButtonStyle}
               type="button"
             >
-              開啟策略工坊 (Workshop)
+              {t("agora.tradingRoom.editor.openWorkshop")}
             </button>
             <button
               data-testid="workspace-header-ask-servant"
               onClick={() => {
-                if (activeView.widgets[0]) {
-                  setRevisionTarget({ viewId: activeView.id, widgetId: activeView.widgets[0].id });
+                if (selectedWidget) {
+                  setError(null);
+                  setRevisionTarget({ viewId: activeView.id, widgetId: selectedWidget.id });
+                } else if (visibleWidgets.length === 0) {
+                  setError(t("agora.tradingRoom.editor.askServantNoWidgets"));
                 } else {
-                  setError("請先新增 Widget 才能交代僕人修改。");
+                  setError(t("agora.tradingRoom.editor.askServantPick"));
                 }
               }}
               style={secondaryButtonStyle}
+              title={selectedWidget
+                ? t("agora.tradingRoom.editor.askServantSelected", { title: agoraCopy(t, undefined, selectedWidget.title) })
+                : t("agora.tradingRoom.editor.askServantPick")}
               type="button"
             >
-              交代僕人 (Ask Servant)
+              {t("agora.tradingRoom.editor.askServantHeader")}
             </button>
             <button
               data-testid="workspace-header-version-history"
@@ -942,7 +991,7 @@ export function WorkspaceGridEditor({
               style={secondaryButtonStyle}
               type="button"
             >
-              版本紀錄 (Versions)
+              {t("agora.tradingRoom.editor.versionHistory")}
             </button>
             <button
               data-testid="workspace-edit-mode-toggle"
@@ -978,27 +1027,27 @@ export function WorkspaceGridEditor({
               {agoraCopy(t, undefined, strategy.title)}
             </div>
             <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
-              狀態: <strong style={{ color: strategy.readiness_state === "ready" ? COLORS.good : COLORS.warning }}>{strategy.readiness_state}</strong>
+              {t("agora.tradingRoom.editor.strategyState")}: <strong style={{ color: strategy.readiness_state === "ready" ? COLORS.good : COLORS.warning }}>{strategy.readiness_state}</strong>
             </div>
             <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
-              待處理決策: <strong style={{ color: pendingEventTotal(strategy) > 0 ? COLORS.accent : COLORS.muted }}>{pendingEventTotal(strategy)}</strong>
+              {t("agora.tradingRoom.editor.pendingDecisions")}: <strong style={{ color: pendingEventTotal(strategy) > 0 ? COLORS.accent : COLORS.muted }}>{pendingEventTotal(strategy)}</strong>
             </div>
             {riskSummary ? (
               <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
-                風險狀態: <strong>{riskSummary.state}</strong>
+                {t("agora.tradingRoom.editor.riskState")}: <strong>{t(`agora.tradingRoom.riskStates.${riskSummary.state}`, { defaultValue: riskSummary.state })}</strong>
                 {riskSummary.summary ? <> · {riskSummary.summary}</> : null}
               </div>
             ) : null}
             {dataCutoff ? (
               <div style={{ color: COLORS.muted, fontSize: 11, marginLeft: "auto" }}>
-                資料切齊: {dataCutoff}
+                {t("agora.tradingRoom.editor.dataCutoff")}: {dataCutoff}
               </div>
             ) : null}
           </div>
         ) : null}
 
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-          <nav aria-label="Workspace views" data-testid="workspace-view-tabs" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <nav aria-label={t("agora.tradingRoom.editor.viewTabs")} data-testid="workspace-view-tabs" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {views.map((view) => {
               const active = view.id === activeView.id;
               return (
@@ -1006,7 +1055,10 @@ export function WorkspaceGridEditor({
                   aria-pressed={active}
                   data-testid={`workspace-view-tab-${view.id}`}
                   key={view.id}
-                  onClick={() => setActiveViewId(view.id)}
+                  onClick={() => {
+                    setActiveViewId(view.id);
+                    setSelectedWidgetId(null);
+                  }}
                   style={{
                     background: active ? COLORS.panelElevated : "transparent",
                     border: `1px solid ${active ? COLORS.borderStrong : "transparent"}`,
@@ -1025,6 +1077,12 @@ export function WorkspaceGridEditor({
             })}
           </nav>
         </div>
+
+        {selectedWidget ? (
+          <div data-testid="workspace-selected-widget" style={{ color: COLORS.textSoft, fontSize: 12 }}>
+            {t("agora.tradingRoom.editor.askServantSelected", { title: agoraCopy(t, undefined, selectedWidget.title) })}
+          </div>
+        ) : null}
 
         {error ? (
           <div data-testid="workspace-error" style={{ color: COLORS.danger, fontSize: 12 }}>
@@ -1048,17 +1106,17 @@ export function WorkspaceGridEditor({
             }}
           >
             <div style={{ color: COLORS.textSoft, fontSize: 12 }}>
-              {dirty ? `${pendingOps.length} unsaved layout operation${pendingOps.length > 1 ? "s" : ""}` : "Grid drop targets and resize handles are active."}
+              {dirty ? t("agora.tradingRoom.editor.unsavedOps", { count: pendingOps.length }) : t("agora.tradingRoom.editor.editActive")}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               <button data-testid="workspace-add-widget-button" onClick={() => setShowAddLibrary((prev) => !prev)} style={secondaryButtonStyle} type="button">
                 {t("agora.tradingRoom.editor.addWidget")}
               </button>
               <button data-testid="workspace-save-layout" disabled={!dirty || saveState === "saving"} onClick={handleSave} style={primaryButtonStyle} type="button">
-                {saveState === "saving" ? "Saving..." : "Save as new version"}
+                {saveState === "saving" ? t("agora.tradingRoom.editor.saving") : t("agora.tradingRoom.editor.saveNewVersion")}
               </button>
               <button data-testid="workspace-discard-layout" disabled={!dirty || saveState === "saving"} onClick={handleDiscard} style={secondaryButtonStyle} type="button">
-                Discard
+                {t("agora.tradingRoom.editor.discard")}
               </button>
             </div>
           </div>
@@ -1069,8 +1127,7 @@ export function WorkspaceGridEditor({
             data-testid="workspace-narrow-layout-notice"
             style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.5 }}
           >
-            Widgets are shown as a stacked narrow preview. Desktop grid coordinates stay unchanged; explicit add,
-            remove, chart, and revision actions remain available.
+            {t("agora.tradingRoom.editor.narrowNotice")}
           </div>
         ) : null}
 
@@ -1150,10 +1207,10 @@ export function WorkspaceGridEditor({
             <div>
               <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.versionHistory")}</strong>
               <div style={{ color: COLORS.muted, fontSize: 11 }}>
-                Immutable snapshots and change logs persisted through BFF contracts.
+                {t("agora.tradingRoom.editor.versionHistoryHint")}
               </div>
             </div>
-            <span style={{ color: COLORS.textSoft, fontSize: 11 }}>{versions.length} versions</span>
+            <span style={{ color: COLORS.textSoft, fontSize: 11 }}>{t("agora.tradingRoom.editor.versionCount", { count: versions.length })}</span>
           </div>
 
           {versionError ? (
@@ -1182,20 +1239,22 @@ export function WorkspaceGridEditor({
                 >
                   <div>
                     <div style={{ color: COLORS.text, fontSize: 12, fontWeight: 700 }}>
-                      v{version.dashboardVersion} · {version.changeSummary || "Dashboard revision"}
+                      v{version.dashboardVersion} · {version.changeSummary || t("agora.tradingRoom.editor.versionFallbackSummary")}
                     </div>
                     <div style={{ color: COLORS.muted, fontSize: 11 }}>
-                      {version.createdAt} · by{" "}
-                      {version.generatedBy === "trading_servant"
-                        ? "交易僕人 (Servant)"
-                        : version.generatedBy === "user_modified"
-                        ? "使用者 (User)"
-                        : version.generatedBy}
+                      {t("agora.tradingRoom.editor.versionBy", {
+                        time: version.createdAt,
+                        actor: version.generatedBy === "trading_servant"
+                          ? t("agora.tradingRoom.editor.actorServant")
+                          : version.generatedBy === "user_modified"
+                          ? t("agora.tradingRoom.editor.actorUser")
+                          : t("agora.tradingRoom.editor.actorOther", { actor: version.generatedBy }),
+                      })}
                     </div>
                   </div>
                   <div style={{ alignItems: "center", display: "flex", gap: 6 }}>
                     {isCurrent ? (
-                      <span style={{ color: COLORS.accent, fontSize: 11, fontWeight: 800 }}>current</span>
+                      <span style={{ color: COLORS.accent, fontSize: 11, fontWeight: 800 }}>{t("agora.tradingRoom.editor.currentVersion")}</span>
                     ) : (
                       <button
                         data-testid={`workspace-rollback-${version.id}`}
@@ -1204,7 +1263,7 @@ export function WorkspaceGridEditor({
                         style={secondaryButtonStyle}
                         type="button"
                       >
-                        Rollback
+                        {t("agora.tradingRoom.editor.rollback")}
                       </button>
                     )}
                   </div>
@@ -1225,7 +1284,7 @@ export function WorkspaceGridEditor({
               padding: 14,
             }}
           >
-            <strong style={{ color: COLORS.text, fontSize: 13 }}>Personalization telemetry</strong>
+            <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.personalizationTelemetry")}</strong>
             <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
               {events.map((event) => (
                 <div

@@ -281,7 +281,7 @@ describe("WorkspaceGridEditor component", () => {
 
     expect(screen.getByText("Winner Branch Test")).toBeTruthy();
     expect(screen.getByText("ready")).toBeTruthy();
-    expect(screen.getByText("資料切齊: 2026-07-14T02:10:00Z")).toBeTruthy();
+    expect(screen.getByText("資料截止: 2026-07-14T02:10:00Z")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy();
   });
 
@@ -342,12 +342,57 @@ describe("WorkspaceGridEditor component", () => {
       />,
     );
 
-    expect(screen.getByTestId("chart-renderer-builtin")).toBeTruthy();
-    expect(screen.getByText("EVENT_ID")).toBeTruthy();
-    expect(screen.getByText("INSTRUMENT")).toBeTruthy();
-    expect(screen.getByText("STATUS")).toBeTruthy();
-    expect(screen.getByText("evt-001")).toBeTruthy();
-    expect(screen.getByText("AAPL")).toBeTruthy();
+    // V11 View A decision queue: entry, add, reduce and exit lanes render
+    // together inside the generated view, fed by the live event list.
+    const queue = screen.getByTestId("decision-queue-widget");
+    expect(queue).toBeTruthy();
+    for (const lane of ["entry", "add", "reduce", "exit"]) {
+      expect(screen.getByTestId(`decision-queue-lane-${lane}`)).toBeTruthy();
+    }
+    expect(screen.getByTestId("decision-queue-lane-entry-count").textContent).toBe("1");
+    expect(screen.getByTestId("decision-queue-lane-exit-count").textContent).toBe("0");
+    const item = screen.getByTestId("decision-queue-item-evt-001");
+    expect(item.textContent).toContain("AAPL");
+    expect(item.textContent).toContain("已觸發");
+    expect(screen.getByTestId("decision-queue-lane-entry").contains(item)).toBe(true);
+    for (const button of Array.from(queue.querySelectorAll("button"))) {
+      expect(button.textContent ?? "").not.toMatch(/下單|送單|order/i);
+    }
+  });
+
+  it("re-renders the in-view decision queue when the live event feed changes", () => {
+    const queueWorkspace: TradingRoomWorkspace = {
+      ...dummyWorkspace,
+      views: [{
+        ...dummyWorkspace.views[0],
+        widgets: [{
+          ...dummyWorkspace.views[0].widgets[0],
+          id: "widget-queue",
+          widgetType: "signal_decision_queue",
+          dataSource: "agora.trading.events",
+          dataAvailability: "complete",
+          chartSpec: {
+            spec_version: "1.0",
+            kind: "table",
+            encodings: {
+              x: { field: "event_id", type: "nominal" },
+              y: { field: "instrument", type: "nominal" },
+              color: { field: "status", type: "nominal" },
+            },
+          },
+        }],
+      }],
+    };
+    const { rerender } = render(
+      <WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={queueWorkspace} streamMode="live" workspaceEvents={[]} />,
+    );
+    expect(screen.getByTestId("decision-queue-widget").getAttribute("data-stream-mode")).toBe("live");
+    expect(screen.getByTestId("decision-queue-lane-entry-count").textContent).toBe("0");
+    rerender(
+      <WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={queueWorkspace} streamMode="live" workspaceEvents={mockEvents} />,
+    );
+    expect(screen.getByTestId("decision-queue-lane-entry-count").textContent).toBe("1");
+    expect(screen.getByTestId("decision-queue-item-evt-001")).toBeTruthy();
   });
 
   it("projects widgets as ordered stacked cards below 900px without changing desktop coordinates", () => {
@@ -366,13 +411,38 @@ describe("WorkspaceGridEditor component", () => {
     expect(screen.queryByTestId("workspace-stacked-view")).toBeNull();
   });
 
-  it("opens the revision drawer when clicking header ask-servant button", async () => {
+  it("asks the trader to pick a widget when the header ask-servant button has no selection", () => {
     render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
-    const trigger = screen.getByTestId("workspace-header-ask-servant");
-    fireEvent.click(trigger);
+    fireEvent.click(screen.getByTestId("workspace-header-ask-servant"));
+
+    expect(screen.getByTestId("workspace-error").textContent).toBe(
+      "請先點選要交代僕人修改的元件，再按「交代僕人」。",
+    );
+    expect(screen.queryByTestId("workspace-widget-revision-drawer")).toBeNull();
+  });
+
+  it("opens the revision drawer for the selected widget from the header ask-servant button", async () => {
+    render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    fireEvent.click(screen.getByTestId("workspace-widget-widget-1"));
+    expect(screen.getByTestId("workspace-selected-widget").textContent).toContain("Strategy Status");
+    expect(screen.queryByTestId("workspace-widget-revision-drawer")).toBeNull();
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+
+    fireEvent.click(screen.getByTestId("workspace-header-ask-servant"));
 
     expect(await screen.findByTestId("workspace-widget-revision-drawer")).toBeTruthy();
     expect(screen.getByText("交代僕人修改 Widget")).toBeTruthy();
+    expect(screen.getByTestId("workspace-widget-revision-drawer").textContent).toContain("widget-1");
+  });
+
+  it("opens directly in edit mode with zh-TW edit, version and rollback labels", () => {
+    render(<WorkspaceGridEditor initialEditMode initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
+
+    expect(screen.getByTestId("workspace-edit-mode-toggle").textContent).toBe("完成調整");
+    expect(screen.getByTestId("workspace-edit-toolbar")).toBeTruthy();
+    expect(screen.getByTestId("workspace-header-version-history").textContent).toBe("版本紀錄");
+    expect(screen.getByTestId("workspace-header-ask-servant").textContent).toBe("交代僕人");
   });
 
   it("opens the widget library dialog in edit mode and adds a registered widget", async () => {

@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TradeDecisionCard } from "./TradeDecisionCard";
 import type { TradingDecisionEvent } from "@/lib/bff-v1/agora/tradingRoom";
 
-vi.mock("@/lib/bff-v1/agora/tradingIntents", () => ({
-  getTradingIntent: vi.fn(), submitTradingIntentHandoff: vi.fn(), withdrawTradingIntent: vi.fn(),
-}));
+vi.mock("@/lib/bff-v1/agora/tradingIntents", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bff-v1/agora/tradingIntents")>();
+  return {
+    getTradingIntent: vi.fn(), submitTradingIntentHandoff: vi.fn(), withdrawTradingIntent: vi.fn(),
+    tradingIntentProgress: actual.tradingIntentProgress,
+  };
+});
 import { getTradingIntent, submitTradingIntentHandoff, withdrawTradingIntent } from "@/lib/bff-v1/agora/tradingIntents";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 const allowedAccess = vi.mocked(useAgoraWriteAccess).getMockImplementation()!();
@@ -52,6 +56,7 @@ vi.mock("react-router-dom", () => ({
 }));
 
 import { decideOnEvent } from "@/lib/bff-v1/agora/tradingRoom";
+import "@/i18n";
 const mockDecideOnEvent = decideOnEvent as ReturnType<typeof vi.fn>;
 
 afterEach(() => {
@@ -128,7 +133,7 @@ describe("TradeDecisionCard", () => {
   it("displays event kind badge with correct label", () => {
     render(<TradeDecisionCard event={baseEvent} />);
     const badge = screen.getByTestId("trade-decision-card-kind-evt-001");
-    expect(badge.textContent).toBe("Entry");
+    expect(badge.textContent).toBe("進場");
   });
 
   it("displays symbol, asset class and venue in the header", () => {
@@ -141,7 +146,7 @@ describe("TradeDecisionCard", () => {
   it("displays state label", () => {
     render(<TradeDecisionCard event={baseEvent} />);
     const stateEl = screen.getByTestId("trade-decision-card-state-evt-001");
-    expect(stateEl.textContent).toBe("Pending Review");
+    expect(stateEl.textContent).toBe("待複核");
   });
 
   it("displays confidence section (evidence quality) distinct from probability", () => {
@@ -175,10 +180,10 @@ describe("TradeDecisionCard", () => {
   it("displays all four EV fields: gross, cost, net, downside", () => {
     render(<TradeDecisionCard event={baseEvent} />);
     const evEl = screen.getByTestId("trade-decision-card-ev-evt-001");
-    expect(evEl.textContent).toContain("Gross");
-    expect(evEl.textContent).toContain("Cost");
-    expect(evEl.textContent).toContain("Net");
-    expect(evEl.textContent).toContain("Downside");
+    expect(evEl.textContent).toContain("毛額");
+    expect(evEl.textContent).toContain("成本");
+    expect(evEl.textContent).toContain("淨額");
+    expect(evEl.textContent).toContain("下檔");
   });
 
   it("colors net EV green for positive values", () => {
@@ -224,7 +229,7 @@ describe("TradeDecisionCard", () => {
   it("displays invalidation state and conditions", () => {
     render(<TradeDecisionCard event={baseEvent} />);
     const invEl = screen.getByTestId("trade-decision-card-invalidation-evt-001");
-    expect(invEl.textContent).toContain("valid");
+    expect(invEl.textContent).toContain("有效");
     expect(invEl.textContent).toContain("Price closes below 200-day MA");
   });
 
@@ -233,7 +238,7 @@ describe("TradeDecisionCard", () => {
     const sugEl = screen.getByTestId("trade-decision-card-suggested-evt-001");
     expect(sugEl.textContent).toContain("enter");
     expect(sugEl.textContent).toContain("medium");
-    expect(sugEl.textContent).toContain("non-binding");
+    expect(sugEl.textContent).toContain("非約束性");
   });
 
   it("displays no_order_route_proof", () => {
@@ -382,7 +387,7 @@ describe("governed intent actions", () => {
     const view = render(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
     fireEvent.click(screen.getByRole("button", { name: "修改部位" }));
     fireEvent.change(screen.getByTestId("modify-proposal-id-evt-001"), { target: { value: "proposal-1" } });
-    fireEvent.change(screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits..."), { target: { value: "reduce" } });
+    fireEvent.change(screen.getByPlaceholderText("說明規模、界線或限制的調整…"), { target: { value: "reduce" } });
     vi.mocked(useAgoraWriteAccess).mockReturnValue({ ...allowedAccess, writeAllowed: false });
     view.rerender(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
     expect(screen.getByTestId("modify-linkage-submit-evt-001")).toBeDisabled();
@@ -394,7 +399,7 @@ describe("governed intent actions", () => {
     render(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
     fireEvent.click(screen.getByRole("button", { name: "修改部位" }));
     fireEvent.change(screen.getByTestId("modify-proposal-id-evt-001"), { target: { value: "proposal-1" } });
-    fireEvent.change(screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits..."), { target: { value: "reduce" } });
+    fireEvent.change(screen.getByPlaceholderText("說明規模、界線或限制的調整…"), { target: { value: "reduce" } });
     fireEvent.click(screen.getByTestId("modify-linkage-submit-evt-001"));
     await screen.findByText("狀態：待送出");
     expect(decideOnEvent).toHaveBeenCalledWith("evt-001", expect.objectContaining({ decision: "modify",
@@ -439,3 +444,51 @@ describe("decision resource versions", () => {
     expect(screen.getByRole("button", { name: "撤回" })).toBeDisabled();
   });
 });
+
+describe("governed intent progress (read-only, zh-TW)", () => {
+  it("shows progress steps and owner-reported paper fills without any order action", async () => {
+    vi.mocked(getTradingIntent).mockResolvedValue({
+      ...intentDetail,
+      status: "submitted",
+      lifecycle_state: "submitted",
+      allowedActions: { submit_handoff: false, withdraw: true },
+      handoffs: [{
+        handoff_id: "h-paper", requested_stage: "paper", state: "accepted",
+        paper_fills: [{ fill_id: "pf-1", symbol: "2330.TW", side: "buy", quantity: 1000, price: 912.5, filled_at: "2026-11-27T02:00:00Z" }],
+      }],
+    });
+    const event = { ...baseEvent, state: "decided" as const, intent_ref: "intent-1" };
+    render(<TradeDecisionCard event={event} etag='"v2"' />);
+
+    const progress = await screen.findByTestId("trade-intent-progress-intent-1");
+    expect(progress.textContent).toContain("受治理意圖進度（唯讀）");
+    for (const step of ["created", "submitted", "accepted", "paper_running", "paper_filled"]) {
+      expect(screen.getByTestId(`trade-intent-step-${step}`).getAttribute("data-reached")).toBe("true");
+    }
+    expect(screen.getByTestId("trade-intent-paper-fill-pf-1").textContent).toContain("2330.TW");
+    expect(progress.textContent).toContain("紙上成交（負責服務回報，非實際成交）");
+    expect(progress.querySelectorAll("button")).toHaveLength(0);
+    const section = screen.getByTestId("trade-intent-status-intent-1");
+    for (const button of Array.from(section.querySelectorAll("button"))) {
+      expect(button.textContent ?? "").not.toMatch(/下單|送單|order/i);
+    }
+  });
+
+  it("says when the paper owner has not reported fills", async () => {
+    const event = { ...baseEvent, state: "decided" as const, intent_ref: "intent-1" };
+    render(<TradeDecisionCard event={event} etag='"v2"' />);
+    expect(await screen.findByText("紙上執行服務尚未回報成交。")).toBeTruthy();
+    expect(screen.getByTestId("trade-intent-step-created").getAttribute("data-reached")).toBe("true");
+    expect(screen.getByTestId("trade-intent-step-paper_filled").getAttribute("data-reached")).toBe("false");
+  });
+
+  it("renders decision card section titles in zh-TW", () => {
+    render(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
+    for (const title of ["信心（證據品質）", "機率（結果預測）", "理由", "失效條件", "建議動作（非約束性）"]) {
+      expect(screen.getByText(title)).toBeTruthy();
+    }
+    expect(screen.queryByText("Rationale")).toBeNull();
+    expect(screen.queryByText("Invalidation")).toBeNull();
+  });
+});
+
