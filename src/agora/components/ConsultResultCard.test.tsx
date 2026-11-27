@@ -46,18 +46,18 @@ describe("ConsultResultCard", () => {
 
   it("shows status badge from payload.status", () => {
     renderCard();
-    expect(screen.getByText("Completed")).toBeDefined();
+    expect(screen.getByText("已完成")).toBeDefined();
   });
 
   it("shows freshness badge", () => {
     renderCard();
-    expect(screen.getByText("Freshness")).toBeDefined();
+    expect(screen.getByText("新鮮度")).toBeDefined();
     expect(screen.getByText("fresh")).toBeDefined();
   });
 
   it("renders participant persona refs", () => {
     renderCard();
-    expect(screen.getByText("Participants")).toBeDefined();
+    expect(screen.getByText("參與者")).toBeDefined();
     expect(screen.getByText("persona-risk-a")).toBeDefined();
     expect(screen.getByText("persona-risk-b")).toBeDefined();
   });
@@ -88,7 +88,7 @@ describe("ConsultResultCard", () => {
       payload: { ...baseCard.payload, disagreements: [] },
     };
     renderCard(card);
-    expect(screen.queryByText("Disagreements")).toBeNull();
+    expect(screen.queryByText("歧異")).toBeNull();
   });
 
   it("does not show risk notes section when missing", () => {
@@ -97,7 +97,7 @@ describe("ConsultResultCard", () => {
       payload: { ...baseCard.payload, risk_notes: undefined },
     };
     renderCard(card);
-    expect(screen.queryByText("Risk Notes")).toBeNull();
+    expect(screen.queryByText("風險備註")).toBeNull();
   });
 
   it("renders Ask Servant button when onContinueDiscussion provided", () => {

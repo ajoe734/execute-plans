@@ -15,6 +15,7 @@ import type {
   WorkshopCard as GeneratedWorkshopCard,
   StrategyReadinessAssessment as GeneratedWorkshopReadinessAssessment,
   WorkshopStreamEvent as GeneratedWorkshopStreamEvent,
+  WorkshopVersionResource,
   WorkshopVersionListEnvelope,
   WorkshopVersionCreateEnvelope,
   WorkshopVersionSelectEnvelope,
@@ -29,6 +30,7 @@ import type {
 
 // Re-export generated v1.13 request/envelope DTO types
 export type {
+  WorkshopVersionResource,
   WorkshopVersionListEnvelope,
   WorkshopVersionCreateEnvelope,
   WorkshopVersionSelectEnvelope,
@@ -46,6 +48,7 @@ export type {
 export type WorkshopCardType =
   | "user_strategy_description"
   | "servant_reconstruction"
+  | "strategy_reconstruction"
   | "completeness_update"
   | "missing_definition"
   | "next_question"
@@ -146,12 +149,136 @@ export interface WorkshopCard extends Omit<GeneratedWorkshopCard, "card_type" | 
 export type WorkshopReadinessAssessment = GeneratedWorkshopReadinessAssessment;
 export type WorkshopStreamEvent = GeneratedWorkshopStreamEvent;
 
+export type WorkshopV10BlockId =
+  | "market_scope"
+  | "insider_branch_mapping"
+  | "winner_branch_scoring"
+  | "migration_reverse_flow"
+  | "event_lead"
+  | "signal_formation"
+  | "entry_holding"
+  | "add_reduce_exit"
+  | "sizing_leverage"
+  | "cost_liquidity_capacity"
+  | "validation_backtest_refutation"
+  | "monitoring_update";
+
+export type WorkshopV10BlockState =
+  | "confirmed"
+  | "inferred"
+  | "missing"
+  | "weak"
+  | "conflict";
+
+export interface WorkshopBlockCitation {
+  ref_type?: string;
+  ref_id?: string;
+  message_number?: number;
+  sequence_no?: number;
+  turn_index?: number;
+  turn_id?: string;
+  quote?: string;
+  excerpt?: string;
+  decision_id?: string | null;
+  option_id?: string | null;
+  summary?: string;
+}
+
+export interface WorkshopStrategyBlock {
+  order?: number;
+  block_id: string;
+  block_key?: string;
+  block_name?: string;
+  v10_block_id?: WorkshopV10BlockId;
+  strategy_map_key?: string;
+  mapped_dimension?: string;
+  name?: string;
+  title?: string;
+  title_zh?: string;
+  label_en?: string;
+  state: WorkshopV10BlockState;
+  state_label_zh?: "已確認" | "助理推定" | "尚缺" | "薄弱" | "衝突";
+  note?: string | null;
+  summary?: string | null;
+  missing_definitions?: string[];
+  source_citations?: WorkshopBlockCitation[];
+  citations?: WorkshopBlockCitation[];
+}
+
+export interface WorkshopDecisionOption {
+  option_id: string;
+  id?: string;
+  label: string;
+  text?: string;
+  summary?: string | null;
+  description?: string | null;
+  patch_value?: string | null;
+  is_default?: boolean;
+}
+
+export interface WorkshopServantDefault {
+  option_id: string;
+  label: string;
+  summary?: string;
+  provisional_assumption?: string;
+}
+
+export interface WorkshopNextDecision {
+  decision_id?: string;
+  question_id?: string;
+  block_id?: string;
+  question?: string;
+  prompt?: string;
+  text?: string;
+  why_now?: string;
+  why_high_value?: string;
+  why_it_matters?: string;
+  rationale?: string | null;
+  resolves?: string[];
+  target_blocks?: string[];
+  impacted_blocks?: string[];
+  options: WorkshopDecisionOption[];
+  answer_options?: string[];
+  default_option_id?: string | null;
+  servant_default?: WorkshopServantDefault | null;
+  score_total?: number;
+  freeform_allowed?: boolean;
+  defer_allowed?: boolean;
+}
+
+export interface WorkshopDecisionRequest {
+  decision_id?: string | null;
+  question_id?: string | null;
+  option_id?: string | null;
+  selected_option_id?: string | null;
+  option_label?: string | null;
+  custom_response?: string | null;
+  use_servant_default?: boolean;
+  resolves?: string[];
+  trace_id?: string | null;
+  correlation_id?: string | null;
+}
+
+export interface WorkshopDecisionReceipt {
+  event_id: string;
+  sequence_no: number;
+  decision_id: string;
+  question_id: string;
+  question: string;
+  response_kind?: "option" | "freeform";
+  option_id: string;
+  option_label: string;
+  used_servant_default: boolean;
+  resolves: string[];
+  target_blocks: string[];
+}
+
 /**
  * Store-level shape returned by the live completeness endpoint.
  *
  * The endpoint predates the canonical StrategyCompleteness DTO and returns the
- * persisted snapshot fields directly. Keep that contract explicit instead of
- * asserting that `overall_grade` and `dimensions` are present at runtime.
+ * persisted snapshot fields directly, enriched with V10 twelve blocks and the
+ * next high-value decision (AGORA-WORKSHOP-TWELVE-BLOCK-COMPLETENESS-20261127).
  */
 export interface WorkshopCompletenessSnapshot {
   snapshot_id: string;
@@ -161,6 +288,14 @@ export interface WorkshopCompletenessSnapshot {
   blocking_items_json: unknown[];
   next_question_json?: Record<string, unknown>;
   created_at: string;
+  strategy_family?: "winner_branch" | "generic";
+  is_branch_strategy?: boolean;
+  overall_grade?: StrategyCompleteness["overall_grade"];
+  research_ready?: boolean;
+  dimensions?: StrategyCompleteness["dimensions"];
+  blocks?: WorkshopStrategyBlock[];
+  twelve_blocks?: WorkshopStrategyBlock[];
+  next_decision?: WorkshopNextDecision | null;
 }
 
 export type WorkshopCompleteness = StrategyCompleteness | WorkshopCompletenessSnapshot;
@@ -174,9 +309,15 @@ export type WorkshopCompleteness = StrategyCompleteness | WorkshopCompletenessSn
  */
 export interface WorkshopReconstructionResponse {
   data: {
-    reconstruction_id: string;
+    reconstruction_id?: string;
+    [key: string]: unknown;
+  } | null;
+  meta?: {
+    job_id?: string;
+    job_status?: "queued" | "running" | "completed" | "replayed" | "failed" | "superseded" | string;
+    registry_draft_ref?: Record<string, unknown> | null;
+    [key: string]: unknown;
   };
-  meta?: Record<string, unknown>;
 }
 
 // ─── Response normalization ──────────────────────────────────────────────────
@@ -362,6 +503,27 @@ export async function getWorkshopCompleteness(
   }
 }
 
+// ─── Decisions (V10 §4.1) ─────────────────────────────────────────────────────
+
+export async function postWorkshopDecision(
+  workshopId: string,
+  body: WorkshopDecisionRequest,
+  precondition: { ifMatch: string; idempotencyKey?: string },
+): Promise<WorkshopDecisionReceipt> {
+  const ifMatch = precondition.ifMatch.trim();
+  if (!ifMatch) {
+    throw new Error("Workshop decision requires the current If-Match precondition.");
+  }
+  const response = await bffFetch<unknown>({
+    method: "POST",
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/decisions`,
+    body,
+    idempotencyKey: precondition.idempotencyKey,
+    headers: { "If-Match": ifMatch },
+  });
+  return entityFrom<WorkshopDecisionReceipt>(response);
+}
+
 // ─── Versions ─────────────────────────────────────────────────────────────────
 
 export async function listWorkshopVersions(workshopId: string): Promise<WorkshopVersionListEnvelope> {
@@ -374,22 +536,33 @@ export async function listWorkshopVersions(workshopId: string): Promise<Workshop
 export async function createWorkshopVersion(
   workshopId: string,
   body: WorkshopVersionCreateRequest,
+  options?: { ifMatch?: string; idempotencyKey?: string },
 ): Promise<WorkshopVersionCreateEnvelope> {
+  if (!Array.isArray(body?.patch) || body.patch.length === 0) {
+    throw new Error("Version patch requires at least one non-empty patch operation.");
+  }
+  const ifMatch = options?.ifMatch?.trim();
   return bffFetch<WorkshopVersionCreateEnvelope>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/versions`,
     body,
+    idempotencyKey: options?.idempotencyKey,
+    headers: ifMatch ? { "If-Match": ifMatch } : undefined,
   });
 }
 
 export async function selectWorkshopVersion(
   workshopId: string,
-  version: number,
+  version: number | string,
+  options?: { ifMatch?: string; idempotencyKey?: string },
 ): Promise<WorkshopVersionSelectEnvelope> {
+  const ifMatch = options?.ifMatch?.trim();
   return bffFetch<WorkshopVersionSelectEnvelope>({
     method: "POST",
-    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/versions/${version}/select`,
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/versions/${encodeURIComponent(String(version))}/select`,
     body: {},
+    idempotencyKey: options?.idempotencyKey,
+    headers: ifMatch ? { "If-Match": ifMatch } : undefined,
   });
 }
 

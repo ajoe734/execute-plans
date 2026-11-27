@@ -4,8 +4,10 @@ import {
   getWorkshop,
   getWorkshopWithEtag,
   postWorkshopMessage,
+  postWorkshopDecision,
   openWorkshopConsultation,
   createWorkshopVersion,
+  selectWorkshopVersion,
   concludeWorkshop,
   getWorkshopCompleteness,
   getWorkshopReadiness,
@@ -16,11 +18,16 @@ import {
   reconstructWorkshopStrategy,
   type WorkshopCard,
   type WorkshopCompleteness,
+  type WorkshopDecisionRequest,
   type WorkshopReadinessAssessment,
   type WorkshopStreamEvent,
   type WorkshopVersionListEnvelope,
+  type WorkshopVersionResource,
 } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
+import { VersionCompareCard } from "@/agora/components/VersionCompareCard";
+import { workshopCopy } from "@/agora/components/workshopCardUtils";
+import { consumePendingInitialReconstruction } from "./WorkshopListView";
 import {
   interaction,
   type ContextBinding,
@@ -448,6 +455,85 @@ function sameOrderedIds(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
+function isReconstructionCard(card: WorkshopCard): boolean {
+  return card.card_type === "strategy_reconstruction" || card.card_type === "servant_reconstruction";
+}
+
+function extractFailureReasonFromCard(card: WorkshopCard | undefined): string | null {
+  if (!card || card.status !== "failed") return null;
+  const payload = recordFrom(card.payload);
+  const direct = payload.failure_reason ?? recordFrom(payload.error).reason;
+  return typeof direct === "string" && direct.trim() ? direct.trim() : "provider_error";
+}
+
+function buildVersionCompareCard(
+  workshopId: string,
+  baseResource: WorkshopVersionResource,
+  candidateResource: WorkshopVersionResource,
+): WorkshopCard {
+  const baseMeta = recordFrom(baseResource.strategy_spec?.entry?.metadata);
+  const candMeta = recordFrom(candidateResource.strategy_spec?.entry?.metadata);
+  const baseSpec = recordFrom(baseMeta.strategy_spec ?? baseMeta);
+  const candSpec = recordFrom(candMeta.strategy_spec ?? candMeta);
+  const allKeys = Array.from(new Set([...Object.keys(baseSpec), ...Object.keys(candSpec)]));
+  const fieldDiffs: Array<{
+    path: string;
+    change_kind: "added" | "removed" | "changed" | "unchanged";
+    candidate_version_id: string;
+    materiality: "high" | "medium" | "low";
+  }> = allKeys
+    .filter((key) => JSON.stringify(baseSpec[key]) !== JSON.stringify(candSpec[key]))
+    .map((key) => ({
+      path: key,
+      change_kind: !(key in baseSpec)
+        ? "added"
+        : !(key in candSpec)
+          ? "removed"
+          : "changed",
+      candidate_version_id: candidateResource.version.workshop_version_id,
+      materiality: "medium",
+    }));
+  if (fieldDiffs.length === 0) {
+    fieldDiffs.push({
+      path: "strategy_spec.document_sha256",
+      change_kind:
+        baseResource.version.document_sha256 === candidateResource.version.document_sha256
+          ? "unchanged"
+          : "changed",
+      candidate_version_id: candidateResource.version.workshop_version_id,
+      materiality: "low",
+    });
+  }
+  return {
+    spec_version: "1.0",
+    card_id: `vc-${baseResource.version.workshop_version_id}-${candidateResource.version.workshop_version_id}`,
+    card_type: "version_compare",
+    workshop_id: workshopId,
+    sequence_no: candidateResource.version.sequence_no ?? 1,
+    status: "informational",
+    title: `${workshopCopy("agora.workshop.session.compareVersionsTitle", "版本差異比較")}: v${baseResource.version.sequence_no} vs v${candidateResource.version.sequence_no}`,
+    payload: {
+      base_version: {
+        workshop_version_id: baseResource.version.workshop_version_id,
+        strategy_spec_registry_id: baseResource.version.strategy_spec_registry_id,
+        label: `v${baseResource.version.sequence_no} (${baseResource.version.workshop_version_id})`,
+      },
+      candidate_versions: [
+        {
+          workshop_version_id: candidateResource.version.workshop_version_id,
+          strategy_spec_registry_id: candidateResource.version.strategy_spec_registry_id,
+          label: `v${candidateResource.version.sequence_no} (${candidateResource.version.workshop_version_id})`,
+        },
+      ],
+      field_diffs: fieldDiffs,
+      metric_diffs: [],
+      risk_diffs: [],
+      readiness_diffs: [],
+    },
+    created_at: candidateResource.version.created_at,
+  };
+}
+
 const MESSAGE_EVENT_READBACK_DEADLINE_MS = 8_000;
 const MESSAGE_EVENT_READBACK_BACKOFF_MS = [250, 500, 1_000, 2_000, 4_000] as const;
 
@@ -616,7 +702,12 @@ function WorkshopDeliberativeMeetingsSection({
         return Array.from(byId.values());
       });
       setMeetingsUnavailable(null);
-    } else if (res.reason !== "RESOURCE_NOT_FOUND" && res.reason !== "no_persona_meetings") {
+    } else if (
+      res.reason !== "RESOURCE_NOT_FOUND" &&
+      res.reason !== "no_persona_meetings" &&
+      res.reason !== "no_trader_meetings" &&
+      res.reason !== "no_meetings"
+    ) {
       setMeetingsUnavailable({ reason: res.reason, owner: res.owner });
     } else {
       setMeetingsUnavailable(null);
@@ -880,7 +971,10 @@ function WorkshopDeliberativeMeetingsSection({
         </ul>
       ) : (
         <p className="text-[11px] text-muted-foreground" data-testid="workshop-convened-meetings-empty">
-          No deliberative meetings convened in this workshop session yet.
+          {workshopCopy(
+            "agora.workshop.meetings.emptyNoTraderMeetings",
+            "目前尚無審議會議紀錄（當策略完成初步建模並觸發週期或條件審議時，會議紀錄將顯示於此）。",
+          )}
         </p>
       )}
     </section>
@@ -916,7 +1010,13 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
   const [personaReceiptState, setPersonaReceiptState] = useState<"none" | "submitting" | "succeeded" | "failed" | "degraded">("none");
   const [reconstructionState, setReconstructionState] = useState<"none" | "admitted" | "completed" | "failed">("none");
   const [reconstructionId, setReconstructionId] = useState<string | null>(null);
+  const [reconstructionFailureReason, setReconstructionFailureReason] = useState<string | null>(null);
+  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
   const [strategySpecIdentity, setStrategySpecIdentity] = useState<StrategySpecIdentity | null>(null);
+  const [versionResources, setVersionResources] = useState<WorkshopVersionResource[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [compareCandidateVersionId, setCompareCandidateVersionId] = useState<string | null>(null);
+  const [personaAddonEnabled, setPersonaAddonEnabled] = useState(true);
 
   // Custom states for interaction
   const [selectedMode, setSelectedMode] = useState<WorkshopInteractionMode>(entry?.mode ?? "ask");
@@ -981,15 +1081,39 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         .catch(() => { if (!cancelled) setReadiness(null); }),
       listWorkshopCards(workshopId)
         .then((items) => {
-          if (!cancelled) dispatch({ type: "RESET", cards: items || [] });
+          if (cancelled) return;
+          const safeItems = items || [];
+          dispatch({ type: "RESET", cards: safeItems });
+          const latestReconstruction = safeItems
+            .filter(isReconstructionCard)
+            .sort((left, right) => right.sequence_no - left.sequence_no)[0];
+          if (latestReconstruction?.status === "completed") {
+            setReconstructionState("completed");
+            setReconstructionFailureReason(null);
+          } else if (latestReconstruction?.status === "failed") {
+            setReconstructionState("failed");
+            setReconstructionFailureReason(extractFailureReasonFromCard(latestReconstruction));
+          } else if (latestReconstruction?.status === "running") {
+            setReconstructionState("admitted");
+          }
         })
         .catch(() => { if (!cancelled) dispatch({ type: "RESET", cards: [] }); }),
       listWorkshopEvents(workshopId)
         .then((response) => { if (!cancelled) setWorkshopEvents(response?.items ?? []); })
         .catch(() => { if (!cancelled) setWorkshopEvents([]); }),
       listWorkshopVersions(workshopId)
-        .then((versions) => { if (!cancelled) setStrategySpecIdentity(canonicalStrategySpecIdentity(versions)); })
-        .catch(() => { if (!cancelled) setStrategySpecIdentity(null); }),
+        .then((versions) => {
+          if (cancelled) return;
+          setStrategySpecIdentity(canonicalStrategySpecIdentity(versions));
+          setVersionResources(versions?.data?.versions ?? []);
+          setSelectedVersionId(versions?.data?.selected_version_id ?? null);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setStrategySpecIdentity(null);
+          setVersionResources([]);
+          setSelectedVersionId(null);
+        }),
     ]).finally(() => {
       if (!cancelled) setSessionLoading(false);
     });
@@ -1130,12 +1254,14 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
       .then((items) => {
         dispatch({ type: "RESET", cards: items });
         const latestReconstruction = items
-          .filter((card) => card.card_type === "servant_reconstruction")
+          .filter(isReconstructionCard)
           .sort((left, right) => right.sequence_no - left.sequence_no)[0];
         if (latestReconstruction?.status === "completed") {
           setReconstructionState("completed");
+          setReconstructionFailureReason(null);
         } else if (latestReconstruction?.status === "failed") {
           setReconstructionState("failed");
+          setReconstructionFailureReason(extractFailureReasonFromCard(latestReconstruction));
         } else if (latestReconstruction?.status === "running") {
           setReconstructionState("admitted");
         }
@@ -1152,12 +1278,86 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
   const refreshStrategySpec = useCallback(() => {
     try {
       void listWorkshopVersions(workshopId)
-        .then((versions) => { if (activeWorkshopIdRef.current === workshopId) setStrategySpecIdentity(canonicalStrategySpecIdentity(versions)); })
-        .catch(() => { if (activeWorkshopIdRef.current === workshopId) setStrategySpecIdentity(null); });
+        .then((versions) => {
+          if (activeWorkshopIdRef.current !== workshopId) return;
+          setStrategySpecIdentity(canonicalStrategySpecIdentity(versions));
+          setVersionResources(versions?.data?.versions ?? []);
+          setSelectedVersionId(versions?.data?.selected_version_id ?? null);
+        })
+        .catch(() => {
+          if (activeWorkshopIdRef.current !== workshopId) return;
+          setStrategySpecIdentity(null);
+          setVersionResources([]);
+          setSelectedVersionId(null);
+        });
     } catch {
-      if (activeWorkshopIdRef.current === workshopId) setStrategySpecIdentity(null);
+      if (activeWorkshopIdRef.current === workshopId) {
+        setStrategySpecIdentity(null);
+        setVersionResources([]);
+        setSelectedVersionId(null);
+      }
     }
   }, [workshopId]);
+
+  const handleRetryReconstruction = useCallback(async () => {
+    if (!workshopId) return;
+    setReconstructionState("admitted");
+    setReconstructionId(null);
+    setReconstructionFailureReason(null);
+    try {
+      const reconstruction = await reconstructWorkshopStrategy(workshopId);
+      setReconstructionId(reconstructionIdentityFrom(reconstruction));
+      setReconstructionState("completed");
+      setReconstructionFailureReason(null);
+      refreshCards();
+      refreshCompleteness();
+      refreshReadiness();
+      refreshEvents();
+      refreshStrategySpec();
+    } catch (err) {
+      setReconstructionId(null);
+      setReconstructionState("failed");
+      const errObj = recordFrom(err);
+      const cause = typeof errObj.cause === "string" && errObj.cause.trim()
+        ? errObj.cause.trim()
+        : err instanceof Error && err.message.trim()
+          ? err.message.trim()
+          : "provider_error";
+      setReconstructionFailureReason(cause);
+      refreshCards();
+    }
+  }, [workshopId, refreshCards, refreshCompleteness, refreshEvents, refreshReadiness, refreshStrategySpec]);
+
+  useEffect(() => {
+    if (!workshop || !workshopId) return;
+    if (consumePendingInitialReconstruction(workshopId)) {
+      void handleRetryReconstruction();
+    }
+  }, [workshop, workshopId, handleRetryReconstruction]);
+
+  const handleSubmitDecision = useCallback(
+    async (decision: WorkshopDecisionRequest) => {
+      if (!workshopId || decisionSubmitting || !writeAccess.interactionAllowed) return;
+      setDecisionSubmitting(true);
+      setSendError(null);
+      try {
+        const currentReadback = await getWorkshopWithEtag(workshopId);
+        const idempotencyKey = globalThis.crypto?.randomUUID
+          ? `decision-${globalThis.crypto.randomUUID()}`
+          : undefined;
+        await postWorkshopDecision(workshopId, decision, {
+          ifMatch: currentReadback.etag,
+          idempotencyKey,
+        });
+        await handleRetryReconstruction();
+      } catch (err) {
+        setSendError(err instanceof Error ? err.message : "Failed to submit decision");
+      } finally {
+        setDecisionSubmitting(false);
+      }
+    },
+    [workshopId, decisionSubmitting, writeAccess.interactionAllowed, handleRetryReconstruction],
+  );
 
   // SSE stream subscription — does not reconnect on every event
   useEffect(() => {
@@ -1281,19 +1481,42 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         // Strategy reconstruction
         setReconstructionState("admitted");
         setReconstructionId(null);
+        setReconstructionFailureReason(null);
         try {
           const reconstruction = await reconstructWorkshopStrategy(workshopId);
           setReconstructionId(reconstructionIdentityFrom(reconstruction));
           setReconstructionState("completed");
+          setReconstructionFailureReason(null);
           refreshCards();
+          refreshCompleteness();
+          refreshReadiness();
           refreshEvents();
           refreshStrategySpec();
-        } catch {
+        } catch (reconErr) {
           setReconstructionId(null);
           setReconstructionState("failed");
+          const errObj = recordFrom(reconErr);
+          const cause = typeof errObj.cause === "string" && errObj.cause.trim()
+            ? errObj.cause.trim()
+            : reconErr instanceof Error && reconErr.message.trim()
+              ? reconErr.message.trim()
+              : "provider_error";
+          setReconstructionFailureReason(cause);
         }
 
-        // Persona interaction
+        // Servant-first default: when no Personas are selected (or Persona add-on is off),
+        // complete the turn after durable servant message & strategy reconstruction.
+        const hasRequiredDeepLinkPersonas = Boolean(entry?.participantIds && entry.participantIds.length > 0);
+        if ((!personaAddonEnabled || pickerSelectionType === "none" || selectedParticipants.length === 0) && !hasRequiredDeepLinkPersonas) {
+          setComposerValue("");
+          refreshCards();
+          refreshEvents();
+          refreshCompleteness();
+          refreshReadiness();
+          return;
+        }
+
+        // Optional Persona interaction (or explicit deep-link Persona interaction)
         if (selectedParticipants.length === 0) {
           throw new Error("Choose at least one eligible Persona before submitting.");
         }
@@ -1415,6 +1638,8 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
     [
       workshopId,
       workshop,
+      personaAddonEnabled,
+      pickerSelectionType,
       selectedMode,
       selectedParticipants,
       sendLoading,
@@ -1436,19 +1661,27 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
   const composerInputDisabled = sendLoading
     || !writeAccess.interactionAllowed
     || workshop?.status === "concluded";
+  const hasRequiredDeepLinkPersonas = Boolean(entry?.participantIds && entry.participantIds.length > 0);
+  const requiresPersonaContext =
+    hasRequiredDeepLinkPersonas ||
+    (personaAddonEnabled && pickerSelectionType !== "none" && selectedParticipants.length > 0);
   const composerSubmitBlock = (() => {
     if (!writeAccess.interactionAllowed) return { code: "write_access_denied", message: writeAccess.interactionDisabledReason ?? "Persona interaction access is restricted." };
     if (workshop?.status === "concluded") return { code: "workshop_concluded", message: "This Workshop is concluded." };
     if (!workshop) return { code: "workshop_loading", message: "Loading the canonical Workshop before submission." };
     if (sendLoading) return { code: "submission_active", message: "Submitting the current Persona interaction." };
-    if (eligibilityLoading) return { code: "eligibility_loading", message: "Checking canonical Persona eligibility." };
-    if (eligibilityError) return { code: "eligibility_error", message: `Persona eligibility is unavailable: ${eligibilityError}` };
-    if (selectedParticipants.length === 0) return { code: "participants_empty", message: "Choose at least one eligible Persona before submitting." };
-    if (contextResolving) return { code: "context_resolving", message: "Resolving authoritative Workshop context." };
-    if (contextError) return { code: "context_error", message: `Authoritative context is unavailable: ${contextError}` };
-    if (!resolvedContext) return { code: "context_pending", message: "Waiting for authoritative Workshop context." };
-    if (selectedMode === "compare" && (selectedParticipants.length !== 2 || new Set(selectedParticipants).size !== 2)) {
-      return { code: "compare_participants_invalid", message: "Compare requires exactly two distinct eligible Personas." };
+    if (requiresPersonaContext) {
+      if (eligibilityLoading) return { code: "eligibility_loading", message: "Checking canonical Persona eligibility." };
+      if (eligibilityError) return { code: "eligibility_error", message: `Persona eligibility is unavailable: ${eligibilityError}` };
+      if (selectedParticipants.length === 0) return { code: "participants_empty", message: "Choose at least one eligible Persona before submitting." };
+      if (contextResolving) return { code: "context_resolving", message: "Resolving authoritative Workshop context." };
+      if (contextError) return { code: "context_error", message: `Authoritative context is unavailable: ${contextError}` };
+      if (!resolvedContext) return { code: "context_pending", message: "Waiting for authoritative Workshop context." };
+      if (selectedMode === "compare" && (selectedParticipants.length !== 2 || new Set(selectedParticipants).size !== 2)) {
+        return { code: "compare_participants_invalid", message: "Compare requires exactly two distinct eligible Personas." };
+      }
+    } else if (eligibilityLoading && personaAddonEnabled && pickerSelectionType !== "none") {
+      return { code: "eligibility_loading", message: "Checking canonical Persona eligibility." };
     }
     if (!composerValue.trim()) return { code: "draft_empty", message: "Enter a Persona interaction request before submitting." };
     return null;
@@ -1636,6 +1869,9 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                 <WorkshopCardRenderer
                   key={c.card_id}
                   card={c}
+                  decisionBusy={decisionSubmitting}
+                  onRetryReconstruction={() => void handleRetryReconstruction()}
+                  onSubmitDecision={(decision) => void handleSubmitDecision(decision)}
                   onContinueDiscussion={(cardId) => {
                     const targetCard = cardState.cards.find((item) => item.card_id === cardId);
                     if (targetCard) {
@@ -1645,6 +1881,72 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                 />
               ))}
           </div>
+
+          {/* Version selection and comparison section (AC6) */}
+          {versionResources.length > 0 && (
+            <section
+              className="space-y-3 rounded-lg border border-border bg-card p-3.5 text-xs"
+              data-testid="workshop-versions-panel"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-foreground">
+                  {workshopCopy("agora.workshop.session.versionsHeader", "策略版本、修補與差異比較")}
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {versionResources.map((res) => {
+                    const vId = res.version.workshop_version_id;
+                    const isSelected = selectedVersionId === vId;
+                    return (
+                      <button
+                        className={cn(
+                          "rounded border px-2 py-1 text-[11px] font-medium transition-colors",
+                          isSelected
+                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                            : "border-border bg-muted/40 text-foreground hover:bg-muted",
+                        )}
+                        data-testid={`select-version-btn-${vId}`}
+                        disabled={isSelected || !writeAccess.writeAllowed}
+                        key={vId}
+                        onClick={async () => {
+                          try {
+                            await selectWorkshopVersion(
+                              workshopId,
+                              res.version.sequence_no ?? vId,
+                            );
+                            setSelectedVersionId(vId);
+                            setCompareCandidateVersionId(vId);
+                            refreshStrategySpec();
+                            refreshCompleteness();
+                            refreshReadiness();
+                          } catch (err) {
+                            setSendError(err instanceof Error ? err.message : "Failed to select version");
+                          }
+                        }}
+                        type="button"
+                      >
+                        v{res.version.sequence_no} ({vId})
+                        {isSelected ? ` · ${workshopCopy("agora.workshop.session.selectedVersion", "目前選用版本")}` : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {(() => {
+                const baseRes = versionResources[0];
+                const candRes =
+                  versionResources.find((r) => r.version.workshop_version_id === (compareCandidateVersionId ?? selectedVersionId)) ??
+                  versionResources[versionResources.length - 1] ??
+                  baseRes;
+                if (!baseRes || !candRes) return null;
+                const compareCard = buildVersionCompareCard(workshopId, baseRes, candRes);
+                return (
+                  <div data-testid="workshop-version-compare-section">
+                    <VersionCompareCard card={compareCard} />
+                  </div>
+                );
+              })()}
+            </section>
+          )}
 
           {dailyInteractions.length > 0 ? (
             <DailyInteractionTimeline
@@ -1664,6 +1966,42 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
 
         {/* Composer section */}
         <div data-testid="servant-composer" className="border-t border-border bg-card p-4 shrink-0 flex flex-col gap-3">
+          {/* Servant-first default bar & optional Persona consultation add-on toggle (AC2) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs">
+            <span className="font-semibold text-foreground" data-testid="servant-default-composer-badge">
+              {workshopCopy(
+                "agora.workshop.composer.servantDefaultBadge",
+                "預設傳送給您的私人助理（無需先選 Persona）",
+              )}
+            </span>
+            <button
+              aria-pressed={personaAddonEnabled}
+              className="rounded border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
+              data-testid="persona-consult-addon-toggle"
+              onClick={() => {
+                setPersonaAddonEnabled((prev) => {
+                  const next = !prev;
+                  if (!next) {
+                    setPickerSelectionType("none");
+                    setSelectedParticipants([]);
+                  } else {
+                    setPickerSelectionType("recommended");
+                    void refreshEligibility(selectedMode, [], "recommended");
+                  }
+                  return next;
+                });
+              }}
+              type="button"
+            >
+              {personaAddonEnabled
+                ? workshopCopy("agora.workshop.composer.personaAddonHide", "收合 Persona 諮詢設定")
+                : workshopCopy(
+                    "agora.workshop.composer.personaAddonToggle",
+                    "選填附加：同步諮詢 Persona（Ask / Challenge / Compare / Propose / Reflect）",
+                  )}
+            </button>
+          </div>
+
           <button
             aria-expanded={mobileComposerOptionsOpen}
             className="agora-mobile-only items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-xs font-semibold text-foreground"
@@ -1757,6 +2095,9 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                     <SelectValue placeholder="Select panel" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-border text-popover-foreground">
+                    <SelectItem value="none" className="text-xs">
+                      {workshopCopy("agora.workshop.composer.noPersonaSelected", "僅與私人助理對話（不附加 Persona）")}
+                    </SelectItem>
                     <SelectItem value="recommended" className="text-xs">Recommended-or-Eligible Panel</SelectItem>
                     <SelectItem value="eligible-one" className="text-xs">First Eligible Persona</SelectItem>
                     <SelectItem value="eligible-two" className="text-xs">First Two Eligible Personas</SelectItem>
@@ -1773,6 +2114,8 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                 const selected = selectedParticipants.length;
                 const excluded = excludedParticipants.length;
                 switch (pickerSelectionType) {
+                  case "none":
+                    return workshopCopy("agora.workshop.composer.noPersonaSelected", "僅與私人助理對話（不附加 Persona）");
                   case "recommended":
                     return `Recommended-or-Eligible Panel — up to ${selected} canonical eligible selected (recommended first when supplied); ${excluded} excluded by the capability gate.`;
                   case "eligible-one":
@@ -1889,6 +2232,26 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                       ? "Strategy reconstruction result recorded"
                       : "Strategy reconstruction unavailable"}
                 </span>
+                {reconstructionState === "failed" && (
+                  <>
+                    {reconstructionFailureReason ? (
+                      <code
+                        className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[11px] text-rose-200"
+                        data-testid="workshop-reconstruction-failure-reason"
+                      >
+                        {reconstructionFailureReason}
+                      </code>
+                    ) : null}
+                    <button
+                      className="rounded border border-rose-500/40 bg-rose-500/20 px-2 py-0.5 text-[11px] font-semibold text-rose-100 hover:bg-rose-500/30"
+                      data-testid="workshop-reconstruction-retry-btn"
+                      onClick={() => void handleRetryReconstruction()}
+                      type="button"
+                    >
+                      {workshopCopy("agora.workshop.session.reconstructRetryButton", "重試策略重建")}
+                    </button>
+                  </>
+                )}
                 {strategySpecIdentity ? (
                   <span data-testid="workshop-strategy-spec-identity">
                     StrategySpec {strategySpecIdentity.strategyId} · {strategySpecIdentity.registryId}
@@ -1957,17 +2320,28 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               data-testid="cmd-version-btn"
               disabled={composerInputDisabled}
               onClick={async () => {
+                const patchText = composerValue.trim();
+                if (!patchText) {
+                  setSendError(
+                    workshopCopy(
+                      "agora.workshop.session.patchEmptyError",
+                      "版本修補內容不可為空；請先輸入修補說明或完成策略重建後再建立版本。",
+                    ),
+                  );
+                  return;
+                }
                 setSendLoading(true);
                 setMessageReceiptState("accepted");
                 try {
                   setMessageReceiptState("processing");
                   await createWorkshopVersion(workshopId, {
-                    patch: [],
-                    reason: composerValue.trim() || "Create new version patch",
+                    reason: patchText,
+                    patch: [{ op: "replace", path: "/notes", value: patchText }],
                   });
                   setMessageReceiptState("succeeded");
                   refreshCards();
                   refreshEvents();
+                  refreshStrategySpec();
                 } catch (err) {
                   setMessageReceiptState("failed");
                   setSendError(err instanceof Error ? err.message : "Create version failed");
@@ -2019,7 +2393,14 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
               data-testid="servant-composer-input"
               disabled={composerInputDisabled}
               id="daily-interaction-request"
-              placeholder={!writeAccess.interactionAllowed ? "Access restricted..." : "描述你的問題，Persona 將獨立回覆… (Ctrl+Enter 送出)"}
+              placeholder={
+                !writeAccess.interactionAllowed
+                  ? "Access restricted..."
+                  : workshopCopy(
+                      "agora.workshop.composer.placeholder",
+                      "直接向您的策略助理補充條件、回答高價值問題，或要求調整策略結構…",
+                    )
+              }
               rows={3}
               value={composerValue}
               onChange={(e) => setComposerValue(e.target.value)}
@@ -2097,8 +2478,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           <StrategyCompletenessRail
             completeness={completeness}
             completenessCard={completenessCard}
-            readiness={readiness}
+            decisionBusy={decisionSubmitting}
             nextQuestion={nextQuestion}
+            onSubmitDecision={(decision) => void handleSubmitDecision(decision)}
+            readiness={readiness}
           />
         </div>
 

@@ -351,3 +351,335 @@ test("reloading the Workshop entry URL resumes the same mode and participant sel
   await expect(page.getByTestId("participant-picker")).toContainText("Named");
   await expect(page.getByTestId("servant-composer-input")).toBeEnabled({ timeout: 30_000 });
 });
+
+test("creating a Workshop from a zh-TW strategy description reconstructs the strategy, renders the 12-block rail, and submits a decision option", async ({ page }) => {
+  await assertServerIdentity(page);
+  const state = await installFixture(page);
+
+  const createdWorkshopId = "ws-v10-zh-create";
+  let createdTitle = "台股大型權值與半導體龍頭波段動能策略";
+  let reconstructed = false;
+  let decisionConfirmed = false;
+
+  await page.route(
+    (url) => url.pathname.startsWith("/bff/agora/workshops"),
+    async (route) => {
+      const request = route.request();
+      const method = request.method();
+      const path = new URL(request.url()).pathname;
+
+      if (method === "OPTIONS") {
+        await route.fulfill({ headers: corsHeaders(request), status: 204 });
+        return;
+      }
+
+      if (method !== "GET") {
+        state.requests.push({ body: requestBody(request), headers: request.headers(), method, path });
+      }
+
+      if (method === "GET" && path === "/bff/agora/workshops") {
+        return json(route, {
+          data: {
+            items: [
+              workshopFixture(),
+              ...(reconstructed
+                ? [
+                    {
+                      spec_version: "1.0",
+                      workshop_id: createdWorkshopId,
+                      operator_id: "op-fe-gate",
+                      status: "open",
+                      title: createdTitle,
+                      subject: { kind: "strategy_spec", ref: createdWorkshopId, title: createdTitle },
+                      metadata: {
+                        strategy_name: createdTitle,
+                        description:
+                          "台股大型權值與半導體龍頭波段動能策略，於月營收年增且法人連買時進場，跌破 20 日均線或單筆虧損 5% 停損出場。",
+                      },
+                      participant_persona_ids: [],
+                      created_at: NOW,
+                    },
+                  ]
+                : []),
+            ],
+          },
+        });
+      }
+
+      if (method === "POST" && path === "/bff/agora/workshops") {
+        const body = (requestBody(request) ?? {}) as JsonRecord;
+        createdTitle = String(body.title ?? createdTitle);
+        return json(
+          route,
+          {
+            data: {
+              spec_version: "1.0",
+              workshop_id: createdWorkshopId,
+              operator_id: "op-fe-gate",
+              status: "open",
+              title: createdTitle,
+              subject: { kind: "strategy_spec", ref: createdWorkshopId, title: createdTitle },
+              metadata: body.metadata ?? {
+                strategy_name: createdTitle,
+                description: body.description,
+              },
+              participant_persona_ids: [],
+              created_at: NOW,
+            },
+          },
+          { status: 201 },
+        );
+      }
+
+      if (method === "POST" && path === `/bff/agora/workshops/${createdWorkshopId}/reconstruct`) {
+        reconstructed = true;
+        return json(
+          route,
+          {
+            data: {
+              reconstruction_id: decisionConfirmed ? "recon-v10-2" : "recon-v10-1",
+              card_id: "card-recon-v10-1",
+              card_type: "strategy_reconstruction",
+              version: 1,
+              title: "策略重建卡 v1",
+              summary: "已根據您的策略描述完成 12 塊策略重建與缺口盤點。",
+              created_at: NOW,
+              payload: {
+                reconstruction_id: decisionConfirmed ? "recon-v10-2" : "recon-v10-1",
+                archetype: "momentum_breakout",
+                market_scope: "TWSE Semis",
+                horizon: "swing_5_20d",
+                overall_completeness: decisionConfirmed ? "B+" : "B-",
+                completeness_dimensions: [],
+                twelve_blocks: [
+                  {
+                    block_id: "strategy_thesis",
+                    title: "策略核心命題",
+                    state: "confirmed",
+                    summary: "台股大型權值與半導體龍頭波段動能",
+                    note: null,
+                  },
+                  {
+                    block_id: "position_sizing",
+                    title: "部位規模與加碼",
+                    state: decisionConfirmed ? "confirmed" : "missing",
+                    summary: decisionConfirmed ? "固定風險比例 1%" : null,
+                    note: decisionConfirmed ? null : "尚未定義單筆風險上限與部位配置方式",
+                  },
+                ],
+                next_high_value_decision: decisionConfirmed
+                  ? null
+                  : {
+                      decision_id: "dec-sizing-v10",
+                      block_id: "position_sizing",
+                      prompt: "請確認此策略的單筆部位規模配置方式：",
+                      rationale: "目前進出場規則已明確，但尚缺單筆風險上限",
+                      options: [
+                        {
+                          option_id: "opt-fixed-risk",
+                          label: "固定風險比例 1%",
+                          description: "依停損距離反推部位大小",
+                          patch_value: "單筆風險上限 1%，依 5% 停損距離計算部位",
+                        },
+                      ],
+                    },
+                high_priority_questions: [],
+              },
+            },
+          },
+          { status: 201 },
+        );
+      }
+
+      if (method === "POST" && path === `/bff/agora/workshops/${createdWorkshopId}/decisions`) {
+        decisionConfirmed = true;
+        return json(
+          route,
+          {
+            data: {
+              event_id: "ev-dec-sizing-v10",
+              sequence_no: 2,
+              workshop_id: createdWorkshopId,
+              decision_id: "dec-sizing-v10",
+              question_id: "dec-sizing-v10",
+              question: "請確認此策略的單筆部位規模配置方式：",
+              option_id: "opt-fixed-risk",
+              option_label: "固定風險比例 1%",
+              used_servant_default: false,
+              resolves: ["position_sizing"],
+              target_blocks: ["position_sizing"],
+            },
+          },
+          {
+            headers: { ETag: `W/"workshop:${createdWorkshopId}:v2"` },
+            status: 201,
+          },
+        );
+      }
+
+      if (method === "GET" && path === `/bff/agora/workshops/${createdWorkshopId}`) {
+        const currentEtag = `W/"workshop:${createdWorkshopId}:${decisionConfirmed ? "v2" : "v1"}"`;
+        return json(
+          route,
+          {
+            data: {
+              spec_version: "1.0",
+              workshop_id: createdWorkshopId,
+              operator_id: "op-fe-gate",
+              status: "open",
+              title: createdTitle,
+              subject: { kind: "strategy_spec", ref: createdWorkshopId, title: createdTitle },
+              metadata: {
+                strategy_name: createdTitle,
+                description:
+                  "台股大型權值與半導體龍頭波段動能策略，於月營收年增且法人連買時進場，跌破 20 日均線或單筆虧損 5% 停損出場。",
+              },
+              participant_persona_ids: [],
+              created_at: NOW,
+            },
+            meta: {
+              etag: currentEtag,
+            },
+          },
+          {
+            headers: {
+              ETag: currentEtag,
+            },
+          },
+        );
+      }
+
+      if (method === "GET" && path === `/bff/agora/workshops/${createdWorkshopId}/cards`) {
+        return json(route, {
+          data: {
+            items: reconstructed
+              ? [
+                  {
+                    card_id: "card-recon-v10-1",
+                    card_type: "strategy_reconstruction",
+                    version: 1,
+                    title: "策略重建卡 v1",
+                    summary: "已根據您的策略描述完成 12 塊策略重建與缺口盤點。",
+                    created_at: NOW,
+                    payload: {
+                      archetype: "momentum_breakout",
+                      market_scope: "TWSE Semis",
+                      horizon: "swing_5_20d",
+                      overall_completeness: decisionConfirmed ? "B+" : "B-",
+                      completeness_dimensions: [],
+                      twelve_blocks: [
+                        {
+                          block_id: "strategy_thesis",
+                          title: "策略核心命題",
+                          state: "confirmed",
+                          summary: "台股大型權值與半導體龍頭波段動能",
+                          note: null,
+                        },
+                        {
+                          block_id: "position_sizing",
+                          title: "部位規模與加碼",
+                          state: decisionConfirmed ? "confirmed" : "missing",
+                          summary: decisionConfirmed ? "固定風險比例 1%" : null,
+                          note: decisionConfirmed ? null : "尚未定義單筆風險上限與部位配置方式",
+                        },
+                      ],
+                      next_high_value_decision: decisionConfirmed
+                        ? null
+                        : {
+                            decision_id: "dec-sizing-v10",
+                            block_id: "position_sizing",
+                            prompt: "請確認此策略的單筆部位規模配置方式：",
+                            rationale: "目前進出場規則已明確，但尚缺單筆風險上限",
+                            options: [
+                              {
+                                option_id: "opt-fixed-risk",
+                                label: "固定風險比例 1%",
+                                description: "依停損距離反推部位大小",
+                                patch_value: "單筆風險上限 1%，依 5% 停損距離計算部位",
+                              },
+                            ],
+                          },
+                      high_priority_questions: [],
+                    },
+                  },
+                ]
+              : [],
+          },
+        });
+      }
+
+      if (method === "GET" && path === `/bff/agora/workshops/${createdWorkshopId}/completeness`) {
+        if (!reconstructed) {
+          return json(route, { data: null, meta: { state: "not_assessed" } });
+        }
+        return json(route, {
+          data: {
+            workshop_id: createdWorkshopId,
+            version: decisionConfirmed ? 2 : 1,
+            overall_grade: decisionConfirmed ? "B+" : "B-",
+            ready_for_backtest: decisionConfirmed,
+            ready_for_governance: false,
+            dimensions: [],
+            twelve_blocks: [
+              {
+                block_id: "strategy_thesis",
+                title: "策略核心命題",
+                state: "confirmed",
+                summary: "台股大型權值與半導體龍頭波段動能",
+                note: null,
+              },
+              {
+                block_id: "position_sizing",
+                title: "部位規模與加碼",
+                state: decisionConfirmed ? "confirmed" : "missing",
+                summary: decisionConfirmed ? "固定風險比例 1%" : null,
+                note: decisionConfirmed ? null : "尚未定義單筆風險上限與部位配置方式",
+              },
+            ],
+            next_decision: decisionConfirmed
+              ? null
+              : {
+                  decision_id: "dec-sizing-v10",
+                  question_id: "dec-sizing-v10",
+                  question: "請確認此策略的單筆部位規模配置方式：",
+                  why_high_value: "目前進出場規則已明確，但尚缺單筆風險上限",
+                  options: [
+                    {
+                      option_id: "opt-fixed-risk",
+                      label: "固定風險比例 1%",
+                      summary: "依停損距離反推部位大小",
+                    },
+                  ],
+                },
+            next_question: null,
+          },
+        });
+      }
+
+      await route.fallback();
+    },
+  );
+
+  await page.goto("/agora/strategy-workshop");
+  await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("create-workshop-btn").click();
+  await expect(page.getByTestId("create-workshop-description-input")).toBeVisible();
+  await page
+    .getByTestId("create-workshop-description-input")
+    .fill("台股大型權值與半導體龍頭波段動能策略\n於月營收年增且法人連買時進場，跌破 20 日均線或單筆虧損 5% 停損出場。");
+  await expect(page.getByTestId("create-workshop-derived-title")).toContainText(
+    "台股大型權值與半導體龍頭波段動能策略",
+  );
+  await page.getByTestId("create-workshop-submit").click();
+
+  await expect(page).toHaveURL(new RegExp(`/agora/strategy-workshop/${createdWorkshopId}$`));
+  await expect(page.getByTestId("workshop-card-card-recon-v10-1")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("v10-twelve-blocks-section")).toBeVisible();
+  await expect(page.getByTestId("next-question-section")).toBeVisible();
+  await expect(page.getByTestId("servant-default-composer-badge")).toBeVisible();
+
+  await page.getByTestId("rail-decision-option-opt-fixed-risk").click();
+  await expect
+    .poll(() => mutationRequests(state, `/bff/agora/workshops/${createdWorkshopId}/decisions`).length)
+    .toBe(1);
+});

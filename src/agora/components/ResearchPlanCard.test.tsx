@@ -65,7 +65,7 @@ describe("ResearchPlanCard", () => {
 
   it("shows status badge", () => {
     renderCard();
-    expect(screen.getByText("Action required")).toBeDefined();
+    expect(screen.getByText("需要處理")).toBeDefined();
   });
 
   it("renders objectives section", () => {
@@ -105,21 +105,21 @@ describe("ResearchPlanCard", () => {
 
   it("shows approval requirement", () => {
     renderCard();
-    expect(screen.getByText("Approval")).toBeDefined();
+    expect(screen.getByText("核准度")).toBeDefined();
     expect(screen.getByText("human")).toBeDefined();
   });
 
   it("renders approve and reject buttons when allowed_actions permits", () => {
     renderCard();
-    expect(screen.getByRole("button", { name: "Approve" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "核准" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "駁回" })).toBeDefined();
   });
 
   it("does not render approve button when allowed_actions.approve is falsy", () => {
     const card: WorkshopCard = { ...baseCard, allowed_actions: { approve: false, reject: true } };
     renderCard(card);
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "核准" })).toBeNull();
+    expect(screen.getByRole("button", { name: "駁回" })).toBeDefined();
   });
 
   it("renders Ask Servant button when onContinueDiscussion is provided", () => {

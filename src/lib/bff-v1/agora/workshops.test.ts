@@ -4,6 +4,7 @@ import { bffFetch, detectBaseUrl } from "../client";
 import { clearAuthProvider, setAuthProvider } from "../headers";
 import { SSE_RECONNECT_BACKOFF_MS } from "../sse/protocol";
 import {
+  createWorkshopVersion,
   getWorkshop,
   getWorkshopWithEtag,
   getWorkshopCompleteness,
@@ -12,6 +13,7 @@ import {
   listWorkshopEvents,
   listWorkshops,
   openWorkshopStream,
+  postWorkshopDecision,
   postWorkshopMessage,
   reconstructWorkshopStrategy,
   type WorkshopCard,
@@ -305,6 +307,57 @@ describe("reconstructWorkshopStrategy", () => {
       method: "POST",
       path: "/bff/agora/workshops/ws%2F001/reconstruct",
     });
+  });
+});
+
+describe("postWorkshopDecision", () => {
+  it("posts a high-value decision to POST /bff/agora/workshops/{id}/decisions with If-Match and Idempotency-Key", async () => {
+    const receipt = {
+      event_id: "evt-dec-1",
+      sequence_no: 4,
+      decision: {
+        question_id: "q-1",
+        selected_option_id: "opt-1",
+        selected_option_label: "近 60 個交易日",
+        used_servant_default: false,
+        answer_text: "近 60 個交易日",
+      },
+    };
+    vi.mocked(bffFetch).mockResolvedValue({ data: receipt });
+
+    const etag = 'W/"workshop:ws-001:v18"';
+    const result = await postWorkshopDecision(
+      "ws-001",
+      { question_id: "q-1", selected_option_id: "opt-1" },
+      { ifMatch: etag, idempotencyKey: "decision-key-1" },
+    );
+
+    expect(result).toEqual(receipt);
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/bff/agora/workshops/ws-001/decisions",
+      body: { question_id: "q-1", selected_option_id: "opt-1" },
+      headers: {
+        "If-Match": etag,
+      },
+      idempotencyKey: "decision-key-1",
+    });
+  });
+
+  it("fails closed when If-Match is blank", async () => {
+    await expect(
+      postWorkshopDecision("ws-001", { question_id: "q-1" }, { ifMatch: "" }),
+    ).rejects.toThrow("Workshop decision requires the current If-Match precondition.");
+    expect(bffFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("createWorkshopVersion", () => {
+  it("never submits an empty patch array", async () => {
+    await expect(
+      createWorkshopVersion("ws-001", { reason: "Empty patch", patch: [] }),
+    ).rejects.toThrow("Version patch requires at least one non-empty patch operation.");
+    expect(bffFetch).not.toHaveBeenCalled();
   });
 });
 

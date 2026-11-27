@@ -8,6 +8,7 @@ import type {
   ReadinessDiff,
   GateName,
 } from "./workshop-card-types";
+import { formatLabel, workshopCopy } from "./workshopCardUtils";
 
 export interface VersionCompareCardProps {
   card: WorkshopCard;
@@ -16,45 +17,57 @@ export interface VersionCompareCardProps {
 
 // Evidence class display config.
 // RULE: predicted must never be visually treated as an observed metric.
-const EVIDENCE_CLASS_CONFIG: Record<
-  string,
-  { label: string; color: string; background: string; border: string; italic: boolean }
-> = {
-  predicted: {
-    label: "Predicted",
-    color: "#92400e",
-    background: "#fffbeb",
-    border: "1px dashed #fbbf24",
-    italic: true,
-  },
-  backtested_in_sample: {
-    label: "Backtest (IS)",
-    color: "#1d4ed8",
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
+function getEvidenceClassConfig(evidenceClass: string): {
+  label: string;
+  className: string;
+  badgeClass: string;
+  italic: boolean;
+} {
+  if (evidenceClass === "predicted") {
+    return {
+      label: workshopCopy("agora.workshop.cardLabels.evidence_predicted", "模型預測"),
+      className: "border border-dashed border-amber-500/40 bg-amber-500/10",
+      badgeClass: "text-amber-300",
+      italic: true,
+    };
+  }
+  if (evidenceClass === "backtested_in_sample") {
+    return {
+      label: workshopCopy("agora.workshop.cardLabels.evidence_backtested_in_sample", "樣本內回測 (IS)"),
+      className: "border border-sky-500/30 bg-sky-500/10",
+      badgeClass: "text-sky-300",
+      italic: false,
+    };
+  }
+  if (evidenceClass === "backtested_oos") {
+    return {
+      label: workshopCopy("agora.workshop.cardLabels.evidence_backtested_oos", "樣本外回測 (OOS)"),
+      className: "border border-emerald-500/30 bg-emerald-500/10",
+      badgeClass: "text-emerald-300",
+      italic: false,
+    };
+  }
+  if (evidenceClass === "paper_observed") {
+    return {
+      label: workshopCopy("agora.workshop.cardLabels.evidence_paper_observed", "模擬盤實測"),
+      className: "border border-purple-500/30 bg-purple-500/10",
+      badgeClass: "text-purple-300",
+      italic: false,
+    };
+  }
+  return {
+    label: evidenceClass,
+    className: "border border-border bg-muted/30",
+    badgeClass: "text-muted-foreground",
     italic: false,
-  },
-  backtested_oos: {
-    label: "Backtest (OOS)",
-    color: "#166534",
-    background: "#f0fdf4",
-    border: "1px solid #bbf7d0",
-    italic: false,
-  },
-  paper_observed: {
-    label: "Paper Observed",
-    color: "#6b21a8",
-    background: "#faf5ff",
-    border: "1px solid #e9d5ff",
-    italic: false,
-  },
-};
+  };
+}
 
-const CHANGE_KIND_COLOR: Record<string, string> = {
-  added: "#16a34a",
-  removed: "#dc2626",
-  changed: "#d97706",
-  unchanged: "#9ca3af",
+const CHANGE_KIND_CLASS: Record<string, string> = {
+  added: "text-emerald-400",
+  removed: "text-rose-400",
+  changed: "text-amber-400",
+  unchanged: "text-muted-foreground",
 };
 
 const CHANGE_KIND_PREFIX: Record<string, string> = {
@@ -64,32 +77,26 @@ const CHANGE_KIND_PREFIX: Record<string, string> = {
   unchanged: " ",
 };
 
-const MATERIALITY_COLOR: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#d97706",
-  medium: "#ca8a04",
-  low: "#9ca3af",
+const MATERIALITY_CLASS: Record<string, string> = {
+  critical: "border-rose-500/40 text-rose-300",
+  high: "border-amber-500/40 text-amber-300",
+  medium: "border-yellow-500/40 text-yellow-300",
+  low: "border-border text-muted-foreground",
 };
 
-const GATE_LABELS: Record<GateName, string> = {
-  preliminary_research: "Preliminary Research",
-  full_validation: "Full Validation",
-  trading_room: "Trading Room",
+const GATE_STATE_CLASS: Record<string, string> = {
+  ready: "text-emerald-400",
+  conditional: "text-amber-400",
+  blocked: "text-rose-400",
+  not_assessed: "text-muted-foreground",
+  stale: "text-amber-300",
 };
 
-const GATE_STATE_COLOR: Record<string, string> = {
-  ready: "#16a34a",
-  conditional: "#ca8a04",
-  blocked: "#dc2626",
-  not_assessed: "#6b7280",
-  stale: "#d97706",
-};
-
-const RISK_CHANGE_COLOR: Record<string, string> = {
-  improved: "#16a34a",
-  worsened: "#dc2626",
-  unchanged: "#6b7280",
-  uncertain: "#d97706",
+const RISK_CHANGE_CLASS: Record<string, string> = {
+  improved: "text-emerald-400",
+  worsened: "text-rose-400",
+  unchanged: "text-muted-foreground",
+  uncertain: "text-amber-400",
 };
 
 function groupByCandidate<T extends { candidate_version_id: string }>(
@@ -99,7 +106,10 @@ function groupByCandidate<T extends { candidate_version_id: string }>(
   const map: Record<string, T[]> = {};
   for (const item of items) {
     const id = item.candidate_version_id;
-    if (!map[id]) { order.push(id); map[id] = []; }
+    if (!map[id]) {
+      order.push(id);
+      map[id] = [];
+    }
     map[id].push(item);
   }
   return order.map((id) => ({ candidateId: id, rows: map[id] }));
@@ -107,16 +117,7 @@ function groupByCandidate<T extends { candidate_version_id: string }>(
 
 function SectionHeader({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 700,
-        textTransform: "uppercase",
-        letterSpacing: "0.05em",
-        color: "#6b7280",
-        marginBottom: 4,
-      }}
-    >
+    <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
       {children}
     </div>
   );
@@ -124,50 +125,24 @@ function SectionHeader({ children }: { children: React.ReactNode }): JSX.Element
 
 function CandidateGroupHeader({ label }: { label: string }): JSX.Element {
   return (
-    <div
-      style={{
-        fontSize: 10,
-        fontWeight: 700,
-        color: "#1d4ed8",
-        padding: "1px 6px",
-        background: "#eff6ff",
-        borderRadius: 3,
-        marginTop: 4,
-        marginBottom: 4,
-        display: "inline-block",
-      }}
-    >
+    <div className="my-1 inline-block rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold text-sky-300">
       {label}
     </div>
   );
 }
 
 function FieldDiffRow({ diff }: { diff: FieldDiff }): JSX.Element {
-  const color = CHANGE_KIND_COLOR[diff.change_kind] ?? "#374151";
+  const colorClass = CHANGE_KIND_CLASS[diff.change_kind] ?? "text-foreground/90";
   const prefix = CHANGE_KIND_PREFIX[diff.change_kind] ?? " ";
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        fontSize: 12,
-        fontFamily: "monospace",
-        padding: "2px 0",
-        color,
-      }}
-    >
-      <span style={{ width: 12, flexShrink: 0 }}>{prefix}</span>
-      <span style={{ flex: 1, color: "#374151" }}>{diff.path}</span>
+    <div className={`flex items-center gap-1.5 py-0.5 font-mono text-xs ${colorClass}`}>
+      <span className="w-3 shrink-0">{prefix}</span>
+      <span className="flex-1 text-foreground/90">{diff.path}</span>
       {diff.materiality && (
         <span
-          style={{
-            fontSize: 10,
-            padding: "0 4px",
-            borderRadius: 3,
-            border: `1px solid ${MATERIALITY_COLOR[diff.materiality] ?? "#e5e7eb"}`,
-            color: MATERIALITY_COLOR[diff.materiality] ?? "#9ca3af",
-          }}
+          className={`rounded border px-1 text-[10px] ${
+            MATERIALITY_CLASS[diff.materiality] ?? "border-border text-muted-foreground"
+          }`}
         >
           {diff.materiality}
         </span>
@@ -177,72 +152,48 @@ function FieldDiffRow({ diff }: { diff: FieldDiff }): JSX.Element {
 }
 
 function MetricDiffRow({ diff }: { diff: MetricDiff }): JSX.Element {
-  const cfg = EVIDENCE_CLASS_CONFIG[diff.evidence_class] ?? {
-    label: diff.evidence_class,
-    color: "#6b7280",
-    background: "#f9fafb",
-    border: "1px solid #e5e7eb",
-    italic: false,
-  };
+  const cfg = getEvidenceClassConfig(diff.evidence_class);
 
   const deltaSign =
     diff.absolute_delta != null
       ? diff.absolute_delta > 0
         ? "+"
         : diff.absolute_delta < 0
-        ? ""
-        : "±"
+          ? ""
+          : "±"
       : "";
 
   return (
     <div
+      className={`mb-1 flex items-center justify-between rounded px-2 py-1 text-xs ${cfg.className}`}
       data-testid={`metric-diff-${diff.metric}`}
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        fontSize: 12,
-        padding: "4px 8px",
-        background: cfg.background,
-        border: cfg.border,
-        borderRadius: 4,
-        marginBottom: 4,
-        fontStyle: cfg.italic ? "italic" : "normal",
-      }}
+      style={{ fontStyle: cfg.italic ? "italic" : "normal" }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        <span style={{ fontWeight: 500, color: "#374151" }}>{diff.metric}</span>
-        <span
-          style={{
-            fontSize: 10,
-            color: cfg.color,
-            fontWeight: 600,
-          }}
-        >
-          {cfg.label}
-        </span>
+      <div className="flex flex-col gap-0.5">
+        <span className="font-medium text-foreground/90">{diff.metric}</span>
+        <span className={`text-[10px] font-semibold ${cfg.badgeClass}`}>{cfg.label}</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+      <div className="flex flex-col items-end gap-0.5">
         {diff.base_value != null && (
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>
-            base: {diff.base_value}
+          <span className="text-[11px] text-muted-foreground">
+            {workshopCopy("agora.workshop.cardLabels.base", "基準")}: {diff.base_value}
           </span>
         )}
         {diff.candidate_value != null && (
-          <span style={{ fontSize: 11, color: "#374151", fontWeight: 500 }}>
-            {diff.candidate_value}
-          </span>
+          <span className="text-[11px] font-medium text-foreground">{diff.candidate_value}</span>
         )}
         {diff.absolute_delta != null && (
           <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color:
-                diff.absolute_delta > 0 ? "#16a34a" : diff.absolute_delta < 0 ? "#dc2626" : "#6b7280",
-            }}
+            className={`text-[11px] font-semibold ${
+              diff.absolute_delta > 0
+                ? "text-emerald-400"
+                : diff.absolute_delta < 0
+                  ? "text-rose-400"
+                  : "text-muted-foreground"
+            }`}
           >
-            {deltaSign}{diff.absolute_delta}
+            {deltaSign}
+            {diff.absolute_delta}
           </span>
         )}
       </div>
@@ -251,62 +202,33 @@ function MetricDiffRow({ diff }: { diff: MetricDiff }): JSX.Element {
 }
 
 function RiskDiffRow({ diff }: { diff: RiskDiff }): JSX.Element {
-  const color = RISK_CHANGE_COLOR[diff.change] ?? "#6b7280";
+  const colorClass = RISK_CHANGE_CLASS[diff.change] ?? "text-muted-foreground";
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        fontSize: 12,
-        padding: "2px 0",
-        borderBottom: "1px solid #f3f4f6",
-      }}
-    >
-      <span style={{ color: "#374151" }}>{diff.risk_domain}</span>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-        <span style={{ fontWeight: 600, color }}>{diff.change}</span>
-        {diff.summary && (
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>{diff.summary}</span>
-        )}
+    <div className="flex items-center justify-between border-b border-border/50 py-0.5 text-xs">
+      <span className="text-foreground/90">{diff.risk_domain}</span>
+      <div className="flex flex-col items-end">
+        <span className={`font-semibold ${colorClass}`}>{diff.change}</span>
+        {diff.summary && <span className="text-[11px] text-muted-foreground">{diff.summary}</span>}
       </div>
     </div>
   );
 }
 
 function ReadinessDiffRow({ diff }: { diff: ReadinessDiff }): JSX.Element {
-  const gateLabel = GATE_LABELS[diff.gate as GateName] ?? diff.gate;
-  const baseColor = GATE_STATE_COLOR[diff.base_state] ?? "#6b7280";
-  const candidateColor = GATE_STATE_COLOR[diff.candidate_state] ?? "#6b7280";
+  const gateLabel = formatLabel(diff.gate as GateName);
+  const baseClass = GATE_STATE_CLASS[diff.base_state] ?? "text-muted-foreground";
+  const candidateClass = GATE_STATE_CLASS[diff.candidate_state] ?? "text-muted-foreground";
   return (
-    <div
-      style={{
-        fontSize: 12,
-        padding: "3px 0",
-        borderBottom: "1px solid #f3f4f6",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <span style={{ color: "#374151" }}>{gateLabel}</span>
-      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <span style={{ color: baseColor }}>{diff.base_state}</span>
-        <span style={{ color: "#9ca3af" }}>→</span>
-        <span style={{ color: candidateColor, fontWeight: 600 }}>{diff.candidate_state}</span>
+    <div className="flex items-center justify-between border-b border-border/50 py-1 text-xs">
+      <span className="text-foreground/90">{gateLabel}</span>
+      <span className="flex items-center gap-1">
+        <span className={baseClass}>{diff.base_state}</span>
+        <span className="text-muted-foreground">→</span>
+        <span className={`font-semibold ${candidateClass}`}>{diff.candidate_state}</span>
       </span>
     </div>
   );
 }
-
-const PREDICTED_SEPARATOR_STYLE = {
-  fontSize: 10,
-  color: "#92400e",
-  fontWeight: 600,
-  marginTop: 4,
-  marginBottom: 2,
-  fontStyle: "italic",
-} as const;
 
 function MetricDiffSection({ diffs }: { diffs: MetricDiff[] }): JSX.Element {
   const observed = diffs.filter((m) => m.evidence_class !== "predicted");
@@ -314,17 +236,20 @@ function MetricDiffSection({ diffs }: { diffs: MetricDiff[] }): JSX.Element {
   return (
     <>
       {observed.map((diff, i) => (
-        <MetricDiffRow key={`obs-${i}`} diff={diff} />
+        <MetricDiffRow diff={diff} key={`obs-${i}`} />
       ))}
       {predicted.length > 0 && (
         <>
           {observed.length > 0 && (
-            <div style={PREDICTED_SEPARATOR_STYLE}>
-              Predicted effects (not observed — subject to uncertainty)
+            <div className="mt-1 mb-0.5 text-[10px] font-semibold italic text-amber-300">
+              {workshopCopy(
+                "agora.workshop.cardLabels.predicted_effects_notice",
+                "預測效果（非實測值 — 具不確定性）",
+              )}
             </div>
           )}
           {predicted.map((diff, i) => (
-            <MetricDiffRow key={`pred-${i}`} diff={diff} />
+            <MetricDiffRow diff={diff} key={`pred-${i}`} />
           ))}
         </>
       )}
@@ -336,186 +261,156 @@ export function VersionCompareCard({
   card,
   onContinueDiscussion,
 }: VersionCompareCardProps): JSX.Element {
-  const p = card.payload as unknown as PayloadVersionCompare;
+  const p = (card.payload ?? {}) as unknown as PayloadVersionCompare;
+  const candidateVersions = Array.isArray(p.candidate_versions) ? p.candidate_versions : [];
+  const fieldDiffs = Array.isArray(p.field_diffs) ? p.field_diffs : [];
+  const metricDiffs = Array.isArray(p.metric_diffs) ? p.metric_diffs : [];
+  const riskDiffs = Array.isArray(p.risk_diffs) ? p.risk_diffs : [];
+  const readinessDiffs = Array.isArray(p.readiness_diffs) ? p.readiness_diffs : [];
 
   const candidateMap = Object.fromEntries(
-    p.candidate_versions.map((v) => [v.workshop_version_id, v.label])
+    candidateVersions.map((v) => [v.workshop_version_id, v.label])
   );
-  const multiCandidate = p.candidate_versions.length > 1;
-  const candidateLabels = p.candidate_versions.map((v) => v.label).join(", ");
+  const multiCandidate = candidateVersions.length > 1;
+  const candidateLabels = candidateVersions.map((v) => v.label).join(", ");
+  const baseLabel = p.base_version?.label ?? "-";
 
   return (
     <div
+      className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 text-card-foreground"
       data-testid={`version-compare-card-${card.card_id}`}
-      style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: 8,
-        padding: 14,
-        background: "#fff",
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}
     >
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ fontWeight: 600, fontSize: 13 }}>{card.title}</div>
-        <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 8 }}>#{card.sequence_no}</span>
+      <div className="flex items-start justify-between">
+        <div className="text-[13px] font-semibold text-foreground">{card.title}</div>
+        <span className="ml-2 text-[11px] text-muted-foreground">#{card.sequence_no}</span>
       </div>
 
       {/* Summary — matches CardShell behavior for other card types */}
-      {card.summary && (
-        <div style={{ fontSize: 12, color: "#6b7280" }}>{card.summary}</div>
-      )}
+      {card.summary && <div className="text-xs text-muted-foreground">{card.summary}</div>}
 
       {/* Version breadcrumb */}
       <div
+        className="flex flex-wrap items-center gap-1.5 text-xs"
         data-testid={`version-compare-card-${card.card_id}-versions`}
-        style={{
-          display: "flex",
-          gap: 6,
-          alignItems: "center",
-          fontSize: 12,
-          flexWrap: "wrap",
-        }}
       >
-        <span
-          style={{
-            padding: "1px 8px",
-            borderRadius: 4,
-            background: "#f3f4f6",
-            fontWeight: 500,
-            color: "#374151",
-          }}
-        >
-          Base: {p.base_version.label}
+        <span className="rounded bg-muted/60 px-2 py-0.5 font-medium text-foreground/90">
+          {workshopCopy("agora.workshop.cardLabels.base", "基準")}: {baseLabel}
         </span>
-        <span style={{ color: "#9ca3af" }}>vs</span>
-        <span
-          style={{
-            padding: "1px 8px",
-            borderRadius: 4,
-            background: "#eff6ff",
-            fontWeight: 500,
-            color: "#1d4ed8",
-          }}
-        >
+        <span className="text-muted-foreground">vs</span>
+        <span className="rounded bg-sky-500/15 px-2 py-0.5 font-medium text-sky-300">
           {candidateLabels}
         </span>
       </div>
 
       {/* Field diffs */}
-      {p.field_diffs.length > 0 && (
+      {fieldDiffs.length > 0 && (
         <div data-testid={`version-compare-card-${card.card_id}-field-diffs`}>
           <SectionHeader>
-            Field Changes ({p.field_diffs.length})
+            {workshopCopy("agora.workshop.cardLabels.field_changes_count", `欄位變更 (${fieldDiffs.length})`, {
+              count: fieldDiffs.length,
+            })}
           </SectionHeader>
           {multiCandidate
-            ? groupByCandidate(p.field_diffs).map(({ candidateId, rows }) => (
+            ? groupByCandidate(fieldDiffs).map(({ candidateId, rows }) => (
                 <div key={candidateId}>
                   <CandidateGroupHeader label={candidateMap[candidateId] ?? candidateId} />
                   {rows.map((diff, i) => (
-                    <FieldDiffRow key={`${diff.path}-${i}`} diff={diff} />
+                    <FieldDiffRow diff={diff} key={`${diff.path}-${i}`} />
                   ))}
                 </div>
               ))
-            : p.field_diffs.map((diff, i) => (
-                <FieldDiffRow key={`${diff.path}-${i}`} diff={diff} />
-              ))}
+            : fieldDiffs.map((diff, i) => <FieldDiffRow diff={diff} key={`${diff.path}-${i}`} />)}
         </div>
       )}
 
       {/* Metric diffs — grouped by evidence class (predicted last, visually distinct) */}
-      {p.metric_diffs.length > 0 && (
+      {metricDiffs.length > 0 && (
         <div data-testid={`version-compare-card-${card.card_id}-metric-diffs`}>
-          <SectionHeader>Metric Differences</SectionHeader>
+          <SectionHeader>
+            {workshopCopy("agora.workshop.cardLabels.metric_differences", "指標差異")}
+          </SectionHeader>
           {multiCandidate
-            ? groupByCandidate(p.metric_diffs).map(({ candidateId, rows }) => (
+            ? groupByCandidate(metricDiffs).map(({ candidateId, rows }) => (
                 <div key={candidateId}>
                   <CandidateGroupHeader label={candidateMap[candidateId] ?? candidateId} />
                   <MetricDiffSection diffs={rows} />
                 </div>
               ))
-            : <MetricDiffSection diffs={p.metric_diffs} />}
+            : (
+                <MetricDiffSection diffs={metricDiffs} />
+              )}
         </div>
       )}
 
       {/* Risk diffs */}
-      {p.risk_diffs && p.risk_diffs.length > 0 && (
+      {riskDiffs.length > 0 && (
         <div data-testid={`version-compare-card-${card.card_id}-risk-diffs`}>
-          <SectionHeader>Risk Changes</SectionHeader>
+          <SectionHeader>
+            {workshopCopy("agora.workshop.cardLabels.risk_changes", "風險變化")}
+          </SectionHeader>
           {multiCandidate
-            ? groupByCandidate(p.risk_diffs).map(({ candidateId, rows }) => (
+            ? groupByCandidate(riskDiffs).map(({ candidateId, rows }) => (
                 <div key={candidateId}>
                   <CandidateGroupHeader label={candidateMap[candidateId] ?? candidateId} />
                   {rows.map((diff, i) => (
-                    <RiskDiffRow key={i} diff={diff} />
+                    <RiskDiffRow diff={diff} key={i} />
                   ))}
                 </div>
               ))
-            : p.risk_diffs.map((diff, i) => (
-                <RiskDiffRow key={i} diff={diff} />
-              ))}
+            : riskDiffs.map((diff, i) => <RiskDiffRow diff={diff} key={i} />)}
         </div>
       )}
 
       {/* Readiness diffs */}
-      {p.readiness_diffs.length > 0 && (
+      {readinessDiffs.length > 0 && (
         <div data-testid={`version-compare-card-${card.card_id}-readiness-diffs`}>
-          <SectionHeader>Readiness Gate Changes</SectionHeader>
+          <SectionHeader>
+            {workshopCopy("agora.workshop.cardLabels.readiness_gate_changes", "就緒閘門變化")}
+          </SectionHeader>
           {multiCandidate
-            ? groupByCandidate(p.readiness_diffs).map(({ candidateId, rows }) => (
+            ? groupByCandidate(readinessDiffs).map(({ candidateId, rows }) => (
                 <div key={candidateId}>
                   <CandidateGroupHeader label={candidateMap[candidateId] ?? candidateId} />
                   {rows.map((diff, i) => (
-                    <ReadinessDiffRow key={i} diff={diff} />
+                    <ReadinessDiffRow diff={diff} key={i} />
                   ))}
                 </div>
               ))
-            : p.readiness_diffs.map((diff, i) => (
-                <ReadinessDiffRow key={i} diff={diff} />
-              ))}
+            : readinessDiffs.map((diff, i) => <ReadinessDiffRow diff={diff} key={i} />)}
         </div>
       )}
 
       {/* Servant recommendation — always with trader-decides attribution */}
       {p.recommendation?.rationale && (
         <div
+          className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 px-2.5 py-2"
           data-testid={`version-compare-card-${card.card_id}-recommendation`}
-          style={{
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            borderRadius: 6,
-            padding: "8px 10px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
-          }}
         >
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" }}>
-            Servant Recommendation
+          <div className="text-[11px] font-bold uppercase text-muted-foreground">
+            {workshopCopy("agora.workshop.cardLabels.servant_recommendation", "私人助理建議")}
           </div>
-          <div style={{ fontSize: 12, color: "#374151" }}>{p.recommendation.rationale}</div>
+          <div className="text-xs text-foreground/90">{p.recommendation.rationale}</div>
           {p.recommendation.confidence != null && (
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>
-              Confidence: {Math.round(p.recommendation.confidence * 100)}%
+            <div className="text-[11px] text-muted-foreground">
+              {workshopCopy("agora.workshop.cardLabels.confidence_level", "信心水準")}:{" "}
+              {Math.round(p.recommendation.confidence * 100)}%
             </div>
           )}
           {p.recommendation.limitations && p.recommendation.limitations.length > 0 && (
-            <div style={{ fontSize: 11, color: "#d97706" }}>
-              Limitations: {p.recommendation.limitations.join("; ")}
+            <div className="text-[11px] text-amber-300">
+              {workshopCopy("agora.workshop.cardLabels.limitations", "限制")}:{" "}
+              {p.recommendation.limitations.join("; ")}
             </div>
           )}
           <div
+            className="mt-0.5 text-[11px] italic text-muted-foreground"
             data-testid={`version-compare-card-${card.card_id}-decision-authority`}
-            style={{
-              fontSize: 11,
-              color: "#6b7280",
-              fontStyle: "italic",
-              marginTop: 2,
-            }}
           >
-            Decision authority: Trader
+            {workshopCopy(
+              "agora.workshop.cardLabels.decision_authority_trader",
+              "決策權限：交易員本人",
+            )}
           </div>
         </div>
       )}
@@ -524,19 +419,12 @@ export function VersionCompareCard({
       {onContinueDiscussion && (
         <div>
           <button
+            className="cursor-pointer rounded border border-border bg-secondary/40 px-2.5 py-1 text-[11px] text-secondary-foreground hover:bg-secondary/70"
             data-testid={`version-compare-card-${card.card_id}-discuss`}
             onClick={() => onContinueDiscussion(card.card_id)}
-            style={{
-              fontSize: 11,
-              padding: "3px 10px",
-              borderRadius: 4,
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              color: "#6b7280",
-              cursor: "pointer",
-            }}
+            type="button"
           >
-            Ask Servant
+            {workshopCopy("agora.workshop.actions.ask_servant", "詢問助理")}
           </button>
         </div>
       )}

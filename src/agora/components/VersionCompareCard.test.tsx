@@ -118,7 +118,7 @@ describe("VersionCompareCard", () => {
     render(<VersionCompareCard card={baseCard} />);
     const fieldDiffs = screen.getByTestId("version-compare-card-card-vc-001-field-diffs");
     expect(fieldDiffs).toBeDefined();
-    expect(fieldDiffs.textContent).toContain("Field Changes (2)");
+    expect(fieldDiffs.textContent).toContain("欄位變更 (2)");
     expect(fieldDiffs.textContent).toContain("entry_signal.lookback_period");
     expect(fieldDiffs.textContent).toContain("exit_signal.stop_loss_pct");
   });
@@ -142,7 +142,7 @@ describe("VersionCompareCard", () => {
   it("shows predicted separator label when both observed and predicted metrics exist", () => {
     render(<VersionCompareCard card={baseCard} />);
     expect(
-      screen.getByText(/Predicted effects \(not observed — subject to uncertainty\)/)
+      screen.getByText(/預測效果（非實測值 — 具不確定性）/)
     ).toBeDefined();
   });
 
@@ -165,7 +165,7 @@ describe("VersionCompareCard", () => {
     };
     render(<VersionCompareCard card={card} />);
     expect(
-      screen.queryByText(/Predicted effects \(not observed/)
+      screen.queryByText(/預測效果（非實測值/)
     ).toBeNull();
   });
 
@@ -181,7 +181,7 @@ describe("VersionCompareCard", () => {
     render(<VersionCompareCard card={baseCard} />);
     const readinessDiffs = screen.getByTestId("version-compare-card-card-vc-001-readiness-diffs");
     expect(readinessDiffs).toBeDefined();
-    expect(readinessDiffs.textContent).toContain("Preliminary Research");
+    expect(readinessDiffs.textContent).toContain("初步研究");
     expect(readinessDiffs.textContent).toContain("conditional");
     expect(readinessDiffs.textContent).toContain("ready");
   });
@@ -201,7 +201,7 @@ describe("VersionCompareCard", () => {
   it("shows trader decision authority attribution in recommendation", () => {
     render(<VersionCompareCard card={baseCard} />);
     expect(screen.getByTestId("version-compare-card-card-vc-001-decision-authority").textContent).toContain(
-      "Decision authority: Trader"
+      "決策權限：交易員本人"
     );
   });
 

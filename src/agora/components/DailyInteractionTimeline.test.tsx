@@ -277,4 +277,59 @@ describe("DailyInteractionTimeline", () => {
     expect(screen.queryByText("Unavailable")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry failed providers" })).not.toBeInTheDocument();
   });
+
+  it("renders candidate measures as labelled readable fields without raw JSON pre blocks and keeps engineering details expandable", () => {
+    const { container } = render(
+      <DailyInteractionTimeline
+        interactions={[candidateInteraction(false)]}
+        onRefresh={vi.fn()}
+        runtimeState="ready"
+        writeAllowed
+      />,
+    );
+    expect(container.querySelector("pre")).toBeNull();
+    const readableFields = screen.getByTestId("measure-readable-fields-measure-1");
+    expect(readableFields).toHaveTextContent("建議調整內容 · Max risk");
+    expect(readableFields).toHaveTextContent("0.02");
+    expect(readableFields).toHaveTextContent("Reduce drawdown");
+    expect(screen.getByTestId("measure-engineering-details-measure-1").tagName.toLowerCase()).toBe("details");
+  });
+
+  it("derives completed status instead of stale running when all participants succeeded", () => {
+    const staleRunning: DailyInteraction = {
+      ...item,
+      status: "running",
+      missing_participant_ids: [],
+      degraded_participant_ids: [],
+      participants: [participant("a", "Alpha"), participant("b", "Beta"), participant("c", "Gamma")],
+      provider_invocations: [
+        {
+          invocation_id: "invoke-a",
+          participant: participant("a", "Alpha"),
+          status: "succeeded",
+          request_correlation_id: "req-a",
+          response_correlation_id: "res-a",
+          started_at: "2026-07-17T00:00:00Z",
+        },
+        {
+          invocation_id: "invoke-b",
+          participant: participant("b", "Beta"),
+          status: "succeeded",
+          request_correlation_id: "req-b",
+          response_correlation_id: "res-b",
+          started_at: "2026-07-17T00:00:00Z",
+        },
+        {
+          invocation_id: "invoke-c",
+          participant: participant("c", "Gamma"),
+          status: "succeeded",
+          request_correlation_id: "req-c",
+          response_correlation_id: "res-c",
+          started_at: "2026-07-17T00:00:00Z",
+        },
+      ],
+    };
+    render(<DailyInteractionTimeline interactions={[staleRunning]} onRefresh={vi.fn()} runtimeState="ready" writeAllowed />);
+    expect(screen.getByTestId("interaction-status-int-1")).toHaveTextContent("completed");
+  });
 });

@@ -46,8 +46,8 @@ export function GovernedProposalWorkshopCard({ payload, proposalId }: { payload:
     return () => { cancelled = true; };
   }, [id]);
 
-  if (error) return <div className="rounded border border-red-200 bg-red-50 p-3 text-xs text-red-800" role="alert">{error}</div>;
-  if (!snapshot) return <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Loading governed proposal…</div>;
+  if (error) return <div className="rounded border border-rose-500/30 bg-rose-500/15 p-3 text-xs text-rose-300" role="alert">{error}</div>;
+  if (!snapshot) return <div className="rounded border border-border bg-muted/40 p-3 text-xs text-muted-foreground">正在載入治理提案…</div>;
 
   const validationResult = record(payload.validation_result ?? snapshot.proposal.validation);
   const canonicalApprovalRefs = strings(snapshot.proposal.available_approval_decision_refs);

@@ -25,24 +25,25 @@ import {
   optionalString,
   stringList,
   stringValue,
+  workshopCopy,
 } from "./workshopCardUtils";
 
 const STATUS_CLASS: Record<WorkshopCardStatus, string> = {
-  informational: "border-slate-200 bg-slate-50 text-slate-600",
-  action_required: "border-amber-200 bg-amber-50 text-amber-700",
-  running: "border-blue-200 bg-blue-50 text-blue-700",
-  completed: "border-green-200 bg-green-50 text-green-700",
-  failed: "border-red-200 bg-red-50 text-red-700",
-  stale: "border-slate-300 bg-slate-100 text-slate-500",
+  informational: "border-border bg-muted/50 text-muted-foreground",
+  action_required: "border-amber-500/30 bg-amber-500/15 text-amber-300",
+  running: "border-sky-500/30 bg-sky-500/15 text-sky-300",
+  completed: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+  failed: "border-rose-500/30 bg-rose-500/15 text-rose-300",
+  stale: "border-border bg-muted/30 text-muted-foreground",
 };
 
 const CARD_ACCENT: Record<WorkshopCardStatus, string> = {
-  informational: "border-slate-200",
-  action_required: "border-amber-300",
-  running: "border-blue-300",
-  completed: "border-green-300",
-  failed: "border-red-300",
-  stale: "border-slate-300",
+  informational: "border-border",
+  action_required: "border-amber-500/40",
+  running: "border-sky-500/40",
+  completed: "border-emerald-500/40",
+  failed: "border-rose-500/40",
+  stale: "border-border",
 };
 
 function cardSequence(card: WorkshopCard): number | string {
@@ -65,11 +66,11 @@ export function Pill({
   tone?: "slate" | "blue" | "green" | "amber" | "red";
 }) {
   const toneClass = {
-    slate: "border-slate-200 bg-slate-50 text-slate-600",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    green: "border-green-200 bg-green-50 text-green-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    red: "border-red-200 bg-red-50 text-red-700",
+    slate: "border-border bg-muted/50 text-muted-foreground",
+    blue: "border-sky-500/30 bg-sky-500/15 text-sky-300",
+    green: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+    amber: "border-amber-500/30 bg-amber-500/15 text-amber-300",
+    red: "border-rose-500/30 bg-rose-500/15 text-rose-300",
   }[tone];
 
   return (
@@ -82,7 +83,7 @@ export function Pill({
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
-      <h4 className="text-[11px] font-semibold uppercase text-slate-500">{title}</h4>
+      <h4 className="text-[11px] font-semibold uppercase text-muted-foreground">{title}</h4>
       {children}
     </section>
   );
@@ -100,8 +101,8 @@ export function KeyValueGrid({
     <dl className="grid gap-2 sm:grid-cols-2">
       {visible.map((item) => (
         <div className="min-w-0" key={item.label}>
-          <dt className="text-[11px] uppercase text-slate-400">{item.label}</dt>
-          <dd className="break-words text-xs font-medium text-slate-700">{formatScalar(item.value)}</dd>
+          <dt className="text-[11px] uppercase text-muted-foreground">{item.label}</dt>
+          <dd className="break-words text-xs font-medium text-foreground/90">{formatScalar(item.value)}</dd>
         </div>
       ))}
     </dl>
@@ -118,9 +119,9 @@ export function TextList({
   const values = stringList(items);
   if (values.length === 0) return null;
   const toneClass = {
-    slate: "text-slate-600 marker:text-slate-300",
-    amber: "text-amber-700 marker:text-amber-300",
-    red: "text-red-700 marker:text-red-300",
+    slate: "text-foreground/85 marker:text-muted-foreground",
+    amber: "text-amber-300 marker:text-amber-400",
+    red: "text-rose-300 marker:text-rose-400",
   }[tone];
 
   return (
@@ -135,12 +136,12 @@ export function TextList({
 export function ProgressBar({ value, label }: { value: number; label?: string }) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-        <span>{label ?? "Progress"}</span>
+      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+        <span>{label ?? workshopCopy("agora.workshop.cardLabels.progress", "進度")}</span>
         <span className="font-mono">{Math.round(value)}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-blue-500" style={{ width: `${value}%` }} />
+      <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary" style={{ width: `${value}%` }} />
       </div>
     </div>
   );
@@ -150,14 +151,14 @@ export function EvidenceRefs({ refs }: { refs?: WorkshopEvidenceRef[] }) {
   if (!refs || refs.length === 0) return null;
 
   return (
-    <Section title="Evidence">
+    <Section title={workshopCopy("agora.workshop.cardLabels.evidence", "證據")}>
       <ul className="space-y-1">
         {refs.map((ref) => (
-          <li className="flex min-w-0 items-start gap-2 text-xs text-slate-600" key={`${ref.ref_type}:${ref.ref_id}`}>
-            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <li className="flex min-w-0 items-start gap-2 text-xs text-muted-foreground" key={`${ref.ref_type}:${ref.ref_id}`}>
+            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="min-w-0 break-words">
-              <span className="font-medium">{formatLabel(ref.ref_type)}</span>
-              <span className="text-slate-400"> · </span>
+              <span className="font-medium text-foreground/90">{formatLabel(ref.ref_type)}</span>
+              <span className="text-muted-foreground"> · </span>
               <span className="font-mono text-[11px]">{ref.ref_id}</span>
               {ref.summary ? <span className="ml-1">{ref.summary}</span> : null}
             </span>
@@ -169,18 +170,7 @@ export function EvidenceRefs({ refs }: { refs?: WorkshopEvidenceRef[] }) {
 }
 
 function actionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    approve: "Approve",
-    edit: "Edit",
-    reject: "Reject",
-    cancel: "Cancel",
-    request_explanation: "Explain",
-    open_detail: "Open detail",
-    validate: "Validate",
-    accept: "Accept",
-    open_diff: "Open diff",
-  };
-  return labels[action] ?? formatLabel(action);
+  return workshopCopy(`agora.workshop.actions.${action}`, formatLabel(action));
 }
 
 function ActionIcon({ action }: { action: string }) {
@@ -197,11 +187,11 @@ export function ActionBar({ actions }: { actions?: WorkshopAllowedActions }) {
   if (enabled.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+    <div className="flex flex-wrap gap-2 border-t border-border/70 pt-3">
       {enabled.map(([action]) => (
         <button
           aria-disabled="true"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-2.5 text-xs font-medium text-secondary-foreground"
           disabled
           key={action}
           title={actionLabel(action)}
@@ -220,7 +210,7 @@ export function BackendModeBadge({ mode }: { mode?: unknown }) {
   const tone = value === "real" ? "green" : value === "fixture" || value === "stub" ? "amber" : "slate";
   return (
     <span className="inline-flex items-center gap-1">
-      <FlaskConical className="h-3.5 w-3.5 text-slate-400" />
+      <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
       <Pill tone={tone}>{formatLabel(value)}</Pill>
     </span>
   );
@@ -230,8 +220,8 @@ export function NoOrderRouteBadge({ value }: { value?: unknown }) {
   const proof = optionalString(value);
   if (!proof) return null;
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-slate-600">
-      <ShieldAlert className="h-3.5 w-3.5 text-slate-400" />
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
       {formatLabel(proof)}
     </span>
   );
@@ -248,10 +238,10 @@ export function CardShell({
 }) {
   const status = card.status ?? "informational";
 
-  let authorLabel = "Workshop Servant";
-  let bgClass = "mr-auto max-w-[92%] border-slate-200 bg-slate-50/50";
+  let authorLabel = workshopCopy("agora.workshop.cardLabels.authorServant", "策略工坊助理");
+  let bgClass = "mr-auto max-w-[92%] border-border bg-card text-card-foreground";
   let accentBorder = "";
-  let authorBadgeColor = "bg-slate-100 text-slate-700 border-slate-200";
+  let authorBadgeColor = "bg-muted/60 text-foreground/90 border-border";
 
   const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description" || card.persona_id === "human";
   const isPersona = card.card_type === "persona_opinion" || card.card_type === "opinion" || (card.persona_id !== undefined && card.persona_id !== "servant" && card.persona_id !== "human");
@@ -259,28 +249,30 @@ export function CardShell({
   const isTool = ["research_result", "research_progress", "research_plan_proposal"].includes(card.card_type);
 
   if (isUser) {
-    authorLabel = "Human (Operator)";
-    bgClass = "ml-auto max-w-[78%] border-blue-200 bg-blue-50/70";
-    authorBadgeColor = "bg-blue-100 text-blue-800 border-blue-200";
+    authorLabel = workshopCopy("agora.workshop.cardLabels.authorHuman", "交易員（操作者）");
+    bgClass = "ml-auto max-w-[78%] border-primary/40 bg-primary/10 text-foreground";
+    authorBadgeColor = "bg-primary/20 text-primary border-primary/30";
   } else if (isPersona) {
-    authorLabel = `Persona: ${formatLabel(card.persona_id || "Bot")}`;
-    bgClass = "mr-auto max-w-[92%] border-purple-200 bg-purple-50/20";
+    authorLabel = workshopCopy("agora.workshop.cardLabels.authorPersona", `Persona：${formatLabel(card.persona_id || "Bot")}`, {
+      name: formatLabel(card.persona_id || "Bot"),
+    });
+    bgClass = "mr-auto max-w-[92%] border-purple-500/30 bg-purple-500/10 text-card-foreground";
     accentBorder = "border-l-4 border-l-purple-500";
-    authorBadgeColor = "bg-purple-100 text-purple-800 border-purple-200";
+    authorBadgeColor = "bg-purple-500/20 text-purple-300 border-purple-500/30";
   } else if (isSynthesis) {
-    authorLabel = "Committee Synthesis";
-    bgClass = "mr-auto max-w-[92%] border-indigo-200 bg-indigo-50/30";
+    authorLabel = workshopCopy("agora.workshop.cardLabels.authorSynthesis", "委員會綜合共識");
+    bgClass = "mr-auto max-w-[92%] border-indigo-500/30 bg-indigo-500/10 text-card-foreground";
     accentBorder = "border-l-4 border-l-indigo-500";
-    authorBadgeColor = "bg-indigo-100 text-indigo-800 border-indigo-200";
+    authorBadgeColor = "bg-indigo-500/20 text-indigo-300 border-indigo-500/30";
   } else if (isTool) {
-    authorLabel = "Tool Execution";
-    bgClass = "mr-auto max-w-[92%] border-emerald-200 bg-emerald-50/20";
+    authorLabel = workshopCopy("agora.workshop.cardLabels.authorTool", "研究工具執行");
+    bgClass = "mr-auto max-w-[92%] border-emerald-500/30 bg-emerald-500/10 text-card-foreground";
     accentBorder = "border-l-4 border-l-emerald-500";
-    authorBadgeColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
+    authorBadgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
   } else {
-    authorLabel = "Workshop Servant";
-    bgClass = "mr-auto max-w-[92%] border-slate-300 bg-slate-50/50";
-    authorBadgeColor = "bg-slate-200 text-slate-800 border-slate-300";
+    authorLabel = workshopCopy("agora.workshop.cardLabels.authorServant", "策略工坊助理");
+    bgClass = "mr-auto max-w-[92%] border-border bg-card text-card-foreground";
+    authorBadgeColor = "bg-muted/60 text-foreground/90 border-border";
   }
 
   return (
@@ -291,36 +283,37 @@ export function CardShell({
         accentBorder,
         !isUser && !isPersona && !isSynthesis && !isTool && CARD_ACCENT[status],
       )}
+      data-card-type={card.card_type}
       data-testid={`workshop-card-${card.card_id}`}
     >
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase text-slate-500">
+          <span className="text-[11px] font-semibold uppercase text-muted-foreground">
             {cardTypeLabel(card.card_type)}
           </span>
           <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", authorBadgeColor)}>
             {authorLabel}
           </span>
           <StatusPill status={status} />
-          <span className="font-mono text-[11px] text-slate-300">#{cardSequence(card)}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">#{cardSequence(card)}</span>
         </div>
-        <h3 className="break-words text-sm font-semibold text-slate-900">
+        <h3 className="break-words text-sm font-semibold text-foreground">
           {card.title || cardTypeLabel(card.card_type)}
         </h3>
-        {card.summary ? <p className="break-words text-xs leading-5 text-slate-600">{card.summary}</p> : null}
+        {card.summary ? <p className="break-words text-xs leading-5 text-muted-foreground">{card.summary}</p> : null}
       </header>
       {children}
       <EvidenceRefs refs={card.evidence_refs} />
       {onContinueDiscussion ? (
-        <div className="flex border-t border-slate-100 pt-3">
+        <div className="flex border-t border-border/70 pt-3">
           <button
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-medium text-blue-700"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/15 px-2.5 text-xs font-medium text-primary hover:bg-primary/25"
             data-testid={`workshop-card-${card.card_id}-discuss`}
             onClick={() => onContinueDiscussion(card.card_id)}
             type="button"
           >
             <HelpCircle className="h-3.5 w-3.5" />
-            <span>Ask Servant</span>
+            <span>{workshopCopy("agora.workshop.actions.ask_servant", "詢問助理")}</span>
           </button>
         </div>
       ) : null}

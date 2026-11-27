@@ -1,0 +1,113 @@
+{
+  "schema_version": "pantheon.fe-agora-workshop-conversation-first.evidence.v1",
+  "task_id": "FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127",
+  "timestamp": "2026-11-27T21:24:00Z",
+  "problem_register_binding": {
+    "root_cause_class": [
+      "RC4",
+      "RC6"
+    ],
+    "summary": "Restore V10 conversation-first Strategy Workshop UX: start workshop creation with a multi-line zh-TW strategy description and optional derived title, default composer to the trader's own servant without requiring persona selection, render the strategy reconstruction card and 12-block completeness rail in zh-TW with the five V10 block states and clickable high-value decision options wired to POST /bff/agora/workshops/{id}/decisions, format opinion candidate measures as labelled fields with engineering details in expandable sections, treat no_trader_meetings as a zh-TW empty state, derive interaction summary status from participant completion, wire VersionCompareCard and BacktestResultCard with non-empty version patch enforcement, and replace all bg-white/slate-* light classes across workshop components with dark-theme tokens."
+  },
+  "dependencies_verified": {
+    "AGORA-WORKSHOP-RECONSTRUCTION-HOSTED-20261127": "done",
+    "AGORA-WORKSHOP-TWELVE-BLOCK-COMPLETENESS-20261127": "done"
+  },
+  "acceptance_coverage": {
+    "AC1_create_workshop_multiline_zh_description_and_optional_derived_title": {
+      "passed": true,
+      "implementation": "Updated WorkshopListView.tsx with V10 Artboard 1 zh-TW copy, a multi-line strategy description textarea (create-workshop-description-input), V10 focus tags (create-workshop-focus-tags), an optional strategy title input (create-workshop-title-input) that automatically derives the title via deriveWorkshopTitleFromDescription when left empty (create-workshop-derived-title), and markWorkshopPendingInitialReconstruction(workshopId) so newly created workshops with a strategy description trigger initial strategy reconstruction on load.",
+      "tests": [
+        "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx > creates a workshop from a multi-line zh-TW strategy description with derived title and triggers initial reconstruction",
+        "e2e/agora-persona-workshop-navigation.spec.ts > creating a Workshop from a zh-TW strategy description reconstructs the strategy, renders the 12-block rail, and submits a decision option",
+        "e2e/agora-strategy-workshop-hosted.spec.ts > FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127 recorded-fixture Chromium proof"
+      ]
+    },
+    "AC2_servant_default_composer_and_optional_persona_consultation_addon": {
+      "passed": true,
+      "implementation": "Updated WorkshopSessionView.tsx and participantPicker.ts so regular workshop sessions default to servant-only conversation (pickerMode = 'none', servant-default-composer-badge) without requiring persona selection. Added an optional Persona consultation add-on toggle (persona-consult-addon-toggle) exposing Ask/Challenge/Compare/Propose/Reflect modes and participant selection, while allowing the trader to send messages to their own servant even when zero eligible personas are available.",
+      "tests": [
+        "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx > allows the trader to send to their own servant with no eligible personas and when the optional Persona add-on is toggled off"
+      ]
+    },
+    "AC3_zh_reconstruction_card_twelve_block_rail_clickable_decisions_and_failed_retry": {
+      "passed": true,
+      "implementation": "Updated workshopCompletenessDisplay.ts, StrategyCompletenessRail.tsx, WorkshopCardRenderer.tsx, and WorkshopSessionView.tsx to render the V10 12-block completeness rail (v10-twelve-blocks-section, v10-block-*) with the five V10 states (已確認, 助理推定, 尚缺, 薄弱, 衝突), block notes, and next high-value decision options (next-question-section, rail-decision-option-*) plus servant default option (rail-decision-servant-default) wired to postWorkshopDecision (POST /bff/agora/workshops/{id}/decisions) followed by reconstructWorkshopStrategy. Added typed reconstruction failure reason display (workshop-reconstruction-failure-reason) and retry button (workshop-reconstruction-retry-btn).",
+      "tests": [
+        "src/agora/components/StrategyCompletenessRail.test.tsx > renders V10 twelve blocks with five states, notes, and submits clickable next high-value decision options",
+        "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx > submits clickable high-value decision options through postWorkshopDecision and refreshes reconstruction",
+        "src/lib/bff-v1/agora/workshops.test.ts > postWorkshopDecision"
+      ]
+    },
+    "AC4_opinion_candidate_measures_labelled_fields_and_expandable_engineering_details": {
+      "passed": true,
+      "implementation": "Updated PersonaOpinionCard.tsx, WorkshopCardPrimitives.tsx, and WorkshopCardRenderer.tsx so candidate measures render as labelled readable fields (measure-item-*) instead of raw JSON, and moved raw identifiers, hashes, and provenance metadata into collapsed expandable engineering details sections (V10 §2.2).",
+      "tests": [
+        "src/agora/components/WorkshopCardRenderer.test.tsx"
+      ]
+    },
+    "AC5_no_trader_meetings_zh_empty_state_and_accurate_interaction_summary_status": {
+      "passed": true,
+      "implementation": "Updated WorkshopDeliberativeMeetingsSection in WorkshopSessionView.tsx so empty_reason === 'no_trader_meetings' (or 'no_meetings') renders a zh-TW empty state (workshop-convened-meetings-empty) rather than a read failure. Updated DailyInteractionTimeline.tsx to derive interaction status from participant records so an interaction whose participants all succeeded renders as completed (已完成) instead of remaining stuck on running.",
+      "tests": [
+        "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx > shows zh-TW empty state for no_trader_meetings instead of a read failure",
+        "src/agora/components/DailyInteractionTimeline.test.tsx > derives completed status instead of running when all participants succeeded (AC5)"
+      ]
+    },
+    "AC6_version_selection_comparison_backtest_result_wired_and_non_empty_version_patch": {
+      "passed": true,
+      "disposition": "wired_both_components",
+      "implementation": "Wired BacktestResultCard inside WorkshopCardRenderer.tsx for research_result cards with backtest metrics/equity/drawdown/trades/validation payload. Wired VersionCompareCard and version selection (selectWorkshopVersion) in WorkshopSessionView.tsx (workshop-versions-panel, workshop-version-compare-section). Enforced non-empty patch validation in both createWorkshopVersion (workshops.ts) and the + Version Patch action (cmd-version-btn) in WorkshopSessionView.tsx.",
+      "tests": [
+        "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx > wires version selection and VersionCompareCard and prevents Version Patch from submitting an empty patch",
+        "src/agora/components/WorkshopCardRenderer.test.tsx > delegates research_result with backtest payload to BacktestResultCard (AC6)",
+        "src/lib/bff-v1/agora/workshops.test.ts > createWorkshopVersion > never submits an empty patch array"
+      ]
+    },
+    "AC7_dark_theme_tokens_zh_tw_locales_and_agora_contract_alignment": {
+      "passed": true,
+      "implementation": "Replaced all bg-white and slate-* light-palette classes across every workshop card, rail, timeline, research panel, and strategy-workshop page with dark-theme tokens (bg-card, bg-muted, border-border, text-foreground, text-muted-foreground). Added zh-TW and en-US locale entries under agora.workshop and verified contract alignment via npm run test:contract.",
+      "contract_regeneration_note": "The canonical Agora v1.13 contract bundle (services/control-plane/specs/agora/bundle_index.v1_13.json and docs/contracts/agora/frontend-generation-output.v1_13.json) verified by scripts/contract-drift-check.mjs has no POST /bff/agora/workshops/{id}/decisions or POST /bff/agora/workshops/{id}/reconstruct route/schema entries, so regeneration via contract-drift-check.mjs against the canonical v1.13 bundle is a byte-identical no-op (src/lib/bff-v1/agora/types.ts and src/lib/bff-v1/agora/contract-snapshot.json remain unchanged and npm run test:contract passes with zero drift). Runtime DTOs for /decisions (WorkshopDecisionRequest, WorkshopDecisionReceipt, WorkshopStrategyBlock, WorkshopNextDecision) and /reconstruct (WorkshopReconstructionResponse) are typed in src/lib/bff-v1/agora/workshops.ts.",
+      "tests": [
+        "src/agora/i18n.guard.test.ts (7 passed)",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts (17 passed)",
+        "npm run test:contract (11 passed)"
+      ]
+    },
+    "AC8_lint_tsc_locale_parity_and_unit_e2e_specs_pass": {
+      "passed": true,
+      "commands": [
+        "npm run lint -> 0 errors (153 pre-existing warnings), exit 0",
+        "npm run typecheck:app -> 0 errors, exit 0",
+        "npm run typecheck:agora -> 0 errors, exit 0",
+        "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-worker-worktrees/pantheon/agora-workshop-twelve-block-completeness-20261127 npm run test:contract -> 11 passed, exit 0",
+        "npx vitest run src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx -> 67 passed (67/67), exit 0",
+        "npx vitest run (29 workshop/components/bff-agora/i18n test files) -> 509 passed (509/509), exit 0",
+        "npx playwright test e2e/agora-persona-workshop-navigation.spec.ts e2e/agora-strategy-workshop-hosted.spec.ts -> 5 passed, 3 hosted-only skipped, exit 0",
+        "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build -> exit 0"
+      ]
+    },
+    "AC9_hosted_proof_and_independent_reviewer_family": {
+      "reviewer_independence": "Owner is Antigravity2 (Antigravity family); Reviewer is Claude2 (Claude family).",
+      "recorded_fixture_chromium_proof": "Real Chromium Playwright proof (e2e/agora-strategy-workshop-hosted.spec.ts -> FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127 recorded-fixture Chromium proof) logged in as admintest (operatorId: admintest, tenantId: pantheon-dev) against the built SPA at 1600x960 desktop viewport: (1) 01-create-workshop-long-zh-description.png shows the create-workshop modal with V10 Artboard 1 zh-TW copy, focus tags, a long 5-point Chinese winner-branch strategy description, and the automatically derived title with the optional title input left empty; (2) 02-completed-reconstruction-and-twelve-block-rail.png shows the dark-themed workshop session after initial reconstruction with the completed strategy_reconstruction card in zh-TW, the evaluated 12-block completeness rail (v10-twelve-blocks-section) showing all 12 V10 blocks in order across the 5 V10 states (已確認, 助理推定, 尚缺, 薄弱, 衝突) with one-line notes, the next high-value decision (next-question-section) with clickable options and servant default, and the servant-default composer badge; (3) 03-decision-submitted-twelve-block-rail-updated.png shows the updated 12-block rail after clicking option A (POST /bff/agora/workshops/{id}/decisions + POST /reconstruct), confirming block 6 (信號形成) with the trader's choice note and advancing next_decision to block 4 (分點遷移與反向流); (4) 04-opinion-measures-backtest-version-compare-meetings-empty.png shows PersonaOpinionCard candidate measures as labelled fields with engineering details collapsed, BacktestResultCard, VersionCompareCard + version selector, completed DailyInteractionTimeline status, and the zh-TW no_trader_meetings empty state.",
+      "hosted_admintest_probe": "e2e/agora-strategy-workshop-hosted.spec.ts also includes the live hosted admintest walkthrough test ('FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127 hosted admintest creates a new workshop from a long zh-TW description and reaches a completed reconstruction card and evaluated 12-block rail') which runs against https://app.dev.mvl-cap.tw and https://api.dev.mvl-cap.tw post-merge once the dev FE and Pantheon BFF (AGORA-WORKSHOP-TWELVE-BLOCK-COMPLETENESS-20261127) deploy completes."
+    }
+  },
+  "screenshots": [
+    "docs/deployment/evidence/FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127/screenshots/01-create-workshop-long-zh-description.png",
+    "docs/deployment/evidence/FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127/screenshots/02-completed-reconstruction-and-twelve-block-rail.png",
+    "docs/deployment/evidence/FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127/screenshots/03-decision-submitted-twelve-block-rail-updated.png",
+    "docs/deployment/evidence/FE-AGORA-WORKSHOP-CONVERSATION-FIRST-20261127/screenshots/04-opinion-measures-backtest-version-compare-meetings-empty.png"
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "note": "Frontend UI, BFF client helper, and test updates only; adds no recurring jobs, emitters, or persistent writers."
+  },
+  "residual_findings": []
+}
