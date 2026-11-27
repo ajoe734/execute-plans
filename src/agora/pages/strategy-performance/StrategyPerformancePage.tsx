@@ -26,6 +26,7 @@ import {
   type TradingRoomStrategyEntry,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import { BffError } from "@/lib/bff-v1/errors";
+import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import { cn } from "@/lib/utils";
 
 type LoadState =
@@ -224,7 +225,7 @@ function healthClass(status: string): string {
   if (normalized.includes("degraded") || normalized.includes("partial") || normalized.includes("stale")) {
     return "border-amber-400/35 bg-amber-400/10 text-amber-200";
   }
-  return "border-slate-500/50 bg-slate-800 text-slate-200";
+  return "border-[#2a2e38] bg-[#1e2330] text-[#c5cad2]";
 }
 
 function availabilityClass(status: PerformanceAvailability | DetailDisplayState): string {
@@ -235,7 +236,25 @@ function availabilityClass(status: PerformanceAvailability | DetailDisplayState)
     return "border-amber-400/35 bg-amber-400/10 text-amber-200";
   }
   if (status === "unavailable") return "border-rose-400/35 bg-rose-400/10 text-rose-200";
-  return "border-slate-500/50 bg-slate-800 text-slate-200";
+  return "border-[#2a2e38] bg-[#1e2330] text-[#c5cad2]";
+}
+
+function formatPerformanceSourceName(name: string, t: TFunction): string {
+  return t(`agora.performance.sources.${name}`, {
+    defaultValue: name.replace(/_/g, " "),
+  });
+}
+
+function formatPerformancePolicy(policy: string | null | undefined, t: TFunction, missing: string): string {
+  if (!policy || !policy.trim()) return missing;
+  const trimmed = policy.trim();
+  return t(`agora.performance.policies.${trimmed}`, {
+    defaultValue: trimmed.replace(/_/g, " "),
+  });
+}
+
+function formatPerformanceHealthStatus(status: string, t: TFunction): string {
+  return statusLabel(status, t);
 }
 
 function metric(row: StrategyPerformanceRow, key: keyof TradingRoomPerformanceAttributionRow["metrics"]): unknown {
@@ -324,7 +343,7 @@ function SourceAvailabilityHeader({
       </span>
       {availability.reason ? (
         <p className="basis-full text-xs text-amber-100/85" data-testid={`${label}-availability-reason`}>
-          {availability.reason}
+          {reasonCodeDisplay(availability.reason, t).text}
         </p>
       ) : null}
     </div>
@@ -342,6 +361,8 @@ function DetailStateNotice({ state }: { state: DetailState }): JSX.Element | nul
   return null;
 }
 
+const PERFORMANCE_REQUEST_TIMEOUT_MS = 10_000;
+
 export function StrategyPerformancePage(): JSX.Element {
   const { t } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -351,14 +372,26 @@ export function StrategyPerformancePage(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
+    const timeoutId = globalThis.setTimeout(() => {
+      if (!cancelled) {
+        cancelled = true;
+        setState({
+          message: t("agora.performance.timeout"),
+          status: "error",
+        });
+      }
+    }, PERFORMANCE_REQUEST_TIMEOUT_MS);
+
     Promise.all([
       getTradingRoom(),
       getAgoraPerformanceAttribution({ pageSize: 50, period }),
     ])
       .then(([aggregate, attribution]) => {
+        globalThis.clearTimeout(timeoutId);
         if (!cancelled) setState({ data: { aggregate, attribution }, status: "loaded" });
       })
       .catch((error: unknown) => {
+        globalThis.clearTimeout(timeoutId);
         if (!cancelled) {
           setState({
             message: error instanceof Error ? error.message : t("agora.performance.unavailable"),
@@ -366,16 +399,32 @@ export function StrategyPerformancePage(): JSX.Element {
           });
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(timeoutId);
+    };
   }, [refreshKey, period, t]);
 
   if (state.status === "loading") {
-    return <section className="flex flex-1 items-center justify-center bg-[#101318] p-6 text-sm text-[#8c96a6]" role="status">{t("agora.performance.loading")}</section>;
+    return (
+      <section
+        aria-label={t("agora.performance.title")}
+        className="flex flex-1 items-center justify-center bg-[#101318] p-6 text-sm text-[#8c96a6]"
+        data-testid="strategy-performance-page"
+        role="status"
+      >
+        {t("agora.performance.loading")}
+      </section>
+    );
   }
 
   if (state.status === "error") {
     return (
-      <section className="flex flex-1 flex-col gap-4 overflow-auto bg-[#101318] p-5 text-[#f0ece4]">
+      <section
+        aria-label={t("agora.performance.title")}
+        className="flex flex-1 flex-col gap-4 overflow-auto bg-[#101318] p-5 text-[#f0ece4]"
+        data-testid="strategy-performance-page"
+      >
         <div className="rounded-md border border-rose-400/35 bg-rose-400/10 p-4" role="alert">
           <div className="flex items-center gap-2 text-sm font-semibold text-rose-100">
             <AlertTriangle aria-hidden="true" className="h-4 w-4" />
@@ -384,11 +433,12 @@ export function StrategyPerformancePage(): JSX.Element {
           <p className="mt-2 text-sm text-rose-100/85">{state.message}</p>
           <button
             className="mt-4 inline-flex h-8 items-center gap-2 rounded-md border border-rose-300/40 px-3 text-xs font-medium text-rose-50 hover:bg-rose-300/10"
+            data-testid="strategy-performance-retry"
             onClick={() => setRefreshKey((key) => key + 1)}
             type="button"
           >
             <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-            {t("agora.performance.refresh")}
+            {t("agora.performance.retry")}
           </button>
         </div>
       </section>
@@ -420,8 +470,8 @@ function StrategyPerformanceLoaded({
   const writeAccess = useAgoraWriteAccess();
   const missing = t("agora.performance.notReported");
   const rows = useMemo(
-    () => buildRows(data.aggregate.strategies, data.attribution.data.items),
-    [data.aggregate.strategies, data.attribution.data.items],
+    () => buildRows(data.aggregate?.strategies ?? [], data.attribution?.data?.items ?? []),
+    [data.aggregate?.strategies, data.attribution?.data?.items],
   );
   const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"perf" | "intv" | "hist">("perf");
@@ -537,6 +587,37 @@ function StrategyPerformanceLoaded({
     }
   };
 
+  if (rows.length === 0) {
+    return (
+      <section
+        aria-label={t("agora.performance.title")}
+        className="flex h-full flex-1 flex-col gap-4 overflow-auto bg-[#101318] p-4 text-[#f0ece4] md:p-5"
+        data-testid="strategy-performance-page"
+      >
+        <div
+          className="max-w-[680px] rounded-lg border border-[#2a2e38] bg-[#171b22] p-4"
+          data-testid="strategy-performance-workshop-empty"
+        >
+          <h2 className="m-0 text-[15px] font-bold text-[#f0ece4]">
+            {t("agora.performance.noWorkshopStrategiesTitle", { defaultValue: "你還沒有工坊策略" })}
+          </h2>
+          <p className="mt-2 mb-3 text-xs leading-relaxed text-[#aab1bc]">
+            {t("agora.performance.noWorkshopStrategiesDescription", {
+              defaultValue: "策略執行與績效會顯示你在策略工坊完成並加入的策略。",
+            })}
+          </p>
+          <Link
+            className="inline-flex items-center rounded bg-[#e8b750] px-2.5 py-1.5 text-xs font-bold text-[#111417]"
+            data-testid="strategy-performance-open-workshop"
+            to="/agora/strategy-workshop"
+          >
+            {t("agora.performance.goToWorkshop", { defaultValue: "前往策略工坊" })}
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       aria-label={t("agora.performance.title")}
@@ -552,7 +633,7 @@ function StrategyPerformanceLoaded({
             </span>
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8c96a6]">
-            <span>{t("agora.performance.policy", { value: data.attribution.meta.policy ?? missing })}</span>
+            <span>{t("agora.performance.policy", { value: formatPerformancePolicy(data.attribution.meta.policy, t, missing) })}</span>
             <span>{t("agora.performance.snapshot", { value: formatDateTime(latestTelemetry, missing, i18n.resolvedLanguage) })}</span>
             <span className="text-[#3b82f6]">
               {t("agora.performance.officialPrefix")} {" "}
@@ -726,7 +807,7 @@ function StrategyPerformanceLoaded({
                         <span>{t("agora.performance.projectionRevision", { value: projection.freshness.projection_revision ?? missing })}</span>
                         <span>{t("agora.performance.projectionGeneration", { value: projection.freshness.projection_generation ?? missing })}</span>
                       </div>
-                      {projection.freshness.unavailable_sources.length > 0 ? <p className="mt-2 text-xs text-amber-100/85">{t("agora.performance.unavailableSources", { value: projection.freshness.unavailable_sources.join(", ") })}</p> : null}
+                      {projection.freshness.unavailable_sources.length > 0 ? <p className="mt-2 text-xs text-amber-100/85">{t("agora.performance.unavailableSources", { value: projection.freshness.unavailable_sources.map((name) => formatPerformanceSourceName(name, t)).join("、") })}</p> : null}
                     </div>
                   ) : null}
 
@@ -911,7 +992,7 @@ function StrategyPerformanceLoaded({
 
       <footer className="flex shrink-0 flex-col gap-2 rounded-xl border border-[#2a2e38] bg-[#171b22]/50 p-3" data-testid="performance-source-health">
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xs font-bold text-[#f0ece4]">{t("agora.performance.sourceHealth")}</h2><div className="text-[10px] text-[#8c96a6]">{t("agora.performance.returnedRows", { returned: summary.returned_row_count, total: summary.row_count })}</div></div>
-        {sourceRows.length > 0 ? <div className="flex flex-wrap gap-2">{sourceRows.map((source) => <span className={cn("inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10.5px]", healthClass(source.status))} key={source.name} title={source.detail}><span className="font-medium">{source.name}</span><span>{source.status}</span></span>)}</div> : <p className="text-[11px] text-[#8c96a6]">{t("agora.performance.noSourceMetadata")}</p>}
+        {sourceRows.length > 0 ? <div className="flex flex-wrap gap-2">{sourceRows.map((source) => <span className={cn("inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10.5px]", healthClass(source.status))} key={source.name} title={source.detail ? reasonCodeDisplay(source.detail, t).text : undefined}><span className="font-medium">{formatPerformanceSourceName(source.name, t)}</span><span>{formatPerformanceHealthStatus(source.status, t)}</span></span>)}</div> : <p className="text-[11px] text-[#8c96a6]">{t("agora.performance.noSourceMetadata")}</p>}
       </footer>
     </section>
   );

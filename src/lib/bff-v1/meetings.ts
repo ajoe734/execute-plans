@@ -200,7 +200,18 @@ function stripPrivateMemoryInner<T>(obj: T, withheldIds: Set<string>): T {
         continue;
       }
       const candidate =
-        ["evidence_refs", "citations", "accepted", "disputed"].includes(k) && Array.isArray(v) && withheldIds.size > 0
+        [
+          "evidence_refs",
+          "citations",
+          "accepted",
+          "disputed",
+          "cited_item_ids",
+          "unresolved_item_ids",
+          "summary_cited_item_ids",
+          "summary_unresolved_item_ids",
+        ].includes(k) &&
+        Array.isArray(v) &&
+        withheldIds.size > 0
           ? v.filter((entry) => {
               if (typeof entry === "string") return !withheldIds.has(entry.trim());
               if (isRecord(entry)) {
@@ -334,13 +345,61 @@ export interface MeetingOperatorReview {
   [key: string]: unknown;
 }
 
+export interface MeetingGatedDecision {
+  type?: string | null;
+  id?: string | null;
+  target_version?: string | number | null;
+  [key: string]: unknown;
+}
+
+export interface MeetingGatePanelReviewer {
+  persona_id: string;
+  persona_display_name?: string | null;
+  persona_name_missing?: boolean;
+  role?: string | null;
+  recommendation?: string | null;
+  [key: string]: unknown;
+}
+
+export interface MeetingGatePanelConclusion {
+  gate_decision?: string | null;
+  operator_decision_required?: boolean | null;
+  vetoed_by?: string | string[] | null;
+  reasons?: string[];
+  reviewers?: MeetingGatePanelReviewer[];
+  status?: string | null;
+  reason?: string | null;
+  [key: string]: unknown;
+}
+
+export interface MeetingGatePanelMemo {
+  memo_id: string;
+  request_id?: string | null;
+  memo_type?: string | null;
+  author_type?: string | null;
+  author_ref?: string | null;
+  summary?: string | null;
+  recommendation?: string | null;
+  status?: string | null;
+  case_file_view?: unknown;
+  [key: string]: unknown;
+}
+
 export interface MeetingSummaryItem {
   id?: string;
   meeting_id: string;
+  session_id?: string | null;
+  request_id?: string | null;
+  session_class?: "gate_panel" | "deliberative_meeting" | string | null;
+  consultation_type?: "persona_panel" | string | null;
   meeting_type: string;
+  title?: string | null;
   topic?: string;
   status: string;
   outcome?: string | null;
+  conclusion?: MeetingGatePanelConclusion | null;
+  gated_decision?: MeetingGatedDecision | null;
+  policy_id?: string | null;
   synthesis_unreadable_reason?: string | null;
   unreadable_reason?: string | null;
   operator_review?: MeetingOperatorReview | null;
@@ -374,6 +433,7 @@ export interface MeetingSummaryItem {
   has_private_servant?: boolean;
   round?: number;
   created_at?: string;
+  completed_at?: string | null;
   closed_at?: string | null;
   href?: string;
   [key: string]: unknown;
@@ -405,6 +465,7 @@ export interface MeetingsListData {
     closed_count?: number;
     review_count?: number;
     dead_letter_count?: number;
+    gate_panel_count?: number;
   };
 }
 
@@ -736,6 +797,10 @@ export interface MeetingDetail extends MeetingSummaryItem {
     [key: string]: unknown;
   } | MeetingPreReadInterpretation[] | null;
   rounds: MeetingRound[];
+  positions?: MeetingRoundPosition[];
+  memo?: MeetingGatePanelMemo | null;
+  memos?: MeetingGatePanelMemo[];
+  case_file_view?: unknown;
   label_reveal?: Record<string, string> | null;
   anonymised_labels_revealed?: boolean;
   synthesis?: MeetingSynthesis | null;
@@ -1858,7 +1923,9 @@ export async function submitMeetingActionResponse(
 
 function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDetail | undefined {
   const data = isRecord(raw.data) ? raw.data : raw;
-  const resolvedId = String(data.meeting_id ?? data.id ?? raw.meeting_id ?? raw.id ?? "").trim();
+  const resolvedId = String(
+    data.meeting_id ?? data.id ?? data.request_id ?? raw.meeting_id ?? raw.id ?? raw.request_id ?? "",
+  ).trim();
   if (!resolvedId) return undefined;
   const cleaned = stripPrivateMemory(data);
   const synthesisRaw = isRecord(cleaned.synthesis)
@@ -1921,11 +1988,32 @@ function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDet
       synthesisRecord?.decision_kind ??
       (rawOutcomeToken === "retain_pool" ? "retain_pool" : null),
   );
+  const normalizedPositions = Array.isArray(cleaned.positions)
+    ? (cleaned.positions.filter(isRecord) as unknown as MeetingRoundPosition[])
+    : undefined;
+  const normalizedRounds = Array.isArray(cleaned.rounds)
+    ? cleaned.rounds.filter(isRecord).map((round) => ({
+        ...round,
+        positions: Array.isArray(round.positions) ? round.positions.filter(isRecord) : [],
+      }) as unknown as MeetingRound)
+    : normalizedPositions && normalizedPositions.length > 0
+      ? [{ round: 1, mode: "independent", positions: normalizedPositions } as MeetingRound]
+      : [];
+  const normalizedMemos = Array.isArray(cleaned.memos)
+    ? (cleaned.memos.filter(isRecord) as unknown as MeetingGatePanelMemo[])
+    : isRecord(cleaned.memo)
+      ? [cleaned.memo as unknown as MeetingGatePanelMemo]
+      : undefined;
+  const normalizedMemo = isRecord(cleaned.memo)
+    ? (cleaned.memo as unknown as MeetingGatePanelMemo)
+    : normalizedMemos && normalizedMemos.length > 0
+      ? normalizedMemos[0]
+      : undefined;
   return {
     ...cleaned,
     id: resolvedId,
     meeting_id: resolvedId,
-    meeting_type: String(cleaned.meeting_type ?? cleaned.type ?? ""),
+    meeting_type: String(cleaned.meeting_type ?? cleaned.type ?? cleaned.session_class ?? ""),
     status: String(cleaned.status ?? ""),
     ...(reviewCause !== null
       ? {
@@ -1948,12 +2036,14 @@ function normalizeMeetingDetailPayload(raw: Record<string, unknown>): MeetingDet
     case_file_items: Array.isArray(cleaned.case_file_items)
       ? (cleaned.case_file_items.filter(isRecord) as unknown as MeetingCaseFileItem[])
       : [],
-    rounds: Array.isArray(cleaned.rounds)
-      ? cleaned.rounds.filter(isRecord).map((round) => ({
-          ...round,
-          positions: Array.isArray(round.positions) ? round.positions.filter(isRecord) : [],
-        }) as unknown as MeetingRound)
-      : [],
+    rounds: normalizedRounds,
+    ...(normalizedPositions !== undefined
+      ? { positions: normalizedPositions }
+      : normalizedRounds[0]?.positions
+        ? { positions: normalizedRounds[0].positions }
+        : {}),
+    ...(normalizedMemo !== undefined ? { memo: normalizedMemo } : {}),
+    ...(normalizedMemos !== undefined ? { memos: normalizedMemos } : {}),
     synthesis,
     adopted_actions: normalizeMeetingActionList(
       cleaned.adopted_actions ?? cleaned.actions ?? synthesis?.actions,

@@ -92,3 +92,95 @@ describe("agoraIdentityClient.getCapabilities — live mode envelope parsing", (
     await expect(agoraIdentityClient.getCapabilities()).rejects.toThrow(/network error|strict mode/);
   });
 });
+
+describe("agoraIdentityClient.getTraderIdentity", () => {
+  beforeEach(() => liveStatus._reset({ mode: "live", effective: "live" }));
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    liveStatus._reset();
+  });
+
+  it("extracts trader display name, style, and scope from /bff/me and /bff/agora/me", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) {
+        return Promise.resolve(
+          okResponse({
+            data: {
+              operator_id: "admintest",
+              user: {
+                id: "admintest",
+                display_name: "陳大戶",
+                trading_style: "分點籌碼與落後補漲",
+                roles: ["operator"],
+              },
+              tenant: { id: "pantheon-dev" },
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/bff/agora/me")) {
+        return Promise.resolve(
+          okResponse({
+            data: {
+              scope_id: "scope-1",
+              tenant_id: "pantheon-dev",
+              user_id: "admintest",
+              operator_id: "admintest",
+              granted_capabilities: ["agora.identity.v1", "agora.session.v1"],
+            },
+          }),
+        );
+      }
+      return Promise.resolve(new Response("Not Found", { status: 404 }));
+    });
+
+    const identity = await agoraIdentityClient.getTraderIdentity();
+    expect(identity).toEqual({
+      userId: "admintest",
+      tenantId: "pantheon-dev",
+      displayName: "陳大戶",
+      style: "分點籌碼與落後補漲",
+      marketState: null,
+      roles: ["operator"],
+      capabilities: ["agora.identity.v1", "agora.session.v1"],
+    });
+  });
+
+  it("falls back to Agora user scope when /bff/me lacks trader style", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) {
+        return Promise.resolve(
+          okResponse({
+            data: {
+              operator_id: "admintest",
+              user: { id: "admintest", display_name: "admintest" },
+              tenant: { id: "pantheon-dev" },
+            },
+          }),
+        );
+      }
+      return Promise.resolve(
+        okResponse({
+          data: {
+            tenant_id: "pantheon-dev",
+            user_id: "admintest",
+            operator_id: "admintest",
+            metadata: {
+              trader_name: "林操盤手",
+              trading_style: "事件與大額資金承接",
+              market_state: "台股盤中",
+            },
+            granted_capabilities: ["agora.workshop.v1"],
+          },
+        }),
+      );
+    });
+
+    const identity = await agoraIdentityClient.getTraderIdentity();
+    expect(identity.displayName).toBe("admintest");
+    expect(identity.style).toBe("事件與大額資金承接");
+    expect(identity.marketState).toBe("台股盤中");
+  });
+});

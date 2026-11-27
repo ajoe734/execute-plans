@@ -154,7 +154,7 @@ async function capture(page: Page, name: string): Promise<string> {
 }
 
 async function openAndVerifyServant(page: Page, narrow: boolean): Promise<void> {
-  const trigger = page.getByRole("button", { name: /servant drawer/i });
+  const trigger = page.getByRole("button", { name: /servant drawer|交易僕人抽屜/i });
   await trigger.focus();
   await trigger.click();
   const drawer = page.getByTestId("trading-desk-servant-drawer");
@@ -226,29 +226,40 @@ test.describe("AG-UIPOL-011 hosted responsive parity", () => {
       await test.step("Trading Room prioritizes the current task and contains drawers", async () => {
         await page.goto(`${FE_BASE_URL}/agora/trading-room`);
         await expect(page.getByTestId("trading-room-page")).toBeVisible({ timeout: 60_000 });
-        if (narrow) {
+        const hasWorkshopEmpty = await page.getByTestId("trading-room-workshop-empty-entry").isVisible();
+        if (hasWorkshopEmpty) {
+          await expect(page.getByTestId("trading-room-open-workshop")).toBeVisible();
+        } else if (narrow) {
           await expect(page.getByTestId("trading-room-mobile-priority")).toBeVisible();
           await expect(page.getByTestId("trading-room-navigation")).toHaveAttribute("data-mobile-collapsed", "true");
         }
         budgets.tradingRoom = await expectContainedShell(page);
         await openAndVerifyServant(page, narrow);
-        if (narrow) await openAndVerifyCandidate(page);
+        if (narrow && !hasWorkshopEmpty) await openAndVerifyCandidate(page);
         captures.push(await capture(page, `${viewport.name}-trading-room`));
       });
 
       await test.step("Strategy Workshop exposes conversation, next question, and readiness without a three-column squeeze", async () => {
         await page.goto(`${FE_BASE_URL}/agora/strategy-workshop`);
-        await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible({ timeout: 60_000 });
-        await expect(page.getByTestId("workshop-conversation-pane")).toBeVisible();
-        await expect(page.getByTestId("servant-composer")).toBeVisible();
-        if (narrow) {
-          await expect(page.getByTestId("workshop-mobile-priority")).toBeVisible();
-          await page.getByRole("button", { name: "Next question & readiness" }).click();
-          await expect(page.getByTestId("completeness-rail")).toBeVisible();
-          await page.getByRole("button", { name: "Conversation" }).click();
+        const workshopSurface = page.locator(
+          '[data-testid="strategy-workshop-page-session"], [data-testid="strategy-workshop-page-list"]',
+        );
+        await expect(workshopSurface.first()).toBeVisible({ timeout: 60_000 });
+        const isSessionView = await page.getByTestId("strategy-workshop-page-session").isVisible();
+        if (isSessionView) {
           await expect(page.getByTestId("workshop-conversation-pane")).toBeVisible();
+          await expect(page.getByTestId("servant-composer")).toBeVisible();
+          if (narrow) {
+            await expect(page.getByTestId("workshop-mobile-priority")).toBeVisible();
+            await page.getByRole("button", { name: /Next question & readiness|下一題與完整度/ }).click();
+            await expect(page.getByTestId("completeness-rail")).toBeVisible();
+            await page.getByRole("button", { name: /Conversation|對話/ }).click();
+            await expect(page.getByTestId("workshop-conversation-pane")).toBeVisible();
+          } else {
+            await expect(page.getByTestId("completeness-rail")).toBeVisible();
+          }
         } else {
-          await expect(page.getByTestId("completeness-rail")).toBeVisible();
+          await expect(page.getByTestId("workshop-list-header")).toBeVisible();
         }
         budgets.workshop = await expectContainedShell(page);
         captures.push(await capture(page, `${viewport.name}-strategy-workshop`));
@@ -257,14 +268,17 @@ test.describe("AG-UIPOL-011 hosted responsive parity", () => {
       await test.step("Performance foregrounds the decision and keeps outcome/list reachable", async () => {
         await page.goto(`${FE_BASE_URL}/agora/strategy-performance`);
         await expect(page.getByTestId("strategy-performance-page")).toBeVisible({ timeout: 60_000 });
-        if (narrow) {
+        const hasPerfEmpty = await page.getByTestId("strategy-performance-workshop-empty").isVisible();
+        if (hasPerfEmpty) {
+          await expect(page.getByTestId("strategy-performance-open-workshop")).toBeVisible();
+        } else if (narrow) {
           await expect(page.getByTestId("performance-mobile-priority")).toBeVisible();
           await expect(page.getByTestId("performance-decision-pane")).toBeVisible();
-          await page.getByRole("button", { name: "Selected outcome" }).click();
+          await page.getByRole("button", { name: /Selected outcome|所選結果/ }).click();
           await expect(page.getByTestId("performance-outcome-pane")).toBeVisible();
-          await page.getByRole("button", { name: "Strategies" }).click();
+          await page.getByRole("button", { name: /Strategies|策略/ }).click();
           await expect(page.getByTestId("performance-strategy-pane")).toBeVisible();
-          await page.getByRole("button", { name: "Decisions" }).click();
+          await page.getByRole("button", { name: /Decisions|決策/ }).click();
         }
         budgets.performance = await expectContainedShell(page);
         captures.push(await capture(page, `${viewport.name}-strategy-performance`));

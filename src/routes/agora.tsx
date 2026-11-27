@@ -1,10 +1,7 @@
-import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
 import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
 import { CommitteePage } from "@/agora/pages/learning/CommitteePage";
-import { MemoryReviewPage } from "@/agora/pages/learning/MemoryReviewPage";
-import { PersonaLabPage } from "@/agora/pages/learning/PersonaLabPage";
-import { FeedbackPage } from "@/agora/pages/learning/FeedbackPage";
 import { StrategyPerformancePage } from "@/agora/pages/strategy-performance/StrategyPerformancePage";
 import {
   StrategyWorkshopPage,
@@ -15,6 +12,7 @@ import {
 import type { WorkshopParticipantPicker } from "@/agora/participantPicker";
 import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import { useLiveSseConnection } from "@/platform/hooks";
+import { useMe } from "@/lib/v4/session/me";
 
 function tradingRoomHandoffQuery(handoff: TradingRoomReadinessHandoff): string {
   const params = new URLSearchParams({
@@ -51,17 +49,16 @@ export function safeWorkshopReturnPath(value: string | null): string | undefined
 export function AgoraLayoutRoute() {
   useLiveSseConnection();
   // useParams() resolves against the full matched route branch in React
-  // Router v6, so `workshopId` is populated here even though this component
-  // renders at the parent `/agora` layout route, not the
-  // `/agora/strategy-workshop/:workshopId` leaf route.
-  const { workshopId } = useParams<{ workshopId?: string }>();
+  // Router v6, so `workshopId` and `strategyId` are populated here even though
+  // this component renders at the parent `/agora` layout route.
+  const { workshopId, strategyId } = useParams<{ workshopId?: string; strategyId?: string }>();
   return (
     <div
       className="flex h-screen h-dvh min-h-0 flex-col overflow-hidden bg-background"
       data-testid="agora-standalone-shell"
     >
       <LiveStatusBanner />
-      <TradingDeskLayout workshopId={workshopId} />
+      <TradingDeskLayout strategyId={strategyId} workshopId={workshopId} />
     </div>
   );
 }
@@ -144,16 +141,30 @@ export function AgoraStrategyWorkshopRoute() {
   const governedProposalId = searchParams.get("governedProposalId")?.trim() || undefined;
 
   return (
-    <StrategyWorkshopPage
-      entry={entry}
-      governedProposalId={governedProposalId}
-      onAddToTradingRoom={(handoff) =>
-        navigate(
-          `/agora/trading-room/${encodeURIComponent(handoff.strategyId)}?${tradingRoomHandoffQuery(handoff)}`,
-        )
-      }
-      workshopId={workshopId}
-    />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div
+        className="flex shrink-0 items-center justify-end border-b border-[#2a2e38] bg-[#14171d] px-4 py-1 text-xs"
+        data-testid="workshop-committee-bar"
+      >
+        <Link
+          className="text-xs font-medium text-[#e8b750] underline-offset-2 hover:underline"
+          data-testid="workshop-open-committee"
+          to="/agora/committee"
+        >
+          委員會會議與備忘錄
+        </Link>
+      </div>
+      <StrategyWorkshopPage
+        entry={entry}
+        governedProposalId={governedProposalId}
+        onAddToTradingRoom={(handoff) =>
+          navigate(
+            `/agora/trading-room/${encodeURIComponent(handoff.strategyId)}?${tradingRoomHandoffQuery(handoff)}`,
+          )
+        }
+        workshopId={workshopId}
+      />
+    </div>
   );
 }
 
@@ -165,7 +176,82 @@ export function AgoraFallbackRoute() {
   return <Navigate to="/agora/trading-room" replace />;
 }
 
+// Legacy routes per IA 05 (05_execute_plans_agora_ui_ia_and_dependencies.md):
+//   /agora/daily       -> /agora/trading-room
+//   /agora/watchlist   -> /agora/trading-room?drawer=watchlist
+//   /agora/signals     -> /agora/trading-room?view=decision-queue
+//   /agora/notebook    -> /agora/strategy-workshop
+//   /agora/ask         -> /agora/trading-room (opens servant drawer)
+//   /agora/journal     -> /agora/trading-room (opens journal drawer once landed)
+//   /agora/trainer     -> /agora/trading-room (opens servant/trainer drawer)
+export function AgoraDailyLegacyRoute() {
+  return <Navigate to="/agora/trading-room" replace />;
+}
+
+export function AgoraWatchlistLegacyRoute() {
+  return <Navigate to="/agora/trading-room?drawer=watchlist" replace />;
+}
+
+export function AgoraSignalsLegacyRoute() {
+  return <Navigate to="/agora/trading-room?view=decision-queue" replace />;
+}
+
+export function AgoraNotebookLegacyRoute() {
+  return <Navigate to="/agora/strategy-workshop" replace />;
+}
+
+export function AgoraAskLegacyRoute() {
+  return <Navigate to="/agora/trading-room" replace state={{ openDrawer: "servant" }} />;
+}
+
+export function AgoraJournalLegacyRoute() {
+  return <Navigate to="/agora/trading-room" replace state={{ openDrawer: "journal" }} />;
+}
+
+export function AgoraTrainerLegacyRoute() {
+  return <Navigate to="/agora/trading-room" replace state={{ openDrawer: "trainer" }} />;
+}
+
 export const AgoraCommitteeRoute = () => <CommitteePage />;
-export const AgoraMemoryRoute = () => <MemoryReviewPage />;
-export const AgoraPersonaLabRoute = () => <PersonaLabPage />;
-export const AgoraFeedbackRoute = () => <FeedbackPage />;
+
+// FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: memory review, persona lab and
+// per-persona feedback are operator tools (institutional memory, JSON harness
+// patches, evaluation suites), not trader screens. Agora is for human traders
+// only, so the old Agora paths send operator roles to the Management pages
+// and everyone else back to the trading room.
+export const PERSONA_TOOL_OPERATOR_ROLES: ReadonlySet<string> = new Set([
+  "admin",
+  "platform_admin",
+  "operator",
+  "ops",
+  "research_lead",
+  "reviewer",
+  "approver",
+]);
+
+export function isPersonaToolOperator(roles: readonly string[] | null | undefined): boolean {
+  return (roles ?? []).some((role) => PERSONA_TOOL_OPERATOR_ROLES.has(String(role).toLowerCase()));
+}
+
+export const PERSONA_TOOL_MANAGEMENT_PATHS = {
+  memory: "/management/persona-tools/memory",
+  "persona-lab": "/management/persona-tools/lab",
+  feedback: "/management/persona-tools/feedback",
+} as const;
+
+function AgoraPersonaToolRedirect({ tool }: { tool: keyof typeof PERSONA_TOOL_MANAGEMENT_PATHS }) {
+  const { me, loading } = useMe();
+  const { search } = useLocation();
+  if (loading && !me) {
+    return <p className="p-4 text-sm text-muted-foreground" data-testid="agora-persona-tool-redirecting">…</p>;
+  }
+  if (!isPersonaToolOperator(me?.roles)) return <Navigate to="/agora/trading-room" replace />;
+  // Only the persona context crosses over; other Agora query keys are dropped.
+  const personaId = new URLSearchParams(search).get("personaId")?.trim();
+  const query = personaId ? `?${new URLSearchParams({ personaId }).toString()}` : "";
+  return <Navigate to={`${PERSONA_TOOL_MANAGEMENT_PATHS[tool]}${query}`} replace />;
+}
+
+export const AgoraMemoryRoute = () => <AgoraPersonaToolRedirect tool="memory" />;
+export const AgoraPersonaLabRoute = () => <AgoraPersonaToolRedirect tool="persona-lab" />;
+export const AgoraFeedbackRoute = () => <AgoraPersonaToolRedirect tool="feedback" />;
