@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { sectionReadFailure, type SectionReadState } from "@/lib/bff-v1/permissionState";
+import { sectionReadBadge, sectionReadFallback } from "@/platform/components/NoPermissionState";
 import { safeDateTime, safePercent } from "@/lib/utils";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
@@ -37,6 +39,7 @@ export const DeploymentDetail = () => {
   );
   const [runtimes, setRuntimes] = useState<Runtime[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [approvalsRead, setApprovalsRead] = useState<SectionReadState>({ status: "idle" });
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [rollbackOpen, setRollbackOpen] = useState(false);
@@ -48,9 +51,19 @@ export const DeploymentDetail = () => {
   useEffect(() => {
     if (!id) return;
     bffV1.runtimes.list().then(setRuntimes).catch(() => {});
-    bffV1.approvals.list().then(setApprovals).catch(() => {});
     bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("deployment.")))).catch(() => {});
   }, [id]);
+  // Approvals belong to a loaded deployment: a not-found id issues no approvals
+  // read. A typed no-permission 403 renders a no-permission section.
+  const loadedId = d ? id : undefined;
+  useEffect(() => {
+    if (!loadedId) return;
+    let active = true;
+    setApprovalsRead({ status: "idle" });
+    bffV1.approvals.list().then((rows) => { if (active) { setApprovals(rows); setApprovalsRead({ status: "ok" }); } },
+      (err) => { if (active) { setApprovals([]); setApprovalsRead(sectionReadFailure(err)); } });
+    return () => { active = false; };
+  }, [loadedId]);
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!d) {
     return (
@@ -158,7 +171,7 @@ export const DeploymentDetail = () => {
               ]} empty={t("empty.noResults")} />
             );
           })() },
-          { value: "approvals", label: t("nav.approvals"), content: (() => {
+          { value: "approvals", label: t("nav.approvals"), badge: sectionReadBadge(approvalsRead), content: sectionReadFallback(approvalsRead) ?? (() => {
             // Live approval rows may omit subject/kind; guard so a real payload
             // doesn't crash the deployment detail page.
             const filtered = approvals.filter(

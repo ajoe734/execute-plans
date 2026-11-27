@@ -9,6 +9,8 @@ import type { BaseObject } from "@/lib/bff-v1";
 export interface DetailTab {
   value: string;
   label: string;
+  /** Optional marker rendered inside the trigger (e.g. a no-permission badge). */
+  badge?: ReactNode;
   content: ReactNode;
 }
 
@@ -32,7 +34,7 @@ export function ObjectDetailLayout<T extends BaseObject>({ object, state, risk, 
         <Tabs defaultValue={defaultTab ?? tabs[0].value}>
           <TabsList>
             {tabs.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
+              <TabsTrigger key={tab.value} value={tab.value}>{tab.label}{tab.badge}</TabsTrigger>
             ))}
           </TabsList>
           {tabs.map((tab) => (

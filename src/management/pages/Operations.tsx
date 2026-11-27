@@ -39,6 +39,8 @@ import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
 import { BffError } from "@/lib/bff-v1/errors";
+import { isNoPermissionError, sectionReadFailure } from "@/lib/bff-v1/permissionState";
+import { sectionReadFallback } from "@/platform/components/NoPermissionState";
 import { normalizeApprovalFields, normalizeAuditFields } from "@/lib/bff-v1/operations";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ServerPager, useServerPageCursor } from "@/platform/components/ServerPager";
@@ -939,7 +941,7 @@ export const IncidentsPage = () => {
 export const ApprovalsPage = () => {
   const t = useT();
   const qc = useClient();
-  const [rows, , refreshPending] = useCachedOperationList<ApprovalRequest>(
+  const [rows, , refreshPending, pendingState] = useCachedOperationList<ApprovalRequest>(
     "operations.approvals",
     () => lists.approvals().then((r) => ({ items: r.items.map((a) => normalizeApprovalFields(a) as ApprovalRequest) })),
   );
@@ -1034,7 +1036,12 @@ export const ApprovalsPage = () => {
         }
       />
       <PageBody>
-        {filter === "all" && decisionsQuery.isError ? (
+        {filter === "pending" && pendingState.isError ? (
+          // A typed no-permission 403 renders a no-permission queue; other failures an error.
+          sectionReadFallback(sectionReadFailure(pendingState.error))
+        ) : filter === "all" && decisionsQuery.isError && isNoPermissionError(decisionsQuery.error) ? (
+          sectionReadFallback(sectionReadFailure(decisionsQuery.error))
+        ) : filter === "all" && decisionsQuery.isError ? (
           <Card role="alert" className="p-6 border-destructive/40 bg-destructive/5 text-destructive text-sm">
             <div>{t("page.approvalsDecisionsError")}</div>
             {decisionsQuery.error instanceof Error && decisionsQuery.error.message && (

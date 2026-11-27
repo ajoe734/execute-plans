@@ -19,6 +19,8 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
 import { BffError } from "@/lib/bff-v1/errors";
 import { safeDateTime } from "@/lib/utils";
+import { sectionReadFailure, type SectionReadState } from "@/lib/bff-v1/permissionState";
+import { sectionReadFallback } from "@/platform/components/NoPermissionState";
 
 export const GovernanceQueuePage = () => {
   const t = useT();
@@ -28,8 +30,13 @@ export const GovernanceQueuePage = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchDecision, setBatchDecision] = useState<"approve" | "reject" | null>(null);
 
-  const reload = () => bffV1.approvals.list().then(setRows);
-  useEffect(() => { reload(); }, []);
+  const [listRead, setListRead] = useState<SectionReadState>({ status: "idle" });
+  // A typed no-permission 403 renders a no-permission queue; other failures an error.
+  const reload = () => bffV1.approvals.list().then(
+    (next) => { setRows(next); setListRead({ status: "ok" }); },
+    (err) => { setListRead(sectionReadFailure(err)); throw err; },
+  );
+  useEffect(() => { reload().catch(() => {}); }, []);
 
   const filtered = useMemo(
     () => filter === "all" ? rows : rows.filter((r) => r.state === "pending"),
@@ -118,7 +125,7 @@ export const GovernanceQueuePage = () => {
         }
       />
       <PageBody>
-        <Card>
+        {sectionReadFallback(listRead) ?? <Card>
           <DataTable
             rows={filtered}
             onRowClick={(r) => nav(`/management/governance/${r.id}`)}
@@ -171,7 +178,7 @@ export const GovernanceQueuePage = () => {
               { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.createdAt)}</span> },
             ]}
           />
-        </Card>
+        </Card>}
 
         <HighRiskConfirm
           open={batchDecision !== null}

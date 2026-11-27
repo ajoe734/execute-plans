@@ -38,7 +38,7 @@ const FE = "http://127.0.0.1:4173";
 const BFF = "https://api.dev.mvl-cap.tw";
 type FailedRead = {
   method: string; path: string; status: number | null; error: string | null; elapsedMs: number; pending: boolean;
-  reason: string; honestNotFound: boolean; streamRule: string | null; counted: boolean;
+  reason: string; honestNotFound: boolean; honestNoPermission: boolean; streamRule: string | null; counted: boolean;
 };
 type CrawlResult = { status: string; dataCheck: { pass: boolean; reasons: string[] }; failedReads: FailedRead[]; failedReadsOmitted: number };
 type Harness = {
@@ -47,6 +47,8 @@ type Harness = {
   sanitizeReadPath: (url: string) => string;
   failedReadDetail: (inputs: object[], opts: object) => { reads: FailedRead[]; omitted: number };
   capFailedReadsPerRun: (routes: object[], cap?: number) => { capPerRoute: number; capPerRun: number; recorded: number; omitted: number };
+  typedNoPermission: (status: number, body: unknown) => { surface: string | null } | null;
+  honestNoPermission: (status: number, noPermission: { surface: string | null } | null, rendered: string[]) => boolean;
   FAILED_READ_CAP_PER_ROUTE: number;
   FAILED_READ_CAP_PER_RUN: number;
 };
@@ -56,7 +58,7 @@ function crawlHarness() {
     .replace(/^import[\s\S]*?from "[^"]+";\n/gm, "")
     .replace(/\nmain\(\);\s*$/, "")}
     ({ crawlRoute, streamResponseRule, sanitizeReadPath, failedReadDetail, capFailedReadsPerRun,
-      FAILED_READ_CAP_PER_ROUTE, FAILED_READ_CAP_PER_RUN });`, {
+      typedNoPermission, honestNoPermission, FAILED_READ_CAP_PER_ROUTE, FAILED_READ_CAP_PER_RUN });`, {
     process: { argv: ["node", "offline"], env: { PANTHEON_FE_BASE_URL: FE, PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "2" } },
     URL, URLSearchParams, Date, Object,
     BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS,
@@ -113,12 +115,12 @@ describe("crawlRoute data check: honest not-found vs short content", () => {
 
 // --- FE-CRAWL-FAILED-READ-DETAIL-20261126: per-route failed-read detail. ---
 type Read = { endpoint: string; status?: number; method?: string; networkError?: string; body?: unknown };
-async function crawlReads(path: string, content: string, reads: Read[], route: object, source = "baseline-or-live-nav") {
+async function crawlReads(path: string, content: string, reads: Read[], route: object, source = "baseline-or-live-nav", noPermissionSurfaces: string[] = []) {
   const frame = {};
   const page: any = Object.assign(new EventEmitter(), {
     mainFrame: () => frame,
     waitForTimeout: async () => {},
-    evaluate: async () => ({ path, finalUrl: path, body: `Pantheon management navigation shell\n${content}`, content, busy: false, login: false }),
+    evaluate: async () => ({ path, finalUrl: path, body: `Pantheon management navigation shell\n${content}`, content, busy: false, login: false, noPermissionSurfaces }),
   });
   return crawlHarness().crawlRoute(page, route, {
     source,
@@ -163,9 +165,15 @@ describe("why the four fixture-id details failed while rendering an honest not-f
     }
   });
 
-  it("rebalance, deployment and evolution detail pages read /bff/approvals regardless of the entity; strategy gates it on a loaded strategy", () => {
+  it("rebalance, deployment and evolution detail pages gate /bff/approvals on a loaded entity (as strategy does)", () => {
+    // FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126: a not-found id no
+    // longer issues the approvals read; a loaded one renders a typed 403 as a
+    // no-permission section.
     for (const file of ["RebalanceDetail", "DeploymentDetail", "EvolutionDetail"]) {
-      expect(readFileSync(`src/management/pages/${file}.tsx`, "utf8")).toMatch(/bffV1\.approvals\s*\.list\(\)/);
+      const src = readFileSync(`src/management/pages/${file}.tsx`, "utf8");
+      expect(src).toMatch(/bffV1\.approvals\s*\.list\(\)/);
+      expect(src).toMatch(/const loadedId = \w+ \? id : undefined;/);
+      expect(src).toContain("sectionReadFailure(err)");
     }
     const strategy = readFileSync("src/management/pages/StrategyDetail.tsx", "utf8");
     expect(strategy).toContain("if (!s || !activeEntityId || primaryLoadSeq <= 0) return;");
@@ -218,7 +226,7 @@ describe("failed-read detail per non-ok route", () => {
     expect(r.dataCheck.reasons).toContain("api_data_failure");
     expect(counted(r)).toEqual([{
       method: "GET", path: "/bff/management/persona-fleet", status: 503, error: null, elapsedMs: expect.any(Number),
-      pending: false, reason: "http_status", honestNotFound: false, streamRule: null, counted: true,
+      pending: false, reason: "http_status", honestNotFound: false, honestNoPermission: false, streamRule: null, counted: true,
     }]);
   });
 
@@ -327,5 +335,100 @@ describe("failed-read detail size bounds", () => {
   it("sanitizes paths: query values removed, unparseable urls masked", () => {
     expect(h.sanitizeReadPath(`${BFF}/bff/a?x=1&x=2&y=secret`)).toBe("/bff/a?x=&y=");
     expect(h.sanitizeReadPath("not a url")).toBe("(unparseable)");
+  });
+});
+
+// --- FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126: honest no-permission. ---
+// A viewer's approvals read answers a typed 403. It is honest only when the
+// response is that typed 403 AND the page renders the no-permission state
+// for the same surface; everything else still fails.
+describe("honest no-permission rule (typed 403 + rendered state)", () => {
+  const h = crawlHarness();
+  const typed = { error: { code: "FORBIDDEN", message: "forbidden", details: { permission_state: "no_permission", surface: "approvals" } } };
+  const untyped = { error: { code: "FORBIDDEN", message: "forbidden" } };
+  const approvalsRoute = { path: "/management/approvals", kind: "nav" };
+  const content = "Approvals\nReview pending decisions\nNo permission\nYour role cannot view this section.";
+
+  it("recognises only the typed 403 shape (error or detail.error envelope)", () => {
+    expect(h.typedNoPermission(403, typed)).toEqual({ surface: "approvals" });
+    expect(h.typedNoPermission(403, { detail: typed })).toEqual({ surface: "approvals" });
+    expect(h.typedNoPermission(403, { error: { code: "FORBIDDEN", details: { permission_state: "no_permission" } } })).toEqual({ surface: null });
+    expect(h.typedNoPermission(403, untyped)).toBeNull();
+    expect(h.typedNoPermission(403, { error: { code: "FORBIDDEN", details: { permission_state: "read_only" } } })).toBeNull();
+    expect(h.typedNoPermission(403, { error: { details: { permission_state: "no_permission" } } })).toBeNull();
+    expect(h.typedNoPermission(401, typed)).toBeNull();
+    expect(h.typedNoPermission(500, typed)).toBeNull();
+    expect(h.typedNoPermission(403, null)).toBeNull();
+  });
+
+  it("needs a rendered marker for the same surface", () => {
+    expect(h.honestNoPermission(403, { surface: "approvals" }, ["approvals"])).toBe(true);
+    expect(h.honestNoPermission(403, { surface: null }, [""])).toBe(true);
+    expect(h.honestNoPermission(403, { surface: "approvals" }, [])).toBe(false);
+    expect(h.honestNoPermission(403, { surface: "approvals" }, ["audit"])).toBe(false);
+    expect(h.honestNoPermission(403, null, ["approvals"])).toBe(false);
+    expect(h.honestNoPermission(500, { surface: "approvals" }, ["approvals"])).toBe(false);
+  });
+
+  it("/management/approvals: typed 403 + rendered no-permission state passes", async () => {
+    const r = await crawlReads(approvalsRoute.path, content, [{ endpoint: "/bff/approvals", status: 403, body: typed }], approvalsRoute,
+      "baseline-or-live-nav", ["approvals"]);
+    expect(r.dataCheck.reasons).toEqual([]);
+    expect(r.status).toBe("ok");
+    expect(r.failedReads).toEqual([]);
+  });
+
+  it("an untyped 403 fails even with the rendered state", async () => {
+    const r = await crawlReads(approvalsRoute.path, content, [{ endpoint: "/bff/approvals", status: 403, body: untyped }], approvalsRoute,
+      "baseline-or-live-nav", ["approvals"]);
+    expect(r.dataCheck.pass).toBe(false);
+    expect(r.dataCheck.reasons).toContain("api_data_failure");
+    expect(counted(r)).toEqual([expect.objectContaining({ path: "/bff/approvals", status: 403, honestNoPermission: false })]);
+  });
+
+  it("a typed 403 without the rendered state fails", async () => {
+    const r = await crawlReads(approvalsRoute.path, content, [{ endpoint: "/bff/approvals", status: 403, body: typed }], approvalsRoute);
+    expect(r.dataCheck.pass).toBe(false);
+    expect(r.dataCheck.reasons).toContain("api_data_failure");
+    expect(counted(r)).toEqual([expect.objectContaining({ path: "/bff/approvals", status: 403, honestNoPermission: false })]);
+  });
+
+  it("a typed 403 whose surface is not the rendered one fails", async () => {
+    const r = await crawlReads(approvalsRoute.path, content, [{ endpoint: "/bff/approvals", status: 403, body: typed }], approvalsRoute,
+      "baseline-or-live-nav", ["audit"]);
+    expect(r.dataCheck.pass).toBe(false);
+    expect(r.dataCheck.reasons).toContain("api_data_failure");
+  });
+
+  it("a 5xx with a no-permission-shaped body and the rendered state still fails", async () => {
+    const r = await crawlReads(approvalsRoute.path, content, [{ endpoint: "/bff/approvals", status: 503, body: typed }], approvalsRoute,
+      "baseline-or-live-nav", ["approvals"]);
+    expect(r.dataCheck.pass).toBe(false);
+    expect(r.dataCheck.reasons).toContain("api_data_failure");
+    expect(counted(r)).toEqual([expect.objectContaining({ path: "/bff/approvals", status: 503, honestNoPermission: false })]);
+  });
+
+  it("a 401 still fails", async () => {
+    const r = await crawlReads(approvalsRoute.path, content, [{ endpoint: "/bff/approvals", status: 401, body: typed }], approvalsRoute,
+      "baseline-or-live-nav", ["approvals"]);
+    expect(r.dataCheck.pass).toBe(false);
+  });
+
+  it("live-id rebalance detail: entity 200 + typed approvals 403 + rendered badge passes", async () => {
+    const p = "/management/rebalance/rb_live";
+    const r = await crawlReads(p, "Rebalance rb_live\nQ3 2026 · target pool_1\nApprovals No permission", [
+      { endpoint: "/bff/rebalances/rb_live", status: 200, body: { data: { id: "rb_live" } } },
+      { endpoint: "/bff/approvals", status: 403, body: typed },
+    ], { path: p, kind: "detail-or-alias", entity: "rebalance" }, "live-id:rebalance", ["approvals"]);
+    expect(r.dataCheck.reasons).toEqual([]);
+    expect(r.status).toBe("ok");
+  });
+
+  it("the honest no-permission read is recorded as excused, not counted", () => {
+    const detail = h.failedReadDetail([
+      { entry: { method: "GET", url: `${BFF}/bff/approvals`, status: 403, noPermission: { surface: "approvals" }, startedAtMs: 0, responseAtMs: 3, failedAtMs: null, failure: null },
+        isDataRead: true, read: { complete: true, valid: false } },
+    ], { honestNotFound: false, renderedNoPermission: ["approvals"], atMs: 5 });
+    expect(detail.reads).toEqual([expect.objectContaining({ status: 403, honestNoPermission: true, counted: false })]);
   });
 });

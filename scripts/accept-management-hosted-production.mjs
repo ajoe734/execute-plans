@@ -252,6 +252,34 @@ function streamResponseRule(method, pathname, status) {
   return method === rule.method && rule.excusedStatuses.includes(status) ? rule.rule : null;
 }
 
+// FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126: honest no-permission rule.
+// The BFF answers a read the role cannot perform with a typed 403:
+//   { error: { code, details: { permission_state: "no_permission", surface } } }
+// (or the same error under `detail.error`). Mirroring the honest-not-found
+// rule, such a read is honest only when the response is that typed 403 AND
+// the page visibly renders the no-permission state
+// ([data-permission-state="no_permission"]) for the same surface. An untyped
+// 403, a typed 403 without the rendered state, a 401 and a 5xx still fail.
+function typedNoPermission(status, body) {
+  if (status !== 403 || !body || typeof body !== "object") return null;
+  const payload = body.error && typeof body.error === "object" ? body.error
+    : body.detail && typeof body.detail === "object" && body.detail.error && typeof body.detail.error === "object" ? body.detail.error
+    : null;
+  if (!payload || typeof payload.code !== "string") return null;
+  const details = payload.details;
+  if (!details || typeof details !== "object" || details.permission_state !== "no_permission") return null;
+  const surface = typeof details.surface === "string" && details.surface.trim() ? details.surface : null;
+  return { surface };
+}
+
+// `renderedSurfaces` lists the surface of each visible no-permission marker
+// ("" when the marker names none). A typed answer naming a surface needs a
+// marker for that surface; one naming none needs any marker.
+function honestNoPermission(status, noPermission, renderedSurfaces) {
+  if (status !== 403 || !noPermission || !Array.isArray(renderedSurfaces) || renderedSurfaces.length === 0) return false;
+  return noPermission.surface === null || renderedSurfaces.includes(noPermission.surface);
+}
+
 // Per-route failed-read detail is bounded so a bad release cannot balloon the
 // crawl artifact: at most FAILED_READ_CAP_PER_ROUTE entries per route (counted
 // failures first) and FAILED_READ_CAP_PER_RUN entries across the whole run.
@@ -275,18 +303,20 @@ function sanitizeReadPath(url) {
 // boundary. Returns null when the request did not fail and is not incomplete.
 // `counted` mirrors the verdict: true only when the read contributed to
 // api_data_failure or data_reads_incomplete.
-function readProblem({ entry, isDataRead, read, honestNotFound, atMs }) {
+function readProblem({ entry, isDataRead, read, honestNotFound, renderedNoPermission = [], atMs }) {
   let reason = null;
   let counted = false;
   let notFoundExcused = false;
+  let noPermissionExcused = false;
   let streamRule = null;
   let pathname = "";
   try { pathname = new URL(entry.url).pathname; } catch { /* keep empty */ }
   if (typeof entry.status === "number" && entry.status >= 400) {
     reason = "http_status";
     notFoundExcused = entry.status === 404 && honestNotFound;
+    noPermissionExcused = honestNoPermission(entry.status, entry.noPermission, renderedNoPermission);
     streamRule = streamResponseRule(entry.method, pathname, entry.status);
-    counted = !notFoundExcused && !streamRule;
+    counted = !notFoundExcused && !noPermissionExcused && !streamRule;
   } else if (entry.failedAtMs !== null && entry.failedAtMs !== undefined) {
     reason = "network_error";
     counted = isDataRead; // a failed data read leaves data_reads_incomplete
@@ -308,13 +338,14 @@ function readProblem({ entry, isDataRead, read, honestNotFound, atMs }) {
     pending: endAt === null || endAt === undefined,
     reason,
     honestNotFound: notFoundExcused,
+    honestNoPermission: noPermissionExcused,
     streamRule,
     counted,
   };
 }
 
-function failedReadDetail(inputs, { honestNotFound, atMs, cap = FAILED_READ_CAP_PER_ROUTE }) {
-  const problems = inputs.map((input) => readProblem({ ...input, honestNotFound, atMs })).filter(Boolean);
+function failedReadDetail(inputs, { honestNotFound, renderedNoPermission = [], atMs, cap = FAILED_READ_CAP_PER_ROUTE }) {
+  const problems = inputs.map((input) => readProblem({ ...input, honestNotFound, renderedNoPermission, atMs })).filter(Boolean);
   // Stable: counted failures first, then excused/diagnostic entries in request order.
   const ordered = [...problems.filter((p) => p.counted), ...problems.filter((p) => !p.counted)];
   return { reads: ordered.slice(0, cap), omitted: Math.max(0, ordered.length - cap) };
@@ -400,7 +431,7 @@ async function crawlRoute(page, route, { source, transport }) {
       attributed, exclusionReason: attributed ? null : "outside_current_document",
       startedAtMs: timingStart > 0 ? timingStart - startedAt : elapsed(),
       observedAtMs: elapsed(), responseAtMs: null, finishedAtMs: null, failedAtMs: null,
-      status: null, failure: null,
+      status: null, failure: null, noPermission: null,
     };
     requestTimeline.set(req, entry);
     if (!attributed) return;
@@ -415,16 +446,26 @@ async function crawlRoute(page, route, { source, transport }) {
     entry.status = res.status();
     if (!entry.attributed || entry.attempt !== attempt) return;
     const url = res.url();
-    responses.push({ status: res.status(), method: req.method(), url });
-    if (!routeRequests.has(req)) return;
-    const read = { path: new URL(url).pathname, status: res.status(), complete: false, valid: false };
-    dataReads.push(read);
-    readByRequest.set(req, read);
+    const status = res.status();
+    responses.push({ status, method: req.method(), url, entry });
+    const isRouteRead = routeRequests.has(req);
+    if (!isRouteRead && status !== 403) return;
+    const read = isRouteRead ? { path: new URL(url).pathname, status, complete: false, valid: false, noPermission: null } : null;
+    if (read) {
+      dataReads.push(read);
+      readByRequest.set(req, read);
+    }
     // Do not keep response bodies or credentials. A response header alone does
     // not establish that finite route data arrived; open streams are excluded.
+    // A 403 body is inspected only for the typed no-permission shape.
     void res.json().then((body) => {
-      read.valid = body !== null && typeof body === "object" && !body.error && body.ok !== false && body.success !== false;
-    }, () => {}).finally(() => { read.complete = true; });
+      const noPermission = typedNoPermission(status, body);
+      entry.noPermission = noPermission;
+      if (read) {
+        read.noPermission = noPermission;
+        read.valid = body !== null && typeof body === "object" && !body.error && body.ok !== false && body.success !== false;
+      }
+    }, () => {}).finally(() => { if (read) read.complete = true; });
   };
   const onRequestFailed = (req) => {
     const entry = requestTimeline.get(req);
@@ -461,7 +502,7 @@ async function crawlRoute(page, route, { source, transport }) {
   let verdictReads = [];
   let verdictRequests = [];
   let verdictFailedReads = { reads: [], omitted: 0 };
-  const freezeEvidence = (honestNotFound = false) => {
+  const freezeEvidence = (honestNotFound = false, renderedNoPermission = []) => {
     verdictReads = dataReads.map((read) => ({ ...read }));
     verdictRequests = [...requestTimeline.values()].map((entry) => ({ ...entry }));
     const inputs = [];
@@ -469,7 +510,7 @@ async function crawlRoute(page, route, { source, transport }) {
       if (!entry.attributed || entry.attempt !== attempt) continue;
       inputs.push({ entry: { ...entry }, isDataRead: routeRequests.has(req), read: readByRequest.get(req) && { ...readByRequest.get(req) } });
     }
-    verdictFailedReads = failedReadDetail(inputs, { honestNotFound, atMs: elapsed() });
+    verdictFailedReads = failedReadDetail(inputs, { honestNotFound, renderedNoPermission, atMs: elapsed() });
   };
 
   try {
@@ -499,6 +540,10 @@ async function crawlRoute(page, route, { source, transport }) {
             content?.matches('[aria-busy="true"], [data-state="loading"]') ||
             content?.querySelector('[aria-busy="true"], [data-state="loading"]')),
           login: Boolean(document.querySelector('input[type="password"]')),
+          // Visible no-permission markers (FE NoPermissionState / NoPermissionBadge).
+          noPermissionSurfaces: Array.from(document.querySelectorAll('[data-permission-state="no_permission"]'))
+            .filter((el) => el.getClientRects().length > 0)
+            .map((el) => el.getAttribute("data-permission-surface") || ""),
         };
       });
       finalUrl = snapshot.finalUrl;
@@ -509,12 +554,15 @@ async function crawlRoute(page, route, { source, transport }) {
       // must return real data; a 404 there is a failure.
       const honestNotFound = route.kind === "detail-or-alias" && source === "baseline-or-live-nav" &&
         /not found|找不到|不存在/iu.test(snapshot.content);
+      // A typed no-permission 403 is honest only while the page shows it.
+      const renderedNoPermission = Array.isArray(snapshot.noPermissionSurfaces) ? snapshot.noPermissionSurfaces : [];
       noDataReadReason = resolveNoDataReadReason(route.path, snapshot);
       // Freeze reads and request evidence at this verdict boundary; a pending
       // res.json() or later navigation must not mutate the returned result.
-      freezeEvidence(honestNotFound);
+      freezeEvidence(honestNotFound, renderedNoPermission);
       const validReads = verdictReads.filter((read) => read.complete &&
-        ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound)));
+        ((read.status >= 200 && read.status < 300 && read.valid) || (read.status === 404 && honestNotFound) ||
+          honestNoPermission(read.status, read.noPermission, renderedNoPermission)));
       const failedReads = verdictReads.filter((read) => read.complete && !validReads.includes(read));
       // The route segment and the API path may spell the same opaque id
       // differently (":" vs "%3A"). Compare exactly one decoded segment each;
@@ -528,6 +576,7 @@ async function crawlRoute(page, route, { source, transport }) {
         decodeSegment(read.path.slice(entityEndpoint.length + 1)) === expectedSegment);
       const apiFailure = responses.some((response) => response.status >= 400 &&
         !(response.status === 404 && honestNotFound) &&
+        !honestNoPermission(response.status, response.entry?.noPermission, renderedNoPermission) &&
         !streamResponseRule(response.method, new URL(response.url).pathname, response.status));
       dataReasons = [
         snapshot.path !== expectedPath && "route_or_redirect_unresolved",

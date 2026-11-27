@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { sectionReadFailure, type SectionReadState } from "@/lib/bff-v1/permissionState";
+import { sectionReadBadge, sectionReadFallback } from "@/platform/components/NoPermissionState";
 import { useParams, useNavigate } from "react-router-dom";
 import { safePercent, safeRatio } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,7 @@ export const CapitalPoolDetail = () => {
   const [stratsStatus, setStratsStatus] = useState<"loading" | "ready" | "error">("loading");
   const [rebalances, setRebalances] = useState<Rebalance[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [approvalsRead, setApprovalsRead] = useState<SectionReadState>({ status: "idle" });
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -125,6 +128,7 @@ export const CapitalPoolDetail = () => {
     async function loadRelated(pool: CapitalPool) {
       setRebalances([]);
       setApprovals([]);
+      setApprovalsRead({ status: "idle" });
       setAudit([]);
 
       const poolIds = new Set(
@@ -134,13 +138,18 @@ export const CapitalPoolDetail = () => {
 
       const [allRebalances, allApprovals, allAudit] = await Promise.all([
         bffV1.rebalances.list().catch((): Rebalance[] => []),
-        bffV1.approvals.list().catch((): ApprovalRequest[] => []),
+        // A typed no-permission 403 renders a no-permission governance section.
+        bffV1.approvals.list().then(
+          (rows) => ({ rows, read: { status: "ok" } as SectionReadState }),
+          (err) => ({ rows: [] as ApprovalRequest[], read: sectionReadFailure(err) }),
+        ),
         bffV1.audit.list().catch((): AuditEvent[] => []),
       ]);
       if (cancelled) return;
 
       setRebalances(allRebalances.filter((r) => poolIds.has(r.targetPoolId)));
-      setApprovals(allApprovals.filter((a) => mentionsPool(a.subject) || (a.kind ?? "").includes("capital")));
+      setApprovalsRead(allApprovals.read);
+      setApprovals(allApprovals.rows.filter((a) => mentionsPool(a.subject) || (a.kind ?? "").includes("capital")));
       setAudit(allAudit.filter((x) => poolIds.has(x.target) || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance.")));
     }
 
@@ -408,8 +417,8 @@ export const CapitalPoolDetail = () => {
             ]} empty={t("empty.none")} />
           ) },
           {
-            value: "governance", label: t("phase13.capital.tabs.governance"),
-            content: (
+            value: "governance", label: t("phase13.capital.tabs.governance"), badge: sectionReadBadge(approvalsRead),
+            content: sectionReadFallback(approvalsRead) ?? (
               <DataTable rows={approvals} onRowClick={(row) => navigate(`/management/governance/${row.id}`)} columns={[
                 { key: "kind", header: t("table.kind"), cell: (row) => <span className="text-mono text-xs">{row.kind}</span> },
                 { key: "subject", header: t("table.subject"), cell: (row) => <div className="font-medium">{row.subject}</div> },

@@ -15,6 +15,8 @@ import {
 import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
+import { sectionReadFailure, type SectionReadState } from "@/lib/bff-v1/permissionState";
+import { sectionReadBadge, sectionReadFallback } from "@/platform/components/NoPermissionState";
 import type {
   Alert,
   ApprovalRequest,
@@ -123,6 +125,7 @@ export const EvolutionDetail = () => {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [approvalsRead, setApprovalsRead] = useState<SectionReadState>({ status: "idle" });
   const [stopOpen, setStopOpen] = useState(false);
   const [newConstraint, setNewConstraint] = useState("");
   const [rejectReason, setRejectReason] = useState("");
@@ -135,20 +138,6 @@ export const EvolutionDetail = () => {
       bffV1.evolutionRuns
         .forProgram(programId)
         .then((items) => setRuns(items))
-        .catch(() => {}),
-      bffV1.approvals
-        .list()
-        .then((items) =>
-          setApprovals(
-            items.filter(
-              (x) =>
-                x.targetId === programId ||
-                x.subject?.includes(programId) ||
-                x.kind?.includes("evolution") ||
-                Boolean(x.id),
-            ),
-          ),
-        )
         .catch(() => {}),
       bffV1.research
         .list()
@@ -165,10 +154,39 @@ export const EvolutionDetail = () => {
     ]);
   }, []);
 
+  // Approvals belong to a loaded program: a not-found id issues no approvals
+  // read. A typed no-permission 403 renders a no-permission section.
+  const loadApprovals = useCallback(async (programId: string) => {
+    await bffV1.approvals
+      .list()
+      .then((items) => {
+        setApprovals(
+          items.filter(
+            (x) =>
+              x.targetId === programId ||
+              x.subject?.includes(programId) ||
+              x.kind?.includes("evolution") ||
+              Boolean(x.id),
+          ),
+        );
+        setApprovalsRead({ status: "ok" });
+      }, (err) => {
+        setApprovals([]);
+        setApprovalsRead(sectionReadFailure(err));
+      });
+  }, []);
+
   const refreshProgram = useCallback(async () => {
     if (!id) return;
-    await Promise.all([refresh(), loadAuxData(id)]);
-  }, [id, refresh, loadAuxData]);
+    await Promise.all([refresh(), loadAuxData(id), loadApprovals(id)]);
+  }, [id, refresh, loadAuxData, loadApprovals]);
+
+  const loadedId = e ? id : undefined;
+  useEffect(() => {
+    if (!loadedId) return;
+    setApprovalsRead({ status: "idle" });
+    void loadApprovals(loadedId);
+  }, [loadedId, loadApprovals]);
 
   useEffect(() => {
     if (!id) return;
@@ -1065,15 +1083,15 @@ export const EvolutionDetail = () => {
                 ]} empty={t("empty.noResults")} />,
           },
           {
-            value: "approvals", label: t("evolution.tabs.approvals"),
-            content: programApprovals.length === 0
+            value: "approvals", label: t("evolution.tabs.approvals"), badge: sectionReadBadge(approvalsRead),
+            content: sectionReadFallback(approvalsRead) ?? (programApprovals.length === 0
               ? <Card className="p-6 text-xs text-muted-foreground">{t("evolution.approvals.empty")}</Card>
               : <DataTable rows={programApprovals} onRowClick={(r) => nav(`/management/governance/${r.id}`)} columns={[
                   { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
                   { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
                   { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
                   { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-                ]} empty={t("empty.none")} />,
+                ]} empty={t("empty.none")} />),
           },
           {
             value: "config", label: "Config",
