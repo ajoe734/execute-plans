@@ -69,7 +69,7 @@ describe("BacktestResultCard", () => {
     render(<BacktestResultCard card={baseCard} />);
     const modeBadge = screen.getByTestId("backtest-result-card-card-bt-001-backend-mode");
     expect(modeBadge.textContent).toContain("vectorbt");
-    expect(modeBadge.textContent).toContain("Real");
+    expect(modeBadge.textContent).toContain("真實執行");
   });
 
   it("shows fixture label for fixture mode", () => {
@@ -79,7 +79,7 @@ describe("BacktestResultCard", () => {
     };
     render(<BacktestResultCard card={card} />);
     expect(screen.getByTestId("backtest-result-card-card-bt-001-backend-mode").textContent).toContain(
-      "Fixture"
+      "樣本資料"
     );
   });
 
@@ -90,7 +90,7 @@ describe("BacktestResultCard", () => {
     };
     render(<BacktestResultCard card={card} />);
     expect(screen.getByTestId("backtest-result-card-card-bt-001-backend-mode").textContent).toContain(
-      "Stub"
+      "模擬樁"
     );
   });
 
@@ -98,9 +98,9 @@ describe("BacktestResultCard", () => {
     render(<BacktestResultCard card={baseCard} />);
     const metricsEl = screen.getByTestId("backtest-result-card-card-bt-001-metrics");
     expect(metricsEl).toBeDefined();
-    expect(metricsEl.textContent).toContain("Performance");
+    expect(metricsEl.textContent).toContain("績效表現");
     expect(metricsEl.textContent).toContain("Sharpe Ratio");
-    expect(metricsEl.textContent).toContain("Risk");
+    expect(metricsEl.textContent).toContain("風險指標");
     expect(metricsEl.textContent).toContain("Max Drawdown");
   });
 

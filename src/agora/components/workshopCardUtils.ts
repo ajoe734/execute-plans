@@ -1,6 +1,12 @@
+import i18n from "@/i18n";
 import type { WorkshopCardType } from "@/lib/bff-v1/agora/workshops";
 
 export type UnknownRecord = Record<string, unknown>;
+
+export function workshopCopy(key: string, fallback: string, options?: Record<string, unknown>): string {
+  const translated = i18n.t(key, { defaultValue: fallback, ...(options ?? {}) });
+  return typeof translated === "string" && translated !== key ? translated : fallback;
+}
 
 export function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -55,6 +61,15 @@ export function stringList(value: unknown): string[] {
 export function formatLabel(value: unknown): string {
   const raw = stringValue(value);
   if (!raw) return "";
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const valueKey = `agora.workshop.values.${normalized}`;
+  if (i18n.exists(valueKey)) {
+    return String(i18n.t(valueKey));
+  }
+  const labelKey = `agora.workshop.cardLabels.${normalized}`;
+  if (i18n.exists(labelKey)) {
+    return String(i18n.t(labelKey));
+  }
   return raw
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
@@ -65,7 +80,11 @@ export function formatLabel(value: unknown): string {
 export function formatScalar(value: unknown): string {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toLocaleString();
-  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "boolean") {
+    return value
+      ? workshopCopy("agora.workshop.values.yes", "是")
+      : workshopCopy("agora.workshop.values.no", "否");
+  }
   if (typeof value === "string") return value;
   return "-";
 }
@@ -77,27 +96,11 @@ export function clampPercent(value: unknown): number {
 }
 
 export function cardTypeLabel(type: WorkshopCardType): string {
-  const labels: Record<WorkshopCardType, string> = {
-    user_strategy_description: "Strategy Description",
-    servant_reconstruction: "Servant Reconstruction",
-    completeness_update: "Completeness Update",
-    missing_definition: "Missing Definition",
-    next_question: "Next Question",
-    research_plan_proposal: "Research Plan",
-    research_progress: "Research Progress",
-    research_result: "Research Result",
-    consult_result: "Consult Result",
-    version_patch_proposal: "Version Patch",
-    version_compare: "Version Compare",
-    readiness_gate: "Readiness Gate",
-    persona_opinion: "Persona Opinion",
-    opinion: "Persona Opinion",
-    debate: "Debate",
-    governed_proposal: "Governed Proposal",
-    workshop_concluded: "Workshop Concluded",
-    conclusion: "Workshop Concluded",
-  };
-  return labels[type] ?? formatLabel(type);
+  const key = `agora.workshop.cardLabels.${type}`;
+  if (i18n.exists(key)) {
+    return String(i18n.t(key));
+  }
+  return formatLabel(type);
 }
 
 export function rendererForChartKind(kind: unknown): "Recharts" | "ECharts" | "Builtin" | "Unsupported" {

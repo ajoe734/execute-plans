@@ -14,6 +14,7 @@ import {
   type RecommendedMeasure,
   type TypedPersonaOpinion,
 } from "@/lib/bff-v1/agora/dailyInteractions";
+import { asRecord, formatLabel, formatScalar, stringList, workshopCopy } from "./workshopCardUtils";
 
 export type DailyRuntimeState = "loading" | "ready" | "unsupported" | "error";
 
@@ -26,11 +27,11 @@ interface Props {
 }
 
 const statusTone: Record<DailyInteraction["status"], string> = {
-  queued: "border-slate-200 bg-slate-50 text-slate-700",
-  running: "border-blue-200 bg-blue-50 text-blue-800",
-  completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  degraded: "border-amber-200 bg-amber-50 text-amber-900",
-  failed: "border-red-200 bg-red-50 text-red-800",
+  queued: "border-border bg-muted/40 text-muted-foreground",
+  running: "border-sky-500/40 bg-sky-500/15 text-sky-300",
+  completed: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
+  degraded: "border-amber-500/40 bg-amber-500/15 text-amber-300",
+  failed: "border-rose-500/40 bg-rose-500/15 text-rose-300",
 };
 
 function safeJson(value: unknown): string {
@@ -39,6 +40,89 @@ function safeJson(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function formatReadableValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  if (Array.isArray(value)) {
+    return value.map((item) => formatReadableValue(item)).join("、");
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(asRecord(value))
+      .filter(([, v]) => v !== null && v !== undefined && v !== "")
+      .map(([k, v]) => `${formatLabel(k)}: ${formatScalar(v)}`);
+    return entries.length > 0 ? entries.join("；") : "-";
+  }
+  return formatScalar(value);
+}
+
+function ReadableMeasureFields({ measure }: { measure: RecommendedMeasure }) {
+  const proposedRecord = asRecord(measure.proposed_value);
+  const proposedEntries = Object.entries(proposedRecord);
+  const hasScalarProposed =
+    proposedEntries.length === 0 &&
+    measure.proposed_value !== null &&
+    measure.proposed_value !== undefined &&
+    typeof measure.proposed_value !== "object";
+
+  const fieldItems: Array<{ label: string; value: string }> = [];
+  for (const [key, val] of proposedEntries) {
+    fieldItems.push({
+      label: `${workshopCopy("agora.workshop.interaction.proposedValueSummary", "建議調整內容")} · ${formatLabel(key)}`,
+      value: formatReadableValue(val),
+    });
+  }
+  if (hasScalarProposed) {
+    fieldItems.push({
+      label: workshopCopy("agora.workshop.interaction.proposedValueSummary", "建議調整內容"),
+      value: formatScalar(measure.proposed_value),
+    });
+  }
+  if (measure.expected_benefit) {
+    fieldItems.push({
+      label: workshopCopy("agora.workshop.cardLabels.predicted_effects", "預期影響"),
+      value: measure.expected_benefit,
+    });
+  }
+  if (typeof measure.confidence === "number") {
+    fieldItems.push({
+      label: workshopCopy("agora.workshop.interaction.confidenceScore", "信心水準"),
+      value: `${Math.round(measure.confidence * 100)}%`,
+    });
+  }
+  if (measure.environment_ceiling) {
+    fieldItems.push({
+      label: workshopCopy("agora.workshop.interaction.measureCategory", "指標類別"),
+      value: `${measure.measure_type} (${measure.environment_ceiling})`,
+    });
+  }
+  if (measure.rollback_trigger || measure.rollback_action) {
+    fieldItems.push({
+      label: workshopCopy("agora.workshop.interaction.measureRule", "規則定義"),
+      value: [measure.rollback_trigger, measure.rollback_action].filter(Boolean).join(" → "),
+    });
+  }
+  const adverse = stringList(measure.adverse_scenarios);
+  if (adverse.length > 0) {
+    fieldItems.push({
+      label: workshopCopy("agora.workshop.cardLabels.risk_notes", "風險備註"),
+      value: adverse.join("、"),
+    });
+  }
+
+  return (
+    <dl
+      className="mt-2 grid gap-2 rounded-md border border-border/70 bg-card/70 p-2.5 sm:grid-cols-2"
+      data-testid={`measure-readable-fields-${measure.measure_id}`}
+    >
+      {fieldItems.map((field) => (
+        <div className="min-w-0" key={field.label}>
+          <dt className="text-[11px] font-medium text-muted-foreground">{field.label}</dt>
+          <dd className="break-words text-xs font-semibold text-foreground">{field.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function ProviderRetry({ interactionId, writeAllowed, onRefresh }: {
@@ -78,11 +162,11 @@ function ProviderRetry({ interactionId, writeAllowed, onRefresh }: {
     }
   };
   return (
-    <div className="mt-2 space-y-2 rounded border border-amber-200 bg-amber-50 p-2" data-testid={`provider-retry-${interactionId}`}>
-      <label className="block text-xs font-medium text-amber-950">
+    <div className="mt-2 space-y-2 rounded border border-amber-500/30 bg-amber-500/10 p-2" data-testid={`provider-retry-${interactionId}`}>
+      <label className="block text-xs font-medium text-amber-200">
         Provider retry reason
         <input
-          className="mt-1 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs"
+          className="mt-1 w-full rounded border border-amber-500/40 bg-background px-2 py-1 text-xs text-foreground"
           maxLength={500}
           onChange={(event) => {
             setReason(event.target.value);
@@ -93,8 +177,8 @@ function ProviderRetry({ interactionId, writeAllowed, onRefresh }: {
         />
       </label>
       <Button disabled={!writeAllowed || busy} onClick={() => void retry()} size="sm" variant="outline">{busy ? "Retrying…" : "Retry failed providers"}</Button>
-      {error ? <p className="text-xs text-red-700" role="alert">{error}</p> : null}
-      {status ? <p aria-live="polite" className="text-xs text-emerald-700" role="status">{status}</p> : null}
+      {error ? <p className="text-xs text-rose-400" role="alert">{error}</p> : null}
+      {status ? <p aria-live="polite" className="text-xs text-emerald-400" role="status">{status}</p> : null}
     </div>
   );
 }
@@ -296,17 +380,36 @@ function GovernedCandidateMeasure({
     && readback?.readiness.reviewer.store_ready === true;
 
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid={`recommended-measure-${measure.measure_id}`}>
+    <div className="rounded-md border border-border bg-muted/30 p-3" data-testid={`recommended-measure-${measure.measure_id}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold text-slate-900">{measure.measure_type}</div>
-          <div className="text-xs text-slate-600">{measure.target.kind} · {measure.target.id} · {measure.target.version}</div>
+          <div className="text-sm font-semibold text-foreground">{formatLabel(measure.measure_type)}</div>
+          <div className="text-xs text-muted-foreground">{measure.target.kind} · {measure.target.id} · {measure.target.version}</div>
         </div>
-        <span className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">authority: none</span>
+        <span className="rounded border border-border bg-card px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">authority: none</span>
       </div>
-      <p className="mt-2 text-sm text-slate-700">{measure.rationale}</p>
-      <pre className="mt-2 max-h-32 overflow-auto rounded bg-slate-900 p-2 text-[11px] text-slate-100">{safeJson(measure.proposed_value)}</pre>
-      <div className="mt-1 break-all text-[10px] text-slate-500">Server measure SHA-256: {measure.measure_sha256}</div>
+      <p className="mt-2 text-sm text-foreground/90">{measure.rationale}</p>
+
+      {/* Readable labelled fields instead of raw JSON (AC4 / V10 §2.2) */}
+      <ReadableMeasureFields measure={measure} />
+
+      <details
+        className="mt-2 rounded border border-border/70 bg-card/50 p-2 text-xs"
+        data-testid={`measure-engineering-details-${measure.measure_id}`}
+      >
+        <summary className="cursor-pointer font-medium text-muted-foreground">
+          {workshopCopy("agora.workshop.interaction.engineeringDetails", "展開工程與憑證細節")}
+        </summary>
+        <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+          <div className="break-all">Server measure SHA-256: {measure.measure_sha256}</div>
+          <div>Measure ID: {measure.measure_id}</div>
+          {measure.validation_plan ? (
+            <div>
+              Validator: {measure.validation_plan.validator} ({measure.validation_plan.required_checks.join(", ")})
+            </div>
+          ) : null}
+        </div>
+      </details>
 
       {!proposalId ? (
         <div className="mt-2 space-y-2">
@@ -315,31 +418,38 @@ function GovernedCandidateMeasure({
           </Button>
         </div>
       ) : loading && !readback ? (
-        <p className="mt-3 text-xs text-slate-500" role="status">Loading authoritative candidate readback…</p>
+        <p className="mt-3 text-xs text-muted-foreground" role="status">Loading authoritative candidate readback…</p>
       ) : readback ? (
         <div className="mt-3 space-y-3" data-testid={`candidate-${readback.candidate.proposal_id}`}>
-          <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-700">
-            <div className="font-semibold">Proposal {readback.candidate.proposal_id} · revision {readback.candidate.revision} · {readback.candidate.state}</div>
-            <div className="mt-1 break-all">Current ETag: {readback.etag}</div>
-            <div className="break-all">Proposal digest: {readback.candidate.proposal_digest}</div>
-          </div>
-          <label className="block text-xs font-medium text-slate-700">
+          <details className="rounded border border-border bg-card p-2 text-xs text-foreground/85" open>
+            <summary className="cursor-pointer font-semibold">
+              Proposal {readback.candidate.proposal_id} · revision {readback.candidate.revision} · {readback.candidate.state}
+            </summary>
+            <div className="mt-1 break-all text-muted-foreground">Current ETag: {readback.etag}</div>
+            <div className="break-all text-muted-foreground">Proposal digest: {readback.candidate.proposal_digest}</div>
+          </details>
+          <label className="block text-xs font-medium text-foreground/90">
             Decision reason for {readback.candidate.proposal_id}
             <input
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
+              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground"
               maxLength={1000}
               onChange={(event) => { setReason(event.target.value); setAttempt(null); setStatus(null); }}
               value={reason}
             />
           </label>
-          <label className="block text-xs font-medium text-slate-700">
-            Proposed value (JSON) for {readback.candidate.proposal_id}
-            <textarea
-              className="mt-1 min-h-24 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs"
-              onChange={(event) => { setProposedValue(event.target.value); setAttempt(null); setStatus(null); }}
-              value={proposedValue}
-            />
-          </label>
+          <details className="rounded border border-border/70 bg-card/50 p-2 text-xs">
+            <summary className="cursor-pointer font-medium text-muted-foreground">
+              {workshopCopy("agora.workshop.interaction.engineeringDetails", "展開工程與憑證細節")} ({readback.candidate.proposal_id})
+            </summary>
+            <label className="mt-2 block text-xs font-medium text-foreground/90">
+              Proposed value (JSON) for {readback.candidate.proposal_id}
+              <textarea
+                className="mt-1 min-h-24 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground"
+                onChange={(event) => { setProposedValue(event.target.value); setAttempt(null); setStatus(null); }}
+                value={proposedValue}
+              />
+            </label>
+          </details>
           <div className="flex flex-wrap gap-2" role="group" aria-label={`Candidate ${readback.candidate.proposal_id} decisions`}>
             <Button disabled={busy || !allowed("modify")} onClick={() => void decide("modify")} size="sm" variant="outline">Modify</Button>
             <Button disabled={busy || !acceptReady} onClick={() => void decide("accept_for_review")} size="sm" variant="outline">Accept for review</Button>
@@ -348,13 +458,15 @@ function GovernedCandidateMeasure({
             <Button disabled={busy || !writeAllowed || readback.readiness.validation.can_run !== true} onClick={() => void validate()} size="sm" variant="outline">Run authoritative validation</Button>
             <Button disabled={busy} onClick={() => void load(readback.candidate.proposal_id)} size="sm" variant="ghost">Reload candidate</Button>
           </div>
-          <div className="rounded border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-950" data-testid={`candidate-readiness-${readback.candidate.proposal_id}`}>
+          <div className="rounded border border-indigo-500/30 bg-indigo-500/10 p-2 text-xs text-indigo-200" data-testid={`candidate-readiness-${readback.candidate.proposal_id}`}>
             Validator: {readback.readiness.validation.adapter_ready === true ? "ready" : `blocked (${readback.readiness.validation.reason ?? "unknown"})`};
             reviewer store: {readback.readiness.reviewer.store_ready === true ? "ready" : `blocked (${readback.readiness.reviewer.reason ?? "unknown"})`};
             formal approval: {readback.readiness.reviewer.current_formal_approval_id ?? "none"}. Accept for review is never approval.
           </div>
-          <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-600" data-testid={`candidate-history-${readback.candidate.proposal_id}`}>
-            Durable history: {readback.revisions.length} revision(s), {readback.decisions.length} operator decision(s), {readback.validation_receipts.length} validation receipt(s), {readback.formal_approval_receipts.length} formal approval receipt(s).
+          <details className="rounded border border-border bg-card p-2 text-xs text-muted-foreground" data-testid={`candidate-history-${readback.candidate.proposal_id}`}>
+            <summary className="cursor-pointer font-medium">
+              Durable history: {readback.revisions.length} revision(s), {readback.decisions.length} operator decision(s), {readback.validation_receipts.length} validation receipt(s), {readback.formal_approval_receipts.length} formal approval receipt(s).
+            </summary>
             {readback.decisions.length ? (
               <ul className="mt-2 space-y-1" aria-label={`Candidate ${readback.candidate.proposal_id} audit history`}>
                 {readback.decisions.map((decision) => (
@@ -364,11 +476,11 @@ function GovernedCandidateMeasure({
                 ))}
               </ul>
             ) : null}
-          </div>
+          </details>
         </div>
       ) : null}
-      {error ? <p className="mt-2 text-xs text-red-700" role="alert">{error}</p> : null}
-      {status ? <p aria-live="polite" className="mt-2 text-xs text-emerald-700" role="status">{status}</p> : null}
+      {error ? <p className="mt-2 text-xs text-rose-400" role="alert">{error}</p> : null}
+      {status ? <p aria-live="polite" className="mt-2 text-xs text-emerald-400" role="status">{status}</p> : null}
     </div>
   );
 }
@@ -381,9 +493,11 @@ function CandidateActions({ interaction, writeAllowed, onRefresh }: {
   const measures = interaction.opinions.flatMap((opinion) => opinion.recommended_measures);
 
   return (
-    <section aria-label="Governed candidate measures" className="space-y-3 border-t border-slate-200 pt-3">
-      <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Candidate measures</h4>
-      {measures.length === 0 ? <p className="text-xs text-slate-500">No Persona recommended measure was returned.</p> : null}
+    <section aria-label="Governed candidate measures" className="space-y-3 border-t border-border/70 pt-3">
+      <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        {workshopCopy("agora.workshop.interaction.candidatesHeading", "候選指標與建議調整")}
+      </h4>
+      {measures.length === 0 ? <p className="text-xs text-muted-foreground">No Persona recommended measure was returned.</p> : null}
       {interaction.opinions.flatMap((opinion) => opinion.recommended_measures.map((measure) => {
         const linked = interaction.candidate_proposal_links.find((item) =>
           item.opinion_id === opinion.opinion_id
@@ -414,6 +528,30 @@ function latestProviderInvocations(interaction: DailyInteraction): Map<string, D
   return latest;
 }
 
+export function resolveEffectiveInteractionStatus(item: DailyInteraction): DailyInteraction["status"] {
+  if (item.status !== "running" && item.status !== "queued") {
+    return item.status;
+  }
+  if (!item.participants || item.participants.length === 0) {
+    return item.status;
+  }
+  const latest = latestProviderInvocations(item);
+  const participantStatuses = item.participants.map((p) => latest.get(p.persona_id)?.status);
+  const allSucceeded =
+    participantStatuses.every((st) => st === "succeeded") &&
+    item.missing_participant_ids.length === 0 &&
+    item.degraded_participant_ids.length === 0;
+  if (allSucceeded) {
+    return "completed";
+  }
+  const allTerminal = participantStatuses.every((st) => st === "succeeded" || st === "failed");
+  if (allTerminal) {
+    const anySucceeded = participantStatuses.some((st) => st === "succeeded");
+    return anySucceeded ? "degraded" : "failed";
+  }
+  return item.status;
+}
+
 function LifecycleIcon({ status }: { status: DailyInteraction["status"] }) {
   if (status === "completed") return <CheckCircle2 aria-hidden="true" className="h-4 w-4" />;
   if (status === "failed") return <XCircle aria-hidden="true" className="h-4 w-4" />;
@@ -423,96 +561,104 @@ function LifecycleIcon({ status }: { status: DailyInteraction["status"] }) {
 
 export function DailyInteractionTimeline({ interactions, runtimeState, runtimeMessage, writeAllowed, onRefresh }: Props) {
   if (runtimeState === "loading") {
-    return <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600" data-testid="daily-interactions-loading" role="status">Loading durable Persona interactions…</div>;
+    return <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground" data-testid="daily-interactions-loading" role="status">Loading durable Persona interactions…</div>;
   }
   if (runtimeState === "unsupported") {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" data-testid="daily-interactions-unsupported" role="status">
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200" data-testid="daily-interactions-unsupported" role="status">
         <div className="font-semibold">Daily Persona runtime is not available on this BFF.</div>
         <p className="mt-1 text-xs">{runtimeMessage ?? "PINT-012–014 routes must be deployed before submissions and authoritative readback are enabled."}</p>
       </div>
     );
   }
   if (runtimeState === "error") {
-    return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800" data-testid="daily-interactions-error" role="alert">{runtimeMessage ?? "Authoritative interaction readback failed."}</div>;
+    return <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300" data-testid="daily-interactions-error" role="alert">{runtimeMessage ?? "Authoritative interaction readback failed."}</div>;
   }
   if (interactions.length === 0) {
-    return <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-500" data-testid="daily-interactions-empty">No durable Persona interactions in this Workshop yet.</div>;
+    return <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground" data-testid="daily-interactions-empty">No durable Persona interactions in this Workshop yet.</div>;
   }
 
   return (
     <section aria-label="Durable Persona interaction timeline" className="space-y-4" data-testid="daily-interaction-timeline">
       <p aria-atomic="true" aria-live="polite" className="sr-only" role="status">
-        {interactions.map((item) => `${item.interaction_id}: ${item.status}`).join("; ") || "No Persona interactions yet."}
+        {interactions.map((item) => `${item.interaction_id}: ${resolveEffectiveInteractionStatus(item)}`).join("; ") || "No Persona interactions yet."}
       </p>
       <div className="flex justify-end">
         <Button aria-label="Refresh Persona interaction readback" onClick={() => void onRefresh()} size="sm" variant="ghost"><RefreshCw className="mr-1 h-4 w-4" />Refresh</Button>
       </div>
-      {interactions.map((item) => (
-        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" data-testid={`daily-interaction-${item.interaction_id}`} key={item.interaction_id}>
-          <header className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{item.human_request.mode.replace("_", " ")} · {item.human_request.submitted_at}</div>
-              <h3 className="mt-1 text-sm font-semibold text-slate-900">{item.human_request.request_text}</h3>
+      {interactions.map((item) => {
+        const effectiveStatus = resolveEffectiveInteractionStatus(item);
+        return (
+          <article className="rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm" data-testid={`daily-interaction-${item.interaction_id}`} key={item.interaction_id}>
+            <header className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.human_request.mode.replace("_", " ")} · {item.human_request.submitted_at}</div>
+                <h3 className="mt-1 text-sm font-semibold text-foreground">{item.human_request.request_text}</h3>
+              </div>
+              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${statusTone[effectiveStatus]}`} data-testid={`interaction-status-${item.interaction_id}`}>
+                <LifecycleIcon status={effectiveStatus} />{effectiveStatus}
+              </span>
+            </header>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="Provider invocation status">
+              {item.participants.map((participant) => {
+                const invocation = latestProviderInvocations(item).get(participant.persona_id);
+                return (
+                  <div className="rounded border border-border/70 bg-muted/30 p-2 text-xs" key={participant.persona_id}>
+                    <div className="font-semibold text-foreground">{participant.display_name ?? participant.persona_id} · v{participant.persona_version}</div>
+                    <div className="text-muted-foreground">OpenClaw {participant.provider_agent_id} · {invocation?.status ?? "not started"}</div>
+                    {invocation?.error ? <div className="mt-1 text-rose-400">{invocation.error.code}: {invocation.error.message}</div> : null}
+                  </div>
+                );
+              })}
             </div>
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${statusTone[item.status]}`} data-testid={`interaction-status-${item.interaction_id}`}>
-              <LifecycleIcon status={item.status} />{item.status}
-            </span>
-          </header>
+            {Array.from(latestProviderInvocations(item).values()).some((invocation) => invocation.status === "failed" && invocation.error?.retryable) ? (
+              <ProviderRetry interactionId={item.interaction_id} onRefresh={onRefresh} writeAllowed={writeAllowed} />
+            ) : null}
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="Provider invocation status">
-            {item.participants.map((participant) => {
-              const invocation = latestProviderInvocations(item).get(participant.persona_id);
-              return (
-                <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs" key={participant.persona_id}>
-                  <div className="font-semibold text-slate-800">{participant.display_name ?? participant.persona_id} · v{participant.persona_version}</div>
-                  <div className="text-slate-500">OpenClaw {participant.provider_agent_id} · {invocation?.status ?? "not started"}</div>
-                  {invocation?.error ? <div className="mt-1 text-red-700">{invocation.error.code}: {invocation.error.message}</div> : null}
-                </div>
-              );
-            })}
-          </div>
-          {Array.from(latestProviderInvocations(item).values()).some((invocation) => invocation.status === "failed" && invocation.error?.retryable) ? (
-            <ProviderRetry interactionId={item.interaction_id} onRefresh={onRefresh} writeAllowed={writeAllowed} />
-          ) : null}
+            {item.missing_participant_ids.length || item.degraded_participant_ids.length ? (
+              <div className="mt-3 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200" data-testid={`interaction-partial-${item.interaction_id}`}>
+                Missing: {item.missing_participant_ids.join(", ") || "none"}; degraded: {item.degraded_participant_ids.join(", ") || "none"}. Successful Persona opinions remain independently visible.
+              </div>
+            ) : null}
 
-          {item.missing_participant_ids.length || item.degraded_participant_ids.length ? (
-            <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900" data-testid={`interaction-partial-${item.interaction_id}`}>
-              Missing: {item.missing_participant_ids.join(", ") || "none"}; degraded: {item.degraded_participant_ids.join(", ") || "none"}. Successful Persona opinions remain independently visible.
+            <div className="mt-3 grid gap-3 lg:grid-cols-2" aria-label="Independent Persona opinions">
+              {item.opinions.map((opinion) => (
+                <section className="rounded-md border border-indigo-500/30 bg-indigo-500/10 p-3" data-testid={`persona-opinion-${opinion.opinion_id}`} key={opinion.opinion_id}>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-indigo-200">{opinion.participant.display_name ?? opinion.participant.persona_id}</h4>
+                    <span className="text-xs font-semibold text-indigo-300">{opinion.conclusion} · {Math.round(opinion.confidence * 100)}%</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-foreground/90">{opinion.rationale}</p>
+                  <details className="mt-2 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer">
+                      {workshopCopy("agora.workshop.interaction.engineeringDetails", "展開工程與憑證細節")}
+                    </summary>
+                    <div className="mt-1">Provider invocation {opinion.provider_invocation_id} · correlated OpenClaw response</div>
+                  </details>
+                </section>
+              ))}
             </div>
-          ) : null}
 
-          <div className="mt-3 grid gap-3 lg:grid-cols-2" aria-label="Independent Persona opinions">
-            {item.opinions.map((opinion) => (
-              <section className="rounded-md border border-indigo-200 bg-indigo-50/40 p-3" data-testid={`persona-opinion-${opinion.opinion_id}`} key={opinion.opinion_id}>
-                <div className="flex flex-wrap justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-indigo-950">{opinion.participant.display_name ?? opinion.participant.persona_id}</h4>
-                  <span className="text-xs font-semibold text-indigo-800">{opinion.conclusion} · {Math.round(opinion.confidence * 100)}%</span>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{opinion.rationale}</p>
-                <div className="mt-2 text-[11px] text-slate-500">Provider invocation {opinion.provider_invocation_id} · correlated OpenClaw response</div>
+            {item.synthesis ? (
+              <section className="mt-3 rounded-md border border-violet-500/30 bg-violet-500/10 p-3" data-testid={`interaction-synthesis-${item.interaction_id}`}>
+                <div className="flex items-center gap-2 text-sm font-semibold text-violet-200"><ShieldCheck className="h-4 w-4" />Synthesis · {item.synthesis.status}</div>
+                <p className="mt-2 text-sm text-foreground/90">{item.synthesis.summary}</p>
+                {item.synthesis.disagreements.length ? (
+                  <div className="mt-2 space-y-1" aria-label="Persona disagreements">
+                    {item.synthesis.disagreements.map((disagreement, index) => <p className="text-xs text-violet-200" key={`${disagreement.cause}-${index}`}><strong>{disagreement.cause}:</strong> {disagreement.detail}</p>)}
+                  </div>
+                ) : null}
               </section>
-            ))}
-          </div>
+            ) : effectiveStatus === "completed" ? (
+              <p className="mt-3 rounded border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-300" role="alert">Completed interaction omitted its authoritative synthesis.</p>
+            ) : null}
 
-          {item.synthesis ? (
-            <section className="mt-3 rounded-md border border-violet-200 bg-violet-50 p-3" data-testid={`interaction-synthesis-${item.interaction_id}`}>
-              <div className="flex items-center gap-2 text-sm font-semibold text-violet-950"><ShieldCheck className="h-4 w-4" />Synthesis · {item.synthesis.status}</div>
-              <p className="mt-2 text-sm text-slate-700">{item.synthesis.summary}</p>
-              {item.synthesis.disagreements.length ? (
-                <div className="mt-2 space-y-1" aria-label="Persona disagreements">
-                  {item.synthesis.disagreements.map((disagreement, index) => <p className="text-xs text-violet-900" key={`${disagreement.cause}-${index}`}><strong>{disagreement.cause}:</strong> {disagreement.detail}</p>)}
-                </div>
-              ) : null}
-            </section>
-          ) : item.status === "completed" ? (
-            <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800" role="alert">Completed interaction omitted its authoritative synthesis.</p>
-          ) : null}
-
-          <CandidateActions interaction={item} onRefresh={onRefresh} writeAllowed={writeAllowed} />
-          <footer className="mt-3 text-[11px] text-slate-500">Audit: {item.audit_refs.join(", ") || "pending"} · execution authority: none</footer>
-        </article>
-      ))}
+            <CandidateActions interaction={item} onRefresh={onRefresh} writeAllowed={writeAllowed} />
+            <footer className="mt-3 text-[11px] text-muted-foreground">Audit: {item.audit_refs.join(", ") || "pending"} · execution authority: none</footer>
+          </article>
+        );
+      })}
     </section>
   );
 }

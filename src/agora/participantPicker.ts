@@ -1,12 +1,13 @@
 import type { PersonaEligibility } from "@/lib/bff-v1/agora/interaction";
 
-export type WorkshopParticipantPicker = "named" | "recommended" | "eligible-one" | "eligible-two" | "eligible-three";
+export type WorkshopParticipantPicker = "none" | "named" | "recommended" | "eligible-one" | "eligible-two" | "eligible-three";
 
 export function pickerParticipants(
   picker: WorkshopParticipantPicker,
   included: PersonaEligibility[],
   preferred: string[] = [],
 ): string[] {
+  if (picker === "none") return [];
   const eligibleIds = new Set(included.map((item) => item.persona_id));
   const preserved = preferred.filter((id) => eligibleIds.has(id));
   if (picker === "named") return preserved;

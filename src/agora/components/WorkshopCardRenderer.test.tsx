@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/agora/useAgoraWriteAccess", async (importOriginal) => {
@@ -78,7 +78,7 @@ describe("WorkshopCardRenderer", () => {
     expect(screen.getByText("Prototype winner-branch plan")).toBeInTheDocument();
     expect(screen.getByText("Validate branch accumulation lead time")).toBeInTheDocument();
     expect(screen.getByText("vectorbt")).toBeInTheDocument();
-    expect(screen.getByText("Approve")).toBeInTheDocument();
+    expect(screen.getByText("核准")).toBeInTheDocument();
     expect(container.querySelector("pre")).toBeNull();
     expect(container).not.toHaveTextContent('"objectives"');
   });
@@ -131,9 +131,9 @@ describe("WorkshopCardRenderer", () => {
       />,
     );
 
-    expect(screen.getByText("Fixture")).toBeInTheDocument();
-    expect(screen.getByText("Performance")).toBeInTheDocument();
-    expect(screen.getByText("Sharpe")).toBeInTheDocument();
+    expect(screen.getByText("樣本資料")).toBeInTheDocument();
+    expect(screen.getByText("績效表現")).toBeInTheDocument();
+    expect(screen.getByText("sharpe")).toBeInTheDocument();
     expect(screen.getByText("Capacity remains thin.")).toBeInTheDocument();
   });
 
@@ -224,6 +224,98 @@ describe("WorkshopCardRenderer", () => {
     expect(screen.getByText("operator-001")).toBeInTheDocument();
     expect(screen.getByText("Promote to Paper Trading")).toBeInTheDocument();
   });
+
+  it("renders BFF strategy_reconstruction card in zh-TW with clickable decision options and expandable engineering details", () => {
+    const onSubmitDecision = vi.fn();
+    render(
+      <WorkshopCardRenderer
+        card={card({
+          card_id: "card-recon-1",
+          card_type: "strategy_reconstruction",
+          status: "completed",
+          title: "策略重建卡",
+          payload: {
+            registry_draft_ref: "draft-001",
+            reconstruction: {
+              reconstruction_id: "recon-001",
+              strategy_map: {
+                market_scope: "台股上市半導體前 30 大",
+                entry_holding: "法說前 10 日分點連續買超進場",
+              },
+              explicit_facts: ["只做台股上市半導體族群"],
+              inferences: ["停損預設為跌破 10 日均線"],
+              assumptions: ["日成交金額大於 3 億新台幣"],
+              contradictions: ["隔日沖出場與波段持有 15 天存在時間窗衝突"],
+              next_decision: {
+                question_id: "q-exit-horizon",
+                question: "請確認主要出場條件應以事件日隔天或波段停利為準？",
+                why_high_value: "解決持有時間窗衝突後才能鎖定回測視窗",
+                options: [
+                  { option_id: "opt-event-t1", label: "事件後 T+1 出場", summary: "純事件前領先交易" },
+                  { option_id: "opt-swing-15d", label: "波段持有 15 日", summary: "搭配移動停利" },
+                ],
+                servant_default: {
+                  option_id: "opt-event-t1",
+                  label: "事件後 T+1 出場",
+                },
+              },
+              provider_lineage: {
+                provider: "openclaw",
+                model: "claude-sonnet",
+              },
+            },
+          },
+        })}
+        onSubmitDecision={onSubmitDecision}
+      />,
+    );
+
+    expect(screen.getByText("一、已確認的策略核心與顯性規則")).toBeInTheDocument();
+    expect(screen.getByText("二、助理推定與暫時假設（待您確認）")).toBeInTheDocument();
+    expect(screen.getByText("三、尚缺定義與潛在衝突")).toBeInTheDocument();
+    expect(screen.getByText("四、下一個最高價值決策問題")).toBeInTheDocument();
+    expect(screen.getByText("只做台股上市半導體族群")).toBeInTheDocument();
+    expect(screen.getByText("隔日沖出場與波段持有 15 天存在時間窗衝突")).toBeInTheDocument();
+    expect(screen.getByTestId("reconstruction-engineering-details")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("reconstruction-decision-option-opt-event-t1"));
+    expect(onSubmitDecision).toHaveBeenCalledWith({
+      question_id: "q-exit-horizon",
+      selected_option_id: "opt-event-t1",
+    });
+
+    fireEvent.click(screen.getByTestId("reconstruction-decision-servant-default"));
+    expect(onSubmitDecision).toHaveBeenCalledWith({
+      question_id: "q-exit-horizon",
+      use_servant_default: true,
+    });
+  });
+
+  it("renders failed strategy_reconstruction card with typed failure_reason and retry callback", () => {
+    const onRetry = vi.fn();
+    render(
+      <WorkshopCardRenderer
+        card={card({
+          card_id: "card-recon-failed",
+          card_type: "strategy_reconstruction",
+          status: "failed",
+          title: "策略重建未完成",
+          payload: {
+            failure_reason: "provider_timeout",
+            failure_status: 504,
+          },
+        })}
+        onRetryReconstruction={onRetry}
+      />,
+    );
+
+    expect(screen.getByTestId("reconstruction-failed-card-recon-failed")).toBeInTheDocument();
+    expect(screen.getByTestId("reconstruction-failure-reason")).toHaveTextContent("provider_timeout");
+    expect(screen.getByText(/策略重建服務回應逾時/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("retry-reconstruction-btn"));
+    expect(onRetry).toHaveBeenCalledWith("card-recon-failed");
+  });
 });
 
 describe("StrategyCompletenessRail", () => {
@@ -268,10 +360,10 @@ describe("StrategyCompletenessRail", () => {
       />,
     );
 
-    expect(screen.getByText("Data dependencies")).toBeInTheDocument();
+    expect(screen.getByText("資料依賴")).toBeInTheDocument();
     expect(screen.getByText("PIT data source unknown")).toBeInTheDocument();
     expect(screen.getByText("Critical definition missing")).toBeInTheDocument();
-    expect(screen.getByText("Preliminary research")).toBeInTheDocument();
+    expect(screen.getByText("初步研究")).toBeInTheDocument();
     expect(screen.getByText("PR-03 blocked")).toBeInTheDocument();
   });
 });
