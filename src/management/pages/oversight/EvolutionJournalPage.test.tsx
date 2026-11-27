@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import i18n from "@/i18n";
 import { EvolutionJournalPage } from "./_core";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
@@ -553,7 +554,7 @@ describe("EvolutionJournalPage Rendering", () => {
     expect(await screen.findByText("Evolution decision · retrain")).toBeInTheDocument();
     expect(String(fetchSpy.mock.calls[0][0])).toBe("/bff/management/evolution-journal?view=history");
     expect(screen.getByTestId("evolution-auto-proposals-summary")).toHaveTextContent(
-      "Automatic proposals: 2672 (Incident follow-up: 320, Incident severity: 325, Postmortem drafts: 2027)",
+      "Automatic proposals: 2672 (Threshold signal: 0, Incident follow-up: 320, Incident severity: 325, Infrastructure: 0, Other: 0)",
     );
     expect(screen.getByTestId("evolution-journal-summary")).toHaveTextContent("Filtered items: 2 (returned 1)");
     expect(screen.getByTestId("evolution-evidence-class-threshold_signal")).toHaveTextContent(
@@ -603,7 +604,7 @@ describe("EvolutionJournalPage Rendering", () => {
     );
     expect(await screen.findByText("Automatic proposal · incident follow-up")).toBeInTheDocument();
     expect(screen.getByTestId("evolution-auto-proposals-summary")).toHaveTextContent(
-      "自動提案：共 2672 筆（事件後續追蹤：320 筆、重大事件門檻：325 筆、事後檢討草稿：2027 筆）",
+      "自動提案：共 2672 筆（門檻訊號：0 筆、事件後續追蹤：320 筆、重大事件門檻：325 筆、基礎設施：0 筆、其他：0 筆）",
     );
     expect(screen.getByTestId("evolution-evidence-class-incident_followup")).toHaveTextContent(
       "事件後續追蹤 (incident_followup)",
@@ -657,7 +658,7 @@ describe("EvolutionJournalPage Rendering", () => {
       "No evolution has been executed yet",
     );
     expect(screen.getByTestId("evolution-history-empty")).toHaveTextContent(
-      "2674 automatic proposal(s) are waiting (Incident follow-up: 322, Incident severity: 325, Postmortem drafts: 2027).",
+      "2674 automatic proposal(s) are waiting (Threshold signal: 0, Incident follow-up: 322, Incident severity: 325, Infrastructure: 0, Other: 0).",
     );
     enView.unmount();
 
@@ -668,7 +669,7 @@ describe("EvolutionJournalPage Rendering", () => {
     );
     expect(screen.getByTestId("evolution-history-empty")).not.toHaveTextContent("真實");
     expect(screen.getByTestId("evolution-history-empty")).toHaveTextContent(
-      "共有 2674 筆自動提案等待處理（事件後續追蹤：322 筆、重大事件門檻：325 筆、事後檢討草稿：2027 筆）。",
+      "共有 2674 筆自動提案等待處理（門檻訊號：0 筆、事件後續追蹤：322 筆、重大事件門檻：325 筆、基礎設施：0 筆、其他：0 筆）。",
     );
     zhView.unmount();
 
@@ -1054,7 +1055,7 @@ describe("EvolutionJournalPage Rendering", () => {
 
     // 2. All 2530 healthy-source auto-proposal counters and toggle remain visible
     expect(screen.getByTestId("evolution-auto-proposals-summary")).toHaveTextContent(
-      "自動提案：共 2530 筆（事件後續追蹤：433 筆、重大事件門檻：9 筆、事後檢討草稿：2088 筆）",
+      "自動提案：共 2530 筆（門檻訊號：0 筆、事件後續追蹤：433 筆、重大事件門檻：9 筆、基礎設施：0 筆、其他：0 筆）",
     );
     expect(screen.getByTestId("auto-proposal-total")).toHaveTextContent("2530");
     expect(screen.getByTestId("auto-proposal-incident-followup")).toHaveTextContent("433");
@@ -1069,7 +1070,8 @@ describe("EvolutionJournalPage Rendering", () => {
       "已驗證來源篩選結果：共 6 筆（本頁 6 筆，未含未知來源）",
     );
     expect(screen.getByTestId("evolution-summary-decisions")).toHaveTextContent("演化決策: 3");
-    expect(screen.getByTestId("evolution-summary-mutation-reviews")).toHaveTextContent("突變審核: 3");
+    // FE-EVO-JOURNAL-DIRECTION-20261125: the mutation review number repeated the decisions and is gone.
+    expect(screen.queryByTestId("evolution-summary-mutation-reviews")).toBeNull();
     expect(screen.getByTestId("evolution-summary-postmortems")).toHaveTextContent("事後檢討: 0");
     expect(screen.getByTestId("evolution-summary-rollbacks")).toHaveTextContent("回滾: 未知 (unavailable)");
     expect(screen.getByTestId("evolution-summary-freeze-orders")).toHaveTextContent("凍結令: 未知 (unavailable)");
@@ -1110,7 +1112,7 @@ describe("EvolutionJournalPage Rendering", () => {
       "Verified-source items: 6 (returned 6, excluding unknown sources)",
     );
     expect(screen.getByTestId("evolution-summary-decisions")).toHaveTextContent("Decisions: 3");
-    expect(screen.getByTestId("evolution-summary-mutation-reviews")).toHaveTextContent("Mutation reviews: 3");
+    expect(screen.queryByTestId("evolution-summary-mutation-reviews")).toBeNull();
     expect(screen.getByTestId("evolution-summary-postmortems")).toHaveTextContent("Postmortems: 0");
     expect(screen.getByTestId("evolution-summary-rollbacks")).toHaveTextContent(
       "Rollbacks: unknown (unavailable)",
@@ -1326,7 +1328,7 @@ describe("EvolutionJournalPage Rendering", () => {
     );
     expect(screen.getByTestId("evolution-journal-pager")).toHaveTextContent("顯示第 1–3 筆，共 3 筆");
     expect(screen.getByTestId("evolution-auto-proposals-summary")).toHaveTextContent(
-      "自動提案：共 2571 筆（事件後續追蹤：434 筆、重大事件門檻：9 筆、事後檢討草稿：2128 筆）",
+      "自動提案：共 2571 筆（門檻訊號：0 筆、事件後續追蹤：434 筆、重大事件門檻：9 筆、基礎設施：0 筆、其他：0 筆）",
     );
     fireEvent.click(screen.getByTestId("evolution-view-toggle"));
     expect(screen.getByTestId("evolution-view-toggle")).toHaveTextContent("返回演化歷史");
@@ -1335,5 +1337,327 @@ describe("EvolutionJournalPage Rendering", () => {
     );
     zhView.unmount();
     await i18n.changeLanguage("en-US");
+  });
+});
+
+describe("EvolutionJournalPage pool versions and system toggle (FE-EVO-JOURNAL-DIRECTION-20261125)", () => {
+  const MACHINE_SENTENCE =
+    "Daily evolution sweep derived a governed flag_for_review proposal from incident inc-1. The proposal is review-gated.";
+  const appliedV2 = {
+    id: "pool_version:per-a:2",
+    entry_type: "pool_version",
+    persona_id: "per-a",
+    persona_name: "Alpha Persona",
+    pool_version: 2,
+    action: "add_member",
+    decision_status: "applied",
+    status: "applied",
+    refused: false,
+    membership_changed: true,
+    reasons: ["Sharpe gate passed on paper"],
+    members_before: [{ artifact_ref: "strat-a@1", stage: "trial", risk_weight: 1 }],
+    members_after: [
+      { artifact_ref: "strat-a@1", stage: "active", risk_weight: 0.5 },
+      { artifact_ref: "strat-b@1", stage: "trial", risk_weight: 0.5 },
+    ],
+    title: "Pool version 2",
+    occurred_at: "2026-11-24T01:00:00Z",
+  };
+  const refusedV3 = {
+    id: "pool_version:per-a:3",
+    entry_type: "pool_version",
+    persona_id: "per-a",
+    persona_name: "Alpha Persona",
+    pool_version: 3,
+    action: "remove_member",
+    decision_status: "refused",
+    status: "refused",
+    refused: true,
+    membership_changed: false,
+    reasons: ["Removing strat-b would leave the pool below its minimum size"],
+    members_before: appliedV2.members_after,
+    members_after: appliedV2.members_after,
+    occurred_at: "2026-11-24T02:00:00Z",
+  };
+  const initialV1 = {
+    id: "pool_version:per-a:1",
+    entry_type: "pool_version",
+    persona_id: "per-a",
+    persona_name: "Alpha Persona",
+    pool_version: 1,
+    action: "initial",
+    decision_status: "applied",
+    status: "applied",
+    refused: false,
+    membership_changed: true,
+    reasons: [],
+    members_before: [],
+    members_after: [{ artifact_ref: "strat-a@1", stage: "trial", risk_weight: 1 }],
+  };
+  const decision = {
+    id: "evolution_decision:evo-1",
+    entry_type: "evolution_decision",
+    source_id: "evo-1",
+    title: MACHINE_SENTENCE,
+    status: "proposed",
+    action_type: "flag_for_review",
+    persona_name: "Alpha Persona",
+    target: { type: "persona", id: "per-a" },
+    subject_class: "unclassified",
+    evidence_class: "incident_followup",
+  };
+  const envelope = (items: unknown[], extra: Record<string, unknown> = {}) => ({
+    data: {
+      items,
+      summary: {
+        total_items: items.length,
+        returned_items: items.length,
+        decision_count: 1,
+        mutation_review_count: 0,
+        postmortem_count: 0,
+        rollback_count: 0,
+        freeze_order_count: 0,
+        pool_version_count: 3,
+        refused_pool_version_count: 1,
+        hidden_system_counts: { infrastructure: 4, test: 2 },
+        decision_subject_class_counts: { strategy: 1 },
+        ...(extra.summary as object),
+      },
+      auto_proposal_counts: { threshold: 3, incident_followup: 2, incident_severity: 1, other: 1, infrastructure: 5, postmortem_draft: 7, total: 12 },
+    },
+    page_info: { next_page_token: null, total: items.length, page_size: 20 },
+    meta: { surfaces: { evolution_decisions: { status: "ok" }, postmortems: { status: "ok" }, strategy_pools: { status: "ok" } }, ...(extra.meta as object) },
+  });
+
+  beforeEach(() => {
+    mocks.useV5Live.mockReset();
+  });
+
+  function feed(data: unknown, error: unknown = null, calls?: unknown[][]) {
+    mocks.useV5Live.mockImplementation((loader: () => unknown, deps: unknown[]) => {
+      const code = String(loader);
+      if (code.includes("evolutionJournal")) {
+        calls?.push(deps);
+        return { data, loading: false, error };
+      }
+      return { data: [], loading: false };
+    });
+  }
+
+  it("lists pool versions with persona name, before and after, applied or refused and a plain reason in both locales; machine text is secondary", async () => {
+    feed(envelope([refusedV3, appliedV2, initialV1, decision]));
+    await i18n.changeLanguage("en-US");
+    const view = renderJournal();
+    const titles = screen.getAllByTestId("evolution-pool-version-title").map((n) => n.textContent);
+    expect(titles).toEqual([
+      "Alpha Persona · strategy pool v3",
+      "Alpha Persona · strategy pool v2",
+      "Alpha Persona · initial strategy pool (v1)",
+    ]);
+    const refused = screen.getByTestId("evolution-pool-version-pool_version:per-a:3");
+    expect(refused).toHaveTextContent("Refused");
+    expect(refused).not.toHaveTextContent("Applied");
+    expect(refused).toHaveTextContent("This version was refused; the pool did not change.");
+    expect(refused).toHaveTextContent("Removing strat-b would leave the pool below its minimum size");
+    const applied = screen.getByTestId("evolution-pool-version-pool_version:per-a:2");
+    expect(applied).toHaveTextContent("Applied");
+    expect(applied).toHaveTextContent("Members before");
+    expect(applied).toHaveTextContent("strat-a@1 (trial, weight 1)");
+    expect(applied).toHaveTextContent("strat-a@1 (active, weight 0.5)");
+    expect(applied).toHaveTextContent("Added strat-b@1 (trial, weight 0.5)");
+    expect(applied).toHaveTextContent("strat-a@1: trial / 1 → active / 0.5");
+    expect(applied).toHaveTextContent("Sharpe gate passed on paper");
+    // The raw id is only inside the collapsed technical details, never the title.
+    expect(within(applied).getByTestId("evolution-pool-version-technical")).toHaveTextContent("pool_version:per-a:2");
+    expect(within(applied).getByTestId("evolution-pool-version-title")).not.toHaveTextContent("pool_version:");
+    // A decision's machine sentence is never the title; it stays as secondary text.
+    const machine = screen.getByTestId("evolution-machine-title");
+    expect(machine).toHaveTextContent(MACHINE_SENTENCE);
+    expect(machine.className).toContain("text-muted-foreground");
+    expect(screen.getByText("Evolution proposal: flag_for_review (Alpha Persona)")).toBeInTheDocument();
+    view.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    renderJournal();
+    expect(screen.getAllByTestId("evolution-pool-version-title")[0]).toHaveTextContent("Alpha Persona · 策略池第 3 版");
+    expect(screen.getByTestId("evolution-pool-version-pool_version:per-a:3")).toHaveTextContent("已拒絕");
+    expect(screen.getByTestId("evolution-pool-version-pool_version:per-a:3")).toHaveTextContent("此版本被拒絕，策略池沒有改變。");
+    expect(screen.getByTestId("evolution-pool-version-pool_version:per-a:2")).toHaveTextContent("新增 strat-b@1");
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("header shows each quantity once, parts add up to the total, postmortem drafts are not proposals, and there is no mutation review number", async () => {
+    feed(envelope([appliedV2]));
+    await i18n.changeLanguage("en-US");
+    renderJournal();
+    const read = (id: string) => Number((screen.getByTestId(id).textContent ?? "").replace(/\D+/g, " ").trim().split(" ").pop());
+    const parts = ["threshold", "incident-followup", "incident-severity", "other", "infrastructure"].map((k) => read(`auto-proposal-${k}`));
+    expect(parts.reduce((a, b) => a + b, 0)).toBe(read("auto-proposal-total"));
+    expect(read("auto-proposal-total")).toBe(12);
+    expect(screen.getByTestId("auto-proposal-postmortem-draft")).toHaveTextContent("7 postmortem draft(s): drafts, not proposals");
+    expect(screen.queryByTestId("evolution-summary-mutation-reviews")).toBeNull();
+    expect(screen.queryByText(/Mutation reviews/i)).toBeNull();
+    expect(screen.getByTestId("evolution-summary-pool-versions")).toHaveTextContent("3 (applied 2, refused 1)");
+  });
+
+  it("puts system and test entries behind a toggle that shows the BFF hidden counts and asks the BFF with include_system", async () => {
+    const calls: unknown[][] = [];
+    feed(envelope([appliedV2]), null, calls);
+    await i18n.changeLanguage("en-US");
+    renderJournal();
+    expect(screen.getByTestId("evolution-system-hidden-count")).toHaveTextContent("6 hidden (infrastructure 4、test 2)");
+    expect(screen.getByTestId("evolution-system-toggle")).toHaveTextContent("Show system and test entries");
+    expect(calls.at(-1)?.[0]).toBe("history");
+    fireEvent.click(screen.getByTestId("evolution-system-toggle"));
+    await waitFor(() => expect(calls.at(-1)?.[0]).toBe("history+system"));
+    expect(screen.getByTestId("evolution-system-toggle")).toHaveTextContent("Hide system and test entries");
+  });
+
+  it("keeps an unclassified decision visible and labels it as not confirmed", () => {
+    feed(envelope([decision]));
+    renderJournal();
+    expect(screen.getByTestId("evolution-subject-class-unclassified")).toHaveTextContent("Class: unclassified");
+    expect(screen.getByText(/Could not confirm whether this entry is strategy or system/)).toBeInTheDocument();
+  });
+
+  it("distinguishes denied, strategy-pools unavailable and empty states", async () => {
+    await i18n.changeLanguage("en-US");
+    feed(undefined, Object.assign(new Error("forbidden"), { status: 403 }));
+    const denied = renderJournal();
+    expect(screen.getByTestId("evolution-journal-denied")).toBeInTheDocument();
+    expect(screen.queryByTestId("evolution-journal-degraded")).toBeNull();
+    denied.unmount();
+
+    feed(envelope([decision], { meta: { surfaces: { evolution_decisions: { status: "ok" }, strategy_pools: { status: "unavailable", reason: "owner_timeout" } } } }));
+    const unavailable = renderJournal();
+    expect(screen.getByTestId("evolution-strategy-pools-unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("evolution-summary-pool-versions")).toHaveTextContent("unknown");
+    expect(screen.queryByTestId("evolution-history-empty")).toBeNull();
+    unavailable.unmount();
+
+    feed(envelope([]));
+    renderJournal();
+    expect(screen.getByTestId("evolution-history-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("evolution-journal-denied")).toBeNull();
+    expect(screen.queryByTestId("evolution-journal-degraded")).toBeNull();
+  });
+
+  it("deep link to one decision, mutation review or persona still opens that entry", () => {
+    feed(envelope([appliedV2, decision]));
+    renderJournal("/management/evolution-journal?decision=evo-1");
+    expect(screen.getByText("Evolution proposal: flag_for_review (Alpha Persona)")).toBeInTheDocument();
+    expect(screen.queryByTestId("evolution-pool-version-pool_version:per-a:2")).toBeNull();
+  });
+
+  it("persona deep link opens that persona's pool versions", () => {
+    feed(envelope([appliedV2, { ...appliedV2, id: "pool_version:per-z:2", persona_id: "per-z", persona_name: "Zed" }]));
+    renderJournal("/management/evolution-journal?persona=per-a");
+    expect(screen.getAllByTestId("evolution-pool-version-title")).toHaveLength(1);
+  });
+
+  // FE-EVO-JOURNAL-VERSION-GUARD-20261126: before BFF-EVO-JOURNAL-VERSION-STRING-20261126
+  // the aggregate emitted `target.version` as a JSON number (pool_version rows always:
+  // `target={"type": "persona", "id": persona_id, "version": number}`; decision rows when the
+  // stored target_version is an int). The page called `.toLowerCase()` on it and the whole
+  // page fell into the error boundary. Rows below are the BFF base-item + pool_version shapes.
+  it("renders decision and pool_version rows with a numeric, null or missing target.version without hitting the error boundary", async () => {
+    const decisionNumericVersion = {
+      id: "evolution_decision:evo-num-1",
+      journal_id: "evolution_decision:evo-num-1",
+      entryType: "evolution_decision",
+      entry_type: "evolution_decision",
+      source_id: "evo-num-1",
+      title: "Freeze decision · evo-num-1",
+      summary: "Governed freeze proposal for plan-num-1",
+      status: "approved",
+      risk_level: "medium",
+      action_type: "freeze",
+      target: { type: "candidate_artifact", id: "plan-num-1-execution-artifact", version: 3 },
+      created_at: "2026-11-24T03:00:00Z",
+      updated_at: "2026-11-24T03:00:00Z",
+      occurred_at: "2026-11-24T03:00:00Z",
+      route: "/management/evolution-journal?decision=evo-num-1",
+      bff_detail_path: null,
+      evidence_class: "incident_severity",
+      subject_class: "strategy",
+    };
+    const decisionNullVersion = {
+      ...decisionNumericVersion,
+      id: "evolution_decision:evo-null-1",
+      journal_id: "evolution_decision:evo-null-1",
+      source_id: "evo-null-1",
+      title: "Freeze decision · evo-null-1",
+      target: { type: "candidate_artifact", id: "plan-null-1-execution-artifact", version: null },
+    };
+    const decisionMissingVersion = {
+      ...decisionNumericVersion,
+      id: "evolution_decision:evo-miss-1",
+      journal_id: "evolution_decision:evo-miss-1",
+      source_id: "evo-miss-1",
+      title: "Freeze decision · evo-miss-1",
+      target: { type: "candidate_artifact", id: "plan-miss-1-execution-artifact" },
+    };
+    const poolNumericVersion = {
+      id: "pool_version:per-a:v2",
+      journal_id: "pool_version:per-a:v2",
+      entryType: "pool_version",
+      entry_type: "pool_version",
+      source_id: "per-a:v2",
+      title: "Alpha Persona pool v2: add_member applied",
+      summary: "Applied add_member; pool membership changed.",
+      status: "applied",
+      risk_level: null,
+      action_type: "add_member",
+      target: { type: "persona", id: "per-a", version: 2 },
+      created_at: "2026-11-24T01:00:00Z",
+      updated_at: "2026-11-24T01:00:00Z",
+      occurred_at: "2026-11-24T01:00:00Z",
+      route: "/management/evolution-journal?persona=per-a",
+      bff_detail_path: null,
+      subject_class: "strategy",
+      persona_id: "per-a",
+      persona_name: "Alpha Persona",
+      pool_version: 2,
+      action: "add_member",
+      decision_status: "applied",
+      refused: false,
+      membership_changed: true,
+      reasons: ["Sharpe gate passed on paper"],
+      members_before: [{ artifact_ref: "strat-a@1", stage: "trial", risk_weight: 1 }],
+      members_after: [
+        { artifact_ref: "strat-a@1", stage: "trial", risk_weight: 0.5 },
+        { artifact_ref: "strat-b@1", stage: "trial", risk_weight: 0.5 },
+      ],
+      record: { persona_id: "per-a", pool_version: 2, digest: "sha256:pool-v2" },
+    };
+    feed(envelope([poolNumericVersion, decisionNumericVersion, decisionNullVersion, decisionMissingVersion]));
+    await i18n.changeLanguage("en-US");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(
+        <ErrorBoundary scope="EvolutionJournal">
+          <I18nextProvider i18n={i18n}>
+            <MemoryRouter initialEntries={["/management/evolution-journal"]}>
+              <Routes>
+                <Route path="/management/evolution-journal" element={<EvolutionJournalPage />} />
+              </Routes>
+            </MemoryRouter>
+          </I18nextProvider>
+        </ErrorBoundary>,
+      );
+      expect(screen.queryByText(/畫面渲染失敗/)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      // Decision with numeric version renders the version as text.
+      expect(screen.getByText("candidate_artifact:plan-num-1-execution-artifact (3)")).toBeInTheDocument();
+      // Null and missing versions render the target without a version suffix.
+      expect(screen.getByText("candidate_artifact:plan-null-1-execution-artifact")).toBeInTheDocument();
+      expect(screen.getByText("candidate_artifact:plan-miss-1-execution-artifact")).toBeInTheDocument();
+      // pool_version row with numeric target.version renders its card.
+      const pool = screen.getByTestId("evolution-pool-version-pool_version:per-a:v2");
+      expect(within(pool).getByTestId("evolution-pool-version-title")).toHaveTextContent("Alpha Persona · strategy pool v2");
+      expect(pool).toHaveTextContent("Applied");
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

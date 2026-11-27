@@ -140,6 +140,56 @@ function evidenceOverview() {
   };
 }
 
+// FE-EVIDENCE-CITED-20261125: /management/evidence now lists what decisions
+// cite (GET /bff/management/evidence?scope=cited); the ingested envelope above
+// stays the answer for scope=ingested. Shape: BFF-EVIDENCE-CITED-LIST-20261125.
+function citedEvidence() {
+  const sources = Object.fromEntries(
+    ["meeting_proposals", "meeting_positions", "governance_approvals", "evolution_proposals", "research_demands", "research_tickets", "persona_cycles"].map(
+      (key) => [key, { status: "ok", reason: null, read_count: 1, truncated: false, failed_count: 0, citation_count: key === "meeting_positions" ? 1 : 0, withheld_count: 0, calls: 1, response_bytes: 900 }],
+    ),
+  );
+  return {
+    data: {
+      id: "management-evidence-cited",
+      scope: "cited",
+      items: [
+        {
+          id: "evref-mgmt-load-004",
+          ref_id: "evref-mgmt-load-004",
+          ref_kind: "evidence_item",
+          source_owner: "source_ingest",
+          label: "MGMT-LOAD-004 evidence packet",
+          name_missing: false,
+          label_parts: {},
+          source_class: "evidence",
+          resolved_link: { route_href: "/management/evidence/evref-mgmt-load-004", evidence_ref_id: "evref-mgmt-load-004" },
+          route_href: "/management/evidence/evref-mgmt-load-004",
+          cited_as: ["evref-mgmt-load-004"],
+          cited_by: [
+            {
+              entity_type: "meeting_position",
+              entity_ref: "mtg-6edaff7d0ff76275",
+              label: "Route split review",
+              parts: { meeting_id: "mtg-6edaff7d0ff76275", round: 1, position: "A", persona_id: "persona-ee7112a829d38b9135ac" },
+              route_href: "/management/meetings/mtg-6edaff7d0ff76275",
+              time: SNAPSHOT_AT,
+              source: "meeting_positions",
+            },
+          ],
+          citation_count: 1,
+          last_cited_at: SNAPSHOT_AT,
+          redacted: false,
+        },
+      ],
+      summary: { scope: "cited", complete: true, incomplete: false, reference_total: 1, returned: 1, references_truncated: false, max_references: 500, redacted_count: 0 },
+      sources,
+    },
+    page_info: { next_page_token: null, total: 1, page_size: 20 },
+    meta: { snapshot_at: SNAPSHOT_AT, surfaces: { cited_evidence: { status: "ok", source: "bff_composed_owner_reads" }, cited_evidence_sources: sources } },
+  };
+}
+
 async function installRuntimeHarness(page: Page): Promise<void> {
   await page.addInitScript(() => {
     try {
@@ -192,7 +242,12 @@ async function installStableShellRoutes(page: Page): Promise<void> {
   ];
 
   for (const [path, body] of stableRoutes) {
-    await page.route(exactPath(path), (route) => fulfillJson(route, body));
+    await page.route(exactPath(path), (route) => {
+      if (path === "/bff/management/evidence" && new URL(route.request().url()).searchParams.get("scope") === "cited") {
+        return fulfillJson(route, citedEvidence());
+      }
+      return fulfillJson(route, body);
+    });
   }
 }
 

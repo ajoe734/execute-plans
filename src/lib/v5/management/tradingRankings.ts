@@ -13,7 +13,13 @@ export type SeedRankingBlockKind =
   | "most_intervened_personas"
   | "most_unstable_after_training";
 
-export type RankingBlockKind = SeedRankingBlockKind | string;
+export type LiveRankingBlockKind =
+  | "pnl-leaders"
+  | "drawdown-control"
+  | "execution-quality"
+  | "sharpe-leaders";
+
+export type RankingBlockKind = SeedRankingBlockKind | LiveRankingBlockKind | string;
 
 export const RANKING_BLOCKS: readonly SeedRankingBlockKind[] = [
   "top_improving_personas",
@@ -24,6 +30,13 @@ export const RANKING_BLOCKS: readonly SeedRankingBlockKind[] = [
   "most_blocked_deployments",
   "most_intervened_personas",
   "most_unstable_after_training",
+] as const;
+
+export const LIVE_RANKING_BLOCKS: readonly LiveRankingBlockKind[] = [
+  "pnl-leaders",
+  "drawdown-control",
+  "execution-quality",
+  "sharpe-leaders",
 ] as const;
 
 export const RANKING_BLOCK_LABELS: Record<SeedRankingBlockKind, string> = {
@@ -37,27 +50,120 @@ export const RANKING_BLOCK_LABELS: Record<SeedRankingBlockKind, string> = {
   most_unstable_after_training: "Most Unstable After Training",
 };
 
+export const LIVE_RANKING_BLOCK_LABELS: Record<LiveRankingBlockKind, string> = {
+  "pnl-leaders": "P&L Leaders",
+  "drawdown-control": "Drawdown Control",
+  "execution-quality": "Execution Quality",
+  "sharpe-leaders": "Sharpe Leaders",
+};
+
+export interface ManagementTradingPulseLinks extends ManagementLinkSet {
+  persona?: string;
+  personaHref?: string;
+  persona_href?: string;
+  strategy?: string;
+  strategyHref?: string;
+  strategy_href?: string;
+  journey?: string;
+  journeyHref?: string;
+  journey_href?: string;
+}
+
+export interface TradingPulseComparisonScopePeriod {
+  startAt?: string | null;
+  start_at?: string | null;
+  endAt?: string | null;
+  end_at?: string | null;
+  endExclusiveAt?: string | null;
+  end_exclusive_at?: string | null;
+  asOf?: string | null;
+  as_of?: string | null;
+  window?: string | null;
+  quarter?: string | null;
+  [key: string]: unknown;
+}
+
+export interface TradingPulseComparisonScope {
+  stage?: string | null;
+  period?: TradingPulseComparisonScopePeriod | string | null;
+  unit?: string | null;
+  definition?: string | null;
+  basis?: string | null;
+  [key: string]: unknown;
+}
+
 export interface TradingPulseRankRow {
   subjectId: string;
   subjectLabel: string;
   metric: string;
   metricValue: number | string | null;
   metricUnit?: string;
-  links?: ManagementLinkSet;
+  metric_unit?: string | null;
+  rankingUnit?: string | null;
+  ranking_unit?: string | null;
+  rankingMetric?: string;
+  ranking_metric?: string;
+  rankingMetricValue?: number | null;
+  ranking_metric_value?: number | null;
+  rankingBlockId?: string;
+  ranking_block_id?: string;
+  rank?: number | null;
+  avgSlippageBps?: number | null;
+  avg_slippage_bps?: number | null;
+  personaId?: string | null;
+  persona_id?: string | null;
+  personaName?: string | null;
+  persona_name?: string | null;
+  strategyId?: string | null;
+  strategy_id?: string | null;
+  strategyName?: string | null;
+  strategy_name?: string | null;
+  underlyingSymbol?: string | null;
+  underlying_symbol?: string | null;
+  tenantId?: string | null;
+  tenant_id?: string | null;
+  runtimeId?: string;
+  runtime_id?: string;
+  runtimeBindingId?: string;
+  runtime_binding_id?: string;
+  deploymentStage?: string;
+  deployment_stage?: string;
+  status?: string;
+  comparisonScope?: TradingPulseComparisonScope | null;
+  comparison_scope?: TradingPulseComparisonScope | null;
+  performanceContext?: Record<string, unknown> | null;
+  performance_context?: Record<string, unknown> | null;
+  latestOutcome?: Record<string, unknown> | null;
+  latest_outcome?: Record<string, unknown> | null;
+  links?: ManagementTradingPulseLinks;
   rankingEligible?: boolean;
   ranking_eligible?: boolean;
+  [key: string]: unknown;
 }
 
 export interface TradingPulseRankBlock {
   kind: RankingBlockKind;
+  blockId?: string;
+  block_id?: string;
   label: string;
+  metric?: string;
+  sortOrder?: "asc" | "desc" | string;
+  sort_order?: "asc" | "desc" | string;
+  secondaryMetric?: string;
+  secondary_metric?: string;
+  rankingBasis?: string;
+  ranking_basis?: string;
+  metricReasons?: Record<string, string | null>;
+  metric_reasons?: Record<string, string | null>;
   rows: TradingPulseRankRow[];
+  items?: TradingPulseRankRow[];
   eligibleItemCount?: number;
   eligible_item_count?: number;
   missingMetricCount?: number;
   missing_metric_count?: number;
   missingMetricRuntimeIds?: string[];
   missing_metric_runtime_ids?: string[];
+  [key: string]: unknown;
 }
 
 const seed = (

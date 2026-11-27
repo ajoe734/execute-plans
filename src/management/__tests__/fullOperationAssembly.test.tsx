@@ -60,7 +60,6 @@ const COMPLETE_BFF_PUBLIC_MODULES = [
   "./governance",
   "./search",
   "./writeOverlay",
-  "./evidenceOperations",
   "./v5",
   "./management",
   "./managementConsoleReads",
@@ -96,6 +95,7 @@ describe("full production operation assembly", () => {
     expect(app).toContain('<Route path="/management" element={<ManagementLayoutRoute />}>');
     expect(app).toContain('<Route path="cockpit" element={<CockpitRoute />} />');
     expect(app).toContain('<Route path="personas" element={<PersonasListRoute />} />');
+    expect(app).toContain('<Route path="knowledge" element={<KnowledgeInboxRoute />} />');
     expect(app).toContain('<Route path="postmortems" element={<PostmortemLibraryRoute />} />');
     expect(app).toContain('<Route path="/agora" element={<ProtectedRoute><AgoraLayoutRoute /></ProtectedRoute>}>');
     expect(app).not.toMatch(/(?:from|import\()\s*["'][^"']*(?:\/mocks?\/|mock[A-Z_a-z-]*)/i);
@@ -119,6 +119,8 @@ describe("full production operation assembly", () => {
     expect(exports).toEqual(COMPLETE_BFF_PUBLIC_MODULES);
     expect(exports).not.toContain("./mocks/adapters");
     expect(exports).not.toContain("./mocks/registry");
+    // FE-EVIDENCE-CITED-20261125: the evidence operation client had no backend and was removed.
+    expect(exports).not.toContain("./evidenceOperations");
     expect(index).toContain('export { runActionSafe, type RunActionSafeOpts } from "./runActionSafe";');
     expect(index).toContain('export { useLiveList, useRealtimeStatus } from "./useLiveList";');
   });
@@ -149,19 +151,37 @@ describe("management reads after retiring dead Agora clients", () => {
     </MemoryRouter>);
   }
 
-  it.each(["jobs", "audit", "approvals", "alerts", "incidents", "artifacts", "research", "evolution"] as const)("keeps the strategy and journal visible when %s fails", async (client) => {
+  it.each([
+    ["audit", "audit"],
+    ["approvals", "governance"],
+    ["alerts", "risk"],
+    ["incidents", "incidents"],
+    ["artifacts", "artifacts"],
+    ["research", "experiments"],
+    ["evolution", "evolution"],
+  ] as const)("keeps the strategy and journal visible when %s fails", async (client, tabValue) => {
     vi.mocked(bffV1[client].list as () => Promise<unknown[]>).mockRejectedValueOnce(new Error("Unavailable"));
     renderStrategy();
     expect(await screen.findByText("Surviving strategy")).toBeInTheDocument();
-    expect(screen.getByText("Journal still available")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Some strategy data could not be loaded");
+    expect(await screen.findByText("Journal still available")).toBeInTheDocument();
+    const trigger = document.querySelector<HTMLElement>(`[role="tab"][id$="-trigger-${tabValue}"]`);
+    expect(trigger).not.toBeNull();
+    fireEvent.mouseDown(trigger!, { button: 0, ctrlKey: false });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Some strategy data could not be loaded");
+  });
+
+  it("does not call bffV1.jobs.list when rendering strategy detail", async () => {
+    renderStrategy();
+    expect(await screen.findByText("Surviving strategy")).toBeInTheDocument();
+    expect(await screen.findByText("Journal still available")).toBeInTheDocument();
+    expect(bffV1.jobs.list).not.toHaveBeenCalled();
   });
 
   it.each(["watchers", "decisionJournal"] as const)("keeps the strategy visible when %s fails", async (client) => {
     vi.mocked(bffV1[client].forSubject).mockRejectedValueOnce(new Error("Unavailable"));
     renderStrategy();
     expect(await screen.findByText("Surviving strategy")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Some strategy data could not be loaded");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Some strategy data could not be loaded");
   });
 
   it("ends loading with an explicit error when the strategy read fails", async () => {

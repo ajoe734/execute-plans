@@ -17,12 +17,14 @@ export type HumanInboxKind =
   | "promotion_review" // 2026-07-03 PPLG — paper/canary promotion human review
   | "meeting_review" // 2026-11-15 SD-PERSONA-MEETINGS — meeting ending in REVIEW
   | "meeting_refusal" // 2026-11-15 SD-PERSONA-MEETINGS — due meeting refused (e.g. insufficient_participants)
-  | "meeting_proposal"; // 2026-11-15 SD-PERSONA-MEETINGS — meeting proposal waiting for operator
+  | "meeting_proposal" // 2026-11-15 SD-PERSONA-MEETINGS — meeting proposal waiting for operator
+  | "meeting_action"; // 2026-11-23 — adopted meeting work waiting for a human on the original ticket
 
 export const MEETING_INBOX_KINDS: readonly HumanInboxKind[] = [
   "meeting_review",
   "meeting_refusal",
   "meeting_proposal",
+  "meeting_action",
 ] as const;
 
 const BASE_HUMAN_INBOX_KINDS: HumanInboxKind[] = [
@@ -54,6 +56,53 @@ export interface HumanInboxAllowedActions {
   canReject?: boolean;
   canRequestRevision?: boolean;
   canRequestEvidence?: boolean;
+}
+
+export interface HumanInboxMeetingActionEvidenceRef {
+  kind: "research_artifact" | "research_note" | string;
+  artifactId: string;
+  checksum?: string;
+  href?: string;
+}
+
+/** Human-facing work carried by a meeting-linked research ticket (the original ticket, no new id). */
+export interface HumanInboxMeetingAction {
+  /** Research ticket id (also the stable action id). */
+  ticketId: string;
+  meetingId?: string;
+  title?: string;
+  owner?: string;
+  assignee?: string;
+  assigneeKind?: "persona" | "human" | string;
+  reviewerId?: string;
+  /** Requested deliverable / material (from requested_material or deliverable). */
+  deliverable?: string;
+  requestedMaterial?: string;
+  acceptanceCriterion?: string;
+  dueAt?: string;
+  nextReview?: string;
+  overdue?: boolean;
+  /** Direct human requirement recorded by the chair (distinct from deliverable). */
+  humanRequirement?: string;
+  /** Specific missing input / authorization or return reason requested from the human. */
+  missingInput?: string;
+  reason?: string;
+  reviewReason?: string;
+  /** Owner-provided next transition: `submit` or `provide_input` (from response_action or next_transition). */
+  responseAction?: string;
+  nextTransition?: string;
+  requiredActor?: string;
+  /** Persona or reviewer that resumes after the human responds (from resumes_with or resumes_label). */
+  resumesWith?: string;
+  resumesLabel?: string;
+  state?: string;
+  ownerStatus?: string;
+  revision?: string | number;
+  /** Source-granted permission; false renders a view-only item. */
+  canRespond: boolean;
+  evidenceRefs?: HumanInboxMeetingActionEvidenceRef[];
+  ticketHref?: string;
+  meetingHref?: string;
 }
 
 export interface HumanInboxItem {
@@ -92,6 +141,11 @@ export interface HumanInboxItem {
   comparator?: string;
   reviewId?: string;
   reviewType?: string;
+  meetingId?: string;
+  meetingType?: string;
+  meetingAction?: HumanInboxMeetingAction;
+  unreadableReason?: string | null;
+  cause?: string | null;
   decisionHref?: string;
   allowedActions?: HumanInboxAllowedActions;
   /** Optional blocking reason when canProceed=false. */
@@ -152,6 +206,7 @@ export function humanInboxRank(kind: HumanInboxKind): number {
     case "promotion_review": return 7.5;
     case "rollback_request": return 7;
     case "meeting_review": return 6.5;
+    case "meeting_action": return 6.6;
     case "meeting_proposal": return 6.2;
     case "sentinel": return 6;
     case "incident": return 5.5;
@@ -163,4 +218,90 @@ export function humanInboxRank(kind: HumanInboxKind): number {
     case "approval": return 2;
     case "ask": return 1;
   }
+}
+
+export function meetingIdFromInboxItem(
+  item: Pick<HumanInboxItem, "id" | "kind" | "sourceId" | "reviewId" | "decisionHref" | "links"> & {
+    meetingId?: string;
+  },
+): string | undefined {
+  const explicit = item.meetingId?.trim();
+  if (explicit) return explicit;
+  const decodedId = (() => {
+    try {
+      return decodeURIComponent(item.id);
+    } catch {
+      return item.id;
+    }
+  })();
+  if (decodedId.startsWith("meeting_review:")) {
+    const rest = decodedId.slice("meeting_review:".length).trim();
+    if (rest) return rest;
+  }
+  if (item.kind === "meeting_review") {
+    for (const candidate of [item.sourceId, item.reviewId]) {
+      const clean = candidate?.trim();
+      if (clean) {
+        return clean.startsWith("meeting_review:")
+          ? clean.slice("meeting_review:".length).trim()
+          : clean;
+      }
+    }
+  }
+  for (const href of [item.decisionHref, item.links?.manageHref, item.links?.primaryObjectHref]) {
+    if (!href) continue;
+    const match = /\/management\/meetings\/([^/?#]+)/.exec(href);
+    if (match?.[1]) {
+      try {
+        return decodeURIComponent(match[1]);
+      } catch {
+        return match[1];
+      }
+    }
+  }
+  return undefined;
+}
+
+export function meetingReviewHrefFromInboxItem(
+  item: Pick<HumanInboxItem, "id" | "kind" | "sourceId" | "reviewId" | "decisionHref" | "links"> & {
+    meetingId?: string;
+  },
+): string | undefined {
+  const meetingId = meetingIdFromInboxItem(item);
+  if (meetingId) {
+    return `/management/meetings/${encodeURIComponent(meetingId)}`;
+  }
+  if (item.links?.manageHref?.startsWith("/management/meetings")) {
+    return item.links.manageHref;
+  }
+  return undefined;
+}
+
+export function meetingTypeFromInboxItem(
+  item: Pick<HumanInboxItem, "title" | "titleDisplay" | "rawTitle" | "summary"> & {
+    meetingType?: string;
+  },
+): string | undefined {
+  if (item.meetingType?.trim()) return item.meetingType.trim().toUpperCase();
+  for (const text of [item.titleDisplay, item.title, item.rawTitle, item.summary]) {
+    if (!text) continue;
+    const match = /\b(MT-[1-6])\b/i.exec(text);
+    if (match?.[1]) return match[1].toUpperCase();
+  }
+  return undefined;
+}
+
+export function ticketIdFromInboxId(rawId: string): string | undefined {
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(rawId);
+    } catch {
+      return rawId;
+    }
+  })().trim();
+  if (decoded.startsWith("meeting_action:")) {
+    const rest = decoded.slice("meeting_action:".length).trim();
+    return rest || undefined;
+  }
+  return undefined;
 }

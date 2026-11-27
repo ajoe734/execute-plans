@@ -1,0 +1,34 @@
+{
+ "task_id": "FE-EVO-JOURNAL-VERSION-GUARD-20261126",
+ "register_instance": "RC6",
+ "owner": "Claude2",
+ "reviewer": "Claude",
+ "review_independence_exception": "The other model families are at terminal quota until 2026-11-27 10:03Z, so the reviewer (Claude) is from the owner's model family. Recorded as required by the task brief.",
+ "operator_scope_approval": "Operator approval 2026-11-25 06:2xZ in conversation 5724fc3b names this page, so the feature freeze does not apply to this scope.",
+ "repository": "ajoe734/execute-plans",
+ "base": "dev",
+ "branch": "task/FE-EVO-JOURNAL-VERSION-GUARD-20261126",
+ "commits": {
+  "fix_and_test": "47051631f"
+ },
+ "scope": "Functional evidence only. Hosted verification is left to the operator acceptance task. No VM or SSH access was used and no operator key was read. This is the second line of defence; the source fix is BFF-EVO-JOURNAL-VERSION-STRING-20261126.",
+ "root_cause": "src/management/pages/oversight/_core.tsx (EvolutionJournalPage row render, previously line ~4508) did `e.target.version.toLowerCase()`, and likewise for target.type, target.id, title/mutation/id, status/verdict, action_type and risk_level, plus `e.persona_name?.trim()`. Before the BFF source fix, the aggregate emitted pool_version rows with `target={\"type\": \"persona\", \"id\": persona_id, \"version\": <int>}` (services/control-plane/bff/evolution/service.py evolution_journal_pool_version_items) and decision rows passed the stored target_version through unchanged, so a number reached the renderer and the whole page fell into the error boundary. The numeric version was computed before the pool_version branch, so pool_version rows crashed too.",
+ "change": {
+  "evolutionJournalFocus.ts": "New exported helpers journalFieldText(value) (string as is; finite number, boolean or bigint as String(value); anything else '') and cleanJournalFieldText(value) (the same, minus the literal nan/undefined/null placeholders, matching the previous filter exactly). evolutionEntryText (focus filtering) reads target.type/id/version through journalFieldText. EvolutionJournalEntry.target fields widened to string | number | null.",
+  "_core.tsx": "headline, status, action, risk, cleanTargetType/Id/Version use cleanJournalFieldText; both persona_name reads use journalFieldText(...).trim(). EvolutionEntry.target fields widened to string | number | null. Behaviour for string values is unchanged (same placeholder list, no trimming added, same fallbacks to undefined/'')."
+ },
+ "acceptance": {
+  "1": "_core.tsx and evolutionJournalFocus.ts convert target.version and every other journal field they call a string method on (target.type, target.id, title/mutation/id, status/verdict, action_type, risk_level, persona_name) to text before use. Numeric version renders as text ('candidate_artifact:plan-num-1-execution-artifact (3)'); null and missing versions render the target without a suffix; nothing throws.",
+  "2": "New test 'renders decision and pool_version rows with a numeric, null or missing target.version without hitting the error boundary' in EvolutionJournalPage.test.tsx renders the page inside the app's ErrorBoundary with a BFF base-item decision row (target.version: 3), a full BFF pool_version row (target {type: persona, id: per-a, version: 2}, risk_level null, record with digest), and decision rows with version null and version missing. It asserts no role=alert and no '畫面渲染失敗' text. On dev source (HEAD:_core.tsx and HEAD:evolutionJournalFocus.ts restored over the fix) it fails: 'AssertionError: expected <div class=\"font-semibold text-sm\"></div> to be null' at the 畫面渲染失敗 check (1 failed). With the fix it passes.",
+  "3": "No i18n key or visible string was added, removed or changed (git diff touches no locale file). i18nParity.test.ts passes. eslint on the three changed files: 0 errors (1 pre-existing react-refresh warning at _core.tsx:1426, unrelated). tsc -p tsconfig.app.json --noEmit: exit 0.",
+  "4": "No existing test was deleted, skipped or weakened; no existing assertion changed. The test file only gains one import (ErrorBoundary) and one new test."
+ },
+ "verification": [
+  {"command": "npx vitest run src/management/pages/oversight/EvolutionJournalPage.test.tsx", "result": "22 passed (22)", "exit": 0},
+  {"command": "npx vitest run src/management/pages/oversight/EvolutionJournalPage.test.tsx -t 'numeric, null or missing' (with dev _core.tsx and evolutionJournalFocus.ts)", "result": "1 failed | 21 skipped; error boundary present", "exit": 1},
+  {"command": "npx vitest run src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/oversight/", "result": "Test Files 18 passed (18); Tests 315 passed (315)", "exit": 0},
+  {"command": "npx tsc -p tsconfig.app.json --noEmit", "result": "no errors", "exit": 0},
+  {"command": "npx eslint src/management/pages/oversight/_core.tsx src/management/pages/oversight/evolutionJournalFocus.ts src/management/pages/oversight/EvolutionJournalPage.test.tsx", "result": "0 errors, 1 pre-existing warning", "exit": 0}
+ ],
+ "status": "ready_for_review"
+}

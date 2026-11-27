@@ -30,10 +30,29 @@ function Row({ label, value, testId }: { label: string; value: React.ReactNode; 
   );
 }
 
-function RecordLink({ id, href }: { id: string; href: string | null }) {
-  if (!href) return <span className="text-mono text-xs">{id}</span>;
+/**
+ * The management evidence item route resolves ingested evidence ids only
+ * (`evi-…`, `evitem-…`, `evref-…`; BFF cited_evidence.py `_route_for`). A source
+ * record id from source ingestion is not an evidence item, so it renders as
+ * plain text instead of a link the item route cannot find
+ * (FE-EVIDENCE-CITED-20261125).
+ */
+const EVIDENCE_ITEM_ID = /^(?:evi|evitem|evref)-[A-Za-z0-9._:-]+$/;
+
+export function discoveryRecordHref(id: string, href: string | null): string | null {
+  if (!href) return null;
   // BFF hrefs are API paths (/bff/management/evidence/{id}); the management evidence page is the UI target.
   const to = href.replace(/^\/bff\/management\/evidence\//, "/management/evidence/");
+  if (to.startsWith("/management/evidence/")) {
+    const target = decodeURIComponent(to.slice("/management/evidence/".length).split(/[?#]/, 1)[0] ?? "");
+    return EVIDENCE_ITEM_ID.test(target) ? to : null;
+  }
+  return EVIDENCE_ITEM_ID.test(id) && to.startsWith("/management/") ? to : null;
+}
+
+function RecordLink({ id, href }: { id: string; href: string | null }) {
+  const to = discoveryRecordHref(id, href);
+  if (!to) return <span className="text-mono text-xs" data-testid="discovery-record-unlinked">{id}</span>;
   return (
     <Link to={to} className="text-mono text-xs text-primary hover:underline">
       {id}

@@ -8,8 +8,18 @@ import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref, shouldNavigateOnCreatedEntity } from "./ObjectListPage";
-import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList, StrategiesList } from "./Lists";
-import { ToolsList, McpServersList, SkillsList } from "./CapabilitiesLists";
+import {
+  ArtifactsList,
+  CapitalPoolsList,
+  DeploymentsList,
+  EvolutionList,
+  PersonasList,
+  RankingFormulasList,
+  RebalancesList,
+  ResearchList,
+  StrategiesList,
+} from "./Lists";
+import { ChannelsList, McpServersList, SkillsList, ToolsList } from "./CapabilitiesLists";
 import { StrategyDetail } from "./StrategyDetail";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
@@ -141,17 +151,20 @@ describe("ObjectListPage", () => {
     const { container } = renderObjectList();
 
     const pageBody = container.querySelector('[data-page-body-mode="fill"]');
-    expect(pageBody).toHaveClass("flex", "min-h-0", "flex-1", "overflow-hidden");
+    expect(pageBody).toHaveClass("flex", "min-h-0", "flex-1", "overflow-y-auto", "overflow-x-hidden");
+    expect(pageBody).not.toHaveClass("overflow-hidden");
 
     const dataTable = container.querySelector('[data-data-table-layout="fill"]');
-    expect(dataTable).toHaveClass("flex-1", "min-h-0", "overflow-hidden");
+    expect(dataTable).toHaveClass("flex-1", "min-h-[384px]", "overflow-hidden");
+    expect(dataTable).not.toHaveClass("min-h-0");
 
     const scrollRoot = container.querySelector('[data-management-table-scroll="pinned-horizontal"]');
     expect(scrollRoot).toHaveClass("h-full", "flex-1", "min-h-0");
 
     const native = container.querySelector('[data-management-table-scrollbar="native"]');
-    expect(native).toHaveClass("h-full", "min-h-0", "overflow-auto");
+    expect(native).toHaveClass("h-full", "min-h-[320px]", "overflow-auto");
     expect(native).not.toHaveClass("max-h-[calc(100dvh-10rem)]");
+    expect(native).not.toHaveClass("overscroll-contain");
   });
 
   it("visibly disables a legacy drawer without a durable create owner", () => {
@@ -164,9 +177,28 @@ describe("ObjectListPage", () => {
 
     renderObjectList({ kind: "drawer", entity: "artifact" });
 
-    expect(screen.getByRole("button", {
-      name: "Create disabled: artifact has no typed durable BFF owner.",
-    })).toBeDisabled();
+    // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the reason is plain words, not an owner/route name.
+    const reason = "Artifact records come from their own workflow and cannot be created from this list.";
+    const disabled = screen.getByRole("button", { name: reason });
+    expect(disabled).toBeDisabled();
+    expect(screen.getByTestId("create-disabled-reason")).toHaveAttribute("title", reason);
+    expect(document.body.textContent).not.toMatch(/typed durable|BFF owner|CRUD/i);
+  });
+
+  it("shows the disabled create reason and the Create Paper Persona label in zh-TW without developer wording", async () => {
+    mocks.useLiveListV1.mockReturnValue({ items: [], pending: 0, refresh: vi.fn(), meta: {} });
+    await i18n.changeLanguage("zh-TW");
+    try {
+      const { unmount } = renderObjectList({ kind: "drawer", entity: "artifact" });
+      const zhReason = i18n.t("registryLists.create.disabledNoOwner", { entity: i18n.t("entityCreate.entity.artifact") });
+      expect(screen.getByRole("button", { name: zhReason })).toBeDisabled();
+      expect(zhReason).not.toMatch(/typed|BFF|CRUD|durable/i);
+      unmount();
+      renderObjectList({ kind: "drawer", entity: "persona" });
+      expect(screen.getByRole("button", { name: "建立模擬交易 Persona" })).toBeEnabled();
+    } finally {
+      await i18n.changeLanguage("en-US");
+    }
   });
 
   it("keeps the Persona drawer enabled because it has a typed durable owner", () => {
@@ -828,7 +860,7 @@ describe("ObjectListPage", () => {
     expect(screen.getByTestId("location")).not.toHaveTextContent("/management/artifacts/undefined");
   });
 
-  it("renders GET /bff/research-tasks rows with name, status, latest run, run count, created by, and updated at; removes duplicate status, risk, metric, value, and owner columns; marks stub/manual runs as non-real; disables research create with workflow explanation in both locales; and navigates to /management/experiments/<task_id>", async () => {
+  it("renders a readable research list, marks test and manual records, and opens the canonical task detail", async () => {
     const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
     mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
 
@@ -940,18 +972,17 @@ describe("ObjectListPage", () => {
     );
 
     expect(await screen.findByText("VectorBT Factor Validation")).toBeInTheDocument();
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/research-tasks");
+    const researchUrls = fetchSpy.mock.calls.map((call) => String(call[0]));
+    expect(researchUrls.filter((u) => u.includes("/bff/research-tasks"))).toHaveLength(1);
+    expect(researchUrls.filter((u) => u.includes("/api/v1/research/tickets"))).toHaveLength(1);
 
     // Verify exact table column headers and removal of duplicate status, risk, metric, value, and owner columns
     const columnHeaders = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
     expect(columnHeaders).toEqual([
       "Name",
-      "Status",
       "Latest run",
-      "Run count",
-      "Created by",
       "Last updated",
+      "Overview",
     ]);
     expect(columnHeaders).not.toContain("State");
     expect(columnHeaders).not.toContain("Risk");
@@ -961,19 +992,16 @@ describe("ObjectListPage", () => {
 
     // Verify real vs stub/manual run rendering
     const realRow = screen.getByText("VectorBT Factor Validation").closest("tr");
-    expect(realRow).toHaveTextContent("rrun-20261023-002");
-    expect(realRow).toHaveTextContent("vectorbt / real");
-    expect(realRow).not.toHaveTextContent("Non-real execution");
+    expect(realRow).not.toHaveTextContent("rrun-20261023-002");
+    expect(realRow).not.toHaveTextContent("Test or manual record");
 
     const stubRow = screen.getByText("SIC Hypothesis Task").closest("tr");
-    expect(stubRow).toHaveTextContent("rrun-20261024-stub");
-    expect(stubRow).toHaveTextContent("stub / stub");
-    expect(stubRow).toHaveTextContent("Non-real execution (stub / stub)");
+    expect(stubRow).not.toHaveTextContent("rrun-20261024-stub");
+    expect(stubRow).toHaveTextContent("Test or manual record");
 
     const manualRow = screen.getByText("Manual Check Task").closest("tr");
-    expect(manualRow).toHaveTextContent("rrun-20261023-001");
-    expect(manualRow).toHaveTextContent("manual / manual");
-    expect(manualRow).toHaveTextContent("Non-real execution (manual / manual)");
+    expect(manualRow).not.toHaveTextContent("rrun-20261023-001");
+    expect(manualRow).toHaveTextContent("Test or manual record");
 
     // Verify research create button stays disabled with workflow reason and never mentions "no typed durable BFF owner"
     const createBtn = screen.getByRole("button", { name: /^create$/i });
@@ -1412,14 +1440,26 @@ describe("ObjectListPage", () => {
     );
 
     const regCell = await screen.findByText("strat-persona-bundle-001");
-    const resCell = await screen.findByText("Qlib Alpha158 Factor Evaluation Output");
     expect(fetchUrls.some((u) => u.includes("/bff/artifacts?page_size=100"))).toBe(true);
     expect(fetchUrls.some((u) => u.includes("page_token=1"))).toBe(true);
 
+    // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the default view is Current. These rows carry
+    // no list_scope (older BFF): the registry bundle stays visible, the research output is
+    // classified research from its source_kind and sits under its own tab.
+    expect(screen.getByRole("button", { name: "Current (1)" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Qlib Alpha158 Factor Evaluation Output")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Research output (1)" }));
+    const resCell = await screen.findByText("Qlib Alpha158 Factor Evaluation Output");
+    fireEvent.click(screen.getByRole("button", { name: "Current (1)" }));
+
     const regTr = regCell.closest("tr");
     expect(regTr).not.toBeNull();
-    expect(regTr).toHaveTextContent("registry");
-    expect(regTr).toHaveTextContent("execution_bundle");
+    // Kind and source are words; the raw code stays as the tooltip.
+    expect(regTr).toHaveTextContent("Registry bundle");
+    expect(regTr).toHaveTextContent("Execution bundle");
+    expect(regTr.querySelector('[data-testid="artifact-source"]')).toHaveAttribute("title", "registry");
+    expect(regTr.querySelector('[data-testid="artifact-kind"]')).toHaveAttribute("title", "execution_bundle");
+    expect(regTr).not.toHaveTextContent("execution_bundle");
     expect(regTr).toHaveTextContent("1.0.1");
     expect(regTr).toHaveTextContent("Approved");
     expect(regTr).toHaveTextContent("Low");
@@ -1430,13 +1470,17 @@ describe("ObjectListPage", () => {
     );
     expect(regTr).toHaveTextContent("aaaaaaaa…aa0001");
     expect(regTr).toHaveTextContent("gov-approver-alpha");
-    expect(regTr).toHaveTextContent("No data");
-    expect(regTr).not.toHaveTextContent("0 MB");
+    expect(regTr).not.toHaveTextContent(/\bMB\b/);
+    expect(screen.queryByRole("columnheader", { name: /size/i })).not.toBeInTheDocument();
 
-    const resTr = resCell.closest("tr");
+    // Back to the research tab for the research-output row assertions.
+    fireEvent.click(screen.getByRole("button", { name: "Research output (1)" }));
+    const resTr = (await screen.findByText("Qlib Alpha158 Factor Evaluation Output")).closest("tr");
     expect(resTr).not.toBeNull();
-    expect(resTr).toHaveTextContent("research_run_output");
-    expect(resTr).toHaveTextContent("factor_eval_report");
+    expect(resTr).toHaveTextContent("Research output");
+    expect(resTr).toHaveTextContent("Factor evaluation report");
+    expect(resTr.querySelector('[data-testid="artifact-source"]')).toHaveAttribute("title", "research_run_output");
+    expect(resTr.querySelector('[data-testid="artifact-kind"]')).toHaveAttribute("title", "factor_eval_report");
     expect(resTr.querySelector('[data-full-hash="sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"]')).toHaveAttribute(
       "title",
       "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
@@ -1445,15 +1489,19 @@ describe("ObjectListPage", () => {
     expect(resTr).toHaveTextContent("research-worker-qlib");
     expect(resTr).not.toHaveTextContent("0 MB");
     expect(resTr).not.toHaveTextContent("Unavailable");
-    expect(resTr?.textContent?.match(/No data/g)?.length).toBeGreaterThanOrEqual(4);
+    // version and the merged state/risk cell have no value: two "No data" cells (the size column is gone).
+    expect(resTr?.textContent?.match(/No data/g)?.length).toBeGreaterThanOrEqual(2);
 
-    // Filter by source_kind
-    const registryScopeBtn = screen.getByRole("button", { name: "Registry bundle (1)" });
+    // Scope tabs: Current, Test, Retired, Research output, Unbound, All — each with its count.
     const researchScopeBtn = screen.getByRole("button", { name: "Research output (1)" });
-    const allScopeBtn = screen.getByRole("button", { name: "All sources (2)" });
-    expect(allScopeBtn).toHaveAttribute("aria-pressed", "true");
+    const currentScopeBtn = screen.getByRole("button", { name: "Current (1)" });
+    const allScopeBtn = screen.getByRole("button", { name: "All (2)" });
+    expect(screen.getByRole("button", { name: "Test (0)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retired (0)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unbound (0)" })).toBeInTheDocument();
+    expect(researchScopeBtn).toHaveAttribute("aria-pressed", "true");
 
-    fireEvent.click(registryScopeBtn);
+    fireEvent.click(currentScopeBtn);
     expect(screen.getByText("strat-persona-bundle-001")).toBeInTheDocument();
     expect(screen.queryByText("Qlib Alpha158 Factor Evaluation Output")).not.toBeInTheDocument();
 
@@ -1528,6 +1576,11 @@ describe("ObjectListPage", () => {
       </I18nextProvider>,
     );
 
+    // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: only the research output survived, so the
+    // default Current tab is empty and says where the surviving row is; the row is one click away.
+    expect(await screen.findByText("No current rows")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show all (1)" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Research output (1)" }));
     expect(await screen.findByText("Qlib Alpha158 Factor Evaluation Output")).toBeInTheDocument();
     const banner = screen.getByTestId("partial-data-banner");
     expect(banner).toBeInTheDocument();
@@ -1622,8 +1675,9 @@ describe("ObjectListPage", () => {
       expect(screen.getByTestId("qualification-policy-version")).toHaveTextContent(
         "evolution-qualification.v1",
       );
+      // FE-EVO-JOURNAL-DIRECTION-20261125: shown in the viewer time zone instead of raw ISO text.
       expect(screen.getByTestId("qualification-evaluated-at")).toHaveTextContent(
-        "2026-11-05T00:00:00Z",
+        new Date("2026-11-05T00:00:00Z").toLocaleString(),
       );
       expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("649");
       expect(screen.getByTestId("qualification-qualified-count")).toHaveTextContent("0");
@@ -2063,6 +2117,9 @@ describe("ObjectListPage", () => {
       name: "Pantheon Dev Paper Release 42123862167 Row 4898",
     };
 
+    // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: tab numbers are the rows the owner did not hide
+    // (visible_state_counts); the raw state_counts also counts hidden test/stub rows, is larger,
+    // and must never be printed.
     const hostedStateCounts = {
       draft: 4764,
       review: 1,
@@ -2074,6 +2131,8 @@ describe("ObjectListPage", () => {
       paused: 0,
       retired: 2,
     };
+    const rawStateCounts = { ...hostedStateCounts, draft: 7421, review: 1, approved: 170, retired: 1556 };
+    const stateCountsMeta = { state_counts: rawStateCounts, visible_state_counts: hostedStateCounts };
 
     const requestedUrls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -2090,7 +2149,7 @@ describe("ObjectListPage", () => {
             data: [realApprovedRow, realReviewRow],
             items: [realApprovedRow, realReviewRow],
             meta: {
-              state_counts: hostedStateCounts,
+              ...stateCountsMeta,
               operational_counts: {
                 running: 5,
                 idle: 0,
@@ -2110,7 +2169,7 @@ describe("ObjectListPage", () => {
           JSON.stringify({
             data: [realApprovedRow],
             items: [realApprovedRow],
-            meta: { state_counts: hostedStateCounts },
+            meta: stateCountsMeta,
             page_info: { page_size: 20, total: 133, next_page_token: "20" },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2121,7 +2180,7 @@ describe("ObjectListPage", () => {
           JSON.stringify({
             data: [realReviewRow],
             items: [realReviewRow],
-            meta: { state_counts: hostedStateCounts },
+            meta: stateCountsMeta,
             page_info: { page_size: 20, total: 1, next_page_token: null },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2132,7 +2191,7 @@ describe("ObjectListPage", () => {
           JSON.stringify({
             data: [realRetiredRow],
             items: [realRetiredRow],
-            meta: { state_counts: hostedStateCounts },
+            meta: stateCountsMeta,
             page_info: { page_size: 20, total: 2, next_page_token: null },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2143,7 +2202,7 @@ describe("ObjectListPage", () => {
           JSON.stringify({
             data: [realDraftRow],
             items: [realDraftRow],
-            meta: { state_counts: hostedStateCounts },
+            meta: stateCountsMeta,
             page_info: { page_size: 20, total: 4764, next_page_token: "20" },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2156,7 +2215,7 @@ describe("ObjectListPage", () => {
             JSON.stringify({
               data: [{ ...realApprovedRow, id: "strategy-persona-59b2143dcecf205acbf1-p2", name: "Pantheon Dev Paper Release Page 2" }],
               items: [{ ...realApprovedRow, id: "strategy-persona-59b2143dcecf205acbf1-p2", name: "Pantheon Dev Paper Release Page 2" }],
-              meta: { state_counts: hostedStateCounts },
+              meta: stateCountsMeta,
               page_info: { page_size: 20, total: 4898, next_page_token: "40" },
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2167,7 +2226,7 @@ describe("ObjectListPage", () => {
             JSON.stringify({
               data: [realLastPageRow],
               items: [realLastPageRow],
-              meta: { state_counts: hostedStateCounts },
+              meta: stateCountsMeta,
               page_info: { page_size: 20, total: 4898, next_page_token: null },
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2177,7 +2236,7 @@ describe("ObjectListPage", () => {
           JSON.stringify({
             data: [realApprovedRow, realDraftRow],
             items: [realApprovedRow, realDraftRow],
-            meta: { state_counts: hostedStateCounts },
+            meta: stateCountsMeta,
             page_info: { page_size: 20, total: 4898, next_page_token: "20" },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2188,7 +2247,7 @@ describe("ObjectListPage", () => {
         JSON.stringify({
           data: [],
           items: [],
-          meta: { state_counts: hostedStateCounts },
+          meta: stateCountsMeta,
           page_info: { page_size: 20, total: 0, next_page_token: null },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -2235,6 +2294,12 @@ describe("ObjectListPage", () => {
     expect(screen.getByRole("button", { name: "Retired (2)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Draft (4764)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "All (4898)" })).toHaveAttribute("aria-pressed", "false");
+    // The raw state_counts (which include hidden test/stub rows) is never printed.
+    const filterGroup = screen.getByTestId("strategy-state-filter");
+    for (const raw of ["7421", "170", "1556"]) {
+      expect(filterGroup).not.toHaveTextContent(raw);
+    }
+    expect(screen.queryByTestId("strategy-draft-notice")).not.toBeInTheDocument();
 
     // AC 1: Default view states both hidden draft count and hidden retired-persona count
     const hiddenBanner = screen.getByTestId("strategy-hidden-drafts-banner");
@@ -2249,6 +2314,13 @@ describe("ObjectListPage", () => {
     expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Draft")).toBeInTheDocument();
     expect(screen.getByTestId("strategy-location")).toHaveTextContent("/management/strategies?state=draft");
     expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?state=draft&page_size=20");
+    // The draft tab says these are unscreened text drafts, not strategies, and its printed
+    // number equals its own pager total.
+    expect(screen.getByTestId("strategy-draft-notice")).toHaveTextContent(
+      "Drafts are unscreened text drafts, not strategies",
+    );
+    expect(screen.getByRole("button", { name: "Draft (4764)" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("strategy-list-total")).toHaveTextContent("of 4764");
     expect(screen.getByRole("button", { name: "Default (hide drafts)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByTestId("strategy-hidden-drafts-banner")).not.toBeInTheDocument();
 
@@ -2257,6 +2329,8 @@ describe("ObjectListPage", () => {
     expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Retired")).toBeInTheDocument();
     expect(screen.getByTestId("strategy-location")).toHaveTextContent("/management/strategies?state=retired");
     expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?state=retired&page_size=20");
+    expect(screen.getByRole("button", { name: "Retired (2)" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("strategy-list-total")).toHaveTextContent("of 2");
 
     // Switch to all view and verify server paging through 4898 rows without loading all pages at once (AC 4)
     const callCountBeforeAll = requestedUrls.length;
@@ -2637,5 +2711,134 @@ describe("ObjectListPage", () => {
     expect(screen.getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
     const idCode = screen.getByText("persona-be19a1fac471247f2b2a");
     expect(idCode).toHaveClass("font-mono", "text-xs", "text-muted-foreground");
+  });
+
+  it("keeps scrollable fill PageBody, >=320px table min-height, filters, pager, empty and unavailable states across all 13 ObjectListPage pages", async () => {
+    await i18n.changeLanguage("en-US");
+    const pages = [
+      { name: "StrategiesList", path: "/management/strategies", Component: StrategiesList, hasPager: true, hasFilter: true },
+      { name: "PersonasList", path: "/management/personas", Component: PersonasList, hasPager: false, hasFilter: true },
+      { name: "CapitalPoolsList", path: "/management/governance-decisions?tab=capital&capital_scope=paper", Component: CapitalPoolsList, hasPager: false, hasFilter: true },
+      { name: "RankingFormulasList", path: "/management/governance-decisions?tab=policy", Component: RankingFormulasList, hasPager: false, hasFilter: false },
+      { name: "RebalancesList", path: "/management/governance-decisions?tab=capital", Component: RebalancesList, hasPager: false, hasFilter: false },
+      { name: "DeploymentsList", path: "/management/deployments", Component: DeploymentsList, hasPager: false, hasFilter: false },
+      { name: "EvolutionList", path: "/management/evolution", Component: EvolutionList, hasPager: false, hasFilter: false },
+      { name: "ResearchList", path: "/management/experiments", Component: ResearchList, hasPager: true, hasFilter: true },
+      { name: "ArtifactsList", path: "/management/artifacts", Component: ArtifactsList, hasPager: false, hasFilter: true },
+      { name: "ToolsList", path: "/management/tools", Component: ToolsList, hasPager: false, hasFilter: false },
+      { name: "McpServersList", path: "/management/mcp", Component: McpServersList, hasPager: false, hasFilter: false },
+      { name: "SkillsList", path: "/management/skills", Component: SkillsList, hasPager: false, hasFilter: false },
+      { name: "ChannelsList", path: "/management/channels", Component: ChannelsList, hasPager: false, hasFilter: false },
+    ] as const;
+
+    expect(pages).toHaveLength(13);
+
+    for (const entry of pages) {
+      // 1. Populated state
+      mocks.useLiveListV1.mockReturnValue({
+        items: [
+          {
+            id: `row-${entry.name}-1`,
+            name: `${entry.name} Row 1`,
+            state: "approved",
+            status: "active",
+            risk: "low",
+            owner: "tenant-dev",
+            updatedAt: "2026-11-25T07:00:00Z",
+            capitalScope: "paper",
+            source_kind: "registry",
+            kind: "execution_bundle",
+          },
+        ],
+        pending: 0,
+        refresh: vi.fn(),
+        meta: {
+          state_counts: { draft: 10, approved: 1, review: 0, retired: 0 },
+          hidden_non_real_count: 2,
+          page_info: { page_size: 20, total: 25, next_page_token: "20" },
+        },
+        estimatedTotal: 25,
+        pageSize: 20,
+        cursor: { next: "20" },
+        loading: false,
+      });
+
+      const { container, unmount } = render(
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <MemoryRouter initialEntries={[entry.path]}>
+              <entry.Component />
+            </MemoryRouter>
+          </TooltipProvider>
+        </I18nextProvider>,
+      );
+
+      const pageBody = container.querySelector('[data-page-body-mode="fill"]');
+      expect(pageBody).toHaveClass("overflow-y-auto", "overflow-x-hidden");
+      const dataTable = container.querySelector('[data-data-table-layout="fill"]');
+      expect(dataTable).toHaveClass("min-h-[384px]", "flex-1");
+      const scroller = container.querySelector('[data-management-table-scrollbar="native"]');
+      expect(scroller).toHaveClass("min-h-[320px]");
+      if (entry.hasFilter) {
+        expect(container.querySelector('[role="group"]')).not.toBeNull();
+      }
+      if (entry.hasPager) {
+        expect(container.querySelector('[data-testid$="-list-pagination"]')).not.toBeNull();
+      }
+      unmount();
+
+      // 2. Unavailable state
+      mocks.useLiveListV1.mockReturnValue({
+        items: [],
+        pending: 0,
+        refresh: vi.fn(),
+        meta: {
+          degradation: {
+            reason: `Upstream unavailable on ${entry.name}`,
+            strictFallbackBlocked: true,
+          },
+          surfaces: {
+            list: { status: "unavailable" },
+          },
+        },
+        loading: false,
+      });
+
+      const { unmount: unmountUnavail } = render(
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <MemoryRouter initialEntries={[entry.path]}>
+              <entry.Component />
+            </MemoryRouter>
+          </TooltipProvider>
+        </I18nextProvider>,
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(`Upstream unavailable on ${entry.name}`);
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+      unmountUnavail();
+
+      // 3. Empty state
+      mocks.useLiveListV1.mockReturnValue({
+        items: [],
+        pending: 0,
+        refresh: vi.fn(),
+        meta: {},
+        loading: false,
+      });
+
+      const { container: emptyContainer, unmount: unmountEmpty } = render(
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <MemoryRouter initialEntries={[entry.path]}>
+              <entry.Component />
+            </MemoryRouter>
+          </TooltipProvider>
+        </I18nextProvider>,
+      );
+      const hasEmptyStateBanner = emptyContainer.querySelector('[role="status"]') !== null;
+      const hasEmptyTableCell = emptyContainer.querySelector('[data-testid="data-table-empty"]') !== null;
+      expect(hasEmptyStateBanner || hasEmptyTableCell).toBe(true);
+      unmountEmpty();
+    }
   });
 });

@@ -1,0 +1,79 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADING-PULSE-OPERATOR-PAGE-20261122",
+  "title": "重整交易脈動首頁、Persona 明細和績效排行",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADING-PULSE-OPERATOR-PAGE-20261122",
+  "problem_register": {
+    "root_cause_class": "RC6",
+    "work_package": "WP6.1-WP6.4"
+  },
+  "prerequisites": [
+    {
+      "task_id": "FE-TRADING-PULSE-DATA-CONTRACT-20261122",
+      "status": "done",
+      "merge_commit": "53d99a951"
+    }
+  ],
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-TRADING-PULSE-OPERATOR-PAGE-20261122/evidence.json",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/lib/bff-v1/__tests__/fixtures/trading-pulse.ts",
+    "src/lib/v5/management/tradingRankings.ts",
+    "src/management/navigation/tradeJourneyLinks.ts",
+    "src/management/navigation/tradeJourneyLinks.test.ts"
+  ],
+  "acceptance_verification": {
+    "acceptance_1_layout_and_verifiable_metrics": {
+      "passed": true,
+      "summary": "TradingPulsePage renders in strict top-to-bottom sequence: (1) Operational Personas summary (paper/canary/live breakdown and single paper-baseline summary shown only when operatorScope is verified all-paper, every row has deploymentStage=paper, and baseline not_required is source-confirmed rather than inferred from missing data), (2) Comparable P&L subtotals and Persona coverage (summary.pnlGroups with currency, period, as-of timestamp, and source-verified P&L definition), (3) Notable trading events, (4) Persona trading details table, (5) Concise performance rankings, and (6) Collapsed-by-default Data Diagnostics. Numbers use thousands separators, currency-appropriate 2-decimal precision, percentages, basis points, and localized timestamps via safeDateTime."
+    },
+    "acceptance_2_chengchuan_2317_and_degraded_states": {
+      "passed": true,
+      "summary": "Dynamically renders the 澄川 (2317) case as Paper (模擬交易), 0 fills (0 筆成交 / 尚未成交), 0% fill rate (該次意向 452 股、成交 0 股 / 0/452 SHARES), no fill P&L yet (尚無成交損益（帳本幣別 TWD） with zero digits in the P&L cell), insufficient cash pre-broker risk rejection (資金不足 / 送券商前風控拒單（未送出委託）), and a verified Trade Journey link. Distinguishes 0/0 no orders submitted, 0/452 and 0/0 source failure, stale telemetry, unknown fill-rate details, normal empty roster, all-probe exclusion via BFF operator_scope, partial scope, full source failure, rankings endpoint failure, and legacy unverified operator_scope without any frontend probe classifier or hardcoded exclusion list. Prioritizes unavailable, stale, and unknown source/detail truth over zero-denominator no-orders inference in both Notable Trading Events and Persona table rows."
+    },
+    "acceptance_3_diagnostics_rankings_i18n_and_navigation": {
+      "passed": true,
+      "summary": "Removes the 7 raw surface status cards, LIVE BFF badge, Row health, Checks, technical IDs (rt-*, rb-*, persona-*), repeated per-row baseline badges, empty leaderboards, unused legacy pulse translation keys, and runtime-module test fixtures. Converges wire alias normalization in management.ts, relocates the two recorded wire fixtures to src/lib/bff-v1/__tests__/fixtures/trading-pulse.ts, and uses the single shared tradeJourneyHref helper for exact journey and persona-filtered journey navigation with tenant/environment/return_to preservation. Expandable Data Diagnostics preserves surface sources, effective timestamps, and runtime/binding locators. Rankings are locale-consistent in zh-TW and en-US with verified names, symbols, units, comparison scopes, and source-backed reasons for unranked Personas (using unknown/no-recorded-reason for omitted blocks without recorded reasons and generic insufficient-sample copy for insufficient_samples/insufficient_data without inferring 10-day sample thresholds); negative P&L is explicitly labeled as loss and never described as profit."
+    }
+  },
+  "verification_commands": [
+    {
+      "command": "./node_modules/.bin/vitest run src/management/navigation/tradeJourneyLinks.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/components/detail/OwnerFacts.test.tsx",
+      "exit_code": 0,
+      "passed_files": 6,
+      "passed_tests": 142
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit && git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "routine_daily_growth_bytes": 0,
+    "notes": "Frontend UI component, shared journey link helper, test fixture relocation, and i18n locale dictionary update only; no background jobs, timers, or persistent writers added."
+  },
+  "residual_findings": [
+    {
+      "finding_id": "RF-FE-TRADING-PULSE-390PX-PERSONA-DETAIL-BACK-LINK",
+      "root_cause_class": "RC6",
+      "work_package": "WP6.4/WP6.5",
+      "scope_boundary": "src/platform/components/EntityHeader.tsx and scripts/accept-trading-pulse-hosted-readonly.mjs are outside FE-TRADING-PULSE-OPERATOR-PAGE-20261122 scoped artifacts.",
+      "description": "TradingPulsePage appends return_to=/management/trading-pulse and return_label to Trade Journey links via tradeJourneyHref so TradeJourneyDetailPage and TradeJourneysPage render a visible <a href=\"/management/trading-pulse\"> on both 1440px desktop and 390px mobile. On /management/personas/:id, however, SideNav is hidden below lg (390px) and EntityHeader.tsx renders a <button> (navigate(-1)) rather than an <a href=\"/management/trading-pulse\">. If returnViaScreen in scripts/accept-trading-pulse-hosted-readonly.mjs queries only visible <a> elements on /management/personas/:id at 390px without falling back to the EntityHeader back button or Ctrl+K command palette, narrow-viewport return from PersonaDetail will require either EntityHeader return_to link support or a returnViaScreen fallback in Task E (TRADING-PULSE-HOSTED-ACCEPTANCE-20261122)."
+    }
+  ],
+  "handoff_to_e": {
+    "downstream_task_id": "TRADING-PULSE-HOSTED-ACCEPTANCE-20261122",
+    "delivery_state": "source_branch_ready_for_review_and_dev_merge"
+  }
+}

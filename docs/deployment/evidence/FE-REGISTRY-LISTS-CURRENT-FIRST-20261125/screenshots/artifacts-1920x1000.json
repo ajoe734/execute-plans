@@ -1,0 +1,39 @@
+{
+  "rowCount": 5,
+  "viewportWidth": 1920,
+  "clientWidth": 1600,
+  "scrollWidth": 1600,
+  "docOverflow": 0,
+  "headers": [
+    "Name",
+    "Source",
+    "Kind",
+    "Version",
+    "State / Risk",
+    "Hash",
+    "Owner",
+    "Last updated"
+  ],
+  "colWidths": [
+    402,
+    144,
+    156,
+    122,
+    142,
+    253,
+    139,
+    243
+  ],
+  "nameWidth": 402,
+  "lastRight": 1880,
+  "maxRowHeight": 65,
+  "scopeButtons": [
+    "Current (5)",
+    "Test (304)",
+    "Retired (20)",
+    "Research output (2)",
+    "Unbound (13)",
+    "All (344)"
+  ],
+  "stateButtons": []
+}

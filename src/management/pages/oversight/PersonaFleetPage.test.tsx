@@ -571,7 +571,7 @@ describe("PersonaFleetPage", () => {
     expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
   });
 
-  it("renders Persona Fleet as a native table viewport that fills the page remainder", () => {
+  it("renders Persona Fleet as a native table viewport that fills the page remainder and keeps at least 320 px with page scroll", () => {
     mockFleet({
       data: [
         fleetRow("persona-live-gold", "Gold Futures Persona"),
@@ -582,17 +582,24 @@ describe("PersonaFleetPage", () => {
 
     renderFleet("/management/persona-fleet");
 
+    // FE-EVIDENCE-CITED-20261125: at 1274x627 a min-h-0 chain under an
+    // overflow-hidden page crushed the table; the page now scrolls and the
+    // table area keeps at least 320 px (card 384 px).
+    const page = screen.getByTestId("persona-fleet-page");
+    expect(page).toHaveClass("overflow-y-auto", "overflow-x-hidden");
+    expect(page).not.toHaveClass("overflow-hidden");
     const tableScroll = screen.getByTestId("persona-fleet-table-scroll");
     expect(tableScroll).toHaveAttribute("data-management-table-scroll", "pinned-horizontal");
     expect(tableScroll).toHaveAttribute("data-management-table-scroll-mode", "native");
     expect(tableScroll).toHaveClass("flex-1");
-    expect(tableScroll).toHaveClass("min-h-0");
+    expect(tableScroll).toHaveClass("min-h-[320px]");
+    expect(tableScroll.parentElement).toHaveClass("min-h-[384px]");
     expect(tableScroll.querySelector("[data-management-table-scrollbar='pinned']")).toBeNull();
     const native = tableScroll.querySelector("[data-management-table-scrollbar='native']");
     expect(native).toBeTruthy();
     expect(native).not.toHaveClass("max-h-[calc(100vh-220px)]");
     expect(native).toHaveClass("h-full");
-    expect(native).toHaveClass("min-h-0");
+    expect(native).toHaveClass("min-h-[320px]");
     expect(native).toHaveClass("overflow-auto");
     expect(native).toHaveClass("pb-4");
     expect(native).not.toHaveClass("pinned-horizontal-scroll__native");

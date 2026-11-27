@@ -98,6 +98,8 @@ const readRoutes = [
   { route: "/bff/management/trading-pulse/rankings", family: "trading-ranking", shape: "list" },
   { route: "/bff/management/evolution-journal", family: "evolution", shape: "list" },
   { route: "/bff/management/evidence", family: "evidence", shape: "list" },
+  // FE-EVIDENCE-CITED-20261125: the Evidence page's default list.
+  { route: "/bff/management/evidence?scope=cited", family: "evidence-cited", shape: "list" },
   { route: "/bff/management/persona-intent", family: "persona-intent", shape: "list" },
   { route: "/bff/management/portfolio-book", family: "portfolio", shape: "object" },
   { route: "/bff/management/portfolio-book/pools", family: "portfolio-pools", shape: "list" },
@@ -517,7 +519,7 @@ function buildCase(suite, i) {
       const queryMode = pick(queryModes, i, 4);
       const route = queryMode === "none"
         ? spec.route
-        : `${spec.route}?${queryMode}=${encodeURIComponent(queryMode === "persona" ? persona : `matrix-${i % 11}`)}`;
+        : `${spec.route}${spec.route.includes("?") ? "&" : "?"}${queryMode}=${encodeURIComponent(queryMode === "persona" ? persona : `matrix-${i % 11}`)}`;
       return {
         id: `${suite}-${String(i + 1).padStart(3, "0")}-${idPart(spec.family)}-${idPart(role.id)}-${idPart(queryMode)}`,
         suite,
@@ -715,7 +717,9 @@ async function validateReadOnly(testCase) {
   const mutationRoutePattern = /\/(actions|decide|acknowledge|execute|feedback)(\/|$)/;
   ensure(!mutationRoutePattern.test(routePath), `${testCase.id}: read suite must not mutate`);
   ensure(routePath !== "/bff/agora/journal", `${testCase.id}: read suite must not post journal entries`);
-  const spec = readRoutes.find((candidate) => testCase.route.startsWith(candidate.route));
+  const spec = readRoutes
+    .filter((candidate) => testCase.route.startsWith(candidate.route))
+    .sort((a, b) => b.route.length - a.route.length)[0];
   ensure(Boolean(spec), `${testCase.id}: route must be known`);
 
   if (LIVE_READONLY) {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { listApprovalDecisions, listApprovals, normalizeApprovalFields, normalizeAuditFields } from "@/lib/bff-v1/operations";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { paths } from "@/lib/bff-v1/paths";
+import { safeDateTime } from "@/lib/utils";
 const n = (r: object) => normalizeApprovalFields(r) as unknown as Record<string, unknown>;
 
 const realHostedDecision = {
@@ -586,5 +587,101 @@ describe("normalizeAuditFields (Governance owner audit readback)", () => {
       id: "different-audit",
     };
     expect(normalizeAuditFields(normalizeAuditFields(conflictingId))).toEqual(normalizeAuditFields(conflictingId));
+  });
+
+  it("normalizes canonical audit timestamps across ts, timestamp, occurred_at, occurredAt, created_at, and createdAt", () => {
+    const cases = [
+      { field: "ts", value: "2026-11-25T07:10:00Z" },
+      { field: "timestamp", value: "2026-11-25T07:11:00Z" },
+      { field: "occurred_at", value: "2026-11-25T07:12:00Z" },
+      { field: "occurredAt", value: "2026-11-25T07:13:00Z" },
+      { field: "created_at", value: "2026-11-25T07:14:00Z" },
+      { field: "createdAt", value: "2026-11-25T07:15:00Z" },
+    ] as const;
+
+    for (const { field, value } of cases) {
+      const raw = {
+        entry_id: `audit-${field}`,
+        actor: "operator-ts",
+        action_type: "route_policy_published",
+        target_id: "strategy-1",
+        [field]: value,
+      };
+      const projected = normalizeAuditFields(raw);
+      expect(projected.ts).toBe(value);
+      const formatted = safeDateTime(projected.ts);
+      expect(formatted).toBe(new Date(value).toLocaleString());
+      expect(formatted).not.toBe("—");
+      expect(formatted).not.toContain("Invalid Date");
+      expect(normalizeAuditFields(projected)).toEqual(projected);
+    }
+  });
+
+  it("accepts multiple matching timestamp fields across ts, timestamp, occurred_at, occurredAt, created_at, and createdAt with idempotence", () => {
+    const iso = "2026-11-25T07:20:00Z";
+    const allMatching = {
+      entry_id: "audit-all-matching-ts",
+      actor: "operator-match",
+      action_type: "approval.decided",
+      target_id: "apv-1",
+      ts: iso,
+      timestamp: iso,
+      occurred_at: iso,
+      occurredAt: iso,
+      created_at: iso,
+      createdAt: iso,
+    };
+    const pass1 = normalizeAuditFields(allMatching);
+    const pass2 = normalizeAuditFields(pass1);
+    expect(pass1.ts).toBe(iso);
+    expect(pass2).toEqual(pass1);
+    expect(safeDateTime(pass1.ts)).toBe(new Date(iso).toLocaleString());
+    expect(safeDateTime(pass1.ts)).not.toContain("Invalid Date");
+  });
+
+  it("detects conflicting or malformed timestamp fields across occurred_at, created_at, timestamp, and ts, clears aliases, and stays idempotent", () => {
+    const conflictPairs = [
+      { occurred_at: "2026-11-25T07:00:00Z", created_at: "2026-11-25T07:05:00Z" },
+      { timestamp: "2026-11-25T07:00:00Z", occurred_at: "2026-11-25T07:01:00Z" },
+      { ts: "2026-11-25T07:00:00Z", createdAt: "2026-11-25T07:02:00Z" },
+      { occurred_at: "2026-11-25T07:00:00Z", occurredAt: "2026-11-25T07:03:00Z" },
+      { created_at: "2026-11-25T07:00:00Z", createdAt: "2026-11-25T07:04:00Z" },
+      { occurred_at: 12345, created_at: "2026-11-25T07:00:00Z" },
+      { occurred_at: "   ", timestamp: "2026-11-25T07:00:00Z" },
+    ];
+
+    for (const conflictFields of conflictPairs) {
+      const raw = {
+        entry_id: "audit-conflict-ts",
+        actor: "operator-conflict",
+        action_type: "approval.proposed",
+        target_id: "apv-conflict",
+        ...conflictFields,
+      };
+      const pass1 = normalizeAuditFields<Record<string, unknown>>(raw);
+      const pass2 = normalizeAuditFields<Record<string, unknown>>(pass1);
+      expect(pass1.ts).toBeUndefined();
+      expect(pass1.timestamp).toBeUndefined();
+      expect(pass1.occurred_at).toBeUndefined();
+      expect(pass1.occurredAt).toBeUndefined();
+      expect(pass1.created_at).toBeUndefined();
+      expect(pass1.createdAt).toBeUndefined();
+      expect(pass2).toEqual(pass1);
+      expect(safeDateTime(pass1.ts)).toBe("—");
+      expect(safeDateTime(pass1.ts)).not.toContain("Invalid Date");
+    }
+
+    const missingTs = {
+      entry_id: "audit-missing-ts",
+      actor: "operator-missing-ts",
+      action_type: "approval.proposed",
+      target_id: "apv-missing-ts",
+    };
+    const missingPass1 = normalizeAuditFields(missingTs);
+    const missingPass2 = normalizeAuditFields(missingPass1);
+    expect(missingPass1.ts).toBeUndefined();
+    expect(missingPass2).toEqual(missingPass1);
+    expect(safeDateTime(missingPass1.ts)).toBe("—");
+    expect(safeDateTime(missingPass1.ts)).not.toContain("Invalid Date");
   });
 });

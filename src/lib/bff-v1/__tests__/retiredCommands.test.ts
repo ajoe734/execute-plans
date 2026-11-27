@@ -42,8 +42,11 @@ export const BACKEND_RETIRED_COMMANDS = [
  * - Every command configured in ENTITY_COMMAND_SPECS (12 distinct command names)
  * - Every command in OPERATIONS_COMMAND_TYPES (8 distinct command names)
  * - Every other command literal passed to command builder or submitCommand in production source:
- *   - "EvidenceRefAction" (src/lib/bff-v1/evidenceOperations.ts:46)
  *   - "ApproveEvolutionDecision" (src/lib/bff-v1/writes.ts:1280 in evolutionReviewDecisionPayload)
+ *
+ * FE-EVIDENCE-CITED-20261125 removed "EvidenceRefAction": the evidence
+ * operation panel and its client (src/lib/bff-v1/evidenceOperations.ts) had
+ * no backend handler, so the frontend no longer emits it.
  */
 export const FRONTEND_EMITTED_COMMANDS = [
   // 1. Commands emitted via ENTITY_COMMAND_SPECS
@@ -71,7 +74,6 @@ export const FRONTEND_EMITTED_COMMANDS = [
   "EmergencyContainment",
 
   // 3. Other command literals passed to command builder or submitCommand in production source
-  "EvidenceRefAction",
   "ApproveEvolutionDecision",
 ] as const;
 
@@ -84,8 +86,8 @@ describe("FE retired backend commands safety gate", () => {
   });
 
   it("proves from the outside that FRONTEND_EMITTED_COMMANDS and BACKEND_RETIRED_COMMANDS are completely disjoint", () => {
-    expect(FRONTEND_EMITTED_COMMANDS).toHaveLength(22);
-    expect(new Set(FRONTEND_EMITTED_COMMANDS).size).toBe(22);
+    expect(FRONTEND_EMITTED_COMMANDS).toHaveLength(21);
+    expect(new Set(FRONTEND_EMITTED_COMMANDS).size).toBe(21);
 
     for (const cmd of FRONTEND_EMITTED_COMMANDS) {
       expect(BACKEND_RETIRED_COMMANDS).not.toContain(cmd);
@@ -201,5 +203,26 @@ describe("FE retired backend commands safety gate", () => {
     expect(exportedKeys).not.toContain("rankingAction");
     expect(exportedKeys).not.toContain("setActiveRankingFormula");
     expect(exportedKeys).not.toContain("requestReview");
+  });
+
+  it("proves no production source emits the removed EvidenceRefAction command (FE-EVIDENCE-CITED-20261125)", async () => {
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { join, resolve } = await import("node:path");
+    const root = resolve(process.cwd(), "src");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) {
+          if (name === "__tests__" || name === "mocks") continue;
+          walk(full);
+        } else if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)) {
+          if (readFileSync(full, "utf8").includes("EvidenceRefAction")) offenders.push(full);
+        }
+      }
+    };
+    walk(root);
+    expect(offenders).toEqual([]);
+    expect(FRONTEND_EMITTED_COMMANDS).not.toContain("EvidenceRefAction");
   });
 });

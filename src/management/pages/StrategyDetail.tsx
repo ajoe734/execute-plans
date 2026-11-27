@@ -1,7 +1,7 @@
 // Strategy Detail — Spec Part 3 §6 (11 tabs).
 // Overview · Spec & Parameters · Experiments · Paper-Live · Risk & Alerts ·
 // Incidents · Artifacts · Evolution · Governance · Lineage · Audit
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
@@ -14,11 +14,11 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bffWrites } from "@/lib/bff-v1/writes";
-import { bffV1, managementConsoleReads, runActionSafe, type LineageRead } from "@/lib/bff-v1";
+import { bffV1, highlightLineageNodesForRoot, managementConsoleReads, runActionSafe, type LineageRead } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
-import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";
+import type { Strategy, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";
 import { Inbox, ArrowRight, CheckCircle2, AlertTriangle, FileText, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -29,19 +29,112 @@ import { strategyMachine, type StrategyState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
-import { StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
-import { StrategyTripleStateCard } from "@/management/components/detail/StrategyTripleStateCard";
-import { normalizeStrategyOperationalStatus } from "./Lists";
-import { lifecycleOf } from "@/lib/v4/strategyTripleDerive";
+import { StrategyRulesList, StrategySpecTab } from "@/management/components/detail/StrategySpecTab";
+import {
+  actionLabel,
+  normalizeStrategyOperationalStatus,
+  normalizeStrategyRuntimeStatus,
+  strategyDeploymentLabel,
+  strategyLifecycleLabel,
+  strategyMetricsReasonText,
+  strategyOperationalStatusClass,
+  strategyReviewLabel,
+  strategyRuntimeReasonText,
+  strategyRuntimeStatusClass,
+} from "@/lib/enumLabels";
+import { deriveStrategyTriple, lifecycleOf } from "@/lib/v4/strategyTripleDerive";
+import { explainTripleViolation, validateStrategyTriple } from "@/lib/v4/strategyInvariants";
 import { StrategyDataFeaturesTab } from "@/management/components/detail/StrategyDataFeaturesTab";
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
 import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPaperLiveTab";
 import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
 import type { Watcher, DecisionJournalEntry } from "@/lib/bff-v1";
-import { Eye, BookOpen, User } from "lucide-react";
+import { Eye, BookOpen } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
-import { RuleDescription } from "@/management/components/detail/RuleDescription";
 import { DiscoverySections } from "@/management/components/discovery/DiscoveryPanels";
+
+type SectionLoadStatus = "loading" | "ready" | "unavailable";
+
+type SecondarySectionKey =
+  | "watchers"
+  | "journal"
+  | "experiments"
+  | "alerts"
+  | "incidents"
+  | "artifacts"
+  | "evolution"
+  | "approvals"
+  | "lineage"
+  | "audit";
+
+const OVERVIEW_SECTIONS: SecondarySectionKey[] = ["watchers", "journal"];
+const EXPERIMENTS_SECTIONS: SecondarySectionKey[] = ["experiments"];
+const RISK_SECTIONS: SecondarySectionKey[] = ["alerts"];
+const INCIDENTS_SECTIONS: SecondarySectionKey[] = ["incidents"];
+const ARTIFACTS_SECTIONS: SecondarySectionKey[] = ["lineage", "artifacts"];
+const EVOLUTION_SECTIONS: SecondarySectionKey[] = ["evolution"];
+const GOVERNANCE_SECTIONS: SecondarySectionKey[] = ["approvals"];
+const LINEAGE_SECTIONS: SecondarySectionKey[] = ["lineage"];
+const AUDIT_SECTIONS: SecondarySectionKey[] = ["audit"];
+
+function TabSectionLoader({
+  sections,
+  ensureLoaded,
+  children,
+}: {
+  sections: SecondarySectionKey[];
+  ensureLoaded: (keys: SecondarySectionKey[]) => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    ensureLoaded(sections);
+  }, [ensureLoaded, sections]);
+  return <>{children}</>;
+}
+
+interface SectionState<T> {
+  status: SectionLoadStatus;
+  data: T;
+  entityId?: string;
+}
+
+function beginSectionLoad<T>(
+  prev: SectionState<T>,
+  entityId: string,
+  emptyFallback: T,
+): SectionState<T> {
+  if (prev.entityId === entityId && prev.status === "ready") {
+    return prev;
+  }
+  return { status: "loading", data: emptyFallback, entityId };
+}
+
+function isLineageUnavailable(lin: LineageRead | null | undefined): boolean {
+  if (!lin) return true;
+  if (lin.meta?.status === "unavailable") return true;
+  const surfaces = lin.meta?.surfaces as Record<string, { status?: string } | undefined> | undefined;
+  return surfaces?.lineage?.status === "unavailable";
+}
+
+function isStrategyPayloadUnavailable(strat: Strategy | null | undefined): boolean {
+  if (!strat || typeof strat !== "object") return false;
+  const record = strat as unknown as {
+    status?: unknown;
+    meta?: {
+      status?: unknown;
+      surfaces?: Record<string, { status?: unknown } | undefined>;
+    };
+  };
+  if (record.status === "unavailable" || record.meta?.status === "unavailable") {
+    return true;
+  }
+  const surfaces = record.meta?.surfaces;
+  return (
+    surfaces?.strategy?.status === "unavailable" ||
+    surfaces?.strategies?.status === "unavailable" ||
+    surfaces?.strategies_detail?.status === "unavailable"
+  );
+}
 
 export const StrategyDetail = () => {
   const { id } = useParams();
@@ -49,76 +142,307 @@ export const StrategyDetail = () => {
   const nav = useNavigate();
   const location = useLocation();
   const { can } = usePermissions();
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [audit, setAudit] = useState<AuditEvent[]>([]);
-  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [artifactsUnavailable, setArtifactsUnavailable] = useState(false);
-  const [experiments, setExperiments] = useState<ResearchExperiment[]>([]);
-  const [evolutions, setEvolutions] = useState<EvolutionProgram[]>([]);
+  const [auditState, setAuditState] = useState<SectionState<AuditEvent[]>>({ status: "loading", data: [] });
+  const [approvalsState, setApprovalsState] = useState<SectionState<ApprovalRequest[]>>({ status: "loading", data: [] });
+  const [alertsState, setAlertsState] = useState<SectionState<Alert[]>>({ status: "loading", data: [] });
+  const [incidentsState, setIncidentsState] = useState<SectionState<Incident[]>>({ status: "loading", data: [] });
+  const [artifactsCatalogState, setArtifactsCatalogState] = useState<SectionState<Artifact[]>>({ status: "loading", data: [] });
+  const [experimentsState, setExperimentsState] = useState<SectionState<ResearchExperiment[]>>({ status: "loading", data: [] });
+  const [evolutionsState, setEvolutionsState] = useState<SectionState<EvolutionProgram[]>>({ status: "loading", data: [] });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [activeTr, setActiveTr] = useState<Transition<StrategyState> | null>(null);
-  const [watchers, setWatchers] = useState<Watcher[]>([]);
-  const [journal, setJournal] = useState<DecisionJournalEntry[]>([]);
-  const [lineage, setLineage] = useState<LineageRead | null>(null);
+  const [watchersState, setWatchersState] = useState<SectionState<Watcher[]>>({ status: "loading", data: [] });
+  const [journalState, setJournalState] = useState<SectionState<DecisionJournalEntry[]>>({ status: "loading", data: [] });
+  const [lineageState, setLineageState] = useState<SectionState<LineageRead | null>>({ status: "loading", data: null });
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
+  const [primaryLoadSeq, setPrimaryLoadSeq] = useState(0);
+
+  const secondaryReqIdRef = useRef(0);
+  const mountedRef = useRef(true);
+  const lastLoadedStrategyRef = useRef<Strategy | undefined>(undefined);
+  const loadedSectionsRef = useRef<{
+    entityId: string;
+    seq: number;
+    sections: Set<SecondarySectionKey>;
+  }>({ entityId: "", seq: -1, sections: new Set() });
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      secondaryReqIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    secondaryReqIdRef.current += 1;
+    lastLoadedStrategyRef.current = undefined;
+    loadedSectionsRef.current = { entityId: id ?? "", seq: -1, sections: new Set() };
+    setLoadErrors([]);
+    setPrimaryLoadSeq(0);
+    setAuditState({ status: "loading", data: [] });
+    setApprovalsState({ status: "loading", data: [] });
+    setAlertsState({ status: "loading", data: [] });
+    setIncidentsState({ status: "loading", data: [] });
+    setArtifactsCatalogState({ status: "loading", data: [] });
+    setExperimentsState({ status: "loading", data: [] });
+    setEvolutionsState({ status: "loading", data: [] });
+    setWatchersState({ status: "loading", data: [] });
+    setJournalState({ status: "loading", data: [] });
+    setLineageState({ status: "loading", data: null });
+  }, [id]);
 
   const { data: s, setData: setS, loading, isError, notFound } = useLiveDetail<Strategy>(
     id,
     async (entityId) => {
-      const failures: string[] = [];
-      const read = <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> =>
-        request.catch(() => { failures.push(label); return fallback; });
-      setLoadErrors([]);
-      let stratError: unknown;
-      const [strat, j, a, ap, al, inc, ar, ex, ev, w, dj, lin] = await Promise.all([
-        bffV1.strategies.get(entityId).catch((err) => {
-          stratError = err;
-          failures.push("Strategy");
-          return undefined;
-        }),
-        read("Jobs", bffV1.jobs.list(), []), read("Audit", bffV1.audit.list(), []),
-        read("Approvals", bffV1.approvals.list(), []), read("Alerts", bffV1.alerts.list(), []),
-        read("Incidents", bffV1.incidents.list(), []), read("Artifacts", bffV1.artifacts.list(), []),
-        read("Research", bffV1.research.list(), []), read("Evolution", bffV1.evolution.list(), []),
-        read("Watchers", bffV1.watchers.forSubject("Strategy", entityId), []),
-        read("Decision journal", bffV1.decisionJournal.forSubject("Strategy", entityId), []),
-        managementConsoleReads.lineage(entityId).catch(() => ({
-          nodes: [],
-          edges: [],
-          meta: { status: "unavailable", source: "frontend_empty_read", surfaces: {} },
-          page_info: { total: 0, page_size: 0, has_more: false },
-          has_more: false,
-        })),
-      ]);
-      setLoadErrors(failures);
-      setJobs(j);
-      setAudit(a.filter((x) => x.target === entityId || (x.target ?? "").includes(entityId)));
-      setApprovals(ap.filter((x) => (x.subject ?? "").includes(entityId)));
-      setAlerts(al.filter((x) => x.relatedTarget === entityId || (x.source ?? "").includes(entityId) || (x.title ?? "").includes(entityId)));
-      setIncidents(inc.filter((x) => x.affected?.includes(entityId)));
-      // Only artifacts related to this strategy through the lineage graph (exact id match);
-      // a failed catalog or lineage read is "unavailable", never another strategy's rows.
-      const lineageUnavailable = lin.meta?.status === "unavailable";
-      const artifactsFailed = failures.includes("Artifacts") || lineageUnavailable;
-      const relatedArtifactIds = new Set(
-        (lin.nodes ?? []).filter((n) => n.type === "Artifact").map((n) => n.id),
-      );
-      setArtifactsUnavailable(artifactsFailed);
-      setArtifacts(artifactsFailed ? [] : ar.filter((a) => relatedArtifactIds.has(a.id)));
-      setExperiments(ex.slice(0, 6));
-      setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
-      setWatchers(w);
-      setJournal(dj);
-      setLineage(lin);
-      if (!strat && stratError) {
-        throw stratError;
+      try {
+        const strat = await bffV1.strategies.get(entityId);
+        if (isStrategyPayloadUnavailable(strat)) {
+          throw new Error("Strategy unavailable");
+        }
+        lastLoadedStrategyRef.current = strat;
+        if (mountedRef.current) {
+          secondaryReqIdRef.current += 1;
+          setLoadErrors([]);
+          setPrimaryLoadSeq((seq) => seq + 1);
+        }
+        return strat;
+      } catch (err) {
+        if (lastLoadedStrategyRef.current && lastLoadedStrategyRef.current.id === entityId) {
+          return lastLoadedStrategyRef.current;
+        }
+        secondaryReqIdRef.current += 1;
+        throw err;
       }
-      return strat;
     },
     { kinds: ["strategies"] },
+  );
+
+  const activeEntityId = id?.trim() || s?.id;
+  const ensureSectionsLoaded = useCallback(
+    (keys: SecondarySectionKey[]) => {
+      if (!s || !activeEntityId || primaryLoadSeq <= 0) return;
+      if (
+        loadedSectionsRef.current.entityId !== activeEntityId ||
+        loadedSectionsRef.current.seq !== primaryLoadSeq
+      ) {
+        loadedSectionsRef.current = {
+          entityId: activeEntityId,
+          seq: primaryLoadSeq,
+          sections: new Set(),
+        };
+      }
+      const seen = loadedSectionsRef.current.sections;
+      const toStart = keys.filter((k) => !seen.has(k));
+      if (toStart.length === 0) return;
+      for (const k of toStart) {
+        seen.add(k);
+      }
+
+      const entityId = activeEntityId;
+      const reqId = secondaryReqIdRef.current;
+      const isCurrent = () => mountedRef.current && secondaryReqIdRef.current === reqId;
+      const recordFailure = (label: string) => {
+        if (!isCurrent()) return;
+        setLoadErrors((prev) => (prev.includes(label) ? prev : [...prev, label]));
+      };
+
+      for (const key of toStart) {
+        switch (key) {
+          case "watchers":
+            setWatchersState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.watchers.forSubject("Strategy", entityId).then(
+              (w) => {
+                if (!isCurrent()) return;
+                setWatchersState({
+                  status: "ready",
+                  data: Array.isArray(w) ? w : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Watchers");
+                setWatchersState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "journal":
+            setJournalState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.decisionJournal.forSubject("Strategy", entityId).then(
+              (dj) => {
+                if (!isCurrent()) return;
+                setJournalState({
+                  status: "ready",
+                  data: Array.isArray(dj) ? dj : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Decision journal");
+                setJournalState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "experiments":
+            setExperimentsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.research.list().then(
+              (ex) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(ex) ? ex : [];
+                setExperimentsState({
+                  status: "ready",
+                  data: rows.slice(0, 6),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Research");
+                setExperimentsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "alerts":
+            setAlertsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.alerts.list().then(
+              (al) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(al) ? al : [];
+                setAlertsState({
+                  status: "ready",
+                  data: rows.filter(
+                    (x) =>
+                      x.relatedTarget === entityId ||
+                      (x.source ?? "").includes(entityId) ||
+                      (x.title ?? "").includes(entityId),
+                  ),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Alerts");
+                setAlertsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "incidents":
+            setIncidentsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.incidents.list().then(
+              (inc) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(inc) ? inc : [];
+                setIncidentsState({
+                  status: "ready",
+                  data: rows.filter((x) => x.affected?.includes(entityId)),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Incidents");
+                setIncidentsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "artifacts":
+            setArtifactsCatalogState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.artifacts.list().then(
+              (ar) => {
+                if (!isCurrent()) return;
+                setArtifactsCatalogState({
+                  status: "ready",
+                  data: Array.isArray(ar) ? ar : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Artifacts");
+                setArtifactsCatalogState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "evolution":
+            setEvolutionsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.evolution.list().then(
+              (ev) => {
+                if (!isCurrent()) return;
+                setEvolutionsState({
+                  status: "ready",
+                  data: Array.isArray(ev) ? ev : [],
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Evolution");
+                setEvolutionsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "approvals":
+            setApprovalsState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.approvals.list().then(
+              (ap) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(ap) ? ap : [];
+                setApprovalsState({
+                  status: "ready",
+                  data: rows.filter((x) => (x.subject ?? "").includes(entityId)),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Approvals");
+                setApprovalsState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+          case "lineage":
+            setLineageState((prev) => beginSectionLoad(prev, entityId, null));
+            managementConsoleReads.lineage(entityId).then(
+              (lin) => {
+                if (!isCurrent()) return;
+                const unavailable = isLineageUnavailable(lin);
+                setLineageState({
+                  status: unavailable ? "unavailable" : "ready",
+                  data: unavailable ? null : lin,
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                setLineageState({ status: "unavailable", data: null, entityId });
+              },
+            );
+            break;
+          case "audit":
+            setAuditState((prev) => beginSectionLoad(prev, entityId, []));
+            bffV1.audit.list().then(
+              (a) => {
+                if (!isCurrent()) return;
+                const rows = Array.isArray(a) ? a : [];
+                setAuditState({
+                  status: "ready",
+                  data: rows.filter((x) => x.target === entityId || (x.target ?? "").includes(entityId)),
+                  entityId,
+                });
+              },
+              () => {
+                if (!isCurrent()) return;
+                recordFailure("Audit");
+                setAuditState({ status: "unavailable", data: [], entityId });
+              },
+            );
+            break;
+        }
+      }
+    },
+    [activeEntityId, primaryLoadSeq, s],
   );
 
   const machineState: StrategyState = useMemo(() => {
@@ -134,11 +458,29 @@ export const StrategyDetail = () => {
     [machineState, can],
   );
 
-  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading && !s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!s) {
     if (notFound) return <div role="alert" className="p-6">{t("mgmt.strategy.detailNotFound", { id })}</div>;
     return <div role="alert" className="p-6">{isError || loadErrors.includes("Strategy") ? "Strategy could not be loaded." : t("mgmt.strategy.detailNotFound", { id })}</div>;
   }
+
+  const artifactsSectionStatus: SectionLoadStatus =
+    artifactsCatalogState.status === "unavailable" || lineageState.status === "unavailable"
+      ? "unavailable"
+      : artifactsCatalogState.status === "loading" || lineageState.status === "loading"
+        ? "loading"
+        : "ready";
+  const artifacts: Artifact[] = (() => {
+    if (artifactsSectionStatus !== "ready") return [];
+    const relatedArtifactIds = new Set(
+      (lineageState.data?.nodes ?? []).filter((n) => n.type === "Artifact").map((n) => n.id),
+    );
+    return artifactsCatalogState.data.filter((a) => relatedArtifactIds.has(a.id));
+  })();
+  const evolutions =
+    evolutionsState.status === "ready"
+      ? evolutionsState.data.filter((e) => e.parentAlpha === s.alpha)
+      : [];
 
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
   const noData = t("common.noData");
@@ -156,7 +498,6 @@ export const StrategyDetail = () => {
           .filter(Boolean)
           .map((personaId) => ({ personaId, state: "" }));
   const personaDisplayNames = s.persona_display_names ?? {};
-  const tradingRules = (Array.isArray(s.rules) ? s.rules : []).filter((rule) => rule && (rule.role ?? "trading") === "trading");
   const isStub = s.is_synthetic_or_stub === true;
   const stubReasonRaw = typeof s.stub_reason === "string" ? s.stub_reason.trim() : "";
   const stubReasonText = stubReasonRaw
@@ -185,38 +526,120 @@ export const StrategyDetail = () => {
   const benchmarkName = s.spec?.evaluation_plan?.benchmark?.trim() || "";
   const alphaRaw = s.alpha?.trim() || "";
   const alphaDisplay = alphaRaw || noData;
-  const poolDisplay = s.capitalPoolId?.trim() || noData;
-  const personasDisplay =
-    (s.personaIds ?? [])
-      .filter(Boolean)
-      .map((pid) => (s.persona_display_names?.[pid] ? `${s.persona_display_names[pid]} (${pid})` : pid))
-      .join(", ") || noData;
-  const subtitle = alphaRaw ? `${alphaRaw} · ${s.id}` : s.id;
-  const hasPnl = typeof s.pnl === "number" && Number.isFinite(s.pnl);
-  const hasPnl30d = typeof s.pnl30d === "number" && Number.isFinite(s.pnl30d);
-  const hasSharpe = typeof s.sharpe === "number" && Number.isFinite(s.sharpe);
-  const hasDrawdown = typeof s.drawdown === "number" && Number.isFinite(s.drawdown);
-  const metricsAsOfText = s.metricsAsOf?.trim() || "";
-  const pnlTone = !hasPnl || s.pnl === 0 ? "default" : s.pnl > 0 ? "success" : "danger";
-  const pnl30dTone = !hasPnl30d || s.pnl30d === 0 ? "default" : s.pnl30d > 0 ? "success" : "danger";
-  const drawdownTone = !hasDrawdown || s.drawdown === 0 ? "default" : "warning";
+  const poolIdRaw = s.capitalPoolId?.trim() || "";
+  const poolDisplay = poolIdRaw || noData;
+  const firstPersonaDisplayName = boundPersonaEntries
+    .map((entry) => personaDisplayNames[entry.personaId]?.trim())
+    .find(Boolean);
+  const poolPrimaryLabel = poolIdRaw
+    ? firstPersonaDisplayName
+      ? t("strategyDetail.capitalPool.forPersona", { persona: firstPersonaDisplayName })
+      : t("strategyDetail.capitalPool.bound")
+    : noData;
+  const ownerIsBoundPersona = Boolean(
+    s.owner && boundPersonaEntries.some((entry) => entry.personaId === s.owner.trim()),
+  );
+  const headerObject = {
+    ...s,
+    owner: (s.owner && personaDisplayNames[s.owner]?.trim()) || s.owner,
+  };
+
+  const rawPnl = s.pnl;
+  const hasPnl = typeof rawPnl === "number" && Number.isFinite(rawPnl);
+  const rawDrawdown = s.drawdown;
+  const hasDrawdown = typeof rawDrawdown === "number" && Number.isFinite(rawDrawdown);
+  const rawTotalTrades = s.totalTrades ?? s.total_trades;
+  const hasTotalTrades = typeof rawTotalTrades === "number" && Number.isFinite(rawTotalTrades);
+  const metricsAsOfText = (s.metricsAsOf ?? s.metrics_as_of)?.trim() || "";
+  const missingMetricReason = strategyMetricsReasonText(s.metricsReason ?? s.metrics_reason, t);
+  const runtimeStatus = normalizeStrategyRuntimeStatus(s.runtimeStatus ?? s.runtime_status);
+  const runtimeReason = strategyRuntimeReasonText(s.runtimeStatusReason ?? s.runtime_status_reason, t);
+  const personaStageFallbackReason =
+    !runtimeReason &&
+    runtimeStatus === "none" &&
+    normalizedOperationalStatus &&
+    normalizedOperationalStatus !== "running"
+      ? t(`strategy.operationalStatus.${normalizedOperationalStatus}`)
+      : undefined;
+  const runtimeReasonText = runtimeReason?.text ?? personaStageFallbackReason;
+  const pnlTone = !hasPnl || rawPnl === 0 ? "default" : rawPnl > 0 ? "success" : "danger";
+  const drawdownTone = !hasDrawdown || rawDrawdown === 0 ? "default" : "warning";
+  const runtimeTone: "default" | "warning" | "danger" | "success" =
+    runtimeStatus === "running"
+      ? "success"
+      : runtimeStatus === "paused_market_input" ||
+          runtimeStatus === "paused_operator" ||
+          runtimeStatus === "unknown"
+        ? "warning"
+        : "default";
+
+  const hasPoolRule =
+    Array.isArray(s.rules) &&
+    s.rules.some((r) => r && (r.role === "pool_envelope" || r.role === "pool_member"));
+  const runsThroughPersonaPool =
+    !isStub &&
+    (Boolean(poolIdRaw) ||
+      hasPoolRule ||
+      (boundPersonaEntries.length > 0 &&
+        (runtimeStatus === "running" ||
+          runtimeStatus === "paused_market_input" ||
+          runtimeStatus === "paused_operator" ||
+          normalizedOperationalStatus === "running")));
+
+  const triple = deriveStrategyTriple({
+    state: s.state,
+    lifecycleStatus: s.lifecycleStatus as string | undefined,
+    reviewStatus: s.reviewStatus as string | undefined,
+    deploymentStatus: s.deploymentStatus as string | undefined,
+  });
+  const tripleValid = validateStrategyTriple(triple);
+  const tripleViolation = tripleValid ? null : explainTripleViolation(triple);
+  const lifecycleCls: Record<string, string> = {
+    discovered: "bg-muted text-muted-foreground border-border",
+    scaffolded: "bg-muted text-muted-foreground border-border",
+    replicated: "bg-accent/15 text-accent border-accent/30",
+    approved: "bg-status-success/15 text-status-success border-status-success/30",
+    paper: "bg-status-running/15 text-status-running border-status-running/30",
+    live: "bg-status-success/15 text-status-success border-status-success/30",
+    degraded: "bg-status-warning/15 text-status-warning border-status-warning/30",
+    retired: "bg-muted text-muted-foreground border-border",
+  };
+  const reviewCls: Record<string, string> = {
+    none: "bg-muted text-muted-foreground border-border",
+    pending: "bg-status-warning/15 text-status-warning border-status-warning/30",
+    changes_requested: "bg-status-warning/15 text-status-warning border-status-warning/30",
+    approved: "bg-status-success/15 text-status-success border-status-success/30",
+  };
+  const deployCls: Record<string, string> = {
+    none: runsThroughPersonaPool
+      ? "bg-status-running/15 text-status-running border-status-running/30"
+      : "bg-muted text-muted-foreground border-border",
+    paper_running: "bg-status-running/15 text-status-running border-status-running/30",
+    live_running: "bg-status-success/15 text-status-success border-status-success/30",
+    stopped: "bg-muted text-muted-foreground border-border",
+    rollback_required: "bg-status-failed/15 text-status-failed border-status-failed/30",
+  };
 
   return (
     <>
       {loadErrors.length > 0 && <div role="alert" className="px-6 py-3 text-sm text-status-warning">Some strategy data could not be loaded: {loadErrors.join(", ")}.</div>}
       <ObjectDetailLayout
-        object={s}
-        subtitle={subtitle}
+        object={headerObject}
+        headerOmit={{ owner: ownerIsBoundPersona }}
         actions={
           <>
             <Button size="sm" variant="ghost" onClick={() => useInspector.getState().open({
               id: s.id, type: "Strategy", name: s.name, state: s.state, risk: s.risk,
               owner: s.owner, updatedAt: s.updatedAt, availableActions: s.availableActions,
-              meta: [{ label: "Alpha", value: alphaDisplay }, { label: "Pool", value: poolDisplay }],
+              meta: [{ label: t("nav.capital"), value: poolDisplay }],
             })}>
-              <Inbox className="h-4 w-4 mr-1" />Inspect
+              <Inbox className="h-4 w-4 mr-1" />{t("strategyDetail.actions.inspect")}
             </Button>
-            <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
+            <NonProductionActionButton
+              size="sm"
+              variant="outline"
+              reason={t("strategyDetail.actions.disabledReason.sweep")}
+            >
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
             </NonProductionActionButton>
             {transitions.map((tr) => (
@@ -224,11 +647,17 @@ export const StrategyDetail = () => {
                 key={tr.action}
                 size="sm"
                 variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
-                status="no executing owner"
+                reason={t("strategyDetail.actions.disabledReason.transition")}
               >
-                {tr.action} → {tr.to}
+                {actionLabel(tr.action, t)}
               </NonProductionActionButton>
             ))}
+            <span
+              data-testid="strategy-actions-disabled-reason"
+              className="text-xs text-muted-foreground"
+            >
+              {t("strategyDetail.actions.readOnlyHint")}
+            </span>
           </>
         }
         tabs={[
@@ -236,7 +665,7 @@ export const StrategyDetail = () => {
           {
             value: "overview", label: t("section.overview"),
             content: (
-              <>
+              <TabSectionLoader sections={OVERVIEW_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
                 {isStub && (
                   <div
                     role="note"
@@ -252,19 +681,7 @@ export const StrategyDetail = () => {
                 {!isStub && (
                   <Section title={t("strategyDetail.rulesSummary.title")}>
                     <div data-testid="strategy-rules-summary" className="space-y-2">
-                      {tradingRules.length === 0 ? (
-                        <p className="text-sm text-muted-foreground" data-testid="strategy-rules-summary-empty">
-                          {t("strategyDetail.rulesSummary.empty")}
-                        </p>
-                      ) : (
-                        tradingRules.map((rule, idx) => (
-                          <RuleDescription
-                            key={`${rule.registryId}-${idx}`}
-                            rule={rule}
-                            testId={`strategy-rules-summary-rule-${idx}`}
-                          />
-                        ))
-                      )}
+                      <StrategyRulesList rules={s.rules} variant="summary" />
                       <button
                         type="button"
                         onClick={openSpecTab}
@@ -289,21 +706,34 @@ export const StrategyDetail = () => {
                         <div className="text-xs uppercase tracking-wider text-muted-foreground">
                           {t("strategyDetail.operationalStatusLabel")}
                         </div>
-                        <div>
-                          {normalizedOperationalStatus ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {runtimeStatus ? (
+                            <>
+                              <Badge
+                                variant="outline"
+                                data-testid="strategy-detail-operational-status"
+                                data-operational-status={normalizedOperationalStatus ?? runtimeStatus}
+                                data-runtime-status={runtimeStatus}
+                                className={strategyRuntimeStatusClass(runtimeStatus)}
+                              >
+                                {t(`strategy.runtimeStatus.${runtimeStatus}`)}
+                              </Badge>
+                              {runtimeReasonText && (
+                                <span
+                                  data-testid="strategy-overview-runtime-reason"
+                                  title={runtimeReason ? `${runtimeReason.text} (${runtimeReason.code})` : undefined}
+                                  className="text-xs text-muted-foreground"
+                                >
+                                  {runtimeReasonText}
+                                </span>
+                              )}
+                            </>
+                          ) : normalizedOperationalStatus ? (
                             <Badge
                               variant="outline"
                               data-testid="strategy-detail-operational-status"
                               data-operational-status={normalizedOperationalStatus}
-                              className={
-                                normalizedOperationalStatus === "running"
-                                  ? "border-status-success/40 text-status-success"
-                                  : normalizedOperationalStatus === "unknown"
-                                    ? "border-status-warning/40 text-status-warning"
-                                    : normalizedOperationalStatus === "idle"
-                                      ? "border-border text-foreground"
-                                      : "border-muted text-muted-foreground"
-                              }
+                              className={strategyOperationalStatusClass(normalizedOperationalStatus)}
                             >
                               {t(`strategy.operationalStatus.${normalizedOperationalStatus}`)}
                             </Badge>
@@ -346,8 +776,11 @@ export const StrategyDetail = () => {
                                     <span className="text-mono text-[10px] text-muted-foreground">{entry.personaId}</span>
                                   </span>
                                 ) : (
-                                  <span className="text-mono text-primary underline-offset-2 hover:underline">
-                                    {entry.personaId}
+                                  <span className="flex flex-col leading-tight">
+                                    <span className="text-primary underline-offset-2 hover:underline">
+                                      {t("nav.personas")}
+                                    </span>
+                                    <span className="text-mono text-[10px] text-muted-foreground">{entry.personaId}</span>
                                   </span>
                                 )}
                                 {entry.state && (
@@ -375,64 +808,231 @@ export const StrategyDetail = () => {
                         )}
                       </div>
                     </div>
-                    <StrategyTripleStateCard
-                      lifecycleStatus={s.lifecycleStatus as string | undefined}
-                      reviewStatus={s.reviewStatus as string | undefined}
-                      deploymentStatus={s.deploymentStatus as string | undefined}
-                      legacyState={s.state}
+                    <Card className="p-3 space-y-2" data-testid="strategy-triple-state-card">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs tracking-wider text-muted-foreground">
+                          {t("strategyDetail.tripleState.title")}
+                        </div>
+                        {tripleValid ? (
+                          <span
+                            data-testid="strategy-triple-invariant"
+                            className="flex items-center gap-1 text-xs text-status-success"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" /> {t("strategyDetail.tripleState.invariantOk")}
+                          </span>
+                        ) : (
+                          <span
+                            data-testid="strategy-triple-invariant"
+                            className="flex items-center gap-1 text-xs text-status-failed"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" /> {t("strategyDetail.tripleState.invariantViolated")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] text-muted-foreground">{t("strategyDetail.tripleState.lifecycle")}</div>
+                          <Badge
+                            variant="outline"
+                            data-testid="strategy-triple-lifecycle"
+                            data-value={triple.lifecycleStatus}
+                            className={lifecycleCls[triple.lifecycleStatus] ?? ""}
+                          >
+                            {strategyLifecycleLabel(triple.lifecycleStatus, t)}
+                          </Badge>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] text-muted-foreground">{t("strategyDetail.tripleState.review")}</div>
+                          <Badge
+                            variant="outline"
+                            data-testid="strategy-triple-review"
+                            data-value={triple.reviewStatus}
+                            className={reviewCls[triple.reviewStatus] ?? ""}
+                          >
+                            {strategyReviewLabel(triple.reviewStatus, t)}
+                          </Badge>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] text-muted-foreground">{t("strategyDetail.tripleState.deployment")}</div>
+                          <Badge
+                            variant="outline"
+                            data-testid="strategy-triple-deployment"
+                            data-value={
+                              runsThroughPersonaPool && triple.deploymentStatus === "none"
+                                ? "persona_pool"
+                                : triple.deploymentStatus
+                            }
+                            className={deployCls[triple.deploymentStatus] ?? ""}
+                          >
+                            {strategyDeploymentLabel(triple.deploymentStatus, t, { runsThroughPersonaPool })}
+                          </Badge>
+                        </div>
+                      </div>
+                      {tripleViolation && (
+                        <p className="text-xs text-status-failed">{tripleViolation}</p>
+                      )}
+                    </Card>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field
+                      label={t("nav.capital")}
+                      value={
+                        poolIdRaw ? (
+                          <div>
+                            <div>{poolPrimaryLabel}</div>
+                            <div
+                              data-testid="strategy-capital-pool-id"
+                              className="text-mono text-xs text-muted-foreground"
+                            >
+                              {poolIdRaw}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">{noData}</span>
+                        )
+                      }
                     />
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Field label="Alpha" value={alphaDisplay} mono />
-                    <Field label={t("nav.capital")} value={poolDisplay} mono />
-                    <Field label={t("nav.personas")} value={personasDisplay} mono />
-                    <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
-                  </div>
                 </Section>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                <div
+                  data-testid="strategy-performance-block"
+                  className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4"
+                >
                   <StatCard
                     label={t("strategyDetail.cumulativePaperPnl")}
-                    value={hasPnl ? s.pnl.toFixed(2) : noData}
+                    value={
+                      hasPnl ? (
+                        rawPnl.toFixed(2)
+                      ) : missingMetricReason ? (
+                        <span
+                          data-testid="strategy-result-missing"
+                          data-metrics-reason={missingMetricReason.code}
+                          title={missingMetricReason.code}
+                        >
+                          {missingMetricReason.text}
+                        </span>
+                      ) : (
+                        noData
+                      )
+                    }
                     hint={metricsAsOfText ? t("strategyDetail.metricsAsOf", { asOf: metricsAsOfText }) : undefined}
                     tone={pnlTone}
                   />
                   <StatCard
-                    label="PnL 30d"
-                    value={hasPnl30d ? `${(s.pnl30d * 100).toFixed(2)}%` : noData}
-                    tone={pnl30dTone}
+                    label={t("table.drawdown")}
+                    value={
+                      hasDrawdown ? (
+                        `${(rawDrawdown * 100).toFixed(2)}%`
+                      ) : missingMetricReason ? (
+                        <span
+                          data-testid="strategy-drawdown-missing"
+                          data-metrics-reason={missingMetricReason.code}
+                          title={missingMetricReason.code}
+                        >
+                          {missingMetricReason.text}
+                        </span>
+                      ) : (
+                        noData
+                      )
+                    }
+                    tone={drawdownTone}
                   />
                   <StatCard
-                    label={t("table.sharpe")}
-                    value={hasSharpe ? s.sharpe.toFixed(2) : noData}
+                    label={t("strategy.list.column.trades")}
+                    value={
+                      hasTotalTrades ? (
+                        <span data-testid="strategy-trades">{rawTotalTrades}</span>
+                      ) : (
+                        <span
+                          data-testid="strategy-trades"
+                          title={missingMetricReason?.code}
+                        >
+                          {missingMetricReason ? missingMetricReason.text : noData}
+                        </span>
+                      )
+                    }
+                    hint={hasTotalTrades && rawTotalTrades === 0 && missingMetricReason ? missingMetricReason.text : undefined}
                     tone="default"
                   />
                   <StatCard
-                    label={t("table.drawdown")}
-                    value={hasDrawdown ? `${(s.drawdown * 100).toFixed(2)}%` : noData}
-                    tone={drawdownTone}
+                    label={t("strategy.list.column.runtime")}
+                    value={
+                      runtimeStatus ? (
+                        <span
+                          data-testid="strategy-runtime-status"
+                          data-runtime-status={runtimeStatus}
+                          title={runtimeReason ? `${runtimeReason.text} (${runtimeReason.code})` : undefined}
+                        >
+                          {t(`strategy.runtimeStatus.${runtimeStatus}`)}
+                          {runtimeReasonText && (
+                            <span
+                              data-testid="strategy-runtime-reason"
+                              title={runtimeReason ? `${runtimeReason.text} (${runtimeReason.code})` : undefined}
+                              className="mt-1 block font-sans text-xs font-normal text-muted-foreground"
+                            >
+                              {runtimeReasonText}
+                            </span>
+                          )}
+                        </span>
+                      ) : normalizedOperationalStatus ? (
+                        <span
+                          data-testid="strategy-runtime-status"
+                          data-operational-status={normalizedOperationalStatus}
+                        >
+                          {t(`strategy.operationalStatus.${normalizedOperationalStatus}`)}
+                        </span>
+                      ) : (
+                        <span data-testid="strategy-runtime-status">{noData}</span>
+                      )
+                    }
+                    tone={runtimeTone}
                   />
                 </div>
-                <div className="grid gap-4 md:grid-cols-3 mt-4">
-                  <LinkedBlock
-                    icon={<User className="h-3.5 w-3.5 text-muted-foreground" />}
-                    title={t("phase13.strategy.linked.identity")}
-                    items={[
-                      { id: `owner:${s.owner}`, label: s.owner, meta: t("table.owner") },
-                      ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, meta: "persona", to: `/management/personas/${p}` })),
-                    ]}
-                  />
-                  <LinkedBlock
-                    icon={<Eye className="h-3.5 w-3.5 text-muted-foreground" />}
-                    title={t("phase13.strategy.linked.watchers")}
-                    items={watchers.map((w) => ({ id: w.id, label: w.user, meta: safeDateTime(w.since, "date") }))}
-                    emptyHint={t("empty.noResults")}
-                  />
-                  <LinkedBlock
-                    icon={<BookOpen className="h-3.5 w-3.5 text-muted-foreground" />}
-                    title={t("phase13.strategy.linked.journal")}
-                    items={journal.slice(0, 4).map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${safeDateTime(d.decidedAt, "date")}` }))}
-                    emptyHint={t("empty.noResults")}
-                  />
+                <div className="grid gap-4 md:grid-cols-2 mt-4">
+                  <div
+                    data-testid="strategy-watchers-section"
+                    data-section-status={watchersState.status}
+                  >
+                    <LinkedBlock
+                      icon={<Eye className="h-3.5 w-3.5 text-muted-foreground" />}
+                      title={t("phase13.strategy.linked.watchers")}
+                      items={
+                        watchersState.status === "ready"
+                          ? watchersState.data.map((w) => ({ id: w.id, label: w.user, meta: safeDateTime(w.since, "date") }))
+                          : []
+                      }
+                      emptyHint={
+                        watchersState.status === "loading"
+                          ? t("common.loading")
+                          : watchersState.status === "unavailable"
+                            ? t("strategyDetail.watchersUnavailable")
+                            : t("empty.noResults")
+                      }
+                    />
+                  </div>
+                  <div
+                    data-testid="strategy-journal-section"
+                    data-section-status={journalState.status}
+                  >
+                    <LinkedBlock
+                      icon={<BookOpen className="h-3.5 w-3.5 text-muted-foreground" />}
+                      title={t("phase13.strategy.linked.journal")}
+                      items={
+                        journalState.status === "ready"
+                          ? journalState.data
+                              .slice(0, 4)
+                              .map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${safeDateTime(d.decidedAt, "date")}` }))
+                          : []
+                      }
+                      emptyHint={
+                        journalState.status === "loading"
+                          ? t("common.loading")
+                          : journalState.status === "unavailable"
+                            ? t("strategyDetail.journalUnavailable")
+                            : t("empty.noResults")
+                      }
+                    />
+                  </div>
                 </div>
                 <div className="flex justify-end mt-4">
                   <Button asChild variant="outline" size="sm">
@@ -441,7 +1041,7 @@ export const StrategyDetail = () => {
                     </Link>
                   </Button>
                 </div>
-              </>
+              </TabSectionLoader>
             ),
           },
 
@@ -489,18 +1089,31 @@ export const StrategyDetail = () => {
           {
             value: "experiments", label: t("nav.experiments"),
             content: (
-              <DataTable<ResearchExperiment>
-                rows={experiments}
-                onRowClick={(r) => nav(`/management/experiments/${r.experiment_id || r.id}`)}
-                columns={[
-                  { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.experiment_id || r.id}</span> },
-                  { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.experiment_name || r.name}</div> },
-                  { key: "hyp", header: t("strategyDetail.hypothesis"), cell: (r) => <span className="text-xs text-muted-foreground">{r.hypothesis}</span> },
-                  { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
-                  { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
-                ]}
-                empty={t("empty.noResults")}
-              />
+              <TabSectionLoader sections={EXPERIMENTS_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-experiments-section"
+                  data-section-status={experimentsState.status}
+                >
+                  <DataTable<ResearchExperiment>
+                    rows={experimentsState.status === "ready" ? experimentsState.data : []}
+                    loading={experimentsState.status === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/experiments/${r.experiment_id || r.id}`)}
+                    columns={[
+                      { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.experiment_id || r.id}</span> },
+                      { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.experiment_name || r.name}</div> },
+                      { key: "hyp", header: t("strategyDetail.hypothesis"), cell: (r) => <span className="text-xs text-muted-foreground">{r.hypothesis}</span> },
+                      { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
+                      { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
+                    ]}
+                    empty={
+                      experimentsState.status === "unavailable"
+                        ? t("strategyDetail.experimentsUnavailable")
+                        : t("empty.noResults")
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -555,37 +1168,48 @@ export const StrategyDetail = () => {
           {
             value: "risk", label: t("strategyDetail.riskAlerts"),
             content: (
-              <>
+              <TabSectionLoader sections={RISK_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
                 <div className="grid grid-cols-3 gap-4">
                   <StatCard label={t("strategyDetail.var95")} value="—" />
                   <StatCard label={t("strategyDetail.beta")} value="—" />
                   <StatCard label={t("strategyDetail.exposure")} value="—" />
                 </div>
                 <Section title={t("strategyDetail.activeAlerts")}>
-                  <DataTable<Alert>
-                    rows={alerts}
-                    columns={[
-                      { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
-                      { key: "t", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
-                      { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
-                      { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
-                      { key: "act", header: "", cell: (r) => (
-                        <div className="flex gap-1 justify-end">
-                          {!r.acknowledged && (
-                            <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}
+                  <div
+                    data-testid="strategy-alerts-section"
+                    data-section-status={alertsState.status}
+                  >
+                    <DataTable<Alert>
+                      rows={alertsState.status === "ready" ? alertsState.data : []}
+                      loading={alertsState.status === "loading"}
+                      loadingText={t("common.loading")}
+                      columns={[
+                        { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+                        { key: "t", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+                        { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
+                        { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
+                        { key: "act", header: "", cell: (r) => (
+                          <div className="flex gap-1 justify-end">
+                            {!r.acknowledged && (
+                              <NonProductionActionButton size="sm" variant="ghost" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}
+                              </NonProductionActionButton>
+                            )}
+                            <NonProductionActionButton size="sm" variant="outline" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
+                              <AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}
                             </NonProductionActionButton>
-                          )}
-                          <NonProductionActionButton size="sm" variant="outline" status="owner endpoint exists with frontend wiring pending">
-                            <AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}
-                          </NonProductionActionButton>
-                        </div>
-                      ) },
-                    ]}
-                    empty={t("empty.noResults")}
-                  />
+                          </div>
+                        ) },
+                      ]}
+                      empty={
+                        alertsState.status === "unavailable"
+                          ? t("strategyDetail.alertsUnavailable")
+                          : t("empty.noResults")
+                      }
+                    />
+                  </div>
                 </Section>
-              </>
+              </TabSectionLoader>
             ),
           },
 
@@ -593,28 +1217,41 @@ export const StrategyDetail = () => {
           {
             value: "incidents", label: t("nav.incidents"),
             content: (
-              <DataTable<Incident>
-                rows={incidents}
-                onRowClick={(r) => nav(`/management/incidents/${r.id}`)}
-                empty={t("strategyDetail.noIncidents")}
-                columns={[
-                  { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
-                  { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
-                  { key: "st", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-                  { key: "cmd", header: t("table.commander"), cell: (r) => <span className="text-mono text-xs">{r.commander ?? "—"}</span> },
-                  { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
-                  { key: "act", header: "", cell: (r) => (
-                    <div className="flex gap-1 justify-end">
-                      <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
-                        {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
-                      </NonProductionActionButton>
-                      <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
-                        <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
-                      </NonProductionActionButton>
-                    </div>
-                  ) },
-                ]}
-              />
+              <TabSectionLoader sections={INCIDENTS_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-incidents-section"
+                  data-section-status={incidentsState.status}
+                >
+                  <DataTable<Incident>
+                    rows={incidentsState.status === "ready" ? incidentsState.data : []}
+                    loading={incidentsState.status === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/incidents/${r.id}`)}
+                    empty={
+                      incidentsState.status === "unavailable"
+                        ? t("strategyDetail.incidentsUnavailable")
+                        : t("strategyDetail.noIncidents")
+                    }
+                    columns={[
+                      { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+                      { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+                      { key: "st", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
+                      { key: "cmd", header: t("table.commander"), cell: (r) => <span className="text-mono text-xs">{r.commander ?? "—"}</span> },
+                      { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
+                      { key: "act", header: "", cell: (r) => (
+                        <div className="flex gap-1 justify-end">
+                          <NonProductionActionButton size="sm" variant="ghost" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
+                            {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
+                          </NonProductionActionButton>
+                          <NonProductionActionButton size="sm" variant="outline" reason={t("strategyDetail.actions.disabledReason.alertOrIncident")}>
+                            <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
+                          </NonProductionActionButton>
+                        </div>
+                      ) },
+                    ]}
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -622,53 +1259,83 @@ export const StrategyDetail = () => {
           {
             value: "artifacts", label: t("nav.artifacts"),
             content: (
-              <DataTable<Artifact>
-                rows={artifacts}
-                onRowClick={(r) => nav(`/management/artifacts/${r.id}`)}
-                columns={[
-                  { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-                  { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px]">{r.kind || noData}</Badge> },
-                  { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
-                  {
-                    key: "size",
-                    header: t("strategyDetail.size"),
-                    cell: (r) => (
-                      <span className="text-mono text-xs">
-                        {typeof r.sizeMb === "number" && Number.isFinite(r.sizeMb)
-                          ? `${r.sizeMb.toFixed(1)} MB`
-                          : noData}
-                      </span>
-                    ),
-                  },
-                ]}
-                empty={artifactsUnavailable ? t("strategyDetail.artifactsUnavailable") : t("empty.noResults")}
-              />
+              <TabSectionLoader sections={ARTIFACTS_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-artifacts-section"
+                  data-section-status={artifactsSectionStatus}
+                >
+                  <DataTable<Artifact>
+                    rows={artifacts}
+                    loading={artifactsSectionStatus === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/artifacts/${r.id}`)}
+                    columns={[
+                      { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+                      { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                      { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px]">{r.kind || noData}</Badge> },
+                      { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
+                      {
+                        key: "size",
+                        header: t("strategyDetail.size"),
+                        cell: (r) => (
+                          <span className="text-mono text-xs">
+                            {typeof r.sizeMb === "number" && Number.isFinite(r.sizeMb)
+                              ? `${r.sizeMb.toFixed(1)} MB`
+                              : noData}
+                          </span>
+                        ),
+                      },
+                    ]}
+                    empty={
+                      artifactsSectionStatus === "unavailable"
+                        ? t("strategyDetail.artifactsUnavailable")
+                        : t("empty.noResults")
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
           // ── 8. Evolution ──
           {
             value: "evolution", label: t("nav.evolution"),
-            content: evolutions.length ? (
-              <DataTable<EvolutionProgram>
-                rows={evolutions}
-                onRowClick={(r) => nav(`/management/evolution/${r.id}`)}
-                columns={[
-                  { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-                  { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "gen", header: t("strategyDetail.generation"), cell: (r) => <span className="text-mono text-xs">{r.generation}</span> },
-                  { key: "fit", header: t("strategyDetail.bestFitness"), cell: (r) => <span className="text-mono text-xs">{(r.bestFitness ?? 0).toFixed(3)}</span> },
-                  { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
-                ]}
-              />
-            ) : (
-              <Card className="p-8 text-center">
-                <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: alphaDisplay })}</div>
-                <Button size="sm" variant="outline" onClick={() => nav("/management/evolution")}>
-                  {t("strategyDetail.startEvolution")} <ArrowRight className="ml-1 h-3 w-3" />
-                </Button>
-              </Card>
+            content: (
+              <TabSectionLoader sections={EVOLUTION_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-evolution-section"
+                  data-section-status={evolutionsState.status}
+                >
+                  {evolutionsState.status === "loading" ? (
+                    <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="strategy-evolution-loading">
+                      {t("common.loading")}
+                    </Card>
+                  ) : evolutionsState.status === "unavailable" ? (
+                    <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="strategy-evolution-unavailable">
+                      {t("strategyDetail.evolutionUnavailable")}
+                    </Card>
+                  ) : evolutions.length ? (
+                    <DataTable<EvolutionProgram>
+                      rows={evolutions}
+                      onRowClick={(r) => nav(`/management/evolution/${r.id}`)}
+                      columns={[
+                        { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+                        { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                        { key: "gen", header: t("strategyDetail.generation"), cell: (r) => <span className="text-mono text-xs">{r.generation}</span> },
+                        { key: "fit", header: t("strategyDetail.bestFitness"), cell: (r) => <span className="text-mono text-xs">{(r.bestFitness ?? 0).toFixed(3)}</span> },
+                        { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{(r.progress * 100).toFixed(0)}%</span> },
+                      ]}
+                    />
+                  ) : (
+                    <Card className="p-8 text-center">
+                      <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: alphaDisplay })}</div>
+                      <Button size="sm" variant="outline" onClick={() => nav("/management/evolution")}>
+                        {t("strategyDetail.startEvolution")} <ArrowRight className="ml-1 h-3 w-3" />
+                      </Button>
+                    </Card>
+                  )}
+                </div>
+              </TabSectionLoader>
             ),
           },
 
@@ -676,45 +1343,99 @@ export const StrategyDetail = () => {
           {
             value: "governance", label: t("nav.governance"),
             content: (
-              <DataTable<ApprovalRequest>
-                rows={approvals}
-                onRowClick={(r) => nav(`/management/governance/${r.id}`)}
-                columns={[
-                  { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
-                  { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
-                  { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
-                  { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-                  { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
-                ]}
-                empty={t("strategyDetail.noGovernance")}
-              />
+              <TabSectionLoader sections={GOVERNANCE_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-governance-section"
+                  data-section-status={approvalsState.status}
+                >
+                  <DataTable<ApprovalRequest>
+                    rows={approvalsState.status === "ready" ? approvalsState.data : []}
+                    loading={approvalsState.status === "loading"}
+                    loadingText={t("common.loading")}
+                    onRowClick={(r) => nav(`/management/governance/${r.id}`)}
+                    columns={[
+                      { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+                      { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
+                      { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
+                      { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                      { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
+                    ]}
+                    empty={
+                      approvalsState.status === "unavailable"
+                        ? t("strategyDetail.governanceUnavailable")
+                        : t("strategyDetail.noGovernance")
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
             ),
           },
 
           // ── 10. Lineage ──
           {
             value: "lineage", label: t("section.lineage"),
-            content: (() => {
-              const nodes: LineageNode[] = (lineage?.nodes ?? []).map((node) => ({
-                ...node,
-                highlight: node.highlight || node.id === s.id,
-              }));
-              const nodeIds = new Set(nodes.map((node) => node.id));
-              const edges: LineageEdge[] = (lineage?.edges ?? []).filter(
-                (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
-              );
-              return (
-                <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
-                  id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,
-                })} />
-              );
-            })(),
+            content: (
+              <TabSectionLoader sections={LINEAGE_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-lineage-section"
+                  data-section-status={lineageState.status}
+                >
+                  {lineageState.status === "loading" ? (
+                    <div
+                      data-testid="strategy-lineage-loading"
+                      className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+                    >
+                      {t("common.loading")}
+                    </div>
+                  ) : lineageState.status === "unavailable" ? (
+                    <div
+                      data-testid="strategy-lineage-unavailable"
+                      className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+                    >
+                      {t("strategyDetail.lineageUnavailable")}
+                    </div>
+                  ) : (() => {
+                    const nodes: LineageNode[] = highlightLineageNodesForRoot(
+                      lineageState.data?.nodes ?? [],
+                      s.id,
+                    );
+                    const nodeIds = new Set(nodes.map((node) => node.id));
+                    const edges: LineageEdge[] = (lineageState.data?.edges ?? []).filter(
+                      (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
+                    );
+                    return (
+                      <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
+                        id: n.id, type: n.type, name: n.display_name || n.label, state: n.state, risk: n.risk,
+                      })} />
+                    );
+                  })()}
+                </div>
+              </TabSectionLoader>
+            ),
           },
 
           // ── 11. Audit ──
           {
             value: "audit", label: t("nav.audit"),
-            content: <AuditTimeline entries={audit} />,
+            content: (
+              <TabSectionLoader sections={AUDIT_SECTIONS} ensureLoaded={ensureSectionsLoaded}>
+                <div
+                  data-testid="strategy-audit-section"
+                  data-section-status={auditState.status}
+                >
+                  <AuditTimeline
+                    entries={auditState.status === "ready" ? auditState.data : []}
+                    emptyText={
+                      auditState.status === "loading"
+                        ? t("common.loading")
+                        : auditState.status === "unavailable"
+                          ? t("strategyDetail.auditUnavailable")
+                          : undefined
+                    }
+                  />
+                </div>
+              </TabSectionLoader>
+            ),
           },
         ]}
       />
@@ -759,7 +1480,11 @@ export const StrategyDetail = () => {
               const fresh = await bffV1.strategies.get(s.id);
               if (fresh) setS(fresh);
               const a = await bffV1.audit.list();
-              setAudit(a.filter((x) => x.target === s.id));
+              setAuditState({
+                status: "ready",
+                data: a.filter((x) => x.target === s.id),
+                entityId: s.id,
+              });
             }}
           />
         );

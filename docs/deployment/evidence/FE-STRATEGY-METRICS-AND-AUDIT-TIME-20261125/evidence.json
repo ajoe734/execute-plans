@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "task_id": "FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125",
+  "taskId": "FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125",
+  "owner": "Antigravity",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125",
+  "base_commit": "19e0403b71f85f9db6fec050714b3a1083b80441",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T12:15:00Z",
+  "problem_register_binding": {
+    "root_cause_classes": ["RC6"],
+    "summary": "AuditPage and normalizeAuditFields previously dropped occurred_at/created_at timestamps from /bff/audit and /bff/audit/events, leaving r.ts undefined on /management/audit."
+  },
+  "scoped_artifacts": [
+    "src/lib/bff-v1/operations.ts",
+    "src/lib/bff-v1/__tests__/approval-readback.test.ts",
+    "src/management/pages/Operations.tsx",
+    "src/management/pages/Operations.test.tsx",
+    "docs/deployment/evidence/FE-STRATEGY-METRICS-AND-AUDIT-TIME-20261125/evidence.json"
+  ],
+  "acceptance_evidence": {
+    "AC1_normalizeAuditFields_timestamps": "Extended pair(...) and normalizeAuditFields in src/lib/bff-v1/operations.ts to normalize canonical audit timestamps across ts, timestamp, occurred_at, occurredAt, created_at, and createdAt while detecting conflicts/malformed values across all 6 timestamp fields, purging conflicting timestamp aliases (timestamp, occurred_at, occurredAt, created_at, createdAt), and preserving strict idempotence.",
+    "AC2_AuditPage_normalization_and_fallback": "Updated AuditPage in src/management/pages/Operations.tsx to normalize list items loaded via lists.audit, incoming realtime 'audit' events, and rendered rows through normalizeAuditFields, and to render missing, conflicting, or unparseable timestamps via safeDateTime(r.ts) as '—' rather than 'Invalid Date'.",
+    "AC3_unit_and_component_tests": "Added unit tests in src/lib/bff-v1/__tests__/approval-readback.test.ts and component tests in src/management/pages/Operations.test.tsx covering ts, timestamp, occurred_at, occurredAt, created_at, createdAt, matching multi-field timestamps, missing timestamps, unparseable timestamps, conflicting timestamps, target-filtered AuditTimeline rendering, and realtime audit event prepends.",
+    "AC4_runtime_budget": {
+      "recurring_jobs_added": 0,
+      "emitters_added": 0,
+      "persistent_writers_added": 0,
+      "notes": "Pure frontend read-boundary normalization and rendering logic; adds 0 recurring jobs, 0 emitters, and 0 persistent writers."
+    }
+  },
+  "verification": [
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "result": "tsc -p tsconfig.app.json --noEmit and tsc -p tsconfig.agora.json --noEmit passed with 0 errors"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=\"$PANTHEON_COMMAND_ROOT\" npm run test:contract",
+      "exit_code": 0,
+      "result": "Agora bundle aligned (49 schemas, 99 routes, 75 sha256 entries) and 11 contract-drift tests passed"
+    },
+    {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/approval-readback.test.ts src/management/pages/Operations.test.tsx src/test/governance-owner-readonly-detail.test.tsx src/management/pages/ResearchDetail.test.tsx",
+      "exit_code": 0,
+      "result": "4 test files passed, 115 tests passed (35 in approval-readback.test.ts, 53 in Operations.test.tsx, 15 in governance-owner-readonly-detail.test.tsx, 12 in ResearchDetail.test.tsx)"
+    }
+  ],
+  "residual_findings": [
+    {
+      "scope": "out_of_scope_shared_lists_module",
+      "class": "RC6",
+      "finding": "src/lib/bff-v1/lists.ts line 501 defines lists.audit with normalizeBaseObjectFields rather than normalizeAuditFields to avoid file overlap with live task FE-REGISTRY-LISTS-CURRENT-FIRST-20261125; AuditPage in src/management/pages/Operations.tsx and bffV1.audit.list in src/lib/bff-v1/operations.ts normalize all audit rows through normalizeAuditFields."
+    },
+    {
+      "scope": "out_of_scope_strategy_list_metrics",
+      "class": "RC6",
+      "finding": "Strategy list cumulative paper metrics and current-first display are owned by live tasks BFF-STRATEGY-METRICS-RUNTIME-20261125 and FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 per task brief."
+    },
+    {
+      "scope": "out_of_scope_research_detail_test_async_race",
+      "class": "RC6",
+      "finding": "src/management/pages/ResearchDetail.test.tsx lines 128-129 await screen.getByText('Management research context') (rendered when researchGet resolves) and then synchronously assert screen.getByText('TW-Index-Arbitrage') (rendered when separate useQuery personaFleetGet resolves), causing a transient race under heavy CI load (observed in push run 45607537645 while pull_request run 45607544326 on the identical commit 6a0c900e5 passed)."
+    }
+  ]
+}

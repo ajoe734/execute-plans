@@ -19,7 +19,12 @@
  *     without a staging dependency.
  */
 
+import { mkdirSync } from "node:fs";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import {
+  RECORDED_A81B_STRATEGY,
+  RECORDED_A81B_STRATEGY_ID,
+} from "../src/management/components/detail/__fixtures__/poolRules";
 import {
   bearerHeader,
   installContainedLoopbackAuth,
@@ -27,6 +32,25 @@ import {
 } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
+
+/**
+ * Evidence capture is opt-in: screenshots are written only when
+ * E2E_EVIDENCE_DIR is set, so a plain run never touches committed files
+ * (FE-E2E-NO-TRACKED-EVIDENCE-WRITES-20261126).
+ */
+async function captureEvidence(
+  page: Page,
+  subdir: string,
+  file: string,
+  options: { fullPage?: boolean } = {},
+): Promise<void> {
+  const evidenceDir = process.env.E2E_EVIDENCE_DIR;
+  if (!evidenceDir) return;
+  const dir = `${evidenceDir}/${subdir}`;
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: `${dir}/${file}`, ...options });
+}
+
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
 const RUN_LIVE_BFF_CONTRACT =
@@ -803,11 +827,19 @@ function listEnvelope(registry: RegistryFixture): JsonRecord {
       totalCountExact: true,
       ...(registry.key === "strategies"
         ? {
+            // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the raw state_counts also counts hidden
+            // test/stub rows and is never printed; the draft banner reads visible_state_counts.
             state_counts: {
+              draft: 7421,
+              review: 1,
+              approved: 170,
+              retired: 1556,
+            },
+            visible_state_counts: {
               draft: 3217,
               review: 1,
               approved: 140,
-              retired: 1556,
+              retired: 2,
             },
             operational_counts: {
               running: 1,
@@ -1201,6 +1233,7 @@ test.describe("F07 entity registry", () => {
         );
         await expect(page.getByTestId("strategy-symbols")).toHaveText("2330.TW");
         await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("3217");
+        await expect(page.getByTestId("strategy-hidden-drafts-banner")).not.toContainText("7421");
         await expect(page.getByTestId("strategy-hidden-drafts-banner")).toContainText("134");
       }
       if (registry.key === "evolution-programs") {
@@ -1208,7 +1241,14 @@ test.describe("F07 entity registry", () => {
         await expect(page.getByTestId("qualification-policy-version")).toHaveText(
           "evolution-qualification.v1",
         );
-        await expect(page.getByTestId("qualification-evaluated-at")).toHaveText(SNAPSHOT_AT);
+        // FE-EVO-JOURNAL-DIRECTION-20261125: evaluated_at renders in the viewer time zone, not as raw ISO text.
+        const expectedEvaluatedAt = await page.evaluate(
+          (iso) => new Date(iso).toLocaleString(),
+          SNAPSHOT_AT,
+        );
+        const evaluatedAtLocator = page.getByTestId("qualification-evaluated-at");
+        await expect(evaluatedAtLocator).toContainText(expectedEvaluatedAt);
+        await expect(evaluatedAtLocator).not.toContainText(SNAPSHOT_AT);
         await expect(page.getByTestId("qualification-evaluated-count")).toHaveText("6");
         await expect(page.getByTestId("qualification-qualified-count")).toHaveText("1");
         await expect(page.getByTestId("qualification-drafted-count")).toHaveText("1");
@@ -1348,6 +1388,190 @@ test.describe("F07 entity registry", () => {
           `${registry.key} live detail error`,
         ),
       ).toBe("RESOURCE_NOT_FOUND");
+    }
+  });
+
+  test("renders StrategyDetail header and recorded pool rules within 2 s when secondary BFF reads take 15 s", async ({
+    page,
+  }) => {
+    const failures = collectPageFailures(page);
+    const secondaryPaths = new Set<string>();
+    const allBffRequests: string[] = [];
+    const secondaryBeforePrimaryAnswered: string[] = [];
+    let primaryStrategyAnswered = false;
+    const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
+
+    await installQuietEventSource(page);
+    await installContainedLoopbackAuth(page);
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+
+      if (request.method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: corsHeaders(route) });
+        return;
+      }
+
+      if (path.startsWith("/bff/")) {
+        allBffRequests.push(`${request.method()} ${path}${url.search}`);
+      }
+
+      if (path === "/bff/events/stream") {
+        await route.fulfill({
+          status: 200,
+          headers: {
+            ...corsHeaders(route),
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache",
+          },
+          body: ": fixture keep-alive\n\n",
+        });
+        return;
+      }
+
+      if (path === "/health") {
+        await fulfillJson(route, { status: "ok", checked_at: SNAPSHOT_AT });
+        return;
+      }
+
+      if (path === "/bff/me") {
+        await fulfillJson(route, ME_RESPONSE);
+        return;
+      }
+
+      if (path === "/bff/actions") {
+        const catalog = REGISTRIES.map((registry) => actionDescriptor(registry));
+        await fulfillJson(route, {
+          data: catalog,
+          catalog,
+          items: catalog,
+          meta: { snapshot_at: SNAPSHOT_AT, totalCountExact: true },
+          totalCount: catalog.length,
+          totalCountExact: true,
+          version: "v1",
+        });
+        return;
+      }
+
+      if (path === "/bff/management/shell-summary") {
+        await fulfillJson(route, {
+          data: {},
+          meta: { snapshot_at: SNAPSHOT_AT, surfaces: { shell_summary: { status: "ok", source: "fe-int-gate-b06" } } },
+        });
+        return;
+      }
+
+      if (path === `/bff/strategies/${RECORDED_A81B_STRATEGY_ID}` && request.method() === "GET") {
+        await fulfillJson(route, {
+          data: RECORDED_A81B_STRATEGY,
+          meta: {
+            snapshot_at: SNAPSHOT_AT,
+            surfaces: {
+              strategies_detail: { status: "ok", source: "fe-int-gate-b06" },
+            },
+          },
+        });
+        primaryStrategyAnswered = true;
+        return;
+      }
+
+      if (path.startsWith("/bff/")) {
+        if (!primaryStrategyAnswered) {
+          secondaryBeforePrimaryAnswered.push(path);
+        }
+        secondaryPaths.add(path);
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            pendingTimers.delete(timer);
+            resolve();
+          }, 15_000);
+          pendingTimers.add(timer);
+        });
+        await fulfillJson(route, emptyListEnvelope("ancillary")).catch(() => undefined);
+        return;
+      }
+
+      await route.continue();
+    });
+    await installContainedLoopbackAuthAuthority(page);
+
+    try {
+      await page.setViewportSize({ width: 1274, height: 627 });
+      const startedAt = Date.now();
+      await page.goto(frontendUrl(`/management/strategies/${RECORDED_A81B_STRATEGY_ID}`), {
+        waitUntil: "domcontentloaded",
+        timeout: 10_000,
+      });
+      await page.getByRole("heading", { name: RECORDED_A81B_STRATEGY.name }).waitFor({
+        state: "visible",
+        timeout: 2_000,
+      });
+      const headerVisibleMs = Date.now() - startedAt;
+      expect(headerVisibleMs, "StrategyDetail header must render within 2 s while secondary reads take 15 s").toBeLessThan(2_000);
+
+      await expect(page.getByTestId("strategy-rules-summary")).toBeVisible();
+      await expect(page.getByTestId("strategy-rule-combination")).toContainText(
+        "依成員風險權重加權合計訊號，並裁切於風險上限內",
+      );
+      await expect(page.getByTestId("strategy-rule-combination")).not.toContainText(
+        "clipped_weighted_sum_v1",
+      );
+      await expect(page.getByTestId("strategy-rule-risk-limits")).toContainText(
+        "多空抵銷後的淨部位上限為 100%（1 倍）",
+      );
+      await expect(page.getByTestId("strategy-rule-risk-limits")).not.toContainText(
+        "max_net_strength=1",
+      );
+      await expect(
+        page.getByTestId("strategy-rule-member-artifact-persona-paper-a81b4fd15944698341aa"),
+      ).toHaveCount(1);
+      await expect(
+        page.getByTestId("strategy-rule-artifact-persona-paper-a81b4fd15944698341aa"),
+      ).toHaveCount(0);
+      await expect(
+        page.getByTestId("strategy-rule-artifact-persona-paper-baseline-a81b4fd15944698341aa"),
+      ).toBeVisible();
+      await expect(page.getByTestId("strategy-triple-state-card")).toContainText(
+        "策略狀態（生命週期 × 審查 × 部署）",
+      );
+      await expect(page.getByTestId("strategy-triple-invariant")).toHaveText("狀態一致");
+      await expect(page.getByTestId("strategy-triple-deployment")).toHaveText(
+        "透過 Persona 策略池執行",
+      );
+      await expect(page.getByTestId("strategy-performance-block")).toContainText("-9.99");
+      await expect(page.getByTestId("strategy-trades")).toHaveText("2");
+      await expect(page.getByTestId("strategy-runtime-status")).toContainText("執行中");
+      await expect(page.getByRole("button", { name: "升級至模擬" })).toBeDisabled();
+
+      const visibleText = await bodyText(page);
+      expect(visibleText).not.toMatch(
+        /clipped_weighted_sum_v1|max_net_strength=1|gross_weight_limit=1|promote_paper|STRATEGY STATE|invariant ok/i,
+      );
+
+      await captureEvidence(
+        page,
+        "FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125",
+        "strategy-detail-overview-1274x627.png",
+        { fullPage: false },
+      );
+
+      await expect(page.getByTestId("strategy-journal-section")).toHaveAttribute(
+        "data-section-status",
+        "loading",
+      );
+      await expect.poll(() => secondaryPaths.size).toBe(1);
+      expect(secondaryBeforePrimaryAnswered).toEqual([]);
+      expect(Array.from(secondaryPaths)).toEqual(["/bff/agora/journal"]);
+      expect(allBffRequests.some((req) => req.includes("/bff/jobs"))).toBe(false);
+      expect(allBffRequests.some((req) => req.includes("/bff/artifacts"))).toBe(false);
+      expect(allBffRequests.some((req) => req.includes("/bff/management/lineage"))).toBe(false);
+      expect(failures).toEqual([]);
+    } finally {
+      for (const timer of pendingTimers) {
+        clearTimeout(timer);
+      }
+      await page.unrouteAll({ behavior: "ignoreErrors" });
     }
   });
 });
