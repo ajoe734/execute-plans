@@ -29,6 +29,7 @@ import {
 import { readBffEnv } from "../runtimeEnv";
 import { buildHeaders } from "../headers";
 import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
+import { fetchSse } from "../sse/liveSse";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -511,6 +512,24 @@ export const TRADING_ROOM_SHADOW_ARMS = [
   "institutional_view",
 ] as const;
 
+/**
+ * Canonical arm names spoken by the Agora owner-scoped shadow route
+ * (GET /bff/agora/trading-room/decision-events/{id}/shadow-comparison).
+ */
+export const TRADING_ROOM_CANONICAL_SHADOW_ARMS = [
+  "human_actual",
+  "private_servant",
+  "base_strategy",
+  "committee_variant",
+] as const;
+
+/** Owner-reported comparison state for a decision (Agora owner route). */
+export type TradingRoomShadowComparisonState =
+  | "settled"
+  | "pending_settlement"
+  | "unavailable"
+  | "no_decision_recorded";
+
 export type TradingRoomShadowArmName =
   | (typeof TRADING_ROOM_SHADOW_ARMS)[number]
   | string;
@@ -540,6 +559,11 @@ export interface TradingRoomShadowComparisonData {
   arms: TradingRoomShadowArm[];
   trader_identity?: Record<string, unknown> | null;
   account_id?: string | null;
+  decision_event_id?: string | null;
+  comparison_state?: TradingRoomShadowComparisonState | null;
+  data_cutoff?: string | null;
+  observation_window?: unknown;
+  cost_model?: unknown;
   execution_authority: "none";
   no_order_route_proof: "agora_decision_support_only";
 }
@@ -1154,29 +1178,6 @@ export async function listDecisionEvents(
     items: extractDecisionEvents(body),
     etag: res.headers.get("ETag"),
   };
-}
-
-/** Get read-only performance attribution grouped by strategy for the Agora Performance tab. */
-export async function getTradingRoomPerformanceAttribution(
-  query?: TradingRoomPerformanceAttributionQuery,
-  baseUrl?: string,
-): Promise<TradingRoomPerformanceAttributionResponse> {
-  const base = resolvedBase(baseUrl);
-  const qs = new URLSearchParams();
-  qs.set("period", query?.period ?? "latest");
-  qs.set("page_size", String(query?.pageSize ?? 50));
-  if (query?.pageToken) qs.set("page_token", query.pageToken);
-  const url = `${base}/bff/management/performance-attribution/by-strategy?${qs.toString()}`;
-  const res = await bffSessionFetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json", ...authHeaders() },
-  });
-  if (!res.ok) {
-    await throwTypedBffError(res, "GET", url);
-  }
-  const body = await parseJson(res);
-  return body as TradingRoomPerformanceAttributionResponse;
 }
 
 /** Get a single decision event by ID. */
@@ -2008,9 +2009,13 @@ function normalizeShadowComparisonPayload(
     return { state: "unavailable", reason };
   }
   if (root.status === "empty") {
+    const emptyData = recordFrom(root.data);
     return {
       state: "empty",
-      reason: stringFrom(root.reason) || undefined,
+      reason:
+        stringFrom(root.reason) ||
+        stringFrom(emptyData.comparison_state) ||
+        undefined,
     };
   }
 
@@ -2078,11 +2083,31 @@ function normalizeShadowComparisonPayload(
         typeof data.account_id === "string" && data.account_id.trim()
           ? data.account_id.trim()
           : null,
+      decision_event_id:
+        typeof data.decision_event_id === "string" && data.decision_event_id.trim()
+          ? data.decision_event_id.trim()
+          : null,
+      comparison_state: shadowComparisonStateFrom(data.comparison_state),
+      data_cutoff:
+        typeof data.data_cutoff === "string" && data.data_cutoff.trim()
+          ? data.data_cutoff.trim()
+          : null,
+      observation_window: data.observation_window ?? null,
+      cost_model: data.cost_model ?? null,
       execution_authority: "none",
       no_order_route_proof: "agora_decision_support_only",
     },
     degraded: Object.keys(degraded).length > 0 ? degraded : undefined,
   };
+}
+
+function shadowComparisonStateFrom(value: unknown): TradingRoomShadowComparisonState | null {
+  return value === "settled" ||
+    value === "pending_settlement" ||
+    value === "unavailable" ||
+    value === "no_decision_recorded"
+    ? value
+    : null;
 }
 
 function isRecordOrNull(value: unknown): Record<string, unknown> | null {
@@ -2092,9 +2117,12 @@ function isRecordOrNull(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Fetch the trader's own shadow comparison (all 4 arms and their settlement source labels)
- * for a decision ID from the BFF attribution/shadow route.
- * Strictly read-only GET; never places orders or changes capital.
+ * Fetch the trader's own shadow comparison (four arms: human_actual,
+ * private_servant, base_strategy, committee_variant, each with its locked
+ * decision detail and settlement source) from the Agora owner-scoped route
+ * GET /bff/agora/trading-room/decision-events/{id}/shadow-comparison.
+ * The Management attribution route keeps its operator audience and is not
+ * used by the trader surface. Strictly read-only; never places orders.
  */
 export async function getTradingRoomShadowComparison(
   decisionId: string,
@@ -2105,7 +2133,7 @@ export async function getTradingRoomShadowComparison(
     return { state: "empty", reason: "decision_id_required" };
   }
   const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/management/attribution/shadow/${encodeURIComponent(cleanId)}`;
+  const url = `${base}/bff/agora/trading-room/decision-events/${encodeURIComponent(cleanId)}/shadow-comparison`;
   try {
     const res = await bffSessionFetch(url, {
       method: "GET",
@@ -2170,4 +2198,133 @@ export async function getTradingRoomDecisionLock(
   const body = await parseJson(res);
   const root = recordFrom(body);
   return recordFrom(root.data ?? root);
+}
+
+// ── Trading Room live stream (SA AD-AG-06) ────────────────────────────────────
+
+export type TradingRoomStreamMode = "connecting" | "live" | "polling" | "closed";
+
+export interface TradingRoomStreamEvent {
+  id: string | null;
+  type: string;
+  data: Record<string, unknown>;
+}
+
+export interface TradingRoomStreamOptions {
+  /**
+   * Called when the decision queue may have changed: a typed stream event
+   * (`event`), a replay/resync request, or a bounded polling tick (`null`).
+   * Callers re-read the resync routes; the stream never carries order actions.
+   */
+  onChange: (event: TradingRoomStreamEvent | null) => void;
+  onModeChange?: (mode: TradingRoomStreamMode) => void;
+  baseUrl?: string;
+  /** Polling interval used after SSE is unavailable (default 15 s). */
+  pollIntervalMs?: number;
+  /** Consecutive SSE failures before falling back to polling (default 3). */
+  sseFailureThreshold?: number;
+  fetchFn?: typeof fetch;
+}
+
+export const TRADING_ROOM_STREAM_POLL_MS = 15_000;
+const TRADING_ROOM_STREAM_MIN_POLL_MS = 5_000;
+
+/**
+ * Subscribe to GET /bff/agora/trading-room/stream — an authenticated,
+ * user-scoped, replayable SSE stream (Last-Event-ID). Uses the fetch-based SSE
+ * client so the Authorization header and session cookie both travel with the
+ * request. After repeated failures it degrades to bounded polling (a fixed
+ * interval, never faster than 5 s) so the queue still updates without reload.
+ */
+export function subscribeTradingRoomStream(options: TradingRoomStreamOptions): () => void {
+  const base = resolvedBase(options.baseUrl);
+  const threshold = Math.max(1, options.sseFailureThreshold ?? 3);
+  const pollMs = Math.max(
+    TRADING_ROOM_STREAM_MIN_POLL_MS,
+    options.pollIntervalMs ?? TRADING_ROOM_STREAM_POLL_MS,
+  );
+  let closed = false;
+  let failures = 0;
+  let hadError = false;
+  let mode: TradingRoomStreamMode = "connecting";
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let controller: { close: () => void } | null = null;
+
+  const setMode = (next: TradingRoomStreamMode) => {
+    if (mode === next) return;
+    mode = next;
+    options.onModeChange?.(next);
+  };
+
+  const startPolling = () => {
+    if (closed || pollTimer) return;
+    controller?.close();
+    controller = null;
+    setMode("polling");
+    pollTimer = setInterval(() => {
+      if (!closed) options.onChange(null);
+    }, pollMs);
+  };
+
+  options.onModeChange?.("connecting");
+  const fetchFn = options.fetchFn ?? (typeof fetch === "function" ? fetch : undefined);
+  if (!fetchFn) {
+    startPolling();
+  } else {
+    controller = fetchSse({
+      url: `${base}/bff/agora/trading-room/stream`,
+      headers: authHeaders(),
+      credentials: "include",
+      autoReconnect: true,
+      fetchFn,
+      onOpen: () => {
+        if (closed) return;
+        failures = 0;
+        setMode("live");
+      },
+      onError: () => {
+        if (closed) return;
+        failures += 1;
+        hadError = true;
+        if (failures >= threshold) startPolling();
+      },
+      onResyncRequired: () => {
+        if (!closed) options.onChange(null);
+      },
+      onMessage: (frame) => {
+        if (closed || !frame.data) return;
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = recordFrom(JSON.parse(frame.data));
+        } catch {
+          return;
+        }
+        const type = stringFrom(parsed.type) || stringFrom(frame.event) || "trading_room.event";
+        const event: TradingRoomStreamEvent = {
+          id: stringFrom(parsed.id) || frame.id || null,
+          type,
+          data: recordFrom(parsed.data),
+        };
+        if (type === "trading_room.connected") {
+          setMode("live");
+          // A reconnect may have missed events beyond the replay window.
+          if (hadError) {
+            hadError = false;
+            options.onChange(event);
+          }
+          return;
+        }
+        options.onChange(event);
+      },
+    });
+  }
+
+  return () => {
+    closed = true;
+    controller?.close();
+    controller = null;
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    setMode("closed");
+  };
 }

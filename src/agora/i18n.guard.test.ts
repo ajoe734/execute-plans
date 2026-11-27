@@ -11,6 +11,47 @@ const operatorComponents = import.meta.glob("./**/*.tsx", {
   query: "?raw",
 }) as Record<string, string>;
 
+/**
+ * Agora trading-room and performance sources whose static `t("agora.…")`
+ * keys must resolve in both zh-TW and en-US. A missing key would otherwise
+ * render the raw key path (e.g. "agora.tradingRoom.editor.enterEditMode").
+ */
+const tradingRoomAndPerformanceSources = {
+  ...(import.meta.glob(
+    [
+      "./pages/trading-room/**/*.tsx",
+      "./trading-room/**/*.tsx",
+      "./pages/strategy-performance/**/*.tsx",
+      "./widgets/**/*.tsx",
+      "./components/TradeDecisionCard.tsx",
+      "./components/CandidateReviewDrawer.tsx",
+      "!./**/*.test.tsx",
+    ],
+    { eager: true, import: "default", query: "?raw" },
+  ) as Record<string, string>),
+};
+
+const PLURAL_SUFFIXES = ["", "_zero", "_one", "_two", "_few", "_many", "_other"];
+
+function resolveLeaf(catalog: unknown, key: string): unknown {
+  return key.split(".").reduce<unknown>((node, part) => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return undefined;
+    return (node as Record<string, unknown>)[part];
+  }, catalog);
+}
+
+function hasTranslation(catalog: unknown, key: string): boolean {
+  return PLURAL_SUFFIXES.some((suffix) => typeof resolveLeaf(catalog, `${key}${suffix}`) === "string");
+}
+
+export function staticAgoraKeys(source: string): string[] {
+  const keys = new Set<string>();
+  for (const match of source.matchAll(/\bt\(\s*["'](agora\.[A-Za-z0-9_.]+)["']/g)) {
+    keys.add(match[1]);
+  }
+  return [...keys];
+}
+
 const forbiddenAuditLiterals = [
   "Trading Servant Proposal",
   "部分可用",
@@ -73,6 +114,63 @@ describe("Agora locale policy", () => {
         shellSource,
         `TradingDeskLayout.tsx contains forbidden hardcoded shell literal: ${literal}`,
       ).not.toContain(literal);
+    }
+  });
+
+  it("fails on any missing zh-TW or en-US key used by Agora trading-room or performance code", () => {
+    const sources = Object.entries(tradingRoomAndPerformanceSources);
+    expect(sources.length).toBeGreaterThan(10);
+    expect(sources.map(([path]) => path)).toEqual(
+      expect.arrayContaining([
+        "./trading-room/WorkspaceGridEditor.tsx",
+        "./pages/trading-room/TradingRoomPage.tsx",
+        "./pages/strategy-performance/StrategyPerformancePage.tsx",
+        "./components/TradeDecisionCard.tsx",
+        "./components/CandidateReviewDrawer.tsx",
+      ]),
+    );
+    const missing: string[] = [];
+    let checked = 0;
+    for (const [path, source] of sources) {
+      for (const key of staticAgoraKeys(source)) {
+        checked += 1;
+        if (!hasTranslation(zh, key)) missing.push(`${path}: zh-TW ${key}`);
+        if (!hasTranslation(en, key)) missing.push(`${path}: en-US ${key}`);
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+    expect(missing).toEqual([]);
+  });
+
+  it("detects a missing grid-editor key the way the guard scans source", () => {
+    const sample = 'const a = t("agora.tradingRoom.editor.enterEditMode"); const b = t("agora.tradingRoom.editor.notARealKey");';
+    const keys = staticAgoraKeys(sample);
+    expect(keys).toEqual([
+      "agora.tradingRoom.editor.enterEditMode",
+      "agora.tradingRoom.editor.notARealKey",
+    ]);
+    expect(keys.filter((key) => !hasTranslation(zh, key))).toEqual(["agora.tradingRoom.editor.notARealKey"]);
+  });
+
+  it("keeps the grid-editor, live-queue, intent, candidate-review and rule-vs-human catalogs in parity", () => {
+    for (const path of [
+      "agora.tradingRoom.editor",
+      "agora.tradingRoom.live",
+      "agora.tradingRoom.mobile",
+      "agora.tradingRoom.decisionCard",
+      "agora.tradingRoom.intent",
+      "agora.tradingRoom.candidateReview",
+      "agora.tradingRoom.candidateContext",
+      "agora.performance.ruleVsHuman",
+      "agora.performance.shadow",
+    ]) {
+      expect(collectLeafKeyPaths(resolveLeaf(zh, path), path)).toEqual(
+        collectLeafKeyPaths(resolveLeaf(en, path), path),
+      );
+    }
+    for (const key of ["enterEditMode", "exitEditMode", "versionHistory", "restoreWidget"]) {
+      expect(hasTranslation(zh, `agora.tradingRoom.editor.${key}`)).toBe(true);
+      expect(hasTranslation(en, `agora.tradingRoom.editor.${key}`)).toBe(true);
     }
   });
 

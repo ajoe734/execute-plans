@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getTradingIntent, submitTradingIntentHandoff, withdrawTradingIntent, type IntentStage } from "./tradingIntents";
+import { getTradingIntent, submitTradingIntentHandoff, tradingIntentProgress, withdrawTradingIntent, type IntentStage, type TradingIntentDetail } from "./tradingIntents";
 
 const intent = { intent_id: "intent/1", strategy_id: "strategy-1", strategy_spec_registry_id: "registry-1" };
 const options = { ifMatch: '"event-v2"', idempotencyKey: "idem-1", requestId: "request-1" };
@@ -69,3 +69,46 @@ describe("governed trading intent client", () => {
     },
   );
 });
+
+describe("governed trading intent progress (read-only)", () => {
+  const base: TradingIntentDetail = { ...detail, handoffs: [] };
+  it("reports created only for a fresh draft and no paper-fill field", () => {
+    const progress = tradingIntentProgress(base);
+    expect(progress.steps.filter((s) => s.reached).map((s) => s.step)).toEqual(["created"]);
+    expect(progress.paperFillsReported).toBe(false);
+    expect(progress.paperFills).toEqual([]);
+    expect(progress.terminal).toBeNull();
+  });
+  it("advances through accepted paper handoff and shows owner-reported paper fills", () => {
+    const progress = tradingIntentProgress({
+      ...base,
+      lifecycle_state: "submitted",
+      handoffs: [{
+        handoff_id: "h-paper", requested_stage: "paper", state: "accepted",
+        paper_fills: [
+          { fill_id: "pf-1", symbol: "2330.TW", side: "buy", quantity: 1000, price: 912.5, filled_at: "2026-11-27T02:00:00Z" },
+          { fill_id: "pf-1", symbol: "2330.TW" },
+          { fill_id: "live-1", execution_venue: "live_broker" },
+          { symbol: "no-id" },
+        ],
+      }],
+    });
+    expect(progress.steps.every((s) => s.reached)).toBe(true);
+    expect(progress.paperFillsReported).toBe(true);
+    expect(progress.paperFills).toEqual([{
+      fill_id: "pf-1", symbol: "2330.TW", side: "buy", quantity: 1000, price: 912.5,
+      filled_at: "2026-11-27T02:00:00Z", handoff_id: "h-paper",
+    }]);
+  });
+  it("marks an empty owner-reported fill list as reported with no fills", () => {
+    const progress = tradingIntentProgress({ ...base, data: { ...intent, paper_fills: [] } });
+    expect(progress.paperFillsReported).toBe(true);
+    expect(progress.paperFills).toEqual([]);
+    expect(progress.steps.find((s) => s.step === "paper_filled")?.reached).toBe(false);
+  });
+  it("surfaces withdrawn and rejected as terminal states", () => {
+    expect(tradingIntentProgress({ ...base, lifecycle_state: "withdrawn" }).terminal).toBe("withdrawn");
+    expect(tradingIntentProgress({ ...base, lifecycle_state: "rejected" }).terminal).toBe("rejected");
+  });
+});
+
