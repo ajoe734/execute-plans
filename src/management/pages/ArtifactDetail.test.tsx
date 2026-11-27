@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -471,5 +471,204 @@ describe("ArtifactDetail load states", () => {
     );
     expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
     view3.unmount();
+  });
+
+  it("sends zero lineage, deployments, and audit requests when GET /bff/artifacts/:id returns 404 or fails", async () => {
+    const requestedUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.includes("/bff/artifacts/art_stg001_v320")) {
+        return jsonResponse({ detail: "Artifact not found" }, 404);
+      }
+      if (url.includes("/bff/artifacts/art_500_err")) {
+        return jsonResponse({ detail: "Artifact store error" }, 500);
+      }
+      return jsonResponse({ data: [], items: [] }, 200);
+    });
+
+    const notFoundView = renderArtifactDetail("/management/artifacts/art_stg001_v320");
+    expect(await screen.findByText("Artifact Not Found")).toBeInTheDocument();
+    expect(requestedUrls.filter((u) => u.includes("/bff/lineage"))).toHaveLength(0);
+    expect(requestedUrls.filter((u) => u.includes("/bff/deployments"))).toHaveLength(0);
+    expect(requestedUrls.filter((u) => u.includes("/bff/audit"))).toHaveLength(0);
+    notFoundView.unmount();
+
+    requestedUrls.length = 0;
+    const errorView = renderArtifactDetail("/management/artifacts/art_500_err");
+    expect(await screen.findByText("Could Not Load Artifact")).toBeInTheDocument();
+    expect(requestedUrls.filter((u) => u.includes("/bff/lineage"))).toHaveLength(0);
+    expect(requestedUrls.filter((u) => u.includes("/bff/deployments"))).toHaveLength(0);
+    expect(requestedUrls.filter((u) => u.includes("/bff/audit"))).toHaveLength(0);
+    errorView.unmount();
+  });
+
+  it("starts lineage, deployments, and audit reads only after the artifact read resolves, sends exactly one lineage read for a found artifact, and cancels previous reads when route id changes", async () => {
+    const ART_ONE = "art-found-001";
+    const ART_TWO = "art-found-002";
+
+    const makeArtifactPayload = (artifactId: string, name: string) => ({
+      data: {
+        id: artifactId,
+        registry_id: artifactId,
+        artifact_id: artifactId,
+        artifact_type: "execution_bundle",
+        version: "1.0.0",
+        name,
+        kind: "execution_bundle",
+        state: "approved",
+        risk: "low",
+        hash: `sha256:${artifactId}`,
+        owner: "operator",
+        updatedAt: "2026-11-27T00:00:00Z",
+        source_kind: "registry",
+      },
+      meta: {
+        snapshot_at: "2026-11-27T00:00:00Z",
+        surfaces: { artifact_detail: { status: "ok", source: "registry" } },
+      },
+    });
+
+    let resolveArtifactOne!: (res: Response) => void;
+    let resolveLineageOne!: (res: Response) => void;
+    const requestedUrls: string[] = [];
+
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.includes(`/bff/artifacts/${ART_ONE}`)) {
+        return new Promise<Response>((resolve) => {
+          resolveArtifactOne = resolve;
+        });
+      }
+      if (url.includes(`/bff/artifacts/${ART_TWO}`)) {
+        return Promise.resolve(jsonResponse(makeArtifactPayload(ART_TWO, "Second Artifact"), 200));
+      }
+      if (url.includes("/bff/artifacts/art-missing-003")) {
+        return Promise.resolve(jsonResponse({ detail: "Not found" }, 404));
+      }
+      if (url.includes(`/bff/lineage`) && url.includes(`root_id=${ART_ONE}`)) {
+        return new Promise<Response>((resolve) => {
+          resolveLineageOne = resolve;
+        });
+      }
+      if (url.includes(`/bff/lineage`) && url.includes(`root_id=${ART_TWO}`)) {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              data: {
+                id: "lineage",
+                nodes: [
+                  {
+                    id: ART_TWO,
+                    label: ART_TWO,
+                    type: "Artifact",
+                    state: "approved",
+                    display_name: "Second Artifact",
+                    name_missing: false,
+                  },
+                ],
+                edges: [],
+                status: "ok",
+                source: "service_client",
+              },
+              items: [],
+              page_info: { next_page_token: null, total: 1, page_size: 1, returned: 1, has_more: false },
+              meta: {
+                snapshot_at: "2026-11-27T00:00:00Z",
+                status: "ok",
+                source: "service_client",
+                surfaces: { lineage: { status: "ok", source: "service_client" } },
+              },
+            },
+            200,
+          ),
+        );
+      }
+      return Promise.resolve(jsonResponse({ data: [], items: [] }, 200));
+    });
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={[`/management/artifacts/${ART_ONE}`]}>
+            <Link to={`/management/artifacts/${ART_TWO}`} data-testid="nav-to-art-two">
+              Go Two
+            </Link>
+            <Link to="/management/artifacts/art-missing-003" data-testid="nav-to-art-missing">
+              Go Missing
+            </Link>
+            <Routes>
+              <Route path="/management/artifacts/:id" element={<ArtifactDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    // While the primary artifact read is still pending, zero secondary reads have started.
+    await waitFor(() => {
+      expect(requestedUrls.some((u) => u.includes(`/bff/artifacts/${ART_ONE}`))).toBe(true);
+    });
+    expect(requestedUrls.filter((u) => u.includes("/bff/lineage"))).toHaveLength(0);
+    expect(requestedUrls.filter((u) => u.includes("/bff/deployments"))).toHaveLength(0);
+    expect(requestedUrls.filter((u) => u.includes("/bff/audit"))).toHaveLength(0);
+
+    // Resolve the found artifact; now secondary reads start and lineage is requested once.
+    resolveArtifactOne(jsonResponse(makeArtifactPayload(ART_ONE, "First Artifact"), 200));
+    expect((await screen.findAllByText("First Artifact")).length).toBeGreaterThanOrEqual(1);
+
+    await waitFor(() => {
+      expect(requestedUrls.filter((u) => u.includes("/bff/lineage"))).toHaveLength(1);
+    });
+    expect(requestedUrls.filter((u) => u.includes(`/bff/lineage`) && u.includes(`root_id=${ART_ONE}`))).toHaveLength(1);
+    expect(requestedUrls.filter((u) => u.includes("/bff/deployments"))).toHaveLength(1);
+    expect(requestedUrls.filter((u) => u.includes("/bff/audit"))).toHaveLength(1);
+
+    // Lineage tab shows loading state while its request is in-flight.
+    const lineageTab = await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i });
+    fireEvent.mouseDown(lineageTab);
+    fireEvent.click(lineageTab);
+    expect(await screen.findByTestId("artifact-lineage-loading")).toBeInTheDocument();
+
+    // Navigate to a second found artifact before the first lineage request resolves.
+    fireEvent.click(screen.getByTestId("nav-to-art-two"));
+    expect((await screen.findAllByText("Second Artifact")).length).toBeGreaterThanOrEqual(1);
+
+    await waitFor(() => {
+      expect(requestedUrls.filter((u) => u.includes(`/bff/lineage`) && u.includes(`root_id=${ART_TWO}`))).toHaveLength(1);
+    });
+
+    // Late resolution from the first artifact's cancelled lineage read is ignored.
+    resolveLineageOne(
+      jsonResponse(
+        {
+          data: { id: "lineage", nodes: [], edges: [], status: "unavailable", source: "unavailable" },
+          items: [],
+          meta: {
+            status: "unavailable",
+            surfaces: { lineage: { status: "unavailable", source: "unavailable" } },
+          },
+        },
+        200,
+      ),
+    );
+
+    const lineageTab2 = await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i });
+    fireEvent.mouseDown(lineageTab2);
+    fireEvent.click(lineageTab2);
+    expect(await screen.findByTestId(`lineage-node-${ART_TWO}`)).toBeInTheDocument();
+    expect(screen.queryByTestId("artifact-lineage-unavailable")).not.toBeInTheDocument();
+
+    // Navigating from a loaded artifact to a 404 artifact sends zero secondary reads for the 404 id.
+    const countBeforeMissing = requestedUrls.filter(
+      (u) => u.includes("/bff/lineage") || u.includes("/bff/deployments") || u.includes("/bff/audit"),
+    ).length;
+    fireEvent.click(screen.getByTestId("nav-to-art-missing"));
+    expect(await screen.findByText("Artifact Not Found")).toBeInTheDocument();
+    const countAfterMissing = requestedUrls.filter(
+      (u) => u.includes("/bff/lineage") || u.includes("/bff/deployments") || u.includes("/bff/audit"),
+    ).length;
+    expect(countAfterMissing).toBe(countBeforeMissing);
   });
 });
