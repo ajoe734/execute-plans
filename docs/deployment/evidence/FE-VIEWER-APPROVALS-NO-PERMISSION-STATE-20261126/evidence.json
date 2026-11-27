@@ -1,7 +1,7 @@
 {
   "schema_version": "pantheon.management-hosted-acceptance.no-permission-state-evidence.v1",
   "task_id": "FE-VIEWER-APPROVALS-NO-PERMISSION-STATE-20261126",
-  "owner": "Claude",
+  "owner": "Claude2",
   "reviewer": "Antigravity",
   "target_repo": "execute-plans",
   "merge_target": "dev",
@@ -75,6 +75,17 @@
   },
   "residual_findings": [
     "StrategyDetail (out of the listed scope) reads approvals only on demand when its governance section opens (GOVERNANCE_SECTIONS), so the crawl does not issue that read; when opened as viewer it shows its generic 'unavailable' section state rather than NoPermissionState. Follow-up candidate.",
-    "Other approvals readers outside the listed scope (Operations runtimes/other tabs, v5 LoopRunDrawer, NotificationCenter) were not changed."
-  ]
+    "Other approvals readers outside the listed scope (Operations runtimes/other tabs, v5 LoopRunDrawer, NotificationCenter) were not changed.",
+    "Root 45956958819 also reports a separate lineage pending-response defect. This task does not change or hide it; the crawl's honest-no-permission rule excuses only typed 403s with a matching rendered marker."
+  ],
+  "rerun_after_dev_merge": {
+    "timestamp": "2026-11-27T12:50:00Z",
+    "by": "Claude2 (owner reassigned from Claude after terminal quota; same Anthropic family, reviewer Antigravity remains a different family)",
+    "merged_dev": "origin/dev 1338da3a8 merged into the task branch, no conflicts",
+    "artifact_contract": "Human/Ops admitted the 13 page/component/locale paths on 2026-11-27T12:28Z; the diff against dev touches only the 16 contracted paths.",
+    "targeted": "approvalsNoPermission.test.tsx + accept-management-honest-not-found.test.ts: 2 files, 78/78 passed",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit exit 0",
+    "lint": "eslint on touched ts/tsx/mjs files exit 0",
+    "full_suite": "vitest run: 293/294 files, 3707/3708 tests. The single failure, src/test/persona-strategy-hosted-readonly.test.ts 'Trading Pulse acceptance roundtrips' (response.json: Target page, context or browser has been closed), reproduces identically on an untouched export of origin/dev 1338da3a8 in this environment; it is in scripts/accept-persona-strategy-hosted-readonly.mjs, which this task does not touch or import. Not counted as passed."
+  }
 }
