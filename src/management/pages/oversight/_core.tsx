@@ -5433,14 +5433,20 @@ function citedSourceClassLabel(t: (key: string, opts?: Record<string, unknown>) 
   });
 }
 
+function citedRowRecordedName(
+  row: Pick<ManagementCitedEvidenceRow, "label" | "refId" | "nameMissing" | "labelParts">,
+): string | null {
+  const targetDisplayName = citedPart(row.labelParts, "target_display_name");
+  if (!row.nameMissing && row.label && row.label !== row.refId) return row.label;
+  if (targetDisplayName) return targetDisplayName;
+  return null;
+}
+
 function citedRowDisplayName(
   t: (key: string, opts?: Record<string, unknown>) => string,
   row: Pick<ManagementCitedEvidenceRow, "label" | "refId" | "refKind" | "nameMissing" | "labelParts">,
 ): string {
-  const targetDisplayName = citedPart(row.labelParts, "target_display_name");
-  if (!row.nameMissing && row.label && row.label !== row.refId) return row.label;
-  if (targetDisplayName) return targetDisplayName;
-  return citedKindLabel(t, row.refKind);
+  return citedRowRecordedName(row) ?? citedKindLabel(t, row.refKind);
 }
 
 function citedEntityLabel(t: (key: string, opts?: Record<string, unknown>) => string, entityType: string): string {
@@ -5719,30 +5725,36 @@ const EvidenceCitedList = () => {
             </thead>
             <tbody>
               {rows.map((row) => {
+                const recordedName = citedRowRecordedName(row);
+                const displayName = citedRowDisplayName(t, row);
                 const kindLabel = citedKindLabel(t, row.refKind);
                 const sourceClassLabel = citedSourceClassLabel(t, row.sourceClass);
+                const showKind = recordedName !== null && displayName !== kindLabel;
                 const showSourceClass = sourceClassLabel !== "—" && sourceClassLabel !== kindLabel;
+                const showKindLine = showKind || showSourceClass;
                 return (
                   <tr key={row.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
                     <td className="min-w-0 px-3 py-3 [overflow-wrap:anywhere]">
                       {citedRowHref(row) ? (
                         <Link to={citedRowHref(row) ?? ""} className="break-words font-medium text-primary underline-offset-4 hover:underline" data-testid="evidence-cited-name">
-                          {citedRowDisplayName(t, row)}
+                          {displayName}
                         </Link>
                       ) : (
                         <span className="break-words font-medium text-foreground" data-testid="evidence-cited-name">
-                          {citedRowDisplayName(t, row)}
+                          {displayName}
                         </span>
                       )}
-                      <div className="mt-1 text-xs text-muted-foreground" data-testid="evidence-cited-kind-line">
-                        <span data-testid="evidence-cited-kind" title={t("mgmt.evidence.cited.kindHeader")}>{kindLabel}</span>
-                        {showSourceClass && (
-                          <>
-                            {" · "}
+                      {showKindLine && (
+                        <div className="mt-1 text-xs text-muted-foreground" data-testid="evidence-cited-kind-line">
+                          {showKind && (
+                            <span data-testid="evidence-cited-kind" title={t("mgmt.evidence.cited.kindHeader")}>{kindLabel}</span>
+                          )}
+                          {showKind && showSourceClass && " · "}
+                          {showSourceClass && (
                             <span data-testid="evidence-cited-source-class" title={t("mgmt.evidence.cited.sourceClassHeader")}>{sourceClassLabel}</span>
-                          </>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-1 truncate font-mono text-xs text-muted-foreground" data-testid="evidence-cited-ref-id" title={row.refId}>{row.refId}</div>
                       {row.nameMissing && (
                         <div className="mt-1 text-xs text-muted-foreground">{t("mgmt.evidence.cited.nameMissing")}</div>

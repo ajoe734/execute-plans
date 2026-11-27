@@ -1792,9 +1792,8 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
 
     const zhKindLines = screen.getAllByTestId("evidence-cited-kind-line").map((el) => el.textContent);
     expect(zhKindLines).toEqual([
-      "會議行動單",
       "策略（登錄） · 登錄紀錄",
-      "登錄項目 · 登錄紀錄",
+      "登錄紀錄",
     ]);
     expect(screen.queryByText("會議行動單 · 會議行動單")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("evidence-cited-name")[0]).toHaveTextContent("會議行動單");
@@ -1820,9 +1819,8 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
     expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("Page 1 of 25 · 500 of 1754 listed");
     const enKindLines = screen.getAllByTestId("evidence-cited-kind-line").map((el) => el.textContent);
     expect(enKindLines).toEqual([
-      "Meeting action ticket",
       "Strategy (registry) · Registry record",
-      "Registry entry · Registry record",
+      "Registry record",
     ]);
     expect(screen.queryByText("Meeting action ticket · Meeting action ticket")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("evidence-cited-name")[0]).toHaveTextContent("Meeting action ticket");
@@ -1861,6 +1859,128 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
     const { unmount: unmountEnUnchanged } = renderEvidence("/management/evidence");
     expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("Page 1 · Total 4");
     unmountEnUnchanged();
+  });
+
+  it("FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127: shows the kind label once for an unnamed meeting_action_ticket row while keeping the id line, name-missing note, differing source class on unnamed rows, and the kind line on a named registry_entry row", async () => {
+    const hostedMeetingActionRefId = "facts:meeting_action_ticket:rt-action-16f4b51de06f6629684a6ab4402dbc5a";
+    const namedRegistryRefId = "reg-strategy-spec-persona-715f5875971f2e342d8f";
+    const unnamedRegistryRefId = "reg-strategy-spec-persona-a81b4fd15944698341aa";
+    const raw = citedPayload() as {
+      data: {
+        items: Array<Record<string, unknown>>;
+      };
+    };
+    raw.data.items = [
+      {
+        id: hostedMeetingActionRefId,
+        ref_id: hostedMeetingActionRefId,
+        ref_kind: "meeting_action_ticket",
+        source_owner: null,
+        label: hostedMeetingActionRefId,
+        name_missing: true,
+        label_parts: {},
+        source_class: "meeting_action_ticket",
+        resolved_link: null,
+        route_href: null,
+        cited_as: [hostedMeetingActionRefId],
+        cited_by: [],
+        citation_count: 1,
+        last_cited_at: "2026-11-27T16:40:00Z",
+        redacted: false,
+      },
+      {
+        id: namedRegistryRefId,
+        ref_id: namedRegistryRefId,
+        ref_kind: "registry_entry",
+        source_owner: "registry",
+        label: "TW momentum 20d breakout",
+        name_missing: false,
+        label_parts: { artifact_id: ART_B },
+        source_class: "registry_entry",
+        resolved_link: { route_href: `/management/artifacts/${ART_B}`, evidence_ref_id: null },
+        route_href: `/management/artifacts/${ART_B}`,
+        cited_as: [`facts:registry_entry:${namedRegistryRefId}`],
+        cited_by: [],
+        citation_count: 1,
+        last_cited_at: "2026-11-27T16:39:00Z",
+        redacted: false,
+      },
+      {
+        id: unnamedRegistryRefId,
+        ref_id: unnamedRegistryRefId,
+        ref_kind: "registry_entry",
+        source_owner: "registry",
+        label: unnamedRegistryRefId,
+        name_missing: true,
+        label_parts: {},
+        source_class: "registry_entry",
+        resolved_link: null,
+        route_href: null,
+        cited_as: [unnamedRegistryRefId],
+        cited_by: [],
+        citation_count: 1,
+        last_cited_at: "2026-11-27T16:38:00Z",
+        redacted: false,
+      },
+    ];
+    mocks.useV5Live.mockReturnValue({
+      data: adaptManagementCitedEvidence(raw),
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = renderEvidence("/management/evidence");
+
+    const zhRows = screen.getAllByTestId("evidence-route-row");
+    expect(zhRows).toHaveLength(3);
+
+    const zhMeetingActionFirstCell = zhRows[0].querySelector("td:first-child")!;
+    expect(zhMeetingActionFirstCell.querySelector("[data-testid='evidence-cited-name']")).toHaveTextContent("會議行動單");
+    expect(zhMeetingActionFirstCell.querySelector("[data-testid='evidence-cited-kind-line']")).toBeNull();
+    expect(zhMeetingActionFirstCell.querySelector("[data-testid='evidence-cited-ref-id']")).toHaveTextContent(hostedMeetingActionRefId);
+    expect(zhMeetingActionFirstCell).toHaveTextContent("這筆證據沒有記錄名稱。");
+    expect(zhMeetingActionFirstCell.textContent?.match(/會議行動單/g)).toEqual(["會議行動單"]);
+
+    const zhNamedRegistryFirstCell = zhRows[1].querySelector("td:first-child")!;
+    expect(zhNamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-name']")).toHaveTextContent("TW momentum 20d breakout");
+    expect(zhNamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-kind-line']")).toHaveTextContent("登錄項目 · 登錄紀錄");
+    expect(zhNamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-kind']")).toHaveTextContent("登錄項目");
+    expect(zhNamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-source-class']")).toHaveTextContent("登錄紀錄");
+    expect(zhNamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-ref-id']")).toHaveTextContent(namedRegistryRefId);
+    expect(zhNamedRegistryFirstCell).not.toHaveTextContent("這筆證據沒有記錄名稱。");
+
+    const zhUnnamedRegistryFirstCell = zhRows[2].querySelector("td:first-child")!;
+    expect(zhUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-name']")).toHaveTextContent("登錄項目");
+    expect(zhUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-kind']")).toBeNull();
+    expect(zhUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-kind-line']")).toHaveTextContent("登錄紀錄");
+    expect(zhUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-source-class']")).toHaveTextContent("登錄紀錄");
+    expect(zhUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-ref-id']")).toHaveTextContent(unnamedRegistryRefId);
+    expect(zhUnnamedRegistryFirstCell).toHaveTextContent("這筆證據沒有記錄名稱。");
+    expect(zhUnnamedRegistryFirstCell.textContent?.match(/登錄項目/g)).toEqual(["登錄項目"]);
+    unmountZh();
+
+    await i18n.changeLanguage("en-US");
+    const { unmount: unmountEn } = renderEvidence("/management/evidence");
+
+    const enRows = screen.getAllByTestId("evidence-route-row");
+    const enMeetingActionFirstCell = enRows[0].querySelector("td:first-child")!;
+    expect(enMeetingActionFirstCell.querySelector("[data-testid='evidence-cited-name']")).toHaveTextContent("Meeting action ticket");
+    expect(enMeetingActionFirstCell.querySelector("[data-testid='evidence-cited-kind-line']")).toBeNull();
+    expect(enMeetingActionFirstCell.querySelector("[data-testid='evidence-cited-ref-id']")).toHaveTextContent(hostedMeetingActionRefId);
+    expect(enMeetingActionFirstCell).toHaveTextContent("No name is recorded for this reference.");
+    expect(enMeetingActionFirstCell.textContent?.match(/Meeting action ticket/g)).toEqual(["Meeting action ticket"]);
+
+    const enNamedRegistryFirstCell = enRows[1].querySelector("td:first-child")!;
+    expect(enNamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-name']")).toHaveTextContent("TW momentum 20d breakout");
+    expect(enNamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-kind-line']")).toHaveTextContent("Registry entry · Registry record");
+
+    const enUnnamedRegistryFirstCell = enRows[2].querySelector("td:first-child")!;
+    expect(enUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-name']")).toHaveTextContent("Registry entry");
+    expect(enUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-kind']")).toBeNull();
+    expect(enUnnamedRegistryFirstCell.querySelector("[data-testid='evidence-cited-kind-line']")).toHaveTextContent("Registry record");
+    expect(enUnnamedRegistryFirstCell.textContent?.match(/Registry entry/g)).toEqual(["Registry entry"]);
+    unmountEn();
   });
 });
 

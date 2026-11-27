@@ -8,7 +8,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
   "extends": {
     "bundle_path": "services/control-plane/specs/agora/bundle_index.v1_12.json",
     "bundle_version": "1.12",
-    "bundle_index_sha256": "f5e9c29dfe7ca6b026bb6607a668e26e32be41cea75c0838e803c14b5ac16f49"
+    "bundle_index_sha256": "10a2405af608446e7fe722198568c7be73be39a0e738b300d2a61b4c16c3a0e9"
   },
   "files": {
     "specs/agora/agora_user_scope.schema.json": "ae660aa7719ded37ca8b41bfc6ac287d1eae0bb85a8389b08d069c528a934dee",
@@ -40,7 +40,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
     "specs/agora/v3/capability_manifest_v1_2.json": "834a21b1d907c1dab188274400b0980ab9b8fe1e578ce9a60244d229ffc47722",
     "openapi/agora_v1_2.openapi.yaml": "5c5ef9e4d7d382c7561d7cf22b26404c4bcf8a9a48ddaa185ccaf70f004c8520",
     "specs/agora/v4/capability_manifest_v1_3.json": "d21ac91558f9205732d6cffffe1fca86efad59bf1824e8dabe95fb4b585ca041",
-    "specs/agora/v4/governed_intent_handoff.schema.json": "d16723d9de8c469905859e62d9904561ce96c51ebce9992cd8927a35e79092db",
+    "specs/agora/v4/governed_intent_handoff.schema.json": "1ed42efa1b5e6e894edd7c15abebad4260a29d0954bc862b9c5ee8ef26d7d4e6",
     "specs/agora/v4/research_plan_execution.schema.json": "cc97bc9e119473c4ae9d2656f9629843645e73d09ab7ba2fa46bbd190c1cbe4c",
     "specs/agora/v4/research_run_projection.schema.json": "305bac84f1075bc3448238bf6157bcc1f7d39b1e18501cdef7dd39035f66c887",
     "specs/agora/v4/strategy_readiness.schema.json": "5ab691bb8c5fa866355092d44f2a6a197eb3c77c1dff814e7fa5e65cb2fbb816",
@@ -84,7 +84,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
     "specs/agora/v13/candidate_member_truth_projection.schema.json": "7ed59957adc97dd48af20aab19f8476acb84c29e8832d3ad076fe8625e610b00",
     "specs/agora/v13/capability_manifest_v1_12.json": "d35999b82e6b606f22de5baf4e6d260f03ce85d0cc871f5c1aa68145a0543188",
     "openapi/agora_v1_12.openapi.yaml": "88a707090a1e58ebe3159d530ab437f6f0bb0d130f26e396edf6f1de3678f53f",
-    "specs/agora/v14/capability_manifest_v1_13.json": "6f9701fdf5a3302c4fd9f5ccd19a89dcbf0cfe8c76fb6627e45c7a1a96bd0bf8",
+    "specs/agora/v14/capability_manifest_v1_13.json": "9275d6a2fbcaa06cce334a9619cb33bcb5dbcadb38e9f3ada0ddb29bc70a867d",
     "openapi/agora_v1_13.openapi.yaml": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087"
   },
   "requiredDefinitionChecksums": {
@@ -2521,7 +2521,7 @@ export interface GovernedIntentHandoff {
   "strategy_id": string;
   "strategy_spec_registry_id": string;
   "requested_by": actor;
-  "target_queue"?: "shadow_research" | "management_governance" | "promotion_review";
+  "target_queue"?: "management_governance" | "promotion_review";
   "required_gate_refs"?: Array<string>;
   "action_proposal"?: {
     "action"?: "enter" | "add" | "reduce" | "exit" | "review";
