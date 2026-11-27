@@ -20,6 +20,8 @@ import {
 } from "@/lib/bff-v1/agora/performance";
 import {
   getTradingRoom,
+  listDecisionEvents,
+  type TradingDecisionEvent,
   type TradingRoomAggregate,
   type TradingRoomPerformanceAttributionResponse,
   type TradingRoomPerformanceAttributionRow,
@@ -28,6 +30,8 @@ import {
 import { BffError } from "@/lib/bff-v1/errors";
 import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import { cn } from "@/lib/utils";
+import { RuleVsHumanComparison } from "./RuleVsHumanComparison";
+import { ShadowComparisonPanel } from "@/agora/pages/trading-room/ShadowComparisonPanel";
 
 type LoadState =
   | { status: "loading" }
@@ -78,24 +82,24 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function formatCurrency(value: unknown, missing = "not reported"): string {
+function formatCurrency(value: unknown, missing: string): string {
   const number = finiteNumber(value);
   return number === undefined ? missing : currencyFormatter.format(number);
 }
 
-function formatNumber(value: unknown, missing = "not reported"): string {
+function formatNumber(value: unknown, missing: string): string {
   const number = finiteNumber(value);
   return number === undefined ? missing : numberFormatter.format(number);
 }
 
-function formatPercent(value: unknown, missing = "not reported"): string {
+function formatPercent(value: unknown, missing: string): string {
   const number = finiteNumber(value);
   if (number === undefined) return missing;
   const normalized = Math.abs(number) <= 1 ? number * 100 : number;
   return `${normalized.toFixed(2)}%`;
 }
 
-function formatDateTime(value: unknown, missing = "not reported", locale = "en-US"): string {
+function formatDateTime(value: unknown, missing: string, locale = "zh-TW"): string {
   if (typeof value !== "string" || !value.trim()) return missing;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
@@ -477,6 +481,7 @@ function StrategyPerformanceLoaded({
   const [activeTab, setActiveTab] = useState<"perf" | "intv" | "hist">("perf");
   const [mobilePane, setMobilePane] = useState<"decision" | "outcome" | "strategies">("decision");
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
+  const [decisionEvents, setDecisionEvents] = useState<TradingDecisionEvent[]>([]);
   const [pendingAction, setPendingAction] = useState<{ suggestionId: string; action: SuggestionAction } | null>(null);
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
   const [actionReasons, setActionReasons] = useState<Record<string, string>>({});
@@ -514,6 +519,24 @@ function StrategyPerformanceLoaded({
       });
     return () => { cancelled = true; };
   }, [activeRow, period]);
+
+  // Owner-scoped decision events pair each intervention with the rule's
+  // suggestion; a failed read leaves the comparison to say 未回報.
+  useEffect(() => {
+    let cancelled = false;
+    listDecisionEvents()
+      .then(({ items }) => {
+        if (!cancelled) setDecisionEvents(items);
+      })
+      .catch(() => {
+        if (!cancelled) setDecisionEvents([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+  const strategyDecisionEvents = useMemo(
+    () => decisionEvents.filter((event) => !activeRow || event.strategy_id === activeRow.strategyId),
+    [decisionEvents, activeRow],
+  );
 
   const projection = detailState.status === "ready" ? detailState.envelope.data : null;
   const detailDisplayState = detailState.status === "ready"
@@ -783,6 +806,7 @@ function StrategyPerformanceLoaded({
                     {(["perf", "intv", "hist"] as const).map((tab) => (
                       <button
                         aria-pressed={activeTab === tab}
+                        data-testid={`performance-tab-${tab}`}
                         className={cn("rounded-full px-3.5 py-1.5 text-xs font-medium transition-all", activeTab === tab ? "bg-[#1e2330] text-[#f0ece4] shadow-sm" : "text-[#8c96a6] hover:text-[#f0ece4]")}
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -857,19 +881,25 @@ function StrategyPerformanceLoaded({
                           {Object.keys(projection.interventions.aggregate.by_status).length > 0 ? ` · ${Object.entries(projection.interventions.aggregate.by_status).map(([status, count]) => `${status}: ${count}`).join(" · ")}` : ""}
                         </div>
                       ) : null}
-                      {projection.interventions.items.length === 0 ? <p className="text-xs italic text-[#8c96a6]">{t("agora.performance.sectionEmpty")}</p> : (
-                        <div className="flex flex-col gap-3">
-                          {projection.interventions.items.map((item) => (
-                            <article className="rounded-xl border border-[#2a2e38] bg-[#101318]/50 p-3" key={item.intervention_id}>
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="text-xs font-bold text-[#f0ece4]">{item.kind}</div>
-                                <span className="rounded border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[10px] text-sky-200">{item.status}</span>
-                              </div>
-                              <div className="mt-2 text-[10px] text-[#8c96a6]">{formatDateTime(item.occurred_at, missing, i18n.resolvedLanguage)} · {t("agora.performance.provenance", { value: item.source_id })}</div>
-                            </article>
-                          ))}
-                        </div>
-                      )}
+                      <section aria-labelledby="rule-vs-human-heading" className="mt-1">
+                        <h3 className="text-xs font-bold text-[#f0ece4]" id="rule-vs-human-heading">{t("agora.performance.ruleVsHuman.title")}</h3>
+                        <p className="mb-3 mt-1 text-[10.5px] text-[#8c96a6]">{t("agora.performance.ruleVsHuman.subtitle")}</p>
+                        <RuleVsHumanComparison
+                          decisionEvents={strategyDecisionEvents}
+                          formatDateTime={(value) => formatDateTime(value, missing, i18n.resolvedLanguage)}
+                          interventions={projection.interventions.items}
+                          journeys={projection.execution_history.items}
+                        />
+                      </section>
+                      <section aria-labelledby="shadow-comparison-heading" className="mt-4" data-testid="performance-shadow-section">
+                        <h3 className="text-xs font-bold text-[#f0ece4]" id="shadow-comparison-heading">{t("agora.performance.shadow.title")}</h3>
+                        <p className="mb-3 mt-1 text-[10.5px] text-[#8c96a6]">{t("agora.performance.shadow.subtitle")}</p>
+                        {strategyDecisionEvents.length === 0 ? (
+                          <p className="text-xs italic text-[#8c96a6]" data-testid="performance-shadow-empty">{t("agora.performance.shadow.noDecisions")}</p>
+                        ) : (
+                          <ShadowComparisonPanel decisionEvents={strategyDecisionEvents} />
+                        )}
+                      </section>
                     </div>
                   ) : null}
 

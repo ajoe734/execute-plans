@@ -19,6 +19,7 @@ import {
   listCandidatePoolMembers,
   reviewCandidateMember,
 } from "@/lib/bff-v1/agora/candidatePool";
+import "@/i18n";
 
 const mockGetScore = getCandidatePoolScore as ReturnType<typeof vi.fn>;
 const mockListMembers = listCandidatePoolMembers as ReturnType<typeof vi.fn>;
@@ -242,7 +243,7 @@ describe("CandidateReviewDrawer — loaded state", () => {
     renderOpen();
     await waitFor(() => {
       const bandEl = screen.getByTestId("candidate-band-cand-001");
-      expect(bandEl.textContent).toContain("priority");
+      expect(bandEl.textContent).toContain("優先審查");
     });
   });
 
@@ -387,7 +388,7 @@ describe("CandidateReviewDrawer — decision flow", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("candidate-decision-readback-cand-001")).toHaveTextContent(
-        "canonical candidate pool",
+        "已從正式候選池讀回決定。",
       );
     });
     expect(mockListMembers).toHaveBeenCalledTimes(2);
@@ -505,3 +506,17 @@ describe("CandidateReviewDrawer — score decomposition missing_policy", () => {
     ).toContain("cap_final_score");
   });
 });
+
+describe("CandidateReviewDrawer — zh-TW copy", () => {
+  it("renders the drawer title, columns, and footer in zh-TW", async () => {
+    render(<CandidateReviewDrawer poolId="pool-001" open onClose={() => undefined} />);
+    await screen.findByTestId("candidate-review-table");
+    expect(screen.getByText("候選標的審查")).toBeTruthy();
+    for (const heading of ["候選標的", "有效分數", "主要加分", "主要扣分", "分級", "決定"]) {
+      expect(screen.getByRole("columnheader", { name: heading })).toBeTruthy();
+    }
+    expect(screen.getByText("候選決定使用 AG-BE-CP-001 正式路徑，不會下單。")).toBeTruthy();
+    expect(screen.queryByText("Candidate Review")).toBeNull();
+  });
+});
+

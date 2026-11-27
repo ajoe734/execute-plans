@@ -17,7 +17,8 @@
  * No order routing, no capital binding — review/score surface only.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   getCandidatePoolScore,
   listCandidatePoolMembers,
@@ -52,14 +53,6 @@ const CATEGORY_COLOR: Record<string, string> = {
   custom: "#374151",
 };
 
-const REVIEW_DECISION_LABEL: Record<CandidateReviewDecision, string> = {
-  approve_for_monitoring: "Add to Monitoring",
-  send_to_shadow: "Send to Shadow",
-  needs_more_research: "Needs Research",
-  park: "Park",
-  reject: "Reject",
-};
-
 const REVIEW_DECISION_COLOR: Record<
   CandidateReviewDecision,
   { bg: string; text: string; border: string }
@@ -84,6 +77,7 @@ function ScoreDecompositionPanel({
   candidateTitle,
   onClose,
 }: ScoreDecompositionProps): JSX.Element {
+  const { t } = useTranslation();
   const positiveComponents = score.components.filter(
     (c) => c.direction === "higher_better",
   );
@@ -121,13 +115,13 @@ function ScoreDecompositionPanel({
       >
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a" }}>
-            Score Decomposition
+            {t("agora.tradingRoom.candidateReview.decomposition")}
           </div>
           <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
             {candidateTitle}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-            Recipe: {score.recipe_id} v{score.recipe_version}
+            {t("agora.tradingRoom.candidateReview.recipe", { id: score.recipe_id, version: score.recipe_version })}
           </div>
         </div>
         <button
@@ -142,7 +136,7 @@ function ScoreDecompositionPanel({
             lineHeight: 1,
             padding: 4,
           }}
-          aria-label="Close decomposition"
+          aria-label={t("agora.tradingRoom.candidateReview.closeDecomposition")}
         >
           ×
         </button>
@@ -161,15 +155,15 @@ function ScoreDecompositionPanel({
         }}
       >
         {[
-          { label: "Raw Score", value: score.raw_score.toFixed(1), testId: "raw-score" },
-          { label: "Penalty", value: score.penalty_score.toFixed(1), testId: "penalty-score" },
+          { label: t("agora.tradingRoom.candidateReview.rawScore"), value: score.raw_score.toFixed(1), testId: "raw-score" },
+          { label: t("agora.tradingRoom.candidateReview.penalty"), value: score.penalty_score.toFixed(1), testId: "penalty-score" },
           {
-            label: "Confidence",
+            label: t("agora.tradingRoom.candidateReview.confidence"),
             value: `${(score.evidence_confidence * 100).toFixed(0)}%`,
             testId: "evidence-confidence",
           },
           {
-            label: "Effective Score",
+            label: t("agora.tradingRoom.candidateReview.effectiveScore"),
             value: score.effective_score.toFixed(1),
             testId: "effective-score",
           },
@@ -200,7 +194,7 @@ function ScoreDecompositionPanel({
                 marginBottom: 8,
               }}
             >
-              Positive Components
+              {t("agora.tradingRoom.candidateReview.positiveComponents")}
             </div>
             {positiveComponents.map((c) => (
               <ComponentRow key={c.component_id} component={c} candidateId={score.candidate_id} />
@@ -220,7 +214,7 @@ function ScoreDecompositionPanel({
                 marginBottom: 8,
               }}
             >
-              Penalty Components
+              {t("agora.tradingRoom.candidateReview.penaltyComponents")}
             </div>
             {penaltyComponents.map((c) => (
               <ComponentRow key={c.component_id} component={c} candidateId={score.candidate_id} />
@@ -248,7 +242,7 @@ function ScoreDecompositionPanel({
                 textTransform: "uppercase",
               }}
             >
-              Score Blockers / Caps
+              {t("agora.tradingRoom.candidateReview.blockers")}
             </div>
             {score.blockers.map((b, i) => (
               <div key={i} style={{ fontSize: 12, color: "#991b1b" }}>
@@ -272,6 +266,7 @@ interface ComponentRowProps {
 }
 
 function ComponentRow({ component: c, candidateId }: ComponentRowProps): JSX.Element {
+  const { t } = useTranslation();
   const catColor = CATEGORY_COLOR[c.category] ?? "#374151";
   const isMissing = c.normalized_value === null;
 
@@ -308,11 +303,11 @@ function ComponentRow({ component: c, candidateId }: ComponentRowProps): JSX.Ele
         }}
       >
         <span>
-          Raw:{" "}
+          {t("agora.tradingRoom.candidateReview.raw")}
           <strong>{c.raw_value != null ? c.raw_value.toFixed(4) : "—"}</strong>
         </span>
         <span>
-          Norm:{" "}
+          {t("agora.tradingRoom.candidateReview.norm")}
           <strong
             data-testid={`component-normalized-${candidateId}-${c.component_id}`}
           >
@@ -320,10 +315,10 @@ function ComponentRow({ component: c, candidateId }: ComponentRowProps): JSX.Ele
           </strong>
         </span>
         <span>
-          Weight: <strong>{(c.weight * 100).toFixed(0)}%</strong>
+          {t("agora.tradingRoom.candidateReview.weight")}<strong>{(c.weight * 100).toFixed(0)}%</strong>
         </span>
         <span>
-          Transform: <strong>{c.transform}</strong>
+          {t("agora.tradingRoom.candidateReview.transform")}<strong>{c.transform}</strong>
         </span>
       </div>
 
@@ -332,15 +327,16 @@ function ComponentRow({ component: c, candidateId }: ComponentRowProps): JSX.Ele
           data-testid={`component-missing-${candidateId}-${c.component_id}`}
           style={{ fontSize: 11, color: "#d97706", marginTop: 2 }}
         >
-          Policy: {c.missing_policy}
-          {isMissing ? " (missing)" : ""}
+          {t("agora.tradingRoom.candidateReview.policy", { value: c.missing_policy })}
+          {isMissing ? t("agora.tradingRoom.candidateReview.missing") : ""}
         </div>
       )}
 
       {c.evidence_refs.length > 0 && (
         <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-          Evidence: {c.evidence_refs.slice(0, 2).join(", ")}
-          {c.evidence_refs.length > 2 ? ` +${c.evidence_refs.length - 2}` : ""}
+          {t("agora.tradingRoom.candidateReview.evidence", {
+            refs: `${c.evidence_refs.slice(0, 2).join(", ")}${c.evidence_refs.length > 2 ? ` +${c.evidence_refs.length - 2}` : ""}`,
+          })}
         </div>
       )}
     </div>
@@ -369,6 +365,7 @@ function CandidateDecisionRow({
   poolEtag,
   onDecisionRecorded,
 }: CandidateDecisionRowProps): JSX.Element {
+  const { t } = useTranslation();
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
   const [confirmedDecision, setConfirmedDecision] = useState<CandidateReviewDecision | null>(null);
@@ -409,7 +406,7 @@ function CandidateDecisionRow({
       setRationale("");
       onDecisionRecorded?.(artifactId, pendingDecision);
     } catch (err) {
-      setCallError(err instanceof Error ? err.message : "Decision failed");
+      setCallError(err instanceof Error ? err.message : t("agora.tradingRoom.candidateReview.decisionFailed"));
       setCallState("error");
     }
   }
@@ -427,7 +424,10 @@ function CandidateDecisionRow({
         data-testid={`candidate-decision-confirmed-${artifactId}`}
         style={{ fontSize: 12, color: "#16a34a", fontWeight: 500 }}
       >
-        {REVIEW_DECISION_LABEL[confirmedDecision]} recorded for {candidateTitle}
+        {t("agora.tradingRoom.candidateReview.recorded", {
+          decision: t(`agora.tradingRoom.candidateReview.decisions.${confirmedDecision}`),
+          title: candidateTitle,
+        })}
       </span>
     );
   }
@@ -467,7 +467,7 @@ function CandidateDecisionRow({
                 fontWeight: isSelected ? 600 : 400,
               }}
             >
-              {REVIEW_DECISION_LABEL[decision]}
+              {t(`agora.tradingRoom.candidateReview.decisions.${decision}`)}
             </button>
           );
         })}
@@ -479,7 +479,7 @@ function CandidateDecisionRow({
             <input
               data-testid={`candidate-rationale-${artifactId}`}
               type="text"
-              placeholder="Rationale required for park/reject"
+              placeholder={t("agora.tradingRoom.candidateReview.rationalePlaceholder")}
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
               style={{
@@ -506,7 +506,7 @@ function CandidateDecisionRow({
               fontWeight: 500,
             }}
           >
-            {callState === "loading" ? "Saving…" : "Confirm"}
+            {callState === "loading" ? t("agora.tradingRoom.candidateReview.saving") : t("agora.tradingRoom.candidateReview.confirm")}
           </button>
           <button
             data-testid={`candidate-cancel-${artifactId}`}
@@ -524,7 +524,7 @@ function CandidateDecisionRow({
               color: "#64748b",
             }}
           >
-            Cancel
+            {t("agora.tradingRoom.candidateReview.cancel")}
           </button>
         </div>
       )}
@@ -560,6 +560,7 @@ export function CandidateReviewDrawer({
   onClose,
   onDecisionRecorded,
 }: CandidateReviewDrawerProps): JSX.Element | null {
+  const { t } = useTranslation();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [scores, setScores] = useState<CandidateScoreResult[]>([]);
   const [members, setMembers] = useState<CandidatePoolMember[]>([]);
@@ -696,10 +697,10 @@ export function CandidateReviewDrawer({
         >
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a" }}>
-              Candidate Review
+              {t("agora.tradingRoom.candidateReview.title")}
             </div>
             <div style={{ fontSize: 12, color: "#64748b", marginTop: 1 }}>
-              Pool: {poolId}
+              {t("agora.tradingRoom.candidateReview.pool", { id: poolId })}
             </div>
           </div>
           <button
@@ -714,7 +715,7 @@ export function CandidateReviewDrawer({
               lineHeight: 1,
               padding: 4,
             }}
-            aria-label="Close candidate review"
+            aria-label={t("agora.tradingRoom.candidateReview.close")}
           >
             ×
           </button>
@@ -735,10 +736,10 @@ export function CandidateReviewDrawer({
             }}
           >
             {decisionReadback.state === "loading"
-              ? "Reading back the recorded decision…"
+              ? t("agora.tradingRoom.candidateReview.readbackLoading")
               : decisionReadback.state === "confirmed"
-                ? "Decision read back from the canonical candidate pool."
-                : "Decision was recorded, but its canonical readback is unavailable."}
+                ? t("agora.tradingRoom.candidateReview.readbackConfirmed")
+                : t("agora.tradingRoom.candidateReview.readbackUnavailable")}
           </div>
         )}
 
@@ -749,7 +750,7 @@ export function CandidateReviewDrawer({
               data-testid="candidate-review-drawer-loading"
               style={{ padding: 24, fontSize: 13, color: "#94a3b8", textAlign: "center" }}
             >
-              Loading candidate scores…
+              {t("agora.tradingRoom.candidateReview.loading")}
             </div>
           )}
 
@@ -758,7 +759,7 @@ export function CandidateReviewDrawer({
               data-testid="candidate-review-drawer-error"
               style={{ padding: 24, fontSize: 13, color: "#dc2626", textAlign: "center" }}
             >
-              Failed to load candidate pool data.
+              {t("agora.tradingRoom.candidateReview.loadFailed")}
             </div>
           )}
 
@@ -767,7 +768,7 @@ export function CandidateReviewDrawer({
               data-testid="candidate-review-drawer-empty"
               style={{ padding: 24, fontSize: 13, color: "#94a3b8", textAlign: "center" }}
             >
-              No scored candidates in this pool.
+              {t("agora.tradingRoom.candidateReview.empty")}
             </div>
           )}
 
@@ -790,28 +791,28 @@ export function CandidateReviewDrawer({
                     #
                   </th>
                   <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#64748b" }}>
-                    Candidate
+                    {t("agora.tradingRoom.candidateReview.columns.candidate")}
                   </th>
                   <th style={{ textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#64748b", width: 100 }}>
-                    Eff. Score
+                    {t("agora.tradingRoom.candidateReview.columns.effectiveScore")}
                   </th>
                   <th style={{ textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#64748b", width: 80 }}>
-                    Confidence
+                    {t("agora.tradingRoom.candidateReview.columns.confidence")}
                   </th>
                   <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#64748b" }}>
-                    Top Drivers
+                    {t("agora.tradingRoom.candidateReview.columns.topDrivers")}
                   </th>
                   <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#64748b" }}>
-                    Top Penalties
+                    {t("agora.tradingRoom.candidateReview.columns.topPenalties")}
                   </th>
                   <th style={{ textAlign: "center", padding: "8px 12px", fontWeight: 600, color: "#64748b", width: 60 }}>
-                    DQ
+                    {t("agora.tradingRoom.candidateReview.columns.dq")}
                   </th>
                   <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#64748b", width: 100 }}>
-                    Band
+                    {t("agora.tradingRoom.candidateReview.columns.band")}
                   </th>
                   <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#64748b" }}>
-                    Decision
+                    {t("agora.tradingRoom.candidateReview.columns.decision")}
                   </th>
                 </tr>
               </thead>
@@ -856,7 +857,7 @@ export function CandidateReviewDrawer({
                               isSelected ? null : score.candidate_id,
                             )
                           }
-                          title="Click to view score decomposition"
+                          title={t("agora.tradingRoom.candidateReview.openDecomposition")}
                           style={{
                             background: "none",
                             border: "none",
@@ -968,7 +969,7 @@ export function CandidateReviewDrawer({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {score.band.replace("_", " ")}
+                          {t(`agora.tradingRoom.candidateReview.bands.${score.band}`, { defaultValue: score.band.replace(/_/g, " ") })}
                         </span>
                       </td>
 
@@ -1003,7 +1004,7 @@ export function CandidateReviewDrawer({
             flexShrink: 0,
           }}
         >
-          <span>Candidate decisions use the AG-BE-CP-001 canonical route. No order routing.</span>
+          <span>{t("agora.tradingRoom.candidateReview.footer")}</span>
           <span style={{ color: "#22c55e", fontWeight: 500 }}>
             candidate_pool_bff_request_only_no_order_route
           </span>

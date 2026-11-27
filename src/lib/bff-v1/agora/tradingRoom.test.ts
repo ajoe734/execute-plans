@@ -20,7 +20,6 @@ import {
   getTradingRoomWorkspaceByStrategyWithMeta,
   getTradingRoomWorkspaceWithMeta,
   getTradingRoomWorkspaceProposal,
-  getTradingRoomPerformanceAttribution,
   listDecisionEvents,
   listTradingRoomWorkspaceVersions,
   patchTradingRoomWorkspaceLayout,
@@ -36,7 +35,10 @@ import {
   classifyShadowSettlementSource,
   isPaperProxySettlement,
   sanitizeShadowExecutionLabel,
+  subscribeTradingRoomStream,
+  type TradingRoomStreamMode,
 } from "./tradingRoom";
+import { getAgoraPerformanceAttribution } from "./performance";
 import { BffError } from "../errors";
 import { getAuthProvider, setAuthProvider } from "../headers";
 import type { TradingRoomWidgetSpec } from "./tradingRoomTypes";
@@ -492,7 +494,7 @@ describe("Authorization header forwarding", () => {
   });
 });
 
-describe("getTradingRoomPerformanceAttribution", () => {
+describe("getAgoraPerformanceAttribution (Agora owner route, not Management)", () => {
   it("reads strategy attribution through the BFF with auth headers and no mutation headers", async () => {
     setAuthProvider({
       getToken: () => "live-token-performance",
@@ -524,14 +526,12 @@ describe("getTradingRoomPerformanceAttribution", () => {
     );
     globalThis.fetch = fetchMock;
 
-    const result = await getTradingRoomPerformanceAttribution(
-      { pageSize: 25, period: "latest" },
-      BASE,
-    );
+    const result = await getAgoraPerformanceAttribution({ pageSize: 25, period: "latest" });
 
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BASE}/bff/management/performance-attribution/by-strategy?period=latest&page_size=25`,
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(
+      /\/bff\/agora\/trading-room\/performance-attribution\/by-strategy\?period=latest&page_size=25$/,
     );
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("/bff/management/");
     expect(fetchMock.mock.calls[0][1].method).toBe("GET");
     const headers = fetchMock.mock.calls[0][1].headers as Record<
       string,
@@ -541,7 +541,8 @@ describe("getTradingRoomPerformanceAttribution", () => {
     expect(headers["X-Tenant-Id"]).toBe("tenant-performance");
     expect(headers["If-Match"]).toBeUndefined();
     expect(headers["Idempotency-Key"]).toBeUndefined();
-    expect(headers["X-Request-Id"]).toBeUndefined();
+    // The shared Agora read client sends a tracing X-Request-Id on every
+    // request; reads still carry no mutation preconditions.
     expect(result.meta.policy).toBe("read_only_performance_attribution");
   });
 
@@ -558,17 +559,14 @@ describe("getTradingRoomPerformanceAttribution", () => {
     globalThis.fetch = fetchMock;
 
     await expect(
-      getTradingRoomPerformanceAttribution(
-        { pageSize: 10, pageToken: "cursor-2", period: "30d" },
-        BASE,
-      ),
+      getAgoraPerformanceAttribution({ pageSize: 10, pageToken: "cursor-2", period: "30d" }),
     ).rejects.toMatchObject({
       code: "BACKEND_UNAVAILABLE",
       message: "attribution source unavailable",
       status: 503,
     });
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BASE}/bff/management/performance-attribution/by-strategy?period=30d&page_size=10&page_token=cursor-2`,
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(
+      /\/bff\/agora\/trading-room\/performance-attribution\/by-strategy\?period=30d&page_size=10&page_token=cursor-2$/,
     );
   });
 });
@@ -1871,3 +1869,162 @@ describe("system suggestions & shadow comparison BFF client (FE-AGORA-SYSTEM-SUG
     expect(await getTradingRoomDecisionLock("evt-missing", BASE)).toBeNull();
   });
 });
+
+describe("getTradingRoomShadowComparison — Agora owner route", () => {
+  it("reads the owner-scoped route, never the Management attribution route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        status: "degraded",
+        owner: "attribution+agora",
+        empty: false,
+        data: {
+          decision_id: "hd-1",
+          decision_event_id: "evt/1",
+          comparison_state: "pending_settlement",
+          account_id: "acct-1",
+          arms: [
+            { arm: "human_actual", decision_detail: { available: true, decision: "approve" }, settlement_source: null, outcome: null, settled_at: null, unavailable_reason: "shadow_not_settled_or_unknown" },
+            { arm: "private_servant", decision_detail: { available: true, suggested_action: "hold" }, settlement_source: null, outcome: null, settled_at: null, unavailable_reason: "shadow_not_settled_or_unknown" },
+            { arm: "base_strategy", decision_detail: { available: true, suggested_action: "buy" }, settlement_source: null, outcome: null, settled_at: null, unavailable_reason: "shadow_not_settled_or_unknown" },
+            { arm: "committee_variant", decision_detail: { available: false, unavailable_reason: "committee_variant_arm_not_recorded" }, settlement_source: null, outcome: null, settled_at: null, unavailable_reason: "shadow_not_settled_or_unknown" },
+          ],
+        },
+        meta: { sources: { attribution: "shadow_not_settled_or_unknown", agora: "ok" } },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const read = await getTradingRoomShadowComparison("evt/1", BASE);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/decision-events/evt%2F1/shadow-comparison`,
+    );
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("/bff/management/");
+    expect(read.state).toBe("ok");
+    if (read.state === "ok") {
+      expect(read.data.arms.map((arm) => arm.arm)).toEqual([
+        "human_actual", "private_servant", "base_strategy", "committee_variant",
+      ]);
+      expect(read.data.comparison_state).toBe("pending_settlement");
+      expect(read.data.decision_event_id).toBe("evt/1");
+      expect(read.data.trader_identity).toBeNull();
+      expect(read.degraded).toEqual({ attribution: "shadow_not_settled_or_unknown" });
+    }
+  });
+
+  it("maps the caller's own undecided event to a typed empty state", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      ok({ status: "empty", empty: true, owner: "agora", data: { decision_id: "evt-2", comparison_state: "no_decision_recorded", arms: [] } }),
+    );
+    const read = await getTradingRoomShadowComparison("evt-2", BASE);
+    expect(read).toEqual({ state: "empty", reason: "no_decision_recorded" });
+  });
+
+  it("answers not_found for an unknown or foreign decision (identical 404)", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      bffErrorResponse(404, "RESOURCE_NOT_FOUND", "Decision not found"),
+    );
+    const read = await getTradingRoomShadowComparison("evt-foreign", BASE);
+    expect(read.state).toBe("not_found");
+  });
+});
+
+function sseResponse(frames: string[], status = 200): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(encoder.encode(frame));
+    },
+  });
+  return new Response(body, { status, headers: { "Content-Type": "text/event-stream" } });
+}
+
+describe("subscribeTradingRoomStream (SA AD-AG-06)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("subscribes to the authenticated stream and reports decision changes without reload", async () => {
+    setAuthProvider({ getToken: () => "stream-token", getTenantId: () => "tenant-stream" });
+    const fetchFn = vi.fn().mockResolvedValue(
+      sseResponse([
+        'id: e1\ndata: {"id":"e1","type":"trading_room.connected","data":{"status":"ready"}}\n\n',
+        'id: e2\ndata: {"id":"e2","type":"trading_room.decision.recorded","data":{"decision_event_id":"evt-1"}}\n\n',
+      ]),
+    );
+    const changes: unknown[] = [];
+    const modes: TradingRoomStreamMode[] = [];
+    const close = subscribeTradingRoomStream({
+      baseUrl: BASE,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      onChange: (event) => changes.push(event),
+      onModeChange: (mode) => modes.push(mode),
+    });
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    close();
+
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe(`${BASE}/bff/agora/trading-room/stream`);
+    expect((init as RequestInit).credentials).toBe("include");
+    expect(((init as RequestInit).headers as Record<string, string>).Authorization).toBe("Bearer stream-token");
+    expect(changes[0]).toEqual({
+      id: "e2",
+      type: "trading_room.decision.recorded",
+      data: { decision_event_id: "evt-1" },
+    });
+    expect(modes).toContain("live");
+    expect(modes[modes.length - 1]).toBe("closed");
+  });
+
+  it("falls back to polling at once when the stream is rejected for auth (401)", async () => {
+    vi.useFakeTimers();
+    const fetchFn = vi.fn().mockResolvedValue(new Response("{}", { status: 401 }));
+    const changes: unknown[] = [];
+    const modes: TradingRoomStreamMode[] = [];
+    const close = subscribeTradingRoomStream({
+      baseUrl: BASE,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      onChange: (event) => changes.push(event),
+      onModeChange: (mode) => modes.push(mode),
+    });
+    for (let i = 0; i < 10 && !modes.includes("polling"); i += 1) {
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(modes).toContain("polling");
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(changes).toEqual([null]);
+    close();
+  });
+
+  it("falls back to bounded polling after repeated stream failures", async () => {
+    vi.useFakeTimers();
+    const fetchFn = vi.fn().mockResolvedValue(new Response("nope", { status: 503 }));
+    const changes: unknown[] = [];
+    const modes: TradingRoomStreamMode[] = [];
+    const close = subscribeTradingRoomStream({
+      baseUrl: BASE,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      onChange: (event) => changes.push(event),
+      onModeChange: (mode) => modes.push(mode),
+      sseFailureThreshold: 1,
+      pollIntervalMs: 1_000,
+    });
+    for (let i = 0; i < 10 && !modes.includes("polling"); i += 1) {
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(modes).toContain("polling");
+    const callsAtFallback = fetchFn.mock.calls.length;
+    // Polling is bounded: never faster than 5 s even when asked for 1 s.
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(changes).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(changes).toEqual([null]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(changes).toEqual([null, null]);
+    // The failed SSE connection is closed, not retried in parallel with polling.
+    expect(fetchFn.mock.calls.length).toBe(callsAtFallback);
+    close();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(changes).toHaveLength(2);
+  });
+});
+

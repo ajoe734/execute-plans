@@ -10,8 +10,9 @@
  * Confidence and probability are displayed as distinct fields per D2 spec.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   decideOnEvent,
   type TradingDecisionEvent,
@@ -21,7 +22,7 @@ import {
 import { interaction } from "@/lib/bff-v1/agora/interaction";
 import { useAgoraWriteAccess, type AgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
-import { getTradingIntent, submitTradingIntentHandoff, withdrawTradingIntent,
+import { getTradingIntent, submitTradingIntentHandoff, tradingIntentProgress, withdrawTradingIntent,
   type TradingIntentDetail, type IntentStage } from "@/lib/bff-v1/agora/tradingIntents";
 
 function newUUID(): string {
@@ -30,30 +31,12 @@ function newUUID(): string {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const EVENT_KIND_LABEL: Record<string, string> = {
-  entry: "Entry",
-  add: "Add",
-  reduce: "Reduce",
-  exit: "Exit",
-  review: "Review",
-};
-
 const EVENT_KIND_COLOR: Record<string, { bg: string; text: string; border: string }> = {
   entry: { bg: "rgba(21, 128, 61, 0.15)", text: "#4ade80", border: "#22c55e" },
   add: { bg: "rgba(29, 78, 216, 0.15)", text: "#60a5fa", border: "#3b82f6" },
   reduce: { bg: "rgba(161, 98, 7, 0.15)", text: "#fbbf24", border: "#f59e0b" },
   exit: { bg: "rgba(185, 28, 28, 0.15)", text: "#f87171", border: "#ef4444" },
   review: { bg: "rgba(126, 34, 206, 0.15)", text: "#c084fc", border: "#a855f7" },
-};
-
-const STATE_LABEL: Record<string, string> = {
-  approaching: "Approaching",
-  triggered: "Triggered",
-  pending_review: "Pending Review",
-  decided: "Decided",
-  expired: "Expired",
-  invalidated: "Invalidated",
-  superseded: "Superseded",
 };
 
 const SEVERITY_COLOR: Record<string, { bg: string; text: string }> = {
@@ -118,6 +101,7 @@ function DecisionCardBody({
   onDecisionRecorded,
 }: TradeDecisionCardProps): JSX.Element {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const writeAccess = useAgoraWriteAccess();
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
@@ -172,7 +156,7 @@ function DecisionCardBody({
       setCallState("success");
       onDecisionRecorded?.(choice, event.decision_event_id);
     } catch (err) {
-      setCallError(err instanceof Error ? err.message : "Decision failed");
+      setCallError(err instanceof Error ? err.message : t("agora.tradingRoom.decisionCard.decisionFailed"));
       setCallState("error");
     }
   }
@@ -218,7 +202,7 @@ function DecisionCardBody({
             textTransform: "uppercase",
           }}
         >
-          {EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind}
+          {t(`agora.tradingRoom.decisionCard.kinds.${ev.event_kind}`, { defaultValue: ev.event_kind })}
         </span>
 
         <span
@@ -244,7 +228,7 @@ function DecisionCardBody({
           data-testid={`trade-decision-card-state-${ev.decision_event_id}`}
           style={{ fontSize: 12, color: "#8c96a6" }}
         >
-          {STATE_LABEL[ev.state] ?? ev.state}
+          {t(`agora.tradingRoom.decisionCard.states.${ev.state}`, { defaultValue: ev.state })}
         </span>
       </div>
 
@@ -254,12 +238,12 @@ function DecisionCardBody({
         {/* Trigger */}
         {ev.trigger && (
           <div data-testid={`trade-decision-card-trigger-${ev.decision_event_id}`}>
-            <SectionHeading label="Trigger" />
+            <SectionHeading label={t("agora.tradingRoom.decisionCard.trigger")} />
             <div style={{ fontSize: 13, color: "#f0ece4" }}>
               {ev.trigger.summary}
               {ev.trigger.distance_to_trigger != null && (
                 <span style={{ marginLeft: 8, color: "#8c96a6", fontSize: 12 }}>
-                  Distance: {ev.trigger.distance_to_trigger.toFixed(4)}
+                  {t("agora.tradingRoom.decisionCard.distance", { value: ev.trigger.distance_to_trigger.toFixed(4) })}
                 </span>
               )}
             </div>
@@ -272,7 +256,7 @@ function DecisionCardBody({
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
         >
           <div data-testid={`trade-decision-card-confidence-${ev.decision_event_id}`}>
-            <SectionHeading label="Confidence (evidence quality)" />
+            <SectionHeading label={t("agora.tradingRoom.decisionCard.confidence")} />
             <div style={{ fontSize: 13, color: "#f0ece4" }}>
               <strong>{(ev.confidence.value * 100).toFixed(0)}%</strong>
               <span style={{ fontSize: 12, color: "#8c96a6", marginLeft: 6 }}>
@@ -284,7 +268,7 @@ function DecisionCardBody({
               style={{ fontSize: 12, color: "#8c96a6" }}
             >
               <div data-testid={`trade-decision-card-calibration-${ev.decision_event_id}`}>
-                Calibration: {ev.confidence.calibration_state}
+                {t("agora.tradingRoom.decisionCard.calibration", { value: ev.confidence.calibration_state })}
               </div>
             </div>
             {ev.confidence.sample_size != null && (
@@ -297,7 +281,7 @@ function DecisionCardBody({
           {/* Probability (distinct from confidence per D4 spec) */}
           <div data-testid="detail-probability">
             <div data-testid={`trade-decision-card-probability-${ev.decision_event_id}`}>
-              <SectionHeading label="Probability (outcome forecast)" />
+              <SectionHeading label={t("agora.tradingRoom.decisionCard.probability")} />
               <div style={{ fontSize: 13, color: "#f0ece4" }}>
                 <strong>{(ev.probability.value * 100).toFixed(0)}%</strong>
                 {ev.probability.ci_lower != null && ev.probability.ci_upper != null && (
@@ -321,23 +305,23 @@ function DecisionCardBody({
         {/* Expected Value — gross/cost/net/downside per D2 spec */}
         <div data-testid="detail-expected-value">
           <div data-testid={`trade-decision-card-ev-${ev.decision_event_id}`}>
-            <SectionHeading label={`Expected Value (${ev.expected_value.horizon}, ${ev.expected_value.unit})`} />
+            <SectionHeading label={t("agora.tradingRoom.decisionCard.expectedValue", { horizon: ev.expected_value.horizon, unit: ev.expected_value.unit })} />
             <div style={{ display: "flex", gap: 20, fontSize: 13, flexWrap: "wrap" }}>
               <div>
-                <span style={{ color: "#8c96a6", fontSize: 12 }}>Gross </span>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>{t("agora.tradingRoom.decisionCard.gross")} </span>
                 <span style={{ fontWeight: 500, color: "#f0ece4" }}>
                   {ev.expected_value.gross >= 0 ? "+" : ""}
                   {ev.expected_value.gross.toFixed(4)}
                 </span>
               </div>
               <div>
-                <span style={{ color: "#8c96a6", fontSize: 12 }}>Cost </span>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>{t("agora.tradingRoom.decisionCard.cost")} </span>
                 <span style={{ fontWeight: 500, color: "#f0ece4" }}>
                   {ev.expected_value.cost.toFixed(4)}
                 </span>
               </div>
               <div>
-                <span style={{ color: "#8c96a6", fontSize: 12 }}>Net </span>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>{t("agora.tradingRoom.decisionCard.net")} </span>
                 <span
                   data-testid={`trade-decision-card-ev-net-${ev.decision_event_id}`}
                   style={{
@@ -350,7 +334,7 @@ function DecisionCardBody({
                 </span>
               </div>
               <div>
-                <span style={{ color: "#8c96a6", fontSize: 12 }}>Downside </span>
+                <span style={{ color: "#8c96a6", fontSize: 12 }}>{t("agora.tradingRoom.decisionCard.downside")} </span>
                 <span style={{ fontWeight: 500, color: "#ff6b6b" }}>
                   {ev.expected_value.downside.toFixed(4)}
                 </span>
@@ -362,7 +346,7 @@ function DecisionCardBody({
         {/* Suggested Action */}
         <div data-testid="detail-suggested-action">
           <div data-testid={`trade-decision-card-suggested-${ev.decision_event_id}`}>
-            <SectionHeading label="Suggested Action (non-binding)" />
+            <SectionHeading label={t("agora.tradingRoom.decisionCard.suggestedAction")} />
             <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#f0ece4" }}>
               <span style={{ fontWeight: 600, textTransform: "capitalize" }}>
                 {ev.suggested_action}
@@ -371,15 +355,15 @@ function DecisionCardBody({
                 <>
                   {ev.suggested_size.size_hint && (
                     <span style={{ color: "#8c96a6" }}>
-                      Size: {ev.suggested_size.size_hint}
+                      {t("agora.tradingRoom.decisionCard.size", { value: ev.suggested_size.size_hint })}
                     </span>
                   )}
                   {ev.suggested_size.portfolio_pct != null && (
                     <span style={{ color: "#8c96a6" }}>
-                      {(ev.suggested_size.portfolio_pct * 100).toFixed(1)}% portfolio
+                      {t("agora.tradingRoom.decisionCard.portfolioPct", { value: (ev.suggested_size.portfolio_pct * 100).toFixed(1) })}
                     </span>
                   )}
-                  <span style={{ fontSize: 11, color: "#8c96a6" }}>non-binding</span>
+                  <span style={{ fontSize: 11, color: "#8c96a6" }}>{t("agora.tradingRoom.decisionCard.nonBinding")}</span>
                 </>
               )}
             </div>
@@ -390,7 +374,7 @@ function DecisionCardBody({
         {ev.rationale.length > 0 && (
           <div data-testid="detail-rationale">
             <div data-testid={`trade-decision-card-rationale-${ev.decision_event_id}`}>
-            <SectionHeading label="Rationale" />
+            <SectionHeading label={t("agora.tradingRoom.decisionCard.rationale")} />
             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {ev.rationale.map((r, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, fontSize: 13 }}>
@@ -416,7 +400,7 @@ function DecisionCardBody({
         {ev.risk_notes.length > 0 && (
           <div data-testid="detail-risk-notes">
             <div data-testid={`trade-decision-card-risk-notes-${ev.decision_event_id}`}>
-              <SectionHeading label="Risk Notes" />
+              <SectionHeading label={t("agora.tradingRoom.decisionCard.riskNotes")} />
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {ev.risk_notes.map((rn, i) => {
                   const color = SEVERITY_COLOR[rn.severity] ?? SEVERITY_COLOR.info;
@@ -449,7 +433,7 @@ function DecisionCardBody({
         {ev.evidence_refs.length > 0 && (
           <div data-testid="detail-evidence-refs">
             <div data-testid={`trade-decision-card-evidence-${ev.decision_event_id}`}>
-              <SectionHeading label={`Evidence (${ev.evidence_refs.length})`} />
+              <SectionHeading label={t("agora.tradingRoom.decisionCard.evidence", { count: ev.evidence_refs.length })} />
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {ev.evidence_refs.map((ref, i) => (
                   <div key={i} style={{ fontSize: 12, color: "#c4ccda" }}>
@@ -466,11 +450,13 @@ function DecisionCardBody({
         {/* Invalidation */}
         <div data-testid="detail-invalidation">
           <div data-testid={`trade-decision-card-invalidation-${ev.decision_event_id}`}>
-          <SectionHeading label="Invalidation" />
+          <SectionHeading label={t("agora.tradingRoom.decisionCard.invalidation")} />
           <div style={{ fontSize: 13, color: "#f0ece4" }}>
-            State:{" "}
+            {t("agora.tradingRoom.decisionCard.invalidationState")}
             <span style={{ fontWeight: 600, color: invalidationColor }}>
-              {ev.invalidation.current_state.toUpperCase()}
+              {t(`agora.tradingRoom.decisionCard.invalidationStates.${ev.invalidation.current_state}`, {
+                defaultValue: ev.invalidation.current_state,
+              })}
             </span>
           </div>
           {ev.invalidation.conditions.length > 0 && (
@@ -486,7 +472,7 @@ function DecisionCardBody({
         {/* Position snapshot (for add/reduce/exit/review events) */}
         {ev.position_snapshot && Object.keys(ev.position_snapshot).length > 0 && (
           <div data-testid={`trade-decision-card-position-${ev.decision_event_id}`}>
-            <SectionHeading label="Position Snapshot" />
+            <SectionHeading label={t("agora.tradingRoom.decisionCard.positionSnapshot")} />
             <pre style={{
               fontSize: 11,
               color: "#c4ccda",
@@ -507,7 +493,7 @@ function DecisionCardBody({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {ev.data_cutoff && (
             <span style={{ fontSize: 11, color: "#8c96a6" }}>
-              Data cutoff: {ev.data_cutoff}
+              {t("agora.tradingRoom.decisionCard.dataCutoff", { value: ev.data_cutoff })}
             </span>
           )}
           <span data-testid="detail-no-order-route">
@@ -532,8 +518,7 @@ function DecisionCardBody({
             color: "#38bdf8",
           }}
         >
-          確認執行或修改部位會建立受治理的交易意圖（TradingIntent）。不會下單。
-          僅可申請 Shadow 追蹤或紙上測試。
+          {t("agora.tradingRoom.decisionCard.intentNotice")}
         </div>
 
         {(intentRef || event.intent_ref) && (
@@ -541,7 +526,7 @@ function DecisionCardBody({
             intentId={(intentRef || event.intent_ref)!} etag={etag} access={writeAccess} />
         )}
         {(!writeAccess.writeAllowed || writeAccess.loading) && (
-          <p role="status">{writeAccess.loading ? "正在確認寫入權限…" : writeAccess.writeDisabledReason}</p>
+          <p role="status">{writeAccess.loading ? t("agora.tradingRoom.decisionCard.checkingWrite") : writeAccess.writeDisabledReason}</p>
         )}
 
         {/* Trader Decision Buttons */}
@@ -557,13 +542,15 @@ function DecisionCardBody({
                 data-testid={`confirmed-${ev.decision_event_id}`}
                 style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}
               >
-                Decision recorded: {decidedChoice}
+                {t("agora.tradingRoom.decisionCard.decisionRecorded", {
+                  choice: decidedChoice ? t(`agora.tradingRoom.decisionCard.choices.${decidedChoice}`) : "",
+                })}
               </span>
             </span>
           ) : (
             <>
               <span style={{ fontSize: 12, color: "#8c96a6", marginRight: 2 }}>
-                Trader decision:
+                {t("agora.tradingRoom.decisionCard.traderDecision")}
               </span>
               {(["approve", "reject", "defer", "modify"] as DecisionChoice[]).map(
                 (choice) => (
@@ -601,7 +588,7 @@ function DecisionCardBody({
                       fontWeight: choice === "approve" || choice === "reject" ? 600 : 400,
                     }}
                   >
-                    {{ approve: "確認執行", modify: "修改部位", defer: "延後觀察", reject: "拒絕" }[choice]}
+                    {t(`agora.tradingRoom.decisionCard.choices.${choice}`)}
                   </button>
                 ),
               )}
@@ -629,14 +616,14 @@ function DecisionCardBody({
                   opacity: writeAccess.interactionAllowed ? 1 : 0.55,
                 }}
               >
-                💬 Ask Personas
+                💬 {t("agora.tradingRoom.decisionCard.askPersonas")}
               </button>
               {callState === "loading" && (
                 <span
                   data-testid={`decision-loading-${ev.decision_event_id}`}
                   style={{ fontSize: 12, color: "#94a3b8" }}
                 >
-                  Sending…
+                  {t("agora.tradingRoom.decisionCard.sending")}
                 </span>
               )}
               {callState === "error" && callError && (
@@ -667,31 +654,31 @@ function DecisionCardBody({
             }}
           >
             <div style={{ fontWeight: 600, color: "#e8b750", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-              <span>🔍 Consult Personas on Signal ({ev.subject.symbol})</span>
+              <span>🔍 {t("agora.tradingRoom.decisionCard.consultTitle", { symbol: ev.subject.symbol })}</span>
             </div>
             
             {/* Display carried context */}
             <div style={{ background: "#121620", padding: 8, borderRadius: 4, marginBottom: 8, border: "1px solid #2a2e38" }}>
-              <div style={{ color: "#8c96a6", fontSize: 11, fontStyle: "italic", marginBottom: 4 }}>Carried Context:</div>
+              <div style={{ color: "#8c96a6", fontSize: 11, fontStyle: "italic", marginBottom: 4 }}>{t("agora.tradingRoom.decisionCard.carriedContext")}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                <div><strong>Event ID:</strong> <span className="font-mono">{ev.decision_event_id}</span></div>
-                <div><strong>Strategy Version:</strong> <span className="font-mono">{ev.strategy_spec_registry_id}</span></div>
-                <div style={{ gridColumn: "span 2" }}><strong>Risk Snapshot:</strong> {ev.risk_notes.map(r => `[${r.severity}] ${r.summary}`).join("; ") || "Normal"}</div>
-                <div style={{ gridColumn: "span 2" }}><strong>Evidence Refs:</strong> {ev.evidence_refs.map(r => `${r.ref_type}:${r.ref_id}`).join(", ") || "None"}</div>
+                <div><strong>{t("agora.tradingRoom.decisionCard.eventId")}</strong> <span className="font-mono">{ev.decision_event_id}</span></div>
+                <div><strong>{t("agora.tradingRoom.decisionCard.strategyVersion")}</strong> <span className="font-mono">{ev.strategy_spec_registry_id}</span></div>
+                <div style={{ gridColumn: "span 2" }}><strong>{t("agora.tradingRoom.decisionCard.riskSnapshot")}</strong> {ev.risk_notes.map(r => `[${r.severity}] ${r.summary}`).join("; ") || t("agora.tradingRoom.decisionCard.normal")}</div>
+                <div style={{ gridColumn: "span 2" }}><strong>{t("agora.tradingRoom.decisionCard.evidenceRefs")}</strong> {ev.evidence_refs.map(r => `${r.ref_type}:${r.ref_id}`).join(", ") || t("agora.tradingRoom.decisionCard.none")}</div>
               </div>
             </div>
 
             {/* Participant eligibility is authoritative and resolved at launch. */}
             <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>Participants:</span>
+              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>{t("agora.tradingRoom.decisionCard.participants")}</span>
               <div data-testid="consult-authoritative-eligibility" style={{ color: "#8c96a6" }}>
-                The canonical eligibility service will choose up to three recommended eligible Personas at launch. No Persona identity is inferred from a name or fixture.
+                {t("agora.tradingRoom.decisionCard.participantsNote")}
               </div>
             </div>
 
             {/* Quick Templates */}
             <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>Quick Templates:</span>
+              <span style={{ fontWeight: 500, color: "#c4ccda", display: "block", marginBottom: 4 }}>{t("agora.tradingRoom.decisionCard.quickTemplates")}</span>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <button
                   type="button"
@@ -700,7 +687,7 @@ function DecisionCardBody({
                   }}
                   style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
                 >
-                  🔴 Red-Team Analysis
+                  🔴 {t("agora.tradingRoom.decisionCard.templateRedTeam")}
                 </button>
                 <button
                   type="button"
@@ -709,7 +696,7 @@ function DecisionCardBody({
                   }}
                   style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
                 >
-                  ⚠️ Fast Risk Assessment
+                  ⚠️ {t("agora.tradingRoom.decisionCard.templateRisk")}
                 </button>
                 <button
                   type="button"
@@ -718,7 +705,7 @@ function DecisionCardBody({
                   }}
                   style={{ padding: "2px 8px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
                 >
-                  📊 Option Comparison
+                  📊 {t("agora.tradingRoom.decisionCard.templateOptions")}
                 </button>
               </div>
             </div>
@@ -726,7 +713,7 @@ function DecisionCardBody({
             {/* Prompt input */}
             <div style={{ marginBottom: 8 }}>
               <textarea
-                placeholder="Ask your question to the selected personas..."
+                placeholder={t("agora.tradingRoom.decisionCard.consultPlaceholder")}
                 value={consultQuery}
                 onChange={(e) => setConsultQuery(e.target.value)}
                 style={{ width: "100%", height: 60, padding: 6, borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4", resize: "none" }}
@@ -786,7 +773,7 @@ function DecisionCardBody({
                     });
                     navigate(`/agora/strategy-workshop/${resolved.data.workshop_id}?${params.toString()}`);
                   } catch (err) {
-                    setConsultError(err instanceof Error ? err.message : "Failed to create consultation");
+                    setConsultError(err instanceof Error ? err.message : t("agora.tradingRoom.decisionCard.consultFailed"));
                   } finally {
                     setConsultLoading(false);
                   }
@@ -803,14 +790,14 @@ function DecisionCardBody({
                 }}
                 data-testid={`consult-panel-submit-${ev.decision_event_id}`}
               >
-                {consultLoading ? "Launching..." : "🚀 Launch Workshop Consultation"}
+                {consultLoading ? t("agora.tradingRoom.decisionCard.launching") : `🚀 ${t("agora.tradingRoom.decisionCard.launchConsult")}`}
               </button>
               <button
                 type="button"
                 onClick={() => setShowConsultPanel(false)}
                 style={{ padding: "4px 12px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
               >
-                Cancel
+                {t("agora.tradingRoom.decisionCard.cancel")}
               </button>
               {consultError && (
                 <span style={{ color: "#f87171", fontSize: 11 }}>{consultError}</span>
@@ -839,15 +826,15 @@ function DecisionCardBody({
             }}
           >
             <div style={{ fontWeight: 600, color: "#e8b750", marginBottom: 8 }}>
-              🛠️ Link Modification Proposal & Consultation
+              🛠️ {t("agora.tradingRoom.decisionCard.modifyTitle")}
             </div>
             
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
               <div>
-                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Linked Proposal ID:</label>
+                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>{t("agora.tradingRoom.decisionCard.linkedProposal")}</label>
                 <input
                   type="text"
-                  placeholder="e.g. prop-123"
+                  placeholder={t("agora.tradingRoom.decisionCard.proposalPlaceholder")}
                   value={modifyProposalId}
                   onChange={(e) => setModifyProposalId(e.target.value)}
                   style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4" }}
@@ -855,7 +842,7 @@ function DecisionCardBody({
                 />
               </div>
               <div>
-                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Proposal Revision:</label>
+                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>{t("agora.tradingRoom.decisionCard.proposalRevision")}</label>
                 <input
                   type="number"
                   min="1"
@@ -866,10 +853,10 @@ function DecisionCardBody({
                 />
               </div>
               <div style={{ gridColumn: "span 2" }}>
-                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Linked Consultation Workshop ID:</label>
+                <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>{t("agora.tradingRoom.decisionCard.linkedWorkshop")}</label>
                 <input
                   type="text"
-                  placeholder="e.g. ws-abc (optional)"
+                  placeholder={t("agora.tradingRoom.decisionCard.workshopPlaceholder")}
                   value={modifyWorkshopId}
                   onChange={(e) => setModifyWorkshopId(e.target.value)}
                   style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4" }}
@@ -879,9 +866,9 @@ function DecisionCardBody({
             </div>
 
             <div style={{ marginBottom: 8 }}>
-              <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>Modification Rationale:</label>
+              <label style={{ display: "block", color: "#c4ccda", fontWeight: 500, marginBottom: 2 }}>{t("agora.tradingRoom.decisionCard.modifyRationale")}</label>
               <textarea
-                placeholder="Explain the changes to sizes, bounds, or limits..."
+                placeholder={t("agora.tradingRoom.decisionCard.modifyRationalePlaceholder")}
                 value={modifyRationale}
                 onChange={(e) => setModifyRationale(e.target.value)}
                 style={{ width: "100%", height: 50, padding: 6, borderRadius: 4, border: "1px solid #2a2e38", background: "#121620", color: "#f0ece4", resize: "none" }}
@@ -915,14 +902,14 @@ function DecisionCardBody({
                 }}
                 data-testid={`modify-linkage-submit-${ev.decision_event_id}`}
               >
-                Confirm Modification
+                {t("agora.tradingRoom.decisionCard.confirmModify")}
               </button>
               <button
                 type="button"
                 onClick={() => setShowModifyLinkage(false)}
                 style={{ padding: "4px 12px", background: "#171b22", border: "1px solid #2a2e38", color: "#c4ccda", borderRadius: 4, cursor: "pointer" }}
               >
-                Cancel
+                {t("agora.tradingRoom.decisionCard.cancel")}
               </button>
             </div>
           </div>
@@ -933,6 +920,7 @@ function DecisionCardBody({
 }
 
 function IntentStatus({ intentId, etag, access }: { intentId: string; etag?: string; access: AgoraWriteAccess }) {
+  const { i18n, t } = useTranslation();
   const [detail, setDetail] = useState<TradingIntentDetail | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -944,10 +932,10 @@ function IntentStatus({ intentId, etag, access }: { intentId: string; etag?: str
     getTradingIntent(intentId).then((value) => {
       if (active) { setDetail(value); setError(null); }
     }).catch((err) => {
-      if (active) setError(err instanceof Error ? err.message : "無法讀取交易意圖");
+      if (active) setError(err instanceof Error ? err.message : t("agora.tradingRoom.intent.readFailed"));
     }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [intentId, revision]);
+  }, [intentId, revision, t]);
   const writable = access.writeAllowed && !access.loading && !!access.actorId && !!etag && !busy;
   async function act(stage: IntentStage | "withdraw") {
     if (!writable || !detail || !(stage === "withdraw" ? detail.allowedActions.withdraw : detail.allowedActions.submit_handoff)) return;
@@ -958,23 +946,64 @@ function IntentStatus({ intentId, etag, access }: { intentId: string; etag?: str
       if (stage === "withdraw") await withdrawTradingIntent(intentId, options);
       else await submitTradingIntentHandoff(detail.data, stage, access.actorId!, options);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "交易意圖操作失敗");
+      setError(err instanceof Error ? err.message : t("agora.tradingRoom.intent.actionFailed"));
       setBusy(false);
       return;
     }
     setRevision((value) => value + 1);
   }
-  const labels: Record<string, string> = { draft: "待送出", submitted: "已提交", withdrawn: "已撤回", accepted: "已接受", rejected: "已拒絕" };
-  return <section aria-label="交易意圖" style={{ color: "#c4ccda", fontSize: 12 }}>
-    <p>交易意圖：{intentId}</p>
-    <p role="status">{busy ? "讀取中…" : detail ? `狀態：${labels[detail.lifecycle_state] ?? detail.lifecycle_state}` : "狀態尚未確認"}</p>
+  const lifecycleLabel = (state: string) => t(`agora.tradingRoom.intent.lifecycle.${state}`, { defaultValue: state });
+  const stageLabel = (stage: string) => t(`agora.tradingRoom.intent.stages.${stage}`, { defaultValue: stage });
+  const progress = detail ? tradingIntentProgress(detail) : null;
+  const missing = t("agora.performance.notReported");
+  const formatNumber = (value: number | null) => (value === null ? missing : value.toLocaleString(i18n.resolvedLanguage));
+  return <section aria-label={t("agora.tradingRoom.intent.label")} data-testid={`trade-intent-status-${intentId}`} style={{ color: "#c4ccda", fontSize: 12 }}>
+    <p>{t("agora.tradingRoom.intent.id", { id: intentId })}</p>
+    <p role="status">{busy ? t("agora.tradingRoom.intent.loading") : detail ? t("agora.tradingRoom.intent.status", { value: lifecycleLabel(detail.lifecycle_state) }) : t("agora.tradingRoom.intent.statusUnknown")}</p>
+    {progress && (
+      <div data-testid={`trade-intent-progress-${intentId}`} style={{ border: "1px solid #2a2e38", borderRadius: 6, margin: "6px 0", padding: "6px 8px" }}>
+        <div style={{ color: "#8c96a6", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>{t("agora.tradingRoom.intent.progressTitle")}</div>
+        <ol style={{ display: "flex", flexWrap: "wrap", gap: 6, listStyle: "none", margin: 0, padding: 0 }}>
+          {progress.steps.map(({ step, reached }) => (
+            <li data-reached={reached ? "true" : "false"} data-testid={`trade-intent-step-${step}`} key={step}
+              style={{ border: `1px solid ${reached ? "#22c55e" : "#2a2e38"}`, borderRadius: 999, color: reached ? "#4ade80" : "#8c96a6", fontSize: 11, padding: "1px 8px" }}>
+              {reached ? "✓ " : ""}{t(`agora.tradingRoom.intent.steps.${step}`)}
+            </li>
+          ))}
+        </ol>
+        {progress.terminal && <p data-testid={`trade-intent-terminal-${intentId}`} style={{ color: "#fbbf24", margin: "4px 0 0" }}>{t(`agora.tradingRoom.intent.terminal.${progress.terminal}`)}</p>}
+        <div data-testid={`trade-intent-paper-fills-${intentId}`} style={{ marginTop: 6 }}>
+          <div style={{ color: "#8c96a6", fontSize: 11, fontWeight: 700 }}>{t("agora.tradingRoom.intent.paperFillsTitle")}</div>
+          {!progress.paperFillsReported ? (
+            <p style={{ margin: "2px 0 0" }}>{t("agora.tradingRoom.intent.paperFillsNotReported")}</p>
+          ) : progress.paperFills.length === 0 ? (
+            <p style={{ margin: "2px 0 0" }}>{t("agora.tradingRoom.intent.paperFillsEmpty")}</p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: "2px 0 0", padding: 0 }}>
+              {progress.paperFills.map((fill) => (
+                <li data-testid={`trade-intent-paper-fill-${fill.fill_id}`} key={fill.fill_id}>
+                  {t("agora.tradingRoom.intent.fillRow", {
+                    symbol: fill.symbol ?? missing,
+                    side: fill.side ?? missing,
+                    quantity: formatNumber(fill.quantity),
+                    price: formatNumber(fill.price),
+                    time: fill.filled_at ?? missing,
+                  })}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <p style={{ color: "#8c96a6", fontSize: 11, margin: "4px 0 0" }}>{t("agora.tradingRoom.intent.noOrderAction")}</p>
+      </div>
+    )}
     {detail?.handoffs.map((handoff) => <p key={handoff.handoff_id}>
-      {handoff.requested_stage === "shadow" ? "Shadow" : handoff.requested_stage === "paper" ? "紙上測試" : handoff.requested_stage}：{labels[handoff.state] ?? handoff.state}
+      {stageLabel(handoff.requested_stage)}：{lifecycleLabel(handoff.state)}
     </p>)}
     {error && <p role="alert">{error}</p>}
-    <button disabled={!writable || !detail?.allowedActions.submit_handoff} onClick={() => act("shadow")}>送 Shadow</button>{" "}
-    <button disabled={!writable || !detail?.allowedActions.submit_handoff} onClick={() => act("paper")}>申請紙上測試</button>{" "}
-    <button disabled={!writable || !detail?.allowedActions.withdraw} onClick={() => act("withdraw")}>撤回</button>{" "}
-    <button disabled={busy} onClick={() => setRevision((value) => value + 1)}>重新讀取狀態</button>
+    <button disabled={!writable || !detail?.allowedActions.submit_handoff} onClick={() => act("shadow")}>{t("agora.tradingRoom.intent.sendShadow")}</button>{" "}
+    <button disabled={!writable || !detail?.allowedActions.submit_handoff} onClick={() => act("paper")}>{t("agora.tradingRoom.intent.requestPaper")}</button>{" "}
+    <button disabled={!writable || !detail?.allowedActions.withdraw} onClick={() => act("withdraw")}>{t("agora.tradingRoom.intent.withdraw")}</button>{" "}
+    <button disabled={busy} onClick={() => setRevision((value) => value + 1)}>{t("agora.tradingRoom.intent.refresh")}</button>
   </section>;
 }

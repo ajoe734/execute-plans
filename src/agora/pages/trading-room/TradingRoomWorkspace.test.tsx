@@ -15,6 +15,7 @@ import type {
   TradingRoomStrategyEntry,
   TradingDecisionEvent,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import "@/i18n";
 import { BffError } from "@/lib/bff-v1/errors";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import type { TradingRoomWorkspaceProposal, TradingRoomWorkspace as TradingRoomWorkspaceType } from "@/lib/bff-v1/agora/tradingRoomTypes";
@@ -481,7 +482,7 @@ describe("TradingRoomWorkspace component suite", () => {
 
   it("renders empty position message when position queue is empty", () => {
     render(<PositionActionQueue positionSummaries={[]} />);
-    expect(screen.getByText(/No position actions/i)).toBeInTheDocument();
+    expect(screen.getByText("沒有未平倉部位。")).toBeInTheDocument();
   });
 
   it("renders TradingRoomGenerationProgress with 9 steps", () => {
@@ -494,6 +495,6 @@ describe("TradingRoomWorkspace component suite", () => {
 
     const progress = screen.getByTestId("trading-room-generation-progress");
     expect(progress).toBeInTheDocument();
-    expect(screen.getByText(/Taiwan Momentum Alpha/)).toBeInTheDocument();
+    expect(screen.getByText("交易僕人正在建立「Taiwan Momentum Alpha」交易操盤室")).toBeInTheDocument();
   });
 });

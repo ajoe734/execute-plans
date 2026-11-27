@@ -71,7 +71,7 @@ const SAMPLE_EVENTS: TradingDecisionEvent[] = [
   },
 ];
 
-// Recorded BFF response shape from BFF-ATTRIBUTION-VIEWS-20261116 (GET /bff/management/attribution/shadow/:decision_id)
+// Recorded BFF response shape from BFF-ATTRIBUTION-VIEWS-20261116; the trader surface now reads it from the Agora owner route (GET /bff/agora/trading-room/decision-events/:id/shadow-comparison, AGORA-SHADOW-COMPARISON-OWNER-ROUTE-20261127)
 const RECORDED_SHADOW_RESPONSE = {
   status: "ok",
   owner: "attribution+agora",
@@ -315,13 +315,13 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
     await screen.findByTestId("shadow-comparison-arms");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BASE}/bff/management/attribution/shadow/dec-1`,
+      `${BASE}/bff/agora/trading-room/decision-events/dec-1/shadow-comparison`,
     );
 
     fireEvent.click(screen.getByTestId("shadow-select-dec-2"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[1][0]).toBe(
-      `${BASE}/bff/management/attribution/shadow/dec-2`,
+      `${BASE}/bff/agora/trading-room/decision-events/dec-2/shadow-comparison`,
     );
 
     fireEvent.change(screen.getByTestId("shadow-decision-input"), {
@@ -330,7 +330,7 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
     fireEvent.click(screen.getByTestId("shadow-decision-load"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(fetchMock.mock.calls[2][0]).toBe(
-      `${BASE}/bff/management/attribution/shadow/dec-custom-3`,
+      `${BASE}/bff/agora/trading-room/decision-events/dec-custom-3/shadow-comparison`,
     );
 
     for (const call of fetchMock.mock.calls) {

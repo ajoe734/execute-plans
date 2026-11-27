@@ -561,7 +561,7 @@ describe("SystemSuggestionsPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => 
           },
         });
       }
-      if (url.includes("/management/attribution/shadow/evt-ik-2330")) {
+      if (url.includes("/bff/agora/trading-room/decision-events/evt-ik-2330/shadow-comparison")) {
         return jsonResponse({
           status: "ok",
           data: {
@@ -579,7 +579,7 @@ describe("SystemSuggestionsPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => 
           },
         });
       }
-      if (url.includes("/management/attribution/shadow/evt-ik-2454")) {
+      if (url.includes("/bff/agora/trading-room/decision-events/evt-ik-2454/shadow-comparison")) {
         return jsonResponse({
           status: "ok",
           data: {

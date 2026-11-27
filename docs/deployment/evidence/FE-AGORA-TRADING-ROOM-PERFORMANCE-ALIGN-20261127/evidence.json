@@ -1,0 +1,111 @@
+{
+  "schema_version": "pantheon.agora.trading-room-performance-align.evidence.v1",
+  "task_id": "FE-AGORA-TRADING-ROOM-PERFORMANCE-ALIGN-20261127",
+  "owner": "Claude2",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-AGORA-TRADING-ROOM-PERFORMANCE-ALIGN-20261127",
+  "base_commit": "9b0df6622",
+  "timestamp": "2026-11-27T14:40:00Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6/RC4",
+    "source": "Trading Room and Strategy Performance were not aligned to V11 / V6 §15: missing grid-editor strings, queue not live and not in the views, duplicate queue code, 先調整版面/交代僕人 mis-targeted, English labels, no rule-vs-human comparison, shadow comparison on the Management route."
+  },
+  "dependency": {
+    "task": "AGORA-SHADOW-COMPARISON-OWNER-ROUTE-20261127",
+    "pantheon_pr": "#7935",
+    "route": "GET /bff/agora/trading-room/decision-events/{decision_event_id}/shadow-comparison",
+    "contract": "Four arms human_actual/private_servant/base_strategy/committee_variant, status ok|degraded|empty, data.comparison_state settled|pending_settlement|unavailable|no_decision_recorded; unknown or foreign decision answers an identical 404."
+  },
+  "acceptance_coverage": {
+    "AC1_grid_editor_keys_and_guard": {
+      "passed": true,
+      "keys": "agora.tradingRoom.editor.{enterEditMode,exitEditMode,versionHistory,restoreWidget} added to zh-TW and en-US, plus the editor/live/mobile/decisionCard/intent/candidateReview/candidateContext catalogs and agora.performance.{ruleVsHuman,shadow}.",
+      "guard": "src/agora/i18n.guard.test.ts scans every non-test .tsx under pages/trading-room, trading-room, pages/strategy-performance, widgets, TradeDecisionCard and CandidateReviewDrawer for static t(\"agora.…\") keys and fails on any key missing from zh-TW or en-US (plural suffixes honoured); also asserts catalog parity for the new namespaces and detects a missing key in a sample. Before this change the scan found the four editor keys, agora.tradingRoom.proposal.validationIssues (plural, resolves) and the whole unused agora.tradingRoom.attribution namespace."
+    },
+    "AC2_live_queue_in_view": {
+      "passed": true,
+      "stream": "subscribeTradingRoomStream (src/lib/bff-v1/agora/tradingRoom.ts) subscribes to GET /bff/agora/trading-room/stream with the fetch-based SSE client (Authorization + session cookie + Last-Event-ID replay). 401/403 or 3 consecutive failures fall back to bounded polling (fixed interval, minimum 5 s, default 15 s). TradingRoomPage debounces events/polls into a silent re-read of the resync routes (decision-events and the aggregate) so the queue updates without reload.",
+      "widget": "src/agora/widgets/DecisionQueueWidget.tsx renders signal_decision_queue / overview_decision_queue (V11 View A) as entry/add/reduce/exit lanes shown together with counts, live-mode badge and last update time; read-only.",
+      "duplicate_code_removed": "TradingRoomPage no longer contains its own TradingEventQueue, DecisionEventDetailPanel, PositionActionQueue, RiskBanner, EVENT_KIND_LABEL/STATE_LABEL and error helpers (dead copies of TradingRoomWorkspace code); it imports RiskBanner from TradingRoomWorkspace.",
+      "layout_fix": "Real-browser run showed the workspace grid squeezed to ~30 px by the stacked panes; the workspace pane now has a 560 px minimum and the column scrolls."
+    },
+    "AC3_adjust_layout_and_servant": {
+      "passed": true,
+      "adjust_layout": "先調整版面 accepts the reviewed preview and mounts the grid editor with initialEditMode=true (WorkspaceGridEditor.initialEditMode).",
+      "ask_servant": "Header 交代僕人 targets the selected widget (selection taken on press because the grid swallows the click in edit mode, also on focus/click); with no selection it asks the trader to pick one, with no widgets it says to add one. Never silently targets widgets[0].",
+      "labels": "Rollback, version history, current, personalization, mobile pane/risk/strategies, candidate context and workspace chrome are zh-TW via i18n keys."
+    },
+    "AC4_decision_card_drawer_intent": {
+      "passed": true,
+      "zh_tw": "TradeDecisionCard section titles, EV fields, consult/modify panels and CandidateReviewDrawer (title, columns, bands, decisions, decomposition, footer) are zh-TW.",
+      "intent_progress": "IntentStatus shows a read-only progress ladder (created → submitted → accepted → paper running → paper fills reported) and owner-reported paper fills (tradingIntentProgress parses paper_fills/fills on the intent or its handoffs; fills claiming a live broker venue are ignored; an unreported field reads 紙上執行服務尚未回報成交). No order action is offered; the only buttons remain the pre-existing governed Shadow/paper-test handoff requests, withdraw and refresh."
+    },
+    "AC5_performance": {
+      "passed": true,
+      "rule_vs_human": "src/agora/pages/strategy-performance/RuleVsHumanComparison.tsx: per intervention, side by side: rule would do (base_strategy arm / decision-event suggestion), trader did (human_actual arm, else the intervention kind), reason, result, and shadow outcome had the trader not intervened (base_strategy settlement).",
+      "link_honesty": "InterventionRecord has no structural decision link (its source_id is the projector id and the schema forbids extra fields). An intervention is linked only through ids the owners report: its evidence refs / source id, or the decision_ids of a journey row sharing one of its evidence refs, matched against the trader's decision events. Otherwise it renders 未連結裁示事件 with every value 未回報; no link is ever guessed. This is a backend follow-up: carry decision_event_id on InterventionRecord.",
+      "shadow_section": "Strategy Performance has a shadow comparison section (ShadowComparisonPanel) and getTradingRoomShadowComparison now reads the Agora owner route above; no Management route remains in src/agora.",
+      "attribution": "AttributionReportView was DELETED (with its test and the Management-route client getTradingRoomPerformanceAttribution): it was never rendered (only re-exported), called /bff/management/performance-attribution/by-strategy, and duplicated the strategy table StrategyPerformancePage already builds from the Agora owner route getAgoraPerformanceAttribution (/bff/agora/trading-room/performance-attribution/by-strategy). Its two client tests were retargeted to getAgoraPerformanceAttribution, not removed.",
+      "missing_values": "The formatters no longer default to the English 'not reported'; every missing value reads the zh-TW 未回報 (formatters now require the localized fallback)."
+    },
+    "AC6_checks": {
+      "passed": true,
+      "eslint": "npx eslint . → exit 0, 0 errors.",
+      "typecheck": "tsc -p tsconfig.app.json --noEmit and tsc -p tsconfig.agora.json --noEmit → exit 0.",
+      "vitest": "src/agora + src/i18n + src/lib/bff-v1: 100 files / 1323 tests passed; remaining suites (all non-agora): 261 files / 3205 tests passed; locale parity suites 8 files / 178 tests passed.",
+      "e2e_local": "e2e/agora-trading-room-performance-align.spec.ts: 3/3 passed in real Chromium (recorded fixtures).",
+      "tests_not_weakened": "No test deleted except AttributionReportView.test.tsx together with the deleted component. Existing English-copy assertions were changed to the zh-TW copy the acceptance requires (same or stronger assertions); mocks gained the new exports; the two getTradingRoomPerformanceAttribution tests were retargeted to the Agora owner client (the old test asserted no X-Request-Id; the shared Agora read client sends a tracing X-Request-Id on reads, so that single negative assertion was replaced by a comment and the no-If-Match/no-Idempotency-Key assertions remain)."
+    },
+    "AC7_hosted_proof": {
+      "passed": "partial",
+      "recorded_fixture_screenshots": "docs/deployment/evidence/FE-AGORA-TRADING-ROOM-PERFORMANCE-ALIGN-20261127/screenshots/ (01 live decision queue in the view, 02 edit mode zh-TW, 03 交代僕人 on the selected widget, 04 proposal preview, 05 先調整版面 opens edit mode, 06 performance rule-vs-human + shadow) produced by e2e/agora-trading-room-performance-align.spec.ts in real Chromium against the built SPA with route fixtures.",
+      "hosted": "Pending: the admintest hosted run needs the merged commit on dev, the integration gate and the dev FE deploy, and an interactive admintest session; none exist from this worker. e2e/agora-winner-branch-hosted.spec.ts was updated for the zh-TW copy and now also records the decision-queue lanes and edit-mode screenshots; e2e/agora-product-journey.spec.ts gained a rule-vs-human/shadow step with a screenshot. Re-run both hosted after deploy as admintest with the walkthrough strategy.",
+      "reviewer_family": "Owner Claude (Anthropic); reviewer Antigravity (different model family)."
+    }
+  },
+  "pre_existing_failures_not_caused_by_this_change": [
+    "e2e/agora-candidate-truth.spec.ts asserts testids (candidate-data-source, candidate-row-AAPL, 'Live dataset') removed from the Trading Room by e4146224a; it fails identically on origin/dev. Not edited.",
+    "e2e/29-persona-interaction.spec.ts 'Trading Room Ask Personas…' lands on the login page with its fixture and fails identically on origin/dev (verified from a clean git archive of origin/dev). Only its 'Decision recorded: modify' copy assertion was updated to the zh-TW text."
+  ],
+  "residual_findings": [
+    "InterventionRecord needs a structural decision_event_id for guaranteed rule-vs-human linking (backend follow-up).",
+    "Paper fills are rendered when the owner reports paper_fills/fills on the TradingIntent or its handoffs; the current BFF intent route does not report them yet, so hosted shows 紙上執行服務尚未回報成交 until it does.",
+    "Intervention kind/status and settlement reason codes are rendered as the owner-authored values (e.g. manual_override, recorded)."
+  ],
+  "modified_surfaces": [
+    "docs/deployment/evidence/FE-AGORA-TRADING-ROOM-PERFORMANCE-ALIGN-20261127/evidence.json",
+    "e2e/29-persona-interaction.spec.ts",
+    "e2e/agora-product-journey.spec.ts",
+    "e2e/agora-trading-room-performance-align.spec.ts",
+    "e2e/agora-winner-branch-hosted.spec.ts",
+    "src/agora/components/CandidateReviewDrawer.test.tsx",
+    "src/agora/components/CandidateReviewDrawer.tsx",
+    "src/agora/components/TradeDecisionCard.test.tsx",
+    "src/agora/components/TradeDecisionCard.tsx",
+    "src/agora/i18n.guard.test.ts",
+    "src/agora/pages/strategy-performance/RuleVsHumanComparison.test.tsx",
+    "src/agora/pages/strategy-performance/RuleVsHumanComparison.tsx",
+    "src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx",
+    "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx",
+    "src/agora/pages/trading-room/AttributionReportView.test.tsx",
+    "src/agora/pages/trading-room/AttributionReportView.tsx",
+    "src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx",
+    "src/agora/pages/trading-room/ShadowComparisonPanel.tsx",
+    "src/agora/pages/trading-room/SystemSuggestionsPanel.test.tsx",
+    "src/agora/pages/trading-room/TradingRoomPage.test.tsx",
+    "src/agora/pages/trading-room/TradingRoomPage.tsx",
+    "src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx",
+    "src/agora/pages/trading-room/TradingRoomWorkspace.tsx",
+    "src/agora/trading-room/WorkspaceGridEditor.test.tsx",
+    "src/agora/trading-room/WorkspaceGridEditor.tsx",
+    "src/agora/widgets/DecisionQueueWidget.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/lib/bff-v1/agora/tradingIntents.test.ts",
+    "src/lib/bff-v1/agora/tradingIntents.ts",
+    "src/lib/bff-v1/agora/tradingRoom.test.ts",
+    "src/lib/bff-v1/agora/tradingRoom.ts"
+  ]
+}
