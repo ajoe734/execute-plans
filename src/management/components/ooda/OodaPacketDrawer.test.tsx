@@ -100,7 +100,7 @@ describe("OodaPacketDrawer", () => {
     expect(screen.getByText("audit://ooda-paper-001")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Mutation review/i })).toHaveAttribute(
       "href",
-      "/evolution/mutation-review/evo-dec-paper-001",
+      "/management/evolution-journal?decision=evo-dec-paper-001",
     );
     expect(screen.getByRole("link", { name: /Approval queue/i })).toHaveAttribute(
       "href",

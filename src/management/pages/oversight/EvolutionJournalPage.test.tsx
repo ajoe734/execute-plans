@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import i18n from "@/i18n";
@@ -9,9 +9,19 @@ import { EvolutionJournalPage } from "./_core";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { __resetV5LiveCacheForTests } from "@/management/pages/v5/useV5Live";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import { makeBffError } from "@/lib/bff-v1/errors";
+import { usePlatform } from "@/platform/store";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
+  useAuth: vi.fn(() => ({ bffSession: { identity: { roles: ["operator"] } } })),
+  decideEvolutionReview: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/AuthProvider", () => ({ useAuth: mocks.useAuth }));
+vi.mock("@/lib/bff-v1/writes", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/bff-v1/writes")>(),
+  decideEvolutionReview: mocks.decideEvolutionReview,
 }));
 
 vi.mock("@/management/pages/v5/useV5Live", async (importOriginal) => ({
@@ -32,6 +42,113 @@ function renderJournal(initialEntry = "/management/evolution-journal") {
     </I18nextProvider>,
   );
 }
+
+describe("Evolution journal paper gate decisions", () => {
+  const refresh = vi.fn();
+  const memo = "Reviewed the consultation evidence and recorded the operator decision.";
+  const id = "pool-publication-op-123";
+  function decision(decisionId = id, status = "proposed") {
+    return {
+      id: `evolution_decision:${decisionId}`, source_id: decisionId,
+      title: "Paper operator decision", entry_type: "evolution_decision", status,
+      action_type: "flag_for_review", risk_level: "low",
+      decision: {
+        decision_id: decisionId, status, action_type: "flag_for_review",
+        rationale: "Risk panel held this paper action for operator review.",
+        evidence_refs: [{ ref_type: "service_handoff", ref_id: "consult-request-123", storage_ref: { owner: "consultation-svc" } }],
+        metadata: { operator_required: true, paper_only: true, reason: "risk_veto", consultation_decision_id: "consult-decision-123" },
+      },
+    };
+  }
+  function setRows(rows = [decision()]) {
+    mocks.useV5Live.mockImplementation((loader) => ({
+      data: loader.toString().includes("evolutionJournal") ? rows : [], loading: false, refresh,
+    }));
+  }
+  beforeEach(() => {
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "true");
+    usePlatform.setState({ env: "paper", role: "admin" });
+    mocks.useAuth.mockReturnValue({ bffSession: { identity: { roles: ["operator"] } } });
+    mocks.decideEvolutionReview.mockReset();
+    refresh.mockReset();
+    setRows();
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([id, "trial-admission-op-456"])("opens rationale and consultation evidence by clicking %s", (decisionId) => {
+    setRows([decision(decisionId)]);
+    renderJournal();
+    fireEvent.click(screen.getByRole("button", { name: "Paper operator decision" }));
+    const detail = screen.getByRole("dialog");
+    expect(within(detail).getByText("Risk panel held this paper action for operator review.")).toBeInTheDocument();
+    expect(within(detail).getByText("consult-decision-123")).toBeInTheDocument();
+    expect(within(detail).getByText(/consult-request-123/)).toBeInTheDocument();
+    expect(within(detail).getByText("risk_veto")).toBeInTheDocument();
+    expect(within(detail).getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
+    expect(within(detail).getByRole("button", { name: "Reject", exact: true })).toBeEnabled();
+  });
+
+  it("opens an exact decision deep link and lets a viewer read without actions despite local admin role", () => {
+    mocks.useAuth.mockReturnValue({ bffSession: { identity: { roles: ["viewer"] } } });
+    renderJournal(`/management/evolution-journal?decision=${id}`);
+    const detail = screen.getByRole("dialog");
+    expect(within(detail).getByText("consult-decision-123")).toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Approve", exact: true })).not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Reject", exact: true })).not.toBeInTheDocument();
+    expect(within(detail).getByRole("note")).toHaveTextContent("do not have permission");
+    expect(mocks.decideEvolutionReview).not.toHaveBeenCalled();
+  });
+
+  it("shows disabled actions with a reason under safe write defaults", () => {
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "false");
+    renderJournal(`/management/evolution-journal?decision=${id}`);
+    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject", exact: true })).toBeDisabled();
+    expect(screen.getByRole("note")).toHaveTextContent("Writes are disabled");
+    expect(mocks.decideEvolutionReview).not.toHaveBeenCalled();
+  });
+
+  it.each(["approve", "reject"] as const)("requires a memo and calls the existing write for %s, displaying the actual receipt", async (action) => {
+    mocks.decideEvolutionReview.mockResolvedValue({ status: "accepted", data: { receipt_id: "receipt-paper-123", status: "queued" } });
+    renderJournal(`/management/evolution-journal?decision=${id}`);
+    fireEvent.click(screen.getByRole("button", { name: action === "approve" ? "Approve" : "Reject", exact: true }));
+    const confirm = screen.getAllByRole("dialog").at(-1)!;
+    const submit = within(confirm).getByRole("button", { name: /Confirm/i });
+    expect(submit).toBeDisabled();
+    expect(mocks.decideEvolutionReview).not.toHaveBeenCalled();
+    fireEvent.change(within(confirm).getByRole("textbox", { name: /memo/i }), { target: { value: memo } });
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.decideEvolutionReview).toHaveBeenCalledExactlyOnceWith(id, action, { memo }));
+    await waitFor(() => expect(screen.getByText(/receipt-paper-123/)).toBeInTheDocument());
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+  });
+
+  it("preserves a typed BFF refusal including code, details and correlation id", async () => {
+    mocks.decideEvolutionReview.mockRejectedValue(makeBffError({
+      code: "ILLEGAL_TRANSITION", message: "flag_for_review cannot be approved", correlationId: "corr-paper-refusal",
+      details: { decision_kind: "pool_envelope_publication" },
+    }));
+    renderJournal(`/management/evolution-journal?decision=${id}`);
+    fireEvent.click(screen.getByRole("button", { name: "Approve", exact: true }));
+    const confirm = screen.getAllByRole("dialog").at(-1)!;
+    fireEvent.change(within(confirm).getByRole("textbox", { name: /memo/i }), { target: { value: memo } });
+    fireEvent.click(within(confirm).getByRole("button", { name: /Confirm/i }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("ILLEGAL_TRANSITION"));
+    expect(screen.getByRole("alert")).toHaveTextContent("flag_for_review cannot be approved");
+    expect(screen.getByRole("alert")).toHaveTextContent("corr-paper-refusal");
+    expect(screen.getByRole("alert")).toHaveTextContent("pool_envelope_publication");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it.each(["approved", "rejected", "superseded", "canceled"])("does not offer actions for a %s decision", (status) => {
+    setRows([decision(id, status)]);
+    renderJournal(`/management/evolution-journal?decision=${id}`);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve", exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject", exact: true })).not.toBeInTheDocument();
+  });
+});
 
 describe("EvolutionJournalPage Rendering", () => {
   let mockEvolutionEntries: Record<string, unknown>[] = [];
