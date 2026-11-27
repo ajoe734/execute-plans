@@ -1,0 +1,46 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-AGORA-SHELL-ORIGINAL-IA-20261127",
+  "title": "Agora shell back to the original design: three Chinese pages, trader header, servant command bar",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "review_independence": {
+    "owner_family": "Antigravity",
+    "reviewer_family": "Claude",
+    "independent": true
+  },
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-AGORA-SHELL-ORIGINAL-IA-20261127",
+  "register_instance": "RC4/RC6",
+  "dependencies_verified": [],
+  "runtime_budget": {
+    "recurring_jobs_added_or_changed": 0,
+    "persistent_writers_added_or_changed": 0,
+    "notes": "Frontend Agora shell restoration and existing BFF servant session/message route wiring; adds no recurring job, emitter, or persistent writer."
+  },
+  "acceptance_coverage": {
+    "AC1": "TradingDeskLayout navigation (TabBar) shows exactly the three visible zh-TW tabs 交易操盤室 (/agora/trading-room, default), 策略工坊 (/agora/strategy-workshop), and 策略執行與績效 (/agora/strategy-performance). Committee (/agora/committee) is reached from the workshop ([data-testid='workshop-open-committee'] and [data-testid='workshop-committee-link']) and from the committee empty state ([data-testid='committee-open-workshop']). Memory, Persona Lab, and Feedback are removed from trader navigation. The bottom Jobs/Shadow/Journal strip ([data-testid='trading-desk-bottom-strip']) is removed.",
+    "AC2": "The header shows the trader display name ([data-testid='trader-display-name']) and trading style ([data-testid='trader-style']) read from /bff/me and /bff/agora/me via agoraIdentityClient.getTraderIdentity(), the market state ([data-testid='trading-desk-market-state']), the servant state (交易僕人 with its display name [data-testid='servant-display-name'] and status [data-testid='servant-status']; formatServantDisplayName normalizes raw English default names like 'Agora Servant', 'Trading Servant', 'Your servant', and 'Servant' to zh-TW '專屬僕人'), and a zh-TW sign-out button '登出' ([data-testid='trading-desk-sign-out']).",
+    "AC3": "A persistent '交代僕人' command bar ([data-testid='trading-desk-command-form']) sits at the top of every Agora page with a distinct zh-TW placeholder per page (trading-room, strategy-workshop, strategy-performance) and all ten V6 §2.3 quick tasks ([data-testid='trading-desk-quick-tasks']: 建立策略視角, 產生候選池, 分析分點, 找落後補漲, 比較多檔股票, 檢查進場條件, 檢查出場條件, 重排目前畫面, 新增圖表, 送影子追蹤). Submitting creates or reuses the trader's servant session via POST /bff/agora/servant/sessions and sends the message with current page, strategy, and selected widget context via POST /bff/agora/servant/sessions/{session_id}/messages, displaying the reply in the servant drawer ([data-testid='servant-command-reply']). When the servant is missing or write access is not allowed, the command bar is disabled with a visible zh-TW reason ([data-testid='trading-desk-command-disabled-reason']).",
+    "AC4": "All agora.shell locale keys in src/i18n/locales/zh-TW.ts and src/i18n/locales/en-US.ts are actively used by TradingDeskLayout.tsx and dead keys (including agora.shell.bottom and unused legacy command keys) are deleted. src/agora/i18n.guard.test.ts verifies recursive zh-TW/en-US key parity across agora.shell, asserts every leaf key under agora.shell is referenced in TradingDeskLayout.tsx (zero dead keys), and rejects forbidden English shell literals.",
+    "AC5": "Legacy routes follow IA 05 in src/routes/agora.tsx and src/App.tsx: /agora/daily redirects to /agora/trading-room; /agora/watchlist redirects to /agora/trading-room?drawer=watchlist; /agora/signals redirects to /agora/trading-room?view=decision-queue; /agora/notebook redirects to /agora/strategy-workshop; /agora/ask, /agora/journal, and /agora/trainer redirect to /agora/trading-room (with /agora/ask and /agora/trainer opening the servant drawer). Covered by unit tests in src/routes/agora.test.tsx and browser tests in e2e/13-agora.spec.ts.",
+    "AC6": "npm run lint (eslint .) reports 0 errors; tsc --noEmit passes with 0 errors; global locale parity (i18nParity.test.ts) and Agora shell i18n guard (i18n.guard.test.ts) pass; all changed unit specs (80/80 tests across 7 files) and e2e/13-agora.spec.ts (5/5 Playwright tests) pass.",
+    "AC7": "e2e/agora-shell-hosted.spec.ts includes the hosted proof at 1600, 720, and 390 px capturing screenshots of the header, three zh-TW tabs, persistent command bar, and one command round trip. Reviewer Claude is from an independent model family from owner Antigravity2."
+  },
+  "changed_assertions": [
+    {
+      "file": "src/agora/TradingDeskLayout.test.tsx",
+      "change": "Updated tab count assertion from 7 English tabs to 3 zh-TW tabs (交易操盤室, 策略工坊, 策略執行與績效), asserted bottom strip removal, updated drawer workshop status/messages/error assertions to zh-TW locale strings ('狀態：open', '訊息：4', '無法取得策略工坊情境：boom'), updated sign-out button accessible name from 'Sign out' to zh-TW '登出', and added tests for header trader identity/style/market state/servant display name normalization and persistent 交代僕人 command bar round trip & disabled reasons.",
+      "reason": "Acceptance 1, 2, 3, and 4 require three visible zh-TW tabs, removal of the bottom strip, zh-TW sign-out and drawer strings, and the persistent 交代僕人 command bar."
+    }
+  ],
+  "verification": {
+    "typecheck": "./node_modules/.bin/tsc --noEmit: 0 errors",
+    "eslint": "./node_modules/.bin/eslint .: 0 errors",
+    "i18n_parity": "./node_modules/.bin/vitest run src/lib/v5/management/__tests__/i18nParity.test.ts src/agora/i18n.guard.test.ts: 21/21 passed",
+    "unit_tests": "./node_modules/.bin/vitest run src/agora/TradingDeskLayout.test.tsx src/routes/agora.test.tsx src/agora/useServantStatus.test.ts src/agora/i18n.guard.test.ts src/lib/bff-v1/agora/servant.test.ts src/lib/bff-v1/agora/identity.test.ts src/agora/agoraWorkspaceCleanup.test.ts: 7 files, 80/80 passed",
+    "playwright_e2e": "./node_modules/.bin/playwright test e2e/13-agora.spec.ts: 5/5 passed"
+  },
+  "residual_findings": []
+}

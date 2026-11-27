@@ -18,6 +18,17 @@ const forbiddenAuditLiterals = [
   "個 View",
 ];
 
+function collectLeafKeyPaths(node: unknown, prefix: string): string[] {
+  if (!node || typeof node !== "object" || Array.isArray(node)) {
+    return [prefix];
+  }
+  const paths: string[] = [];
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    paths.push(...collectLeafKeyPaths(value, `${prefix}.${key}`));
+  }
+  return paths;
+}
+
 describe("Agora locale policy", () => {
   it("never exposes a missing raw i18n key", () => {
     const keyReturningT = ((key: string) => key) as TFunction;
@@ -28,6 +39,41 @@ describe("Agora locale policy", () => {
     expect(Object.keys(zh.agora.tradingRoom.views)).toEqual(Object.keys(en.agora.tradingRoom.views));
     expect(Object.keys(zh.agora.tradingRoom.warnings)).toEqual(Object.keys(en.agora.tradingRoom.warnings));
     expect(Object.keys(zh.agora.tradingRoom.reasons)).toEqual(Object.keys(en.agora.tradingRoom.reasons));
+  });
+
+  it("keeps agora.shell in exact zh-TW/en-US key parity with zero dead keys and full shell string coverage", () => {
+    const zhShellKeys = collectLeafKeyPaths(zh.agora.shell, "agora.shell");
+    const enShellKeys = collectLeafKeyPaths(en.agora.shell, "agora.shell");
+    expect(zhShellKeys).toEqual(enShellKeys);
+    expect(zhShellKeys.length).toBeGreaterThan(30);
+
+    const shellSource = operatorComponents["./TradingDeskLayout.tsx"] ?? "";
+    expect(shellSource.length).toBeGreaterThan(0);
+
+    for (const key of zhShellKeys) {
+      expect(
+        shellSource,
+        `agora.shell key ${key} must be referenced by TradingDeskLayout.tsx (no dead keys allowed)`,
+      ).toContain(key);
+    }
+
+    const forbiddenShellLiterals = [
+      "Agora Servant",
+      "Ask AI",
+      "Chat with AI",
+      "問 AI",
+      '"Persona Lab"',
+      '"Jobs"',
+      '"Sign out"',
+      "Open servant drawer",
+      "Close servant drawer",
+    ];
+    for (const literal of forbiddenShellLiterals) {
+      expect(
+        shellSource,
+        `TradingDeskLayout.tsx contains forbidden hardcoded shell literal: ${literal}`,
+      ).not.toContain(literal);
+    }
   });
 
   it("rejects the mixed-language literals found by the hosted audit", () => {

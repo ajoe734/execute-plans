@@ -396,4 +396,184 @@ test.describe("F13 retained Agora journal and canonical postmortems", () => {
     expect(perfText).not.toContain("trade_journeys");
     expect(perfText).not.toContain("read_only_performance_attribution");
   });
+
+  test("Agora original IA shell: three zh-TW tabs, trader header, persistent 交代僕人 command bar round trip, and IA 05 legacy redirects (FE-AGORA-SHELL-ORIGINAL-IA-20261127)", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
+    });
+    await installContainedLoopbackAuth(page);
+    await installQuietEventSource(page);
+
+    const sessionCalls: Array<{ path: string; body: unknown }> = [];
+
+    await page.route(/\/(?:bff|api\/v1)\//, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const headers = {
+        "Access-Control-Allow-Origin": request.headers().origin || "*",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Headers": request.headers()["access-control-request-headers"] || "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      };
+      if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+
+      const respond = (body: unknown, status = 200) =>
+        route.fulfill({
+          status,
+          headers,
+          contentType: "application/json",
+          body: JSON.stringify(body),
+        });
+
+      if (path === "/bff/agora/me") {
+        return respond({
+          data: {
+            spec_version: "1.0",
+            scope_id: "scope-admintest",
+            tenant_id: "pantheon-dev",
+            user_id: "admintest",
+            operator_id: "admintest",
+            granted_capabilities: ["agora.identity.v1", "agora.session.v1", "agora.workshop.v1"],
+            metadata: {
+              trader_name: "admintest",
+              trading_style: "主觀與策略交易",
+              market_state: "模擬盤監控中",
+            },
+          },
+        });
+      }
+      if (path === "/bff/agora/capabilities") {
+        return respond({
+          data: {
+            capabilities: [
+              { name: "agora.identity.v1" },
+              { name: "agora.session.v1" },
+              { name: "agora.workshop.v1" },
+            ],
+          },
+        });
+      }
+      if (path === "/bff/agora/servant") {
+        return respond({
+          data: {
+            persona_id: "agora-servant-799a3ce8c021b91cbb54",
+            display_name: "Agora Servant",
+            status: "paper_only",
+            tenant_id: "pantheon-dev",
+            agora_user_id: "admintest",
+            capability_summary: { can_ask: true, can_research: true, can_workshop: true },
+            policy: { execution_authority: "none" },
+          },
+        });
+      }
+      if (path === "/bff/agora/servant/sessions" && request.method() === "POST") {
+        const body = request.postDataJSON();
+        sessionCalls.push({ path, body });
+        return respond(
+          {
+            data: {
+              session_id: "sess-e2e-001",
+              servant_persona_id: "agora-servant-799a3ce8c021b91cbb54",
+              session_type: "interactive",
+              status: "active",
+              state: "active",
+              metadata: body?.metadata ?? {},
+            },
+          },
+          201,
+        );
+      }
+      if (path === "/bff/agora/servant/sessions/sess-e2e-001/messages" && request.method() === "POST") {
+        const body = request.postDataJSON();
+        sessionCalls.push({ path, body });
+        return respond(
+          {
+            status: "accepted",
+            data: {
+              message_id: "servant-msg-e2e-001",
+              session_id: "sess-e2e-001",
+              session_type: "interactive",
+              servant_persona_id: "agora-servant-799a3ce8c021b91cbb54",
+              provider: {
+                status: "completed",
+                answer: "僕人已替您完成目前交易操盤室的分點籌碼與進場條件檢查。",
+                error: null,
+              },
+            },
+          },
+          202,
+        );
+      }
+      if (path === "/bff/agora/trading-room") {
+        return respond({
+          data: {
+            data_cutoff: "2026-11-27T01:00:00Z",
+            queue_summary: { add: 0, entry: 0, exit: 0, reduce: 0, review: 0 },
+            risk_summary: { alerts: [], state: "normal" },
+            snapshot_at: "2026-11-27T01:00:00Z",
+            spec_version: "1.0",
+            strategies: [],
+            user_scope_ref: "tenant:pantheon-dev",
+            operational_readiness: {
+              readiness: "not_configured",
+              reason: "no_workshop_strategies",
+            },
+          },
+        });
+      }
+      if (path === "/bff/agora/workshops") {
+        return respond({ data: { items: [], total: 0 } });
+      }
+      return respond({ data: [] });
+    });
+
+    await installContainedLoopbackAuthAuthority(page);
+
+    await page.goto("/agora/trading-room");
+    const tabBar = page.getByTestId("trading-desk-tab-bar");
+    await expect(tabBar).toBeVisible();
+    const tabButtons = tabBar.locator("button");
+    await expect(tabButtons).toHaveCount(3);
+    await expect(tabButtons.nth(0)).toHaveText("交易操盤室");
+    await expect(tabButtons.nth(1)).toHaveText("策略工坊");
+    await expect(tabButtons.nth(2)).toHaveText("策略執行與績效");
+    await expect(page.getByTestId("trading-desk-bottom-strip")).toHaveCount(0);
+
+    // Header checks
+    const commandBar = page.getByTestId("trading-desk-command-bar");
+    await expect(page.getByTestId("trader-display-name")).toBeVisible();
+    await expect(page.getByTestId("trader-style")).toContainText("主觀與策略交易");
+    await expect(page.getByTestId("trading-desk-market-state")).toContainText("市場狀態：");
+    await expect(page.getByTestId("servant-display-name")).toContainText("專屬僕人");
+    await expect(commandBar).not.toContainText("Agora Servant");
+    await expect(page.getByTestId("trading-desk-sign-out")).toHaveText("登出");
+
+    // 10 quick tasks & command round trip
+    const quickTasks = page.getByTestId("trading-desk-quick-tasks").locator("button");
+    await expect(quickTasks).toHaveCount(10);
+    await page.getByTestId("trading-desk-command-input").fill("分析分點並檢查進場條件");
+    await page.getByTestId("trading-desk-command-submit").click();
+
+    await expect(page.getByTestId("trading-desk-servant-drawer")).toBeVisible();
+    await expect(page.getByTestId("servant-command-reply")).toContainText(
+      "僕人已替您完成目前交易操盤室的分點籌碼與進場條件檢查。",
+    );
+    expect(sessionCalls.length).toBe(2);
+
+    // Legacy route redirects per IA 05
+    await page.goto("/agora/daily");
+    await expect(page).toHaveURL(/\/agora\/trading-room$/);
+
+    await page.goto("/agora/watchlist");
+    await expect(page).toHaveURL(/\/agora\/trading-room\?drawer=watchlist$/);
+
+    await page.goto("/agora/signals");
+    await expect(page).toHaveURL(/\/agora\/trading-room\?view=decision-queue$/);
+
+    await page.goto("/agora/notebook");
+    await expect(page).toHaveURL(/\/agora\/strategy-workshop$/);
+    await expect(page.getByTestId("workshop-open-committee")).toBeVisible();
+  });
 });

@@ -154,7 +154,7 @@ async function capture(page: Page, name: string): Promise<string> {
 }
 
 async function openAndVerifyServant(page: Page, narrow: boolean): Promise<void> {
-  const trigger = page.getByRole("button", { name: /servant drawer/i });
+  const trigger = page.getByRole("button", { name: /servant drawer|交易僕人抽屜/i });
   await trigger.focus();
   await trigger.click();
   const drawer = page.getByTestId("trading-desk-servant-drawer");
