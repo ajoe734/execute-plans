@@ -1,0 +1,52 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-AGORA-GLOBAL-DRAWERS-20261127",
+  "title": "Agora global drawers: servant tasks, Shadow, Journal/Replay, expert review, layout, personalization",
+  "owner": "Antigravity",
+  "reviewer": "Claude2",
+  "review_independence": {
+    "owner_family": "Antigravity",
+    "reviewer_family": "Claude",
+    "independent": true
+  },
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-AGORA-GLOBAL-DRAWERS-20261127",
+  "register_instance": "RC4",
+  "dependencies_verified": [
+    "FE-AGORA-SHELL-ORIGINAL-IA-20261127",
+    "FE-AGORA-TRADING-ROOM-PERFORMANCE-ALIGN-20261127",
+    "AGORA-SHADOW-COMPARISON-OWNER-ROUTE-20261127"
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added_or_changed": 0,
+    "persistent_writers_added_or_changed": 0,
+    "notes": "Frontend Agora global drawers and own-servant correction UI consuming existing BFF routes; adds no recurring job, emitter, or persistent writer."
+  },
+  "acceptance_coverage": {
+    "AC1": "Every Agora page (交易操盤室, 策略工坊, 策略執行與績效) can open six global drawers from the command bar toolbar ([data-testid='trading-desk-global-drawers']): 1) 交易僕人任務 ([data-testid='trading-desk-servant-drawer']) showing servant profile, context, session message composer, session message stream & running turns via GET /bff/agora/servant/sessions/{id} and GET /bff/agora/servant/sessions/{id}/stream, and session termination via POST /bff/agora/servant/sessions/{id}/terminate; 2) Shadow ([data-testid='trading-desk-shadow-drawer']) loading own decision events and four-party shadow comparison (human_actual, private_servant, base_strategy, committee_variant) through GET /bff/agora/trading-room/decision-events/{id}/shadow-comparison; 3) Journal/Replay ([data-testid='trading-desk-journal-drawer']) fetching both GET /bff/agora/journal and GET /bff/agora/decision-journal into a merged decision chain timeline with step-by-step replay controls; 4) 專家審視 ([data-testid='trading-desk-expert-review-drawer']) supporting Ask, Challenge, Compare, Propose, and Reflect on the current object through POST /bff/agora/interactions/context:resolve, POST /bff/agora/interactions/participants:eligible, and POST /bff/agora/interactions; 5) 版面調整 ([data-testid='trading-desk-layout-drawer']) opening the widget revision flow (WorkspaceWidgetRevisionDrawer) in the trading room and disabled with a zh-TW reason ([data-testid='layout-drawer-disabled-reason']) elsewhere; 6) 個人化紀錄 ([data-testid='trading-desk-personalization-drawer']) displaying workspace versions (GET /bff/agora/trading-room/workspaces/{id}/versions) and what the servant learned (GET /bff/agora/persona-lab/{id}/change-log and GET /bff/agora/personas/{id}/human-evidence).",
+    "AC2": "A 修正助理 section ([data-testid='servant-correction-section']) in src/agora/drawers/ServantCorrectionSection.tsx binds automatically to the trader's own servant persona_id without any persona ID input field, submits signal-feedback, notes, insights, and training-examples through POST /bff/agora/{kind}, and immediately reads back the submitted item via GET /bff/agora/human-evidence/{evidence_id} and refreshes GET /bff/agora/personas/{persona_id}/human-evidence.",
+    "AC3": "/agora/ask, /agora/journal, and /agora/trainer redirect to /agora/trading-room and open the matching global drawer (/agora/ask -> 交易僕人任務 drawer; /agora/journal -> Journal/Replay drawer; /agora/trainer -> 交易僕人任務 drawer with 修正助理 active [data-trainer-active='true']).",
+    "AC4": "ShadowComparisonPanel and ShadowGlobalDrawer consume the Agora owner route GET /bff/agora/trading-room/decision-events/{id}/shadow-comparison from AGORA-SHADOW-COMPARISON-OWNER-ROUTE-20261127 (displaying comparison_state settled/pending_settlement/unavailable/no_decision_recorded and the four canonical arms), and no trader page calls any /bff/management route.",
+    "AC5": "All drawer text is zh-TW through src/i18n/locales/zh-TW.ts (with exact key parity in src/i18n/locales/en-US.ts) enforced by src/agora/i18n.guard.test.ts; empty and error states are typed; npm run lint reports 0 errors and tsc --noEmit passes with 0 errors; no existing test was weakened or deleted.",
+    "AC6": "e2e/agora-shell-hosted.spec.ts includes both the hosted admintest proof and the recorded-fixture real-Chromium proof capturing screenshots of all six global drawers and feedback submission + readback under docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/. Reviewer Claude2 is from an independent model family from owner Antigravity."
+  },
+  "screenshots": [
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/01-servant-tasks-drawer.png",
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/02-correction-submit-readback.png",
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/03-shadow-drawer.png",
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/04-journal-replay-drawer.png",
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/05-expert-review-drawer.png",
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/06-layout-drawer-trading-room.png",
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/07-layout-drawer-disabled-outside.png",
+    "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/08-personalization-drawer.png"
+  ],
+  "verification": {
+    "typecheck": "npx tsc --noEmit: 0 errors",
+    "eslint": "npm run lint (eslint .): 0 errors",
+    "i18n_guard": "npx vitest run src/agora/i18n.guard.test.ts: 8/8 passed",
+    "unit_tests": "npx vitest run src/agora/i18n.guard.test.ts src/agora/TradingDeskLayout.test.tsx src/routes/agora.test.tsx src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx src/lib/bff-v1/agora/learning.test.ts src/lib/bff-v1/agora/servant.test.ts src/lib/bff-v1/agora/tradingRoom.test.ts: 7 files, 157/157 passed",
+    "playwright_e2e": "npx playwright test e2e/agora-shell-hosted.spec.ts: real Chromium proof with 8 screenshots captured"
+  },
+  "residual_findings": []
+}

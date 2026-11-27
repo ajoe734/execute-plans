@@ -28,11 +28,13 @@ import {
   listDecisionEvents,
   listTradingRoomWorkspaceVersions,
   type TradingDecisionEvent,
-  type TradingRoomDashboardVersion,
-  type TradingRoomView,
-  type TradingRoomWidgetSpec,
-  type TradingRoomWorkspace,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import type {
+  TradingRoomDashboardVersion,
+  TradingRoomViewSpec,
+  TradingRoomWidgetSpec,
+  TradingRoomWorkspace,
+} from "@/lib/bff-v1/agora/tradingRoomTypes";
 import { ServantCorrectionSection } from "./ServantCorrectionSection";
 
 export type GlobalDrawerId =
@@ -433,7 +435,8 @@ export function ShadowGlobalDrawer({
     setLoading(true);
     setError(null);
     try {
-      const list = await listDecisionEvents();
+      const res = await listDecisionEvents();
+      const list = Array.isArray(res) ? res : (res?.items ?? []);
       setEvents(list);
     } catch (err) {
       setError(err instanceof Error ? err.message : "decision_events_unavailable");
@@ -1339,6 +1342,26 @@ export interface LayoutAdjustmentGlobalDrawerProps {
   onNavigateToTradingRoom: () => void;
 }
 
+function widgetIdOf(widget: TradingRoomWidgetSpec): string {
+  const rec = widget as unknown as Record<string, unknown>;
+  return String(rec.id ?? rec.widgetId ?? "");
+}
+
+function viewTitleOf(view: TradingRoomViewSpec): string {
+  const rec = view as unknown as Record<string, unknown>;
+  return String(rec.title ?? rec.viewName ?? rec.id ?? "");
+}
+
+function workspaceIdOf(workspace: TradingRoomWorkspace): string {
+  const rec = workspace as unknown as Record<string, unknown>;
+  return String(rec.id ?? rec.workspaceId ?? "");
+}
+
+function versionIdOf(ver: TradingRoomDashboardVersion): string {
+  const rec = ver as unknown as Record<string, unknown>;
+  return String(rec.id ?? rec.versionId ?? `v-${ver.dashboardVersion}`);
+}
+
 export function LayoutAdjustmentGlobalDrawer({
   onClose,
   isNarrowViewport,
@@ -1353,7 +1376,7 @@ export function LayoutAdjustmentGlobalDrawer({
   const [loading, setLoading] = useState<boolean>(false);
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [activeRevisionTarget, setActiveRevisionTarget] = useState<{
-    view: TradingRoomView;
+    view: TradingRoomViewSpec;
     widget: TradingRoomWidgetSpec;
   } | null>(null);
 
@@ -1369,7 +1392,10 @@ export function LayoutAdjustmentGlobalDrawer({
         const firstStrategy = room.strategies[0];
         if (firstStrategy) {
           targetStrategyId = firstStrategy.strategy_id;
-          targetStrategyVersion = firstStrategy.version_id || "v1";
+          targetStrategyVersion =
+            firstStrategy.strategy_spec_registry_id ||
+            ((firstStrategy as unknown as Record<string, unknown>).version_id as string | undefined) ||
+            "v1";
         }
       }
       if (!targetStrategyId) {
@@ -1395,7 +1421,7 @@ export function LayoutAdjustmentGlobalDrawer({
     void loadWorkspace();
   }, [loadWorkspace]);
 
-  const allWidgets: Array<{ view: TradingRoomView; widget: TradingRoomWidgetSpec }> = [];
+  const allWidgets: Array<{ view: TradingRoomViewSpec; widget: TradingRoomWidgetSpec }> = [];
   if (workspace) {
     for (const v of workspace.views) {
       for (const w of v.widgets) {
@@ -1428,7 +1454,7 @@ export function LayoutAdjustmentGlobalDrawer({
     }
     const matched =
       (selectedWidget
-        ? allWidgets.find((item) => item.widget.widgetId === selectedWidget)
+        ? allWidgets.find((item) => widgetIdOf(item.widget) === selectedWidget)
         : undefined) ?? allWidgets[0];
     if (matched) {
       setActiveRevisionTarget(matched);
@@ -1611,48 +1637,52 @@ export function LayoutAdjustmentGlobalDrawer({
                   gap: 6,
                 }}
               >
-                {allWidgets.map(({ view, widget }) => (
-                  <li
-                    key={widget.widgetId}
-                    style={{
-                      background: "#171b22",
-                      border: "1px solid #2a2e38",
-                      borderRadius: 6,
-                      padding: "8px 10px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 8,
-                    }}
-                  >
-                    <div>
-                      <div style={{ color: "#f0ece4", fontSize: 12, fontWeight: 600 }}>
-                        {widget.title}
-                      </div>
-                      <div style={{ color: "#8c96a6", fontSize: 11, fontFamily: "monospace" }}>
-                        {widget.widgetId} · {view.viewName}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      data-testid={`layout-drawer-revise-widget-${widget.widgetId}`}
-                      onClick={() => setActiveRevisionTarget({ view, widget })}
+                {allWidgets.map(({ view, widget }) => {
+                  const wid = widgetIdOf(widget);
+                  const vTitle = viewTitleOf(view);
+                  return (
+                    <li
+                      key={wid}
                       style={{
-                        background: "#12161f",
-                        border: "1px solid #e8b750",
-                        borderRadius: 4,
-                        color: "#e8b750",
-                        cursor: "pointer",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        padding: "4px 8px",
-                        whiteSpace: "nowrap",
+                        background: "#171b22",
+                        border: "1px solid #2a2e38",
+                        borderRadius: 6,
+                        padding: "8px 10px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
                       }}
                     >
-                      {t("agora.drawers.layout.reviseThisWidget")}
-                    </button>
-                  </li>
-                ))}
+                      <div>
+                        <div style={{ color: "#f0ece4", fontSize: 12, fontWeight: 600 }}>
+                          {widget.title}
+                        </div>
+                        <div style={{ color: "#8c96a6", fontSize: 11, fontFamily: "monospace" }}>
+                          {wid} · {vTitle}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`layout-drawer-revise-widget-${wid}`}
+                        onClick={() => setActiveRevisionTarget({ view, widget })}
+                        style={{
+                          background: "#12161f",
+                          border: "1px solid #e8b750",
+                          borderRadius: 4,
+                          color: "#e8b750",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "4px 8px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {t("agora.drawers.layout.reviseThisWidget")}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -1723,7 +1753,10 @@ export function PersonalizationGlobalDrawer({
         const first = room.strategies[0];
         if (first) {
           targetStrategyId = first.strategy_id;
-          targetStrategyVersion = first.version_id || "v1";
+          targetStrategyVersion =
+            first.strategy_spec_registry_id ||
+            ((first as unknown as Record<string, unknown>).version_id as string | undefined) ||
+            "v1";
         }
       }
       if (!targetStrategyId) {
@@ -1734,7 +1767,7 @@ export function PersonalizationGlobalDrawer({
           targetStrategyVersion,
         );
         const versionList = await listTradingRoomWorkspaceVersions(
-          wsMeta.workspace.workspaceId,
+          workspaceIdOf(wsMeta.workspace),
         );
         setVersions(versionList);
       }
@@ -1848,48 +1881,51 @@ export function PersonalizationGlobalDrawer({
               gap: 6,
             }}
           >
-            {versions.map((ver) => (
-              <li
-                key={ver.versionId}
-                data-testid={`personalization-workspace-version-${ver.dashboardVersion}`}
-                style={{
-                  background: "#12161f",
-                  border: "1px solid #2a2e38",
-                  borderRadius: 6,
-                  padding: "8px 10px",
-                  fontSize: 12,
-                }}
-              >
-                <div
+            {versions.map((ver) => {
+              const vid = versionIdOf(ver);
+              return (
+                <li
+                  key={vid}
+                  data-testid={`personalization-workspace-version-${ver.dashboardVersion}`}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    color: "#e8b750",
-                    fontSize: 11,
-                    fontWeight: 700,
+                    background: "#12161f",
+                    border: "1px solid #2a2e38",
+                    borderRadius: 6,
+                    padding: "8px 10px",
+                    fontSize: 12,
                   }}
                 >
-                  <span>
-                    {t("agora.drawers.personalization.versionBadge", {
-                      version: ver.dashboardVersion,
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      color: "#e8b750",
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span>
+                      {t("agora.drawers.personalization.versionBadge", {
+                        version: ver.dashboardVersion,
+                      })}
+                    </span>
+                    <span style={{ color: "#8c96a6", fontFamily: "monospace" }}>
+                      {vid}
+                    </span>
+                  </div>
+                  <div style={{ color: "#f0ece4", marginTop: 4 }}>{ver.changeSummary}</div>
+                  <div style={{ color: "#8c96a6", fontSize: 11, marginTop: 4 }}>
+                    {t("agora.drawers.personalization.generatedByLabel", {
+                      source: ver.generatedBy,
+                    })}{" "}
+                    ·{" "}
+                    {t("agora.drawers.personalization.createdAtLabel", {
+                      time: ver.createdAt,
                     })}
-                  </span>
-                  <span style={{ color: "#8c96a6", fontFamily: "monospace" }}>
-                    {ver.versionId}
-                  </span>
-                </div>
-                <div style={{ color: "#f0ece4", marginTop: 4 }}>{ver.changeSummary}</div>
-                <div style={{ color: "#8c96a6", fontSize: 11, marginTop: 4 }}>
-                  {t("agora.drawers.personalization.generatedByLabel", {
-                    source: ver.generatedBy,
-                  })}{" "}
-                  ·{" "}
-                  {t("agora.drawers.personalization.createdAtLabel", {
-                    time: ver.createdAt,
-                  })}
-                </div>
-              </li>
-            ))}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
