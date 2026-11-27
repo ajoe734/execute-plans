@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,16 @@ export const ArtifactDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
+  const loadedEntityIdsRef = useRef(new WeakMap<Artifact, string>());
   const { data: a, loading, isError, error } = useLiveDetail<Artifact>(
     id,
-    (entityId) => bffV1.artifacts.get(entityId),
+    (entityId) =>
+      bffV1.artifacts.get(entityId).then((item) => {
+        if (item && typeof item === "object") {
+          loadedEntityIdsRef.current.set(item, entityId);
+        }
+        return item;
+      }),
     { kinds: ["artifacts"] },
   );
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -47,17 +54,24 @@ export const ArtifactDetail = () => {
     data: LineageRead | null;
   }>({ status: "loading", data: null });
 
+  // Lineage, deployments, and audit belong to a loaded artifact: a not-found or
+  // failing artifact read issues no secondary reads.
+  const isLoadedForRoute = Boolean(a && id && loadedEntityIdsRef.current.get(a) === id.trim());
+  const loadedId = isLoadedForRoute ? id : undefined;
+
   useEffect(() => {
-    if (!id) return;
+    if (!loadedId) return;
     let cancelled = false;
+    setDeployments([]);
+    setAudit([]);
     setLineageState({ status: "loading", data: null });
     bffV1.deployments.list().then((all) => {
-      if (!cancelled) setDeployments(all.filter((d) => d.artifactId === id));
+      if (!cancelled) setDeployments(all.filter((d) => d.artifactId === loadedId));
     }).catch(() => {});
     bffV1.audit.list().then((au) => {
-      if (!cancelled) setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact.")));
+      if (!cancelled) setAudit(au.filter((x) => x.target === loadedId || x.action?.startsWith("artifact.")));
     }).catch(() => {});
-    managementConsoleReads.lineage(id).then(
+    managementConsoleReads.lineage(loadedId).then(
       (lin) => {
         if (cancelled) return;
         const unavailable = isLineageUnavailable(lin);
@@ -74,7 +88,7 @@ export const ArtifactDetail = () => {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [loadedId]);
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!a) {

@@ -1,0 +1,61 @@
+{
+  "schema_version": "pantheon.fe-artifact-reads-after-found.evidence.v1",
+  "task_id": "FE-ARTIFACT-READS-AFTER-FOUND-20261127",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-ARTIFACT-READS-AFTER-FOUND-20261127",
+  "base_commit": "9b0df6622fa1b73a01dc21000e576dfda5949088",
+  "timestamp": "2026-11-27T15:30:30Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC1",
+    "work_package": "WP1.2",
+    "summary": "ArtifactDetail fired artifact, deployments, audit, and lineage reads concurrently on mount; when GET /bff/artifacts/:id returned 404 (e.g. art_stg001_v320 during hosted crawl), the lineage, deployments, and audit reads still executed and a slow /bff/lineage response failed the route."
+  },
+  "modified_surfaces": [
+    "src/management/pages/ArtifactDetail.tsx",
+    "src/management/pages/ArtifactDetail.test.tsx",
+    "docs/deployment/evidence/FE-ARTIFACT-READS-AFTER-FOUND-20261127/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_gate_secondary_reads_on_found_artifact": {
+      "passed": true,
+      "implementation": "In src/management/pages/ArtifactDetail.tsx, tracked the route entityId that resolved the current artifact instance and gated the secondary useEffect on const loadedId = isLoadedForRoute ? id : undefined (following the execute-plans #1111 loadedId pattern on RebalanceDetail, DeploymentDetail, and EvolutionDetail). When GET /bff/artifacts/:id is still pending, returns 404, or fails with an error, loadedId remains undefined, no /bff/lineage, /bff/deployments, or /bff/audit request is sent, and the existing not-found or error EmptyState renders unchanged.",
+      "tests": [
+        "src/management/pages/ArtifactDetail.test.tsx > ArtifactDetail load states > sends zero lineage, deployments, and audit requests when GET /bff/artifacts/:id returns 404 or fails",
+        "src/management/pages/ArtifactDetail.test.tsx > ArtifactDetail load states > starts lineage, deployments, and audit reads only after the artifact read resolves, sends exactly one lineage read for a found artifact, and cancels previous reads when route id changes"
+      ]
+    },
+    "AC2_single_lineage_read_and_route_change_cancellation": {
+      "passed": true,
+      "implementation": "For a found artifact, loadedId transitions to id once, sending managementConsoleReads.lineage(loadedId) (GET /bff/lineage?root_id=<id>), bffV1.deployments.list(), and bffV1.audit.list() once. The lineage tab keeps its loading, empty, unavailable, and graph states unchanged. When the route :id changes, loadedId immediately clears until the new route's artifact resolves, running the effect cleanup (cancelled = true) to ignore in-flight responses from the previous route id.",
+      "tests": [
+        "src/management/pages/ArtifactDetail.test.tsx > ArtifactDetail load states > renders the artifact lineage graph from /bff/lineage?root_id=:id with display_name, highlights the current artifact, and separates empty from unavailable",
+        "src/management/pages/ArtifactDetail.test.tsx > ArtifactDetail load states > starts lineage, deployments, and audit reads only after the artifact read resolves, sends exactly one lineage read for a found artifact, and cancels previous reads when route id changes"
+      ]
+    },
+    "AC3_tests_lint_and_typecheck": {
+      "passed": true,
+      "changed_test_assertions_justification": [],
+      "note": "All 5 existing tests in src/management/pages/ArtifactDetail.test.tsx were preserved unchanged; 2 new tests were added (7/7 passing).",
+      "tests": [
+        "src/management/pages/ArtifactDetail.test.tsx (7 passed)"
+      ]
+    }
+  },
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "requests_delta": "Zero extra requests. For a found artifact, the page still sends 1 artifact read, 1 lineage read, 1 deployments read, and 1 audit read. For a not-found or errored artifact read, the page now sends 0 lineage, 0 deployments, and 0 audit reads (3 fewer requests per 404/error detail load)."
+  },
+  "residual_findings": [],
+  "verification": {
+    "commands": [
+      "./node_modules/.bin/vitest run src/management/pages/ArtifactDetail.test.tsx -> 1 file, 7 passed, exit 0",
+      "npm run typecheck (tsc -p tsconfig.app.json --noEmit) -> 0 errors, exit 0",
+      "npm run lint (eslint .) -> 0 errors (143 pre-existing warnings), exit 0",
+      "./node_modules/.bin/eslint src/management/pages/ArtifactDetail.tsx src/management/pages/ArtifactDetail.test.tsx -> 0 errors, 0 warnings, exit 0"
+    ]
+  }
+}
