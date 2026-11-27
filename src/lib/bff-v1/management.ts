@@ -14,6 +14,7 @@
 import {
   isStrictLiveFallback,
 } from "./liveTransport";
+import { resolveMeetingActionEvidenceHref } from "./meetings";
 import { strictLiveRead } from "./domainReads";
 import { liveStatus } from "./liveStatus";
 import { paths } from "./paths";
@@ -25,8 +26,27 @@ import {
   composeCockpit, defaultCockpitSeed, type CockpitModel,
 } from "@/lib/v5/management/cockpit";
 import {
-  defaultPulseRankings, type TradingPulseRankBlock,
+  defaultPulseRankings,
+  LIVE_RANKING_BLOCKS,
+  LIVE_RANKING_BLOCK_LABELS,
+  type LiveRankingBlockKind,
+  type ManagementTradingPulseLinks,
+  type TradingPulseComparisonScope,
+  type TradingPulseComparisonScopePeriod,
+  type TradingPulseRankBlock,
+  type TradingPulseRankRow,
 } from "@/lib/v5/management/tradingRankings";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
+export {
+  LIVE_RANKING_BLOCKS,
+  LIVE_RANKING_BLOCK_LABELS,
+  type LiveRankingBlockKind,
+  type ManagementTradingPulseLinks,
+  type TradingPulseComparisonScope,
+  type TradingPulseComparisonScopePeriod,
+  type TradingPulseRankBlock,
+  type TradingPulseRankRow,
+};
 import {
   HUMAN_INBOX_KINDS,
   type HumanInboxAllowedActions,
@@ -47,7 +67,7 @@ import type {
   PortfolioIncident, PortfolioSourceIssue, PortfolioCapitalScopeKind,
 } from "@/lib/v5/management/portfolio";
 import type { PersonaLeagueRow, PersonaLeagueInventoryRow } from "@/lib/v5/management/personaLeague";
-import { buildLinkSet } from "@/lib/v5/management/links";
+import { buildLinkSet, resolveManagementHref } from "@/lib/v5/management/links";
 import type {
   QuarterlyRankingRow, QuarterlyRankingFormula,
 } from "@/lib/v5/management/quarterlyRanking";
@@ -66,6 +86,8 @@ import {
   type EvolutionQualificationCriterionRow,
   type EvolutionQualificationDecisionItem,
   type EvolutionQualificationReport,
+  type EvolutionMemberBaseline,
+  type EvolutionMemberBaselinesSurface,
 } from "./dto";
 import { isRawEvidenceSummaryText } from "@/lib/enumLabels";
 
@@ -538,8 +560,180 @@ export interface ManagementTradingPulseCoverage {
   [key: string]: unknown;
 }
 
+export interface ManagementTradingPulseStageScopeCount {
+  personaCount: number | null;
+  persona_count: number | null;
+  runtimeCount: number | null;
+  runtime_count: number | null;
+  [key: string]: unknown;
+}
+
+export type ManagementTradingPulseOperatorScopeStatus =
+  | "verified"
+  | "partial"
+  | "unavailable"
+  | "unverified"
+  | string;
+
+export interface ManagementTradingPulseOperatorScope {
+  status: ManagementTradingPulseOperatorScopeStatus;
+  tenantId: string | null;
+  tenant_id: string | null;
+  personaCount: number | null;
+  persona_count: number | null;
+  runtimeCount: number | null;
+  runtime_count: number | null;
+  verifiedRuntimeCount: number | null;
+  verified_runtime_count: number | null;
+  excludedProbeCount?: number | null;
+  excluded_probe_count?: number | null;
+  reason: string | null;
+  byStage: Record<string, ManagementTradingPulseStageScopeCount>;
+  by_stage: Record<string, ManagementTradingPulseStageScopeCount>;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulsePnlGroup {
+  stage: string | null;
+  currency: string | null;
+  periodStartAt: string | null;
+  period_start_at: string | null;
+  periodEndAt: string | null;
+  period_end_at: string | null;
+  periodLabel?: string | null;
+  period_label?: string | null;
+  asOf: string | null;
+  as_of: string | null;
+  pnlDefinition: string | null;
+  pnl_definition: string | null;
+  value: number | null;
+  coveredPersonaCount: number | null;
+  covered_persona_count: number | null;
+  eligiblePersonaCount: number | null;
+  eligible_persona_count: number | null;
+  coveredRuntimeCount: number | null;
+  covered_runtime_count: number | null;
+  eligibleRuntimeCount: number | null;
+  eligible_runtime_count: number | null;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseFillRateDetails {
+  status: string | null;
+  reason: string | null;
+  basis: string | null;
+  unit: string | null;
+  numerator: number | null;
+  denominator: number | null;
+  window?: TradingPulseComparisonScopePeriod | string | null;
+  sources?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseMetricPeriod {
+  startAt: string | null;
+  start_at: string | null;
+  asOf: string | null;
+  as_of: string | null;
+  window: string | null;
+  [key: string]: unknown;
+}
+
+export type ManagementTradingPulseSourceStatus =
+  | "available"
+  | "stale"
+  | "unavailable"
+  | "unverified"
+  | string;
+
+export interface ManagementTradingPulsePerformanceContext {
+  ledgerFillCount: number | null;
+  ledger_fill_count: number | null;
+  pnlCurrency: string | null;
+  pnl_currency: string | null;
+  pnlPeriodStartAt: string | null;
+  pnl_period_start_at: string | null;
+  pnlAt: string | null;
+  pnl_at: string | null;
+  pnlDefinition: string | null;
+  pnl_definition: string | null;
+  fillRateDetails: ManagementTradingPulseFillRateDetails | null;
+  fill_rate_details: ManagementTradingPulseFillRateDetails | null;
+  fillRateBasis: string | null;
+  fill_rate_basis: string | null;
+  sharpeRatioStatus: string | null;
+  sharpe_ratio_status: string | null;
+  sharpeRatioReason: string | null;
+  sharpe_ratio_reason: string | null;
+  staleness: Record<string, unknown> | null;
+  metricReasons: Record<string, string | null>;
+  metric_reasons: Record<string, string | null>;
+  metricUnits: Record<string, string | null>;
+  metric_units: Record<string, string | null>;
+  metricPeriods: Record<string, ManagementTradingPulseMetricPeriod>;
+  metric_periods: Record<string, ManagementTradingPulseMetricPeriod>;
+  latestReportAt: string | null;
+  latest_report_at: string | null;
+  lastFillAt: string | null;
+  last_fill_at: string | null;
+  snapshotAt: string | null;
+  snapshot_at: string | null;
+  sourceStatus: ManagementTradingPulseSourceStatus;
+  source_status: ManagementTradingPulseSourceStatus;
+  [key: string]: unknown;
+}
+
+export type ManagementTradingPulseOutcomeStatus =
+  | "available"
+  | "not_observed"
+  | "unavailable"
+  | string;
+
+export interface ManagementTradingPulseLatestOutcome {
+  status: ManagementTradingPulseOutcomeStatus;
+  occurredAt: string | null;
+  occurred_at: string | null;
+  reasonCode: string | null;
+  reason_code: string | null;
+  submittedToBroker: boolean | null;
+  submitted_to_broker: boolean | null;
+  requestedQuantity: number | null;
+  requested_quantity: number | null;
+  filledQuantity: number | null;
+  filled_quantity: number | null;
+  required: number | null;
+  available: number | null;
+  currency: string | null;
+  journeyId: string | null;
+  journey_id: string | null;
+  sourceEventId: string | null;
+  source_event_id: string | null;
+  focusStage: string | null;
+  focus_stage: string | null;
+  decisionId: string | null;
+  decision_id: string | null;
+  orderId: string | null;
+  order_id: string | null;
+  brokerOrderId: string | null;
+  broker_order_id: string | null;
+  side: string | null;
+  symbol: string | null;
+  journeyHref: string | null;
+  journey_href: string | null;
+  [key: string]: unknown;
+}
+
 export interface ManagementTradingPulseSummary {
-  runtimeCount: number;
+  operatorScope: ManagementTradingPulseOperatorScope;
+  operator_scope: ManagementTradingPulseOperatorScope;
+  pnlGroups: ManagementTradingPulsePnlGroup[];
+  pnl_groups: ManagementTradingPulsePnlGroup[];
+  fillRateAggregation?: string | null;
+  fill_rate_aggregation?: string | null;
+  snapshotAt?: string;
+  snapshot_at?: string;
+  runtimeCount: number | null;
+  runtime_count?: number | null;
   telemetryCoverageCount: number;
   monitoringCoverageCount?: number;
   monitoring_coverage_count?: number;
@@ -571,7 +765,8 @@ export interface ManagementTradingPulseSummary {
   worstDrawdown: number | null;
   averageFillRate: number | null;
   worstSlippageBps: number | null;
-  totalTrades: number;
+  totalTrades: number | null;
+  total_trades?: number | null;
   byStatus: Record<string, number>;
   byStage: Record<string, number>;
   byBaselineStatus: Record<string, number>;
@@ -634,8 +829,18 @@ export interface ManagementTradingPulseBaselineComparison {
 }
 
 export interface ManagementTradingPulseRuntimeRow {
+  personaId?: string | null;
+  persona_id?: string | null;
+  personaName?: string | null;
+  persona_name?: string | null;
   strategyId?: string;
   strategy_id?: string;
+  strategyName?: string | null;
+  strategy_name?: string | null;
+  underlyingSymbol?: string | null;
+  underlying_symbol?: string | null;
+  tenantId?: string | null;
+  tenant_id?: string | null;
   runtimeId: string;
   runtime_id?: string;
   runtimeBindingId?: string;
@@ -643,9 +848,20 @@ export interface ManagementTradingPulseRuntimeRow {
   deploymentStage?: string;
   deployment_stage?: string;
   status?: string;
+  executedTradeCount?: number | null;
+  executed_trade_count?: number | null;
+  totalTrades?: number | null;
+  total_trades?: number | null;
+  positionCount?: number | null;
+  position_count?: number | null;
   metrics: Record<string, unknown>;
   telemetrySummary?: Record<string, unknown>;
   telemetry_summary?: Record<string, unknown>;
+  performanceContext?: ManagementTradingPulsePerformanceContext;
+  performance_context?: ManagementTradingPulsePerformanceContext;
+  latestOutcome?: ManagementTradingPulseLatestOutcome;
+  latest_outcome?: ManagementTradingPulseLatestOutcome;
+  links?: ManagementTradingPulseLinks;
   baselineComparison?: ManagementTradingPulseBaselineComparison | null;
   baseline_comparison?: ManagementTradingPulseBaselineComparison | null;
   rowHealth?: Record<string, unknown>;
@@ -654,6 +870,82 @@ export interface ManagementTradingPulseRuntimeRow {
   last_updated_at?: string;
   [key: string]: unknown;
 }
+
+export interface ManagementTradingPulseRankingEntry {
+  rank?: number | null;
+  personaId: string | null;
+  persona_id: string | null;
+  personaName: string | null;
+  persona_name: string | null;
+  strategyId: string | null;
+  strategy_id: string | null;
+  strategyName: string | null;
+  strategy_name: string | null;
+  underlyingSymbol: string | null;
+  underlying_symbol: string | null;
+  tenantId: string | null;
+  tenant_id: string | null;
+  runtimeId: string;
+  runtime_id: string;
+  runtimeBindingId: string;
+  runtime_binding_id: string;
+  deploymentStage: string;
+  deployment_stage: string;
+  status: string;
+  pnl: number | null;
+  drawdown: number | null;
+  sharpeRatio: number | null;
+  sharpe_ratio: number | null;
+  fillRate: number | null;
+  fill_rate: number | null;
+  avgSlippageBps: number | null;
+  avg_slippage_bps: number | null;
+  totalTrades: number | null;
+  total_trades: number | null;
+  lastUpdatedAt: string | null;
+  last_updated_at: string | null;
+  baselineComparisonStatus: string | null;
+  baseline_comparison_status: string | null;
+  breachedMetricCount: number | null;
+  breached_metric_count: number | null;
+  rowHealthStatus: string | null;
+  row_health_status: string | null;
+  rowHealthDegradedChecks: string[];
+  row_health_degraded_checks: string[];
+  performanceContext: ManagementTradingPulsePerformanceContext;
+  performance_context: ManagementTradingPulsePerformanceContext;
+  latestOutcome: ManagementTradingPulseLatestOutcome;
+  latest_outcome: ManagementTradingPulseLatestOutcome;
+  links?: ManagementTradingPulseLinks;
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseRankingsSummary {
+  operatorScope: ManagementTradingPulseOperatorScope;
+  operator_scope: ManagementTradingPulseOperatorScope;
+  pnlGroups: ManagementTradingPulsePnlGroup[];
+  pnl_groups: ManagementTradingPulsePnlGroup[];
+  runtimeCount: number | null;
+  runtime_count: number | null;
+  rankingBlockCount: number;
+  ranking_block_count: number;
+  rankedItemCount: number;
+  ranked_item_count: number;
+  eligibleItemCount: number;
+  eligible_item_count: number;
+  missingMetricItemCount: number;
+  missing_metric_item_count: number;
+  criteria: string[];
+  limit: number | null;
+  topRuntimeId: string | null;
+  top_runtime_id: string | null;
+  [key: string]: unknown;
+}
+
+export type TradingPulseRankingsList = TradingPulseRankBlock[] & {
+  summary?: ManagementTradingPulseRankingsSummary;
+  meta?: ManagementTradingPulseMeta;
+};
 
 export interface ManagementTradingPulseMeta {
   snapshotAt?: string;
@@ -667,7 +959,7 @@ export interface ManagementTradingPulseModel {
   id?: string;
   summary: ManagementTradingPulseSummary;
   cards: ManagementTradingPulseCard[];
-  rankings: unknown[];
+  rankings: ManagementTradingPulseRankingEntry[];
   runtimeRows: ManagementTradingPulseRuntimeRow[];
   runtime_rows?: ManagementTradingPulseRuntimeRow[];
   baselineComparisons: ManagementTradingPulseBaselineComparison[];
@@ -1039,6 +1331,15 @@ export interface ManagementEvidenceDetail {
   refId: string;
   ref_id: string;
   title: string;
+  /** False when the BFF recorded no title and `title` falls back to the ref id. */
+  titleRecorded?: boolean;
+  /** Recorded source class (for example official_reference), or null. */
+  sourceClass?: string | null;
+  /** http(s) link to the original source, or null. */
+  externalUrl?: string | null;
+  /** True when the item route answered `evidence_ref_detail.status: unavailable`. */
+  unavailable?: boolean;
+  unavailableReason?: string | null;
   sourceDocument: ManagementEvidenceSourceDocument;
   source_document: ManagementEvidenceSourceDocument;
   linkType: string;
@@ -1208,9 +1509,19 @@ const asBooleanRecord = (value: unknown): Record<string, boolean> => {
 };
 
 const asNullableNumber = (value: unknown): number | null => {
-  if (value === null || value === undefined || value === "") return null;
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  if (!Number.isFinite(n)) return null;
+  return Object.is(n, -0) ? 0 : n;
+};
+
+const asNullableBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") return value;
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "y"].includes(text)) return true;
+  if (["0", "false", "no", "n"].includes(text)) return false;
+  return null;
 };
 
 const asCountRecord = (value: unknown): Record<string, number> => {
@@ -1941,6 +2252,223 @@ export function adaptManagementEvidenceOverview(raw: unknown): ManagementEvidenc
   };
 }
 
+// ---------------------------------------------------------------------------
+// Cited evidence list (FE-EVIDENCE-CITED-20261125)
+// GET /bff/management/evidence?scope=cited (BFF-EVIDENCE-CITED-LIST-20261125)
+// ---------------------------------------------------------------------------
+
+/** Owner sources the BFF reads citations from, in the BFF's own order. */
+export const CITED_EVIDENCE_SOURCE_KEYS = [
+  "meeting_proposals",
+  "meeting_positions",
+  "governance_approvals",
+  "evolution_proposals",
+  "research_demands",
+  "research_tickets",
+  "persona_cycles",
+] as const;
+
+export interface ManagementCitedEvidenceSource {
+  key: string;
+  /** ok | partial | failed | denied (as recorded by the BFF). */
+  status: string;
+  reason: string | null;
+  readCount: number | null;
+  truncated: boolean;
+  failedCount: number | null;
+  citationCount: number | null;
+  withheldCount: number | null;
+}
+
+export interface ManagementCitedEvidenceCitation {
+  entityType: string;
+  entityRef: string;
+  /** The citing entity's recorded title, or null. */
+  label: string | null;
+  parts: Record<string, unknown>;
+  routeHref: string | null;
+  time: string | null;
+  source: string | null;
+}
+
+export interface ManagementCitedEvidenceRow {
+  id: string;
+  refId: string;
+  refKind: string;
+  sourceOwner: string | null;
+  /** Display name; equals refId when nameMissing. */
+  label: string;
+  nameMissing: boolean;
+  labelParts: Record<string, unknown>;
+  sourceClass: string | null;
+  /** Management page that shows this reference, or null when none exists. */
+  routeHref: string | null;
+  evidenceRefId: string | null;
+  citedAs: string[];
+  citedBy: ManagementCitedEvidenceCitation[];
+  citationCount: number;
+  lastCitedAt: string | null;
+  redacted: boolean;
+  requiredCapability: string | null;
+}
+
+export interface ManagementCitedEvidenceList {
+  /**
+   * ok | degraded | unavailable from the BFF; "unsupported" when the server
+   * answered without `data.scope: "cited"` (a BFF that predates the scope).
+   */
+  status: "ok" | "degraded" | "unavailable" | "unsupported";
+  items: ManagementCitedEvidenceRow[];
+  sources: ManagementCitedEvidenceSource[];
+  /** Number of cited references; null when the BFF could not count them. */
+  total: number | null;
+  complete: boolean;
+  incomplete: boolean;
+  referencesTruncated: boolean;
+  maxReferences: number | null;
+  redactedCount: number;
+  nextPageToken: string | null;
+  pageSize: number | null;
+  snapshotAt: string | null;
+}
+
+const asRecord = (value: unknown): Record<string, unknown> => (isObject(value) ? value : {});
+
+const citedNullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+function adaptCitedEvidenceCitation(value: unknown): ManagementCitedEvidenceCitation | null {
+  if (!isObject(value)) return null;
+  const entityType = asString(value.entity_type ?? value.entityType);
+  const entityRef = asString(value.entity_ref ?? value.entityRef);
+  if (!entityType && !entityRef) return null;
+  return {
+    entityType,
+    entityRef,
+    label: nullableString(value.label),
+    parts: { ...asRecord(value.parts) },
+    routeHref: nullableString(value.route_href ?? value.routeHref),
+    time: nullableString(value.time),
+    source: nullableString(value.source),
+  };
+}
+
+function adaptCitedEvidenceRow(value: unknown): ManagementCitedEvidenceRow | null {
+  if (!isObject(value)) return null;
+  const refId = asString(value.ref_id ?? value.refId ?? value.id);
+  if (!refId) return null;
+  const resolved = asRecord(value.resolved_link ?? value.resolvedLink);
+  const routeHref = nullableString(value.route_href ?? value.routeHref ?? resolved.route_href ?? resolved.routeHref);
+  const citedBy = firstArray<unknown>(value.cited_by, value.citedBy)
+    .map(adaptCitedEvidenceCitation)
+    .filter((item): item is ManagementCitedEvidenceCitation => Boolean(item));
+  const rawLabel = nullableString(value.label);
+  const nameMissing = asBoolean(value.name_missing ?? value.nameMissing, !rawLabel || rawLabel === refId);
+  return {
+    id: asString(value.id, refId),
+    refId,
+    refKind: asString(value.ref_kind ?? value.refKind),
+    sourceOwner: nullableString(value.source_owner ?? value.sourceOwner),
+    label: rawLabel ?? refId,
+    nameMissing,
+    labelParts: { ...asRecord(value.label_parts ?? value.labelParts) },
+    sourceClass: nullableString(value.source_class ?? value.sourceClass),
+    routeHref,
+    evidenceRefId: nullableString(resolved.evidence_ref_id ?? resolved.evidenceRefId),
+    citedAs: firstArray<unknown>(value.cited_as, value.citedAs).map((item) => asString(item)).filter(Boolean),
+    citedBy,
+    citationCount: asFiniteNumber(value.citation_count ?? value.citationCount, citedBy.length),
+    lastCitedAt: nullableString(value.last_cited_at ?? value.lastCitedAt),
+    redacted: asBoolean(value.redacted, false),
+    requiredCapability: nullableString(value.required_capability ?? value.requiredCapability),
+  };
+}
+
+function adaptCitedEvidenceSources(value: unknown): ManagementCitedEvidenceSource[] {
+  const record = asRecord(value);
+  const known = CITED_EVIDENCE_SOURCE_KEYS.filter((key) => key in record);
+  const extra = Object.keys(record).filter((key) => !(CITED_EVIDENCE_SOURCE_KEYS as readonly string[]).includes(key));
+  return [...known, ...extra].map((key) => {
+    const source = asRecord(record[key]);
+    return {
+      key,
+      status: asString(source.status, "failed").toLowerCase(),
+      reason: nullableString(source.reason),
+      readCount: citedNullableNumber(source.read_count ?? source.readCount),
+      truncated: asBoolean(source.truncated, false),
+      failedCount: citedNullableNumber(source.failed_count ?? source.failedCount),
+      citationCount: citedNullableNumber(source.citation_count ?? source.citationCount),
+      withheldCount: citedNullableNumber(source.withheld_count ?? source.withheldCount),
+    };
+  });
+}
+
+/**
+ * Adapts `GET /bff/management/evidence?scope=cited`. A server that predates
+ * the scope ignores the parameter and answers the ingested list; that answer
+ * is reported as `status: "unsupported"` with no rows instead of being
+ * misread as cited references.
+ */
+export function adaptManagementCitedEvidence(raw: unknown): ManagementCitedEvidenceList | null {
+  if (!isObject(raw)) return null;
+  const data = asRecord(raw.data);
+  const meta = asRecord(raw.meta);
+  const pageInfo = asRecord(raw.page_info ?? raw.pageInfo ?? data.page_info);
+  const summary = asRecord(data.summary);
+  const surfaces = asRecord(meta.surfaces);
+  const snapshotAt = nullableString(meta.snapshot_at ?? meta.snapshotAt);
+  const scope = asString(data.scope ?? summary.scope).toLowerCase();
+  if (scope !== "cited") {
+    return {
+      status: "unsupported",
+      items: [],
+      sources: [],
+      total: null,
+      complete: false,
+      incomplete: true,
+      referencesTruncated: false,
+      maxReferences: null,
+      redactedCount: 0,
+      nextPageToken: null,
+      pageSize: null,
+      snapshotAt,
+    };
+  }
+  const items = firstArray<unknown>(data.items)
+    .map(adaptCitedEvidenceRow)
+    .filter((item): item is ManagementCitedEvidenceRow => Boolean(item));
+  const sources = adaptCitedEvidenceSources(data.sources ?? surfaces.cited_evidence_sources);
+  const surfaceStatus = asString(asRecord(surfaces.cited_evidence).status).toLowerCase();
+  const anySourceNotOk = sources.some((source) => source.status !== "ok" || source.truncated);
+  const status: ManagementCitedEvidenceList["status"] =
+    surfaceStatus === "unavailable"
+      ? "unavailable"
+      : surfaceStatus === "degraded" || anySourceNotOk
+        ? "degraded"
+        : surfaceStatus === "ok" || surfaceStatus === ""
+          ? "ok"
+          : "degraded";
+  const total = status === "unavailable" ? null : citedNullableNumber(pageInfo.total ?? summary.reference_total);
+  const incomplete = status !== "ok" || asBoolean(summary.incomplete, false) || asBoolean(summary.references_truncated, false);
+  return {
+    status,
+    items,
+    sources,
+    total,
+    complete: !incomplete && asBoolean(summary.complete, true),
+    incomplete,
+    referencesTruncated: asBoolean(summary.references_truncated, false),
+    maxReferences: citedNullableNumber(summary.max_references),
+    redactedCount: asFiniteNumber(summary.redacted_count ?? meta.redacted_evidence_count, 0),
+    nextPageToken: status === "unavailable" ? null : nullableString(pageInfo.next_page_token ?? pageInfo.nextPageToken),
+    pageSize: citedNullableNumber(pageInfo.page_size ?? pageInfo.pageSize),
+    snapshotAt,
+  };
+}
+
 function adaptEvidenceStoragePreview(value: unknown): ManagementEvidenceStoragePreview {
   const record = isObject(value) ? value : {};
   const previewType = asString(record.previewType ?? record.preview_type, "unavailable");
@@ -1951,12 +2479,27 @@ function adaptEvidenceStoragePreview(value: unknown): ManagementEvidenceStorageP
   };
 }
 
+/** Values the BFF uses for "not recorded"; never shown to the reader as content. */
+const EVIDENCE_PLACEHOLDER_VALUES = new Set(["unknown", "management-evidence", "none", "null", "n/a"]);
+
+/** A recorded value, or "" when the BFF sent a placeholder such as "unknown". */
+export function evidenceRecordedText(value: unknown): string {
+  const text = asString(value);
+  return EVIDENCE_PLACEHOLDER_VALUES.has(text.toLowerCase()) ? "" : text;
+}
+
+/** An http(s) URL a reader can open, or null (storage refs and internal ids are never links). */
+export function evidenceExternalUrl(value: unknown): string | null {
+  const text = asString(value);
+  return /^https?:\/\/[^\s]+$/i.test(text) ? text : null;
+}
+
 function adaptEvidenceSourceDocument(value: unknown, fallbackTitle: string): ManagementEvidenceSourceDocument {
   const record = isObject(value) ? value : {};
-  const sourceType = asString(record.sourceType ?? record.source_type, "unknown");
+  const sourceType = evidenceRecordedText(record.sourceType ?? record.source_type);
   const storagePreview = adaptEvidenceStoragePreview(record.storagePreview ?? record.storage_preview);
   return {
-    title: asString(record.title, fallbackTitle),
+    title: evidenceRecordedText(record.title) || fallbackTitle,
     sourceType,
     source_type: sourceType,
     excerpt: nullableString(record.excerpt),
@@ -2029,15 +2572,53 @@ function adaptEvidenceSourceMemoryContext(value: unknown): ManagementEvidenceSou
   };
 }
 
-export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceDetail | null {
+/**
+ * The one item object in a detail answer. The item route answers a flat
+ * object; a list envelope (`data.id: "management-evidence"`, `data.items[]`)
+ * is searched for `wantedRefId` and never read as an item itself.
+ */
+function evidenceDetailItem(raw: unknown, wantedRefId?: string): Record<string, unknown> | null {
   const data = unwrap(raw);
   if (!isObject(data)) return null;
-  const refId = asString(data.refId ?? data.ref_id ?? data.id);
+  if (Array.isArray(data.items) || Array.isArray(data.evidence_refs)) {
+    const wanted = asString(wantedRefId);
+    const items = firstArray<unknown>(data.items, data.evidence_refs).filter(isObject);
+    const match = items.find((item) => {
+      const id = asString(item.ref_id ?? item.refId ?? item.evidence_item_id ?? item.id);
+      return wanted ? id === wanted : false;
+    });
+    return match ?? null;
+  }
+  return data;
+}
+
+export function adaptManagementEvidenceDetail(raw: unknown, wantedRefId?: string): ManagementEvidenceDetail | null {
+  const data = evidenceDetailItem(raw, wantedRefId);
+  if (!data) return null;
+  const refId = evidenceRecordedText(data.refId ?? data.ref_id ?? data.id) || asString(wantedRefId);
   if (!refId) return null;
-  const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, refId);
   const rawSourceDoc = isObject(data.sourceDocument ?? data.source_document)
     ? ((data.sourceDocument ?? data.source_document) as Record<string, unknown>)
     : {};
+  const recordedTitle = evidenceRecordedText(
+    rawSourceDoc.title ?? data.title ?? data.displayLabel ?? data.display_label,
+  );
+  const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, recordedTitle || refId);
+  if (!sourceDocument.sourceType) {
+    const flatType = evidenceRecordedText(data.sourceType ?? data.source_type);
+    sourceDocument.sourceType = flatType;
+    sourceDocument.source_type = flatType;
+  }
+  if (!sourceDocument.capturedAt) {
+    const flatCaptured = nullableString(data.capturedAt ?? data.captured_at);
+    sourceDocument.capturedAt = flatCaptured;
+    sourceDocument.captured_at = flatCaptured;
+  }
+  const sourceRef = rawSourceDoc.sourceRef ?? rawSourceDoc.source_ref ?? data.sourceRef ?? data.source_ref;
+  const rawMeta = asRecord(data.meta ?? (isObject(raw) ? raw.meta : undefined));
+  const detailSurface = asRecord(asRecord(rawMeta.surfaces).evidence_ref_detail);
+  const detailStatus = asString(detailSurface.status ?? asRecord(rawMeta.surfaces).evidence_ref_detail).toLowerCase();
+  const unavailable = detailStatus === "unavailable";
   const isOfficialReference = isOfficialReferenceSource(
     sourceDocument.sourceType ?? asString(data.sourceType ?? data.source_type),
     rawSourceDoc.sourceRef ?? rawSourceDoc.source_ref ?? data.sourceRef ?? data.source_ref,
@@ -2047,7 +2628,7 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   const linkedDecisions = firstArray<unknown>(data.linkedDecisions, data.linked_decisions)
     .map(adaptEvidenceLinkedDecision)
     .filter((item): item is ManagementEvidenceLinkedDecision => Boolean(item));
-  const linkType = asString(data.linkType ?? data.link_type, "unknown");
+  const linkType = evidenceRecordedText(data.linkType ?? data.link_type);
   const allowedActions = adaptEvidenceAllowedActions(data.allowedActions ?? data.allowed_actions);
   const disabledActionReasons = adaptEvidenceDisabledActionReasons(
     data.disabledActionReasons ?? data.disabled_action_reasons,
@@ -2061,7 +2642,12 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   return {
     refId,
     ref_id: refId,
-    title: asString(data.title ?? data.displayLabel ?? data.display_label ?? sourceDocument.title, refId),
+    title: recordedTitle || refId,
+    titleRecorded: Boolean(recordedTitle) && recordedTitle !== refId,
+    sourceClass: evidenceRecordedText(data.sourceClass ?? data.source_class) || null,
+    externalUrl: evidenceExternalUrl(sourceRef),
+    unavailable,
+    unavailableReason: unavailable ? nullableString(detailSurface.reason) : null,
     sourceDocument,
     source_document: sourceDocument,
     linkType,
@@ -2960,7 +3546,7 @@ const asInboxStringList = (raw: unknown): string[] => {
   return arr
     .map((it) => {
       if (typeof it === "string") return it;
-      if (isObject(it)) return asString(it.ref ?? it.evidence_ref ?? it.ref_id ?? it.id ?? it.href ?? it.route);
+      if (isObject(it)) return asString(it.ref ?? it.evidence_ref ?? it.ref_id ?? it.artifact_id ?? it.id ?? it.href ?? it.route);
       return asString(it);
     })
     .filter(Boolean);
@@ -3084,6 +3670,98 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
   if (recommendation.includes("research")) return "research-owner";
   if (kind === "readiness_blocker") return "research-owner";
   return "";
+};
+
+const adaptInboxMeetingAction = (
+  it: Record<string, unknown>,
+  kind: HumanInboxKind,
+): HumanInboxItem["meetingAction"] | undefined => {
+  if (kind !== "meeting_action") return undefined;
+  const nested = isObject(it.meeting_action) ? (it.meeting_action as Record<string, unknown>) : {};
+  const src: Record<string, unknown> = { ...nested, ...it };
+  const ticketId = asString(src.ticket_id ?? src.action_id ?? it.source_id ?? it.item_id);
+  if (!ticketId) return undefined;
+  const meetingId = asOptionalString(src.meeting_id ?? src.origin_meeting_id ?? nested.meeting_id);
+  const revision = src.revision ?? src.ticket_revision;
+  const requestedMaterial = asOptionalString(src.requested_material ?? src.deliverable ?? nested.deliverable);
+  const humanRequirement = asOptionalString(src.human_requirement);
+  const reviewDecision = isObject(src.review_decision) ? (src.review_decision as Record<string, unknown>) : undefined;
+  const inputRequest = isObject(src.input_request) ? (src.input_request as Record<string, unknown>) : undefined;
+  const reviewReason = asOptionalString(reviewDecision?.reason);
+  const reason = asOptionalString(
+    src.reason ??
+      inputRequest?.reason ??
+      reviewDecision?.reason ??
+      src.human_requirement ??
+      src.missing_input ??
+      it.summary,
+  );
+  const responseAction = asOptionalString(src.response_action ?? src.next_transition);
+  const resumesWith = asOptionalString(src.resumes_with ?? src.resumes_label ?? src.resumes);
+  const linksObj = isObject(it.links) ? (it.links as Record<string, unknown>) : {};
+  const ticketHref =
+    asOptionalString(linksObj.ticket ?? src.ticket_href) ??
+    `/api/v1/research/tickets/${encodeURIComponent(ticketId)}`;
+  const meetingHref =
+    asOptionalString(linksObj.meeting ?? src.href ?? src.route) ??
+    (meetingId ? `/management/meetings/${encodeURIComponent(meetingId)}?action=${encodeURIComponent(ticketId)}` : undefined);
+  const rawEvidenceRefs = Array.isArray(src.evidence_refs) ? src.evidence_refs : [];
+  const evidenceRefs = rawEvidenceRefs
+    .map((entry) => {
+      if (typeof entry === "string" && entry.trim()) {
+        const id = entry.trim();
+        return {
+          kind: id.startsWith("note-") ? "research_note" : "research_artifact",
+          artifactId: id,
+          href: resolveMeetingActionEvidenceHref(undefined, id)!,
+        };
+      }
+      if (isObject(entry)) {
+        const artifactId = asString(entry.artifact_id ?? entry.id ?? entry.ref ?? entry.evidence_ref);
+        if (!artifactId) return null;
+        const refKind = asOptionalString(entry.kind);
+        const explicitHref = asOptionalString(entry.href ?? entry.route_href ?? entry.routeHref);
+        return {
+          kind: refKind ?? (artifactId.startsWith("note-") ? "research_note" : "research_artifact"),
+          artifactId,
+          ...(asOptionalString(entry.checksum) ? { checksum: asOptionalString(entry.checksum) } : {}),
+          href: resolveMeetingActionEvidenceHref(refKind, artifactId, explicitHref)!,
+        };
+      }
+      return null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+  return {
+    ticketId,
+    meetingId,
+    title: asOptionalString(src.title),
+    owner: asOptionalString(src.owner),
+    assignee: asOptionalString(src.assignee ?? src.owner),
+    assigneeKind: asOptionalString(src.assignee_kind ?? nested.assignee_kind),
+    reviewerId: asOptionalString(src.reviewer_id ?? nested.reviewer_id),
+    deliverable: requestedMaterial,
+    requestedMaterial,
+    acceptanceCriterion: asOptionalString(src.acceptance_criterion ?? nested.acceptance_criterion),
+    dueAt: asOptionalString(src.due_at ?? nested.due_at),
+    nextReview: asOptionalString(src.next_review ?? nested.next_review),
+    ...(typeof src.overdue === "boolean" ? { overdue: src.overdue } : {}),
+    ...(humanRequirement ? { humanRequirement } : {}),
+    ...(reviewReason ? { reviewReason } : {}),
+    reason,
+    missingInput: reason ?? humanRequirement,
+    responseAction,
+    nextTransition: responseAction,
+    requiredActor: asOptionalString(src.required_actor),
+    resumesWith,
+    resumesLabel: resumesWith,
+    state: asOptionalString(src.status ?? src.state ?? src.action_state),
+    ownerStatus: asOptionalString(src.owner_status),
+    ...(typeof revision === "string" || typeof revision === "number" ? { revision } : {}),
+    canRespond: asBoolean(src.can_respond ?? src.canRespond, false),
+    ...(evidenceRefs.length > 0 ? { evidenceRefs } : {}),
+    ticketHref,
+    ...(meetingHref ? { meetingHref } : {}),
+  };
 };
 
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
@@ -3236,6 +3914,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
     ...(comparator !== undefined ? { comparator } : {}),
     reviewId,
     reviewType,
+    ...(adaptInboxMeetingAction(it, kind) ? { meetingAction: adaptInboxMeetingAction(it, kind) } : {}),
     decisionHref,
     allowedActions,
     blockingReasons: blockingReasons.length ? blockingReasons : undefined,
@@ -3386,6 +4065,796 @@ const adaptPromotionReviewDecisionResult = (
 
 // ---------- PM-4 Trading Pulse ----------
 
+const TRADE_JOURNEY_LIST_FOCUS_KEYS = [
+  "persona_id",
+  "strategy_id",
+  "decision_id",
+  "order_id",
+  "broker_order_id",
+] as const;
+
+function sanitizeTradingPulseEntityHref(
+  value: unknown,
+  kind: "persona" | "strategy" | "journey" | "any" = "any",
+): string | undefined {
+  const text = asString(value).trim();
+  if (
+    !text
+    || text === "#"
+    || text.startsWith("#")
+    || !text.startsWith("/")
+    || text.startsWith("//")
+    || text.includes("\\")
+    || /^[a-z][a-z0-9+.-]*:/i.test(text)
+  ) {
+    return undefined;
+  }
+  const [withoutHash] = text.split("#");
+  const [pathname, rawSearch = ""] = withoutHash.split("?");
+  const cleanPath = pathname.replace(/\/+$/, "");
+  if (!cleanPath.startsWith("/management/")) {
+    return undefined;
+  }
+  const params = new URLSearchParams(rawSearch);
+  const hasParam = (...keys: readonly string[]) =>
+    keys.some((key) => Boolean(params.get(key)?.trim()));
+
+  const isPersonaRoute =
+    /^\/management\/personas\/[^/]+(?:\/onboarding)?$/.test(cleanPath)
+    || (cleanPath === "/management/persona-fleet" && hasParam("persona", "persona_id"));
+  const isStrategyRoute = /^\/management\/strategies\/[^/]+$/.test(cleanPath);
+  const journeyDetailMatch = /^\/management\/trade-journeys\/([^/]+)$/.exec(cleanPath);
+  const isJourneyRoute =
+    (journeyDetailMatch !== null && journeyDetailMatch[1] !== "resolve" && journeyDetailMatch[1] !== "events")
+    || (cleanPath === "/management/trade-journeys" && hasParam(...TRADE_JOURNEY_LIST_FOCUS_KEYS));
+
+  if (kind === "persona") return isPersonaRoute ? text : undefined;
+  if (kind === "strategy") return isStrategyRoute ? text : undefined;
+  if (kind === "journey") return isJourneyRoute ? text : undefined;
+  if (isPersonaRoute || isStrategyRoute || isJourneyRoute) return text;
+
+  const isOtherSupportedEntityOrFocusRoute =
+    /^\/management\/(?:capital|capital-pools|human-inbox|governance|deployments|deployment|evidence|incidents|evolution|persona-intent|experiments|artifacts|meetings|rebalance|rebalances|tools)\/[^/]+$/.test(cleanPath)
+    || /^\/management\/(?:governance\/policies|ranking\/formulas|ranking-formulas)\/[^/]+$/.test(cleanPath)
+    || /^\/management\/readiness\/(?:broker-live|bff-ha|strict-publish|ep5)$/.test(cleanPath)
+    || (cleanPath === "/management/governance-decisions" && hasParam("capital_id", "pool", "item"))
+    || (cleanPath === "/management/governance" && hasParam("item"))
+    || (cleanPath === "/management/runtimes" && hasParam("runtime", "runtime_id", "persona", "persona_id"))
+    || (cleanPath === "/management/evolution-journal" && hasParam("item", "persona", "persona_id"))
+    || (cleanPath === "/management/postmortems" && hasParam("item"))
+    || (cleanPath === "/management/audit" && hasParam("item"))
+    || (/^\/management\/loops(?:\/[^/]+)?$/.test(cleanPath) && hasParam("run"));
+
+  return isOtherSupportedEntityOrFocusRoute ? text : undefined;
+}
+
+function firstSanitizedTradingPulseHref(
+  kind: "persona" | "strategy" | "journey" | "any",
+  ...candidates: unknown[]
+): string | undefined {
+  for (const candidate of candidates) {
+    const sanitized = sanitizeTradingPulseEntityHref(candidate, kind);
+    if (sanitized !== undefined) return sanitized;
+  }
+  return undefined;
+}
+
+function buildTradingPulseJourneyHref(
+  journeyId: string | null,
+  opts: {
+    tenantId?: string | null;
+    deploymentStage?: string | null;
+    decisionId?: string | null;
+    orderId?: string | null;
+    brokerOrderId?: string | null;
+  } = {},
+): string | undefined {
+  const cleanJourneyId = nullableString(journeyId);
+  const decisionId = nullableString(opts.decisionId);
+  const orderId = nullableString(opts.orderId);
+  const brokerOrderId = nullableString(opts.brokerOrderId);
+  if (!cleanJourneyId && !decisionId && !orderId && !brokerOrderId) return undefined;
+  return tradeJourneyHref(undefined, {
+    journeyId: cleanJourneyId,
+    tenantId: opts.tenantId,
+    environment: opts.deploymentStage,
+    decisionId,
+    orderId,
+    brokerOrderId,
+  });
+}
+
+function normalizeTradingPulseLinks(
+  value: Record<string, unknown>,
+  context: {
+    personaId?: string | null;
+    strategyId?: string | null;
+    journeyId?: string | null;
+    decisionId?: string | null;
+    orderId?: string | null;
+    brokerOrderId?: string | null;
+    tenantId?: string | null;
+    deploymentStage?: string | null;
+  },
+): ManagementTradingPulseLinks | undefined {
+  const rawLinks = isObject(value.links) ? value.links : undefined;
+  const rawOutcome = isObject(value.latestOutcome ?? value.latest_outcome)
+    ? (value.latestOutcome ?? value.latest_outcome) as Record<string, unknown>
+    : undefined;
+
+  const personaHref =
+    firstSanitizedTradingPulseHref(
+      "persona",
+      rawLinks?.persona,
+      rawLinks?.personaHref,
+      rawLinks?.persona_href,
+    )
+    ?? (context.personaId ? (resolveManagementHref("persona", context.personaId) ?? undefined) : undefined);
+
+  const strategyHref =
+    firstSanitizedTradingPulseHref(
+      "strategy",
+      rawLinks?.strategy,
+      rawLinks?.strategyHref,
+      rawLinks?.strategy_href,
+    )
+    ?? (context.strategyId ? (resolveManagementHref("strategy", context.strategyId) ?? undefined) : undefined);
+
+  const journeyHref =
+    firstSanitizedTradingPulseHref(
+      "journey",
+      rawLinks?.journey,
+      rawLinks?.journeyHref,
+      rawLinks?.journey_href,
+      rawLinks?.tradeJourney,
+      rawLinks?.trade_journey,
+      rawOutcome?.journeyHref,
+      rawOutcome?.journey_href,
+    )
+    ?? buildTradingPulseJourneyHref(context.journeyId ?? null, {
+      tenantId: context.tenantId,
+      deploymentStage: context.deploymentStage,
+      decisionId: context.decisionId,
+      orderId: context.orderId,
+      brokerOrderId: context.brokerOrderId,
+    });
+
+  const explicitManageHref = firstSanitizedTradingPulseHref(
+    "any",
+    rawLinks?.manageHref,
+    rawLinks?.manage_href,
+    rawLinks?.primaryObjectHref,
+    rawLinks?.primary_object_href,
+  );
+  const manageHref = explicitManageHref ?? personaHref ?? strategyHref ?? journeyHref;
+  if (!manageHref) return undefined;
+
+  const primaryObjectHref =
+    firstSanitizedTradingPulseHref(
+      "any",
+      rawLinks?.primaryObjectHref,
+      rawLinks?.primary_object_href,
+    ) ?? manageHref;
+
+  const out: ManagementTradingPulseLinks = {
+    manageHref,
+    primaryObjectHref,
+  };
+  const evidenceHref = firstSanitizedTradingPulseHref(
+    "any",
+    rawLinks?.evidenceHref,
+    rawLinks?.evidence_href,
+  );
+  if (evidenceHref) out.evidenceHref = evidenceHref;
+  const recommendedActionHref = firstSanitizedTradingPulseHref(
+    "any",
+    rawLinks?.recommendedActionHref,
+    rawLinks?.recommended_action_href,
+  );
+  if (recommendedActionHref) out.recommendedActionHref = recommendedActionHref;
+  const auditHref = firstSanitizedTradingPulseHref(
+    "any",
+    rawLinks?.auditHref,
+    rawLinks?.audit_href,
+  );
+  if (auditHref) out.auditHref = auditHref;
+  if (Array.isArray(rawLinks?.relatedHrefs)) {
+    const relatedHrefs = rawLinks.relatedHrefs
+      .filter(isObject)
+      .map((item) => {
+        const href = sanitizeTradingPulseEntityHref(item.href, "any");
+        if (!href) return null;
+        return {
+          ...item,
+          label: asString(item.label, href),
+          href,
+          kind: asString(item.kind, "persona") as NonNullable<ManagementTradingPulseLinks["relatedHrefs"]>[number]["kind"],
+        };
+      })
+      .filter((item): item is NonNullable<ManagementTradingPulseLinks["relatedHrefs"]>[number] => item !== null);
+    if (relatedHrefs.length > 0) out.relatedHrefs = relatedHrefs;
+  }
+  if (personaHref) {
+    out.persona = personaHref;
+    out.personaHref = personaHref;
+    out.persona_href = personaHref;
+  }
+  if (strategyHref) {
+    out.strategy = strategyHref;
+    out.strategyHref = strategyHref;
+    out.strategy_href = strategyHref;
+  }
+  if (journeyHref) {
+    out.journey = journeyHref;
+    out.journeyHref = journeyHref;
+    out.journey_href = journeyHref;
+  }
+  return out;
+}
+
+function normalizeNullableStringRecord(value: unknown): Record<string, string | null> {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([k, v]) => [k, nullableString(v)] as const),
+  );
+}
+
+function normalizeComparisonScopePeriod(value: unknown): TradingPulseComparisonScopePeriod {
+  const record = isObject(value) ? value : {};
+  const startAt = nullableString(record.startAt ?? record.start_at);
+  const endAt = nullableString(record.endAt ?? record.end_at);
+  const endExclusiveAt = nullableString(record.endExclusiveAt ?? record.end_exclusive_at);
+  const asOf = nullableString(record.asOf ?? record.as_of);
+  const window = nullableString(record.window);
+  const quarter = nullableString(record.quarter);
+  return {
+    ...record,
+    startAt,
+    start_at: startAt,
+    ...(endAt !== null ? { endAt, end_at: endAt } : {}),
+    ...(endExclusiveAt !== null ? { endExclusiveAt, end_exclusive_at: endExclusiveAt } : {}),
+    asOf,
+    as_of: asOf,
+    window,
+    ...(quarter !== null ? { quarter } : {}),
+  };
+}
+
+function normalizeTradingPulseComparisonScope(value: unknown): TradingPulseComparisonScope | null {
+  if (!isObject(value)) return null;
+  const rawPeriod = value.period;
+  const period = isObject(rawPeriod)
+    ? normalizeComparisonScopePeriod(rawPeriod)
+    : nullableString(rawPeriod);
+  return {
+    ...value,
+    stage: nullableString(value.stage ?? value.deploymentStage ?? value.deployment_stage),
+    period,
+    unit: nullableString(value.unit),
+    definition: nullableString(value.definition),
+    basis: nullableString(value.basis),
+  };
+}
+
+function normalizeTradingPulseFillRateDetails(
+  value: unknown,
+): ManagementTradingPulseFillRateDetails | null {
+  if (!isObject(value)) return null;
+  const rawWindow = value.window;
+  const window = isObject(rawWindow)
+    ? normalizeComparisonScopePeriod(rawWindow)
+    : nullableString(rawWindow);
+  return {
+    ...value,
+    status: nullableString(value.status),
+    reason: nullableString(value.reason),
+    basis: nullableString(value.basis),
+    unit: nullableString(value.unit),
+    numerator: asNullableNumber(value.numerator),
+    denominator: asNullableNumber(value.denominator),
+    window,
+    ...(Array.isArray(value.sources) ? { sources: value.sources } : {}),
+  };
+}
+
+function isTradingPulseFillRateKnown(
+  details: ManagementTradingPulseFillRateDetails | null,
+): boolean {
+  if (!details) return true;
+  if (details.reason !== null) return false;
+  const status = details.status?.trim().toLowerCase() ?? null;
+  if (status !== null && status !== "known" && status !== "available" && status !== "ok" && status !== "verified") {
+    return false;
+  }
+  const num = details.numerator;
+  const den = details.denominator;
+  return num !== null && den !== null && den > 0 && num >= 0;
+}
+
+function normalizeTradingPulseMetricPeriods(
+  value: unknown,
+): Record<string, ManagementTradingPulseMetricPeriod> {
+  if (!isObject(value)) return {};
+  const entries: Array<[string, ManagementTradingPulseMetricPeriod]> = [];
+  for (const [metric, rawEntry] of Object.entries(value)) {
+    if (!isObject(rawEntry)) continue;
+    const startAt = nullableString(rawEntry.startAt ?? rawEntry.start_at);
+    const asOf = nullableString(rawEntry.asOf ?? rawEntry.as_of);
+    const window = nullableString(rawEntry.window);
+    entries.push([
+      metric,
+      {
+        ...rawEntry,
+        startAt,
+        start_at: startAt,
+        asOf,
+        as_of: asOf,
+        window,
+      },
+    ]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function normalizeTradingPulsePerformanceContext(
+  rowRecord: Record<string, unknown>,
+  telemetrySummary?: Record<string, unknown>,
+  metricsRecord?: Record<string, unknown>,
+): ManagementTradingPulsePerformanceContext {
+  const raw = isObject(rowRecord.performanceContext ?? rowRecord.performance_context)
+    ? (rowRecord.performanceContext ?? rowRecord.performance_context) as Record<string, unknown>
+    : null;
+
+  const ledgerFillCount = asNullableNumber(
+    raw?.ledgerFillCount
+    ?? raw?.ledger_fill_count
+    ?? rowRecord.ledgerFillCount
+    ?? rowRecord.ledger_fill_count
+    ?? telemetrySummary?.ledger_fill_count
+    ?? telemetrySummary?.ledgerFillCount,
+  );
+  const pnlCurrency = nullableString(
+    raw?.pnlCurrency
+    ?? raw?.pnl_currency
+    ?? rowRecord.pnlCurrency
+    ?? rowRecord.pnl_currency
+    ?? telemetrySummary?.pnl_currency
+    ?? telemetrySummary?.pnlCurrency,
+  );
+  const pnlPeriodStartAt = nullableString(
+    raw?.pnlPeriodStartAt
+    ?? raw?.pnl_period_start_at
+    ?? rowRecord.pnlPeriodStartAt
+    ?? rowRecord.pnl_period_start_at
+    ?? telemetrySummary?.pnl_period_start_at
+    ?? telemetrySummary?.pnlPeriodStartAt,
+  );
+  const pnlAt = nullableString(
+    raw?.pnlAt
+    ?? raw?.pnl_at
+    ?? rowRecord.pnlAt
+    ?? rowRecord.pnl_at
+    ?? telemetrySummary?.pnl_at
+    ?? telemetrySummary?.pnlAt,
+  );
+  const pnlDefinition = nullableString(
+    raw?.pnlDefinition
+    ?? raw?.pnl_definition
+    ?? rowRecord.pnlDefinition
+    ?? rowRecord.pnl_definition
+    ?? telemetrySummary?.pnl_definition
+    ?? telemetrySummary?.pnlDefinition,
+  );
+  const fillRateDetails = normalizeTradingPulseFillRateDetails(
+    raw?.fillRateDetails
+    ?? raw?.fill_rate_details
+    ?? telemetrySummary?.fill_rate_details
+    ?? telemetrySummary?.fillRateDetails
+    ?? metricsRecord?.fill_rate_details
+    ?? metricsRecord?.fillRateDetails,
+  );
+  const fillRateBasis = nullableString(
+    raw?.fillRateBasis
+    ?? raw?.fill_rate_basis
+    ?? fillRateDetails?.basis
+    ?? (raw ? "legacy_source_scalar" : null),
+  );
+  const sharpeRatioStatus = nullableString(
+    raw?.sharpeRatioStatus
+    ?? raw?.sharpe_ratio_status
+    ?? telemetrySummary?.sharpe_ratio_status
+    ?? telemetrySummary?.sharpeRatioStatus,
+  );
+  const sharpeRatioReason = nullableString(
+    raw?.sharpeRatioReason
+    ?? raw?.sharpe_ratio_reason
+    ?? telemetrySummary?.sharpe_ratio_reason
+    ?? telemetrySummary?.sharpeRatioReason,
+  );
+  const rawStaleness = raw?.staleness ?? telemetrySummary?.staleness;
+  const staleness = isObject(rawStaleness) ? { ...rawStaleness } : null;
+
+  const metricUnits = normalizeNullableStringRecord(raw?.metricUnits ?? raw?.metric_units);
+  const metricPeriods = normalizeTradingPulseMetricPeriods(raw?.metricPeriods ?? raw?.metric_periods);
+
+  const latestReportAt = nullableString(
+    raw?.latestReportAt
+    ?? raw?.latest_report_at
+    ?? telemetrySummary?.last_event_at
+    ?? telemetrySummary?.lastEventAt
+    ?? telemetrySummary?.collected_at
+    ?? telemetrySummary?.collectedAt,
+  );
+
+  const rawLastFill = isObject(telemetrySummary?.last_fill ?? telemetrySummary?.lastFill ?? rowRecord.last_fill ?? rowRecord.lastFill)
+    ? (telemetrySummary?.last_fill ?? telemetrySummary?.lastFill ?? rowRecord.last_fill ?? rowRecord.lastFill) as Record<string, unknown>
+    : null;
+  const lastFillAt = nullableString(
+    raw?.lastFillAt
+    ?? raw?.last_fill_at
+    ?? rawLastFill?.at
+    ?? rawLastFill?.occurred_at
+    ?? rawLastFill?.occurredAt
+    ?? rawLastFill?.created_at
+    ?? rawLastFill?.createdAt,
+  );
+  const snapshotAt = nullableString(raw?.snapshotAt ?? raw?.snapshot_at);
+
+  const isStale = Boolean(
+    staleness && (
+      staleness.is_stale === true
+      || staleness.isStale === true
+      || String(staleness.status ?? "").trim().toLowerCase() === "stale"
+      || (
+        typeof staleness.age_seconds === "number"
+        && typeof staleness.threshold_seconds === "number"
+        && staleness.age_seconds > staleness.threshold_seconds
+      )
+    ),
+  );
+  const hasObservedSourceEvidence = Boolean(
+    telemetrySummary
+    || latestReportAt !== null
+    || lastFillAt !== null
+    || ledgerFillCount !== null
+    || (
+      fillRateDetails !== null
+      && (isTradingPulseFillRateKnown(fillRateDetails) || fillRateDetails.reason === "no_submitted_orders")
+    )
+    || (metricsRecord && Object.values(metricsRecord).some((v) => typeof v === "number" && Number.isFinite(v))),
+  );
+  const explicitSourceStatus = nullableString(raw?.sourceStatus ?? raw?.source_status);
+  const sourceStatus: ManagementTradingPulseSourceStatus = explicitSourceStatus
+    ?? (isStale ? "stale" : hasObservedSourceEvidence ? "available" : "unverified");
+
+  const metricReasons: Record<string, string | null> = {
+    ...normalizeNullableStringRecord(raw?.metricReasons ?? raw?.metric_reasons),
+  };
+  if (fillRateDetails !== null && !isTradingPulseFillRateKnown(fillRateDetails) && !metricReasons.fill_rate) {
+    const den = fillRateDetails.denominator;
+    const num = fillRateDetails.numerator;
+    const detailsStatus = fillRateDetails.status?.trim().toLowerCase() ?? null;
+    const normalizedSourceStatus = String(sourceStatus ?? "").trim().toLowerCase();
+    const isSourceVerifiedAvailable =
+      ["available", "ok", "live", "fresh", "verified"].includes(normalizedSourceStatus);
+    const isDetailsStatusVerified =
+      detailsStatus === "known"
+      || detailsStatus === "available"
+      || detailsStatus === "ok"
+      || detailsStatus === "verified";
+    if (normalizedSourceStatus === "unavailable" || detailsStatus === "unavailable") {
+      metricReasons.fill_rate =
+        fillRateDetails.reason === "telemetry_unavailable"
+          ? "telemetry_unavailable"
+          : "source_unavailable";
+    } else if (normalizedSourceStatus === "stale" || detailsStatus === "stale") {
+      metricReasons.fill_rate =
+        fillRateDetails.reason === "telemetry_stale"
+          ? "telemetry_stale"
+          : "stale";
+    } else if (fillRateDetails.reason !== null) {
+      metricReasons.fill_rate = fillRateDetails.reason;
+    } else if (
+      isSourceVerifiedAvailable
+      && isDetailsStatusVerified
+      && den !== null
+      && den === 0
+      && (num === null || num === 0)
+    ) {
+      metricReasons.fill_rate = "no_submitted_orders";
+    } else {
+      metricReasons.fill_rate =
+        fillRateDetails.status
+        ?? (normalizedSourceStatus === "unknown" || normalizedSourceStatus === "unverified"
+          ? "unknown"
+          : "source_unavailable");
+    }
+  }
+  if (
+    (sharpeRatioReason !== null || sharpeRatioStatus !== null)
+    && asNullableNumber(metricsRecord?.sharpe_ratio ?? metricsRecord?.sharpeRatio) === null
+    && !metricReasons.sharpe_ratio
+  ) {
+    metricReasons.sharpe_ratio = sharpeRatioReason ?? sharpeRatioStatus;
+  }
+
+  return {
+    ...(raw ?? {}),
+    ledgerFillCount,
+    ledger_fill_count: ledgerFillCount,
+    pnlCurrency,
+    pnl_currency: pnlCurrency,
+    pnlPeriodStartAt,
+    pnl_period_start_at: pnlPeriodStartAt,
+    pnlAt,
+    pnl_at: pnlAt,
+    pnlDefinition,
+    pnl_definition: pnlDefinition,
+    fillRateDetails,
+    fill_rate_details: fillRateDetails,
+    fillRateBasis,
+    fill_rate_basis: fillRateBasis,
+    sharpeRatioStatus,
+    sharpe_ratio_status: sharpeRatioStatus,
+    sharpeRatioReason,
+    sharpe_ratio_reason: sharpeRatioReason,
+    staleness,
+    metricReasons,
+    metric_reasons: metricReasons,
+    metricUnits,
+    metric_units: metricUnits,
+    metricPeriods,
+    metric_periods: metricPeriods,
+    latestReportAt,
+    latest_report_at: latestReportAt,
+    lastFillAt,
+    last_fill_at: lastFillAt,
+    snapshotAt,
+    snapshot_at: snapshotAt,
+    sourceStatus,
+    source_status: sourceStatus,
+  };
+}
+
+function normalizeTradingPulseLatestOutcome(
+  value: unknown,
+): ManagementTradingPulseLatestOutcome {
+  const raw = isObject(value) ? value : null;
+  if (!raw) {
+    return {
+      status: "not_observed",
+      occurredAt: null,
+      occurred_at: null,
+      reasonCode: null,
+      reason_code: null,
+      submittedToBroker: null,
+      submitted_to_broker: null,
+      requestedQuantity: null,
+      requested_quantity: null,
+      filledQuantity: null,
+      filled_quantity: null,
+      required: null,
+      available: null,
+      currency: null,
+      journeyId: null,
+      journey_id: null,
+      sourceEventId: null,
+      source_event_id: null,
+      focusStage: null,
+      focus_stage: null,
+      decisionId: null,
+      decision_id: null,
+      orderId: null,
+      order_id: null,
+      brokerOrderId: null,
+      broker_order_id: null,
+      side: null,
+      symbol: null,
+      journeyHref: null,
+      journey_href: null,
+    };
+  }
+  const occurredAt = nullableString(raw.occurredAt ?? raw.occurred_at);
+  const reasonCode = nullableString(
+    raw.reasonCode ?? raw.reason_code ?? raw.rejectReason ?? raw.reject_reason ?? raw.reason,
+  );
+  const submittedToBroker = asNullableBoolean(raw.submittedToBroker ?? raw.submitted_to_broker);
+  const requestedQuantity = asNullableNumber(raw.requestedQuantity ?? raw.requested_quantity);
+  const filledQuantity = asNullableNumber(raw.filledQuantity ?? raw.filled_quantity);
+  const required = asNullableNumber(raw.required);
+  const available = asNullableNumber(raw.available);
+  const currency = nullableString(raw.currency);
+  const journeyId = nullableString(raw.journeyId ?? raw.journey_id);
+  const sourceEventId = nullableString(
+    raw.sourceEventId ?? raw.source_event_id ?? raw.eventId ?? raw.event_id,
+  );
+  const focusStage = nullableString(raw.focusStage ?? raw.focus_stage);
+  const decisionId = nullableString(raw.decisionId ?? raw.decision_id);
+  const orderId = nullableString(raw.orderId ?? raw.order_id);
+  const brokerOrderId = nullableString(raw.brokerOrderId ?? raw.broker_order_id);
+  const side = nullableString(raw.side);
+  const symbol = nullableString(raw.symbol);
+  const journeyHref =
+    sanitizeTradingPulseEntityHref(raw.journeyHref ?? raw.journey_href, "journey") ?? null;
+  const status = asString(
+    raw.status,
+    journeyId || reasonCode || occurredAt ? "available" : "not_observed",
+  );
+  return {
+    ...raw,
+    status,
+    occurredAt,
+    occurred_at: occurredAt,
+    reasonCode,
+    reason_code: reasonCode,
+    submittedToBroker,
+    submitted_to_broker: submittedToBroker,
+    requestedQuantity,
+    requested_quantity: requestedQuantity,
+    filledQuantity,
+    filled_quantity: filledQuantity,
+    required,
+    available,
+    currency,
+    journeyId,
+    journey_id: journeyId,
+    sourceEventId,
+    source_event_id: sourceEventId,
+    focusStage,
+    focus_stage: focusStage,
+    decisionId,
+    decision_id: decisionId,
+    orderId,
+    order_id: orderId,
+    brokerOrderId,
+    broker_order_id: brokerOrderId,
+    side,
+    symbol,
+    journeyHref,
+    journey_href: journeyHref,
+  };
+}
+
+function normalizeTradingPulseOperatorScope(
+  value: unknown,
+): ManagementTradingPulseOperatorScope {
+  const raw = isObject(value) ? value : null;
+  if (!raw) {
+    return {
+      status: "unverified",
+      tenantId: null,
+      tenant_id: null,
+      personaCount: null,
+      persona_count: null,
+      runtimeCount: null,
+      runtime_count: null,
+      verifiedRuntimeCount: null,
+      verified_runtime_count: null,
+      reason: "operator_scope_missing",
+      byStage: {},
+      by_stage: {},
+    };
+  }
+  const status = asString(raw.status, "unverified");
+  const tenantId = nullableString(raw.tenantId ?? raw.tenant_id);
+  const personaCount = asNullableNumber(raw.personaCount ?? raw.persona_count);
+  const runtimeCount = asNullableNumber(raw.runtimeCount ?? raw.runtime_count);
+  const verifiedRuntimeCount = asNullableNumber(
+    raw.verifiedRuntimeCount ?? raw.verified_runtime_count,
+  );
+  const excludedProbeCount = asNullableNumber(
+    raw.excludedProbeCount ?? raw.excluded_probe_count,
+  );
+  const reason = nullableString(raw.reason);
+  const rawByStage = isObject(raw.byStage ?? raw.by_stage)
+    ? (raw.byStage ?? raw.by_stage) as Record<string, unknown>
+    : {};
+  const byStageEntries: Array<[string, ManagementTradingPulseStageScopeCount]> = [];
+  for (const [stage, entry] of Object.entries(rawByStage)) {
+    if (isObject(entry)) {
+      const pc = asNullableNumber(entry.personaCount ?? entry.persona_count);
+      const rc = asNullableNumber(entry.runtimeCount ?? entry.runtime_count);
+      byStageEntries.push([
+        stage,
+        {
+          ...entry,
+          personaCount: pc,
+          persona_count: pc,
+          runtimeCount: rc,
+          runtime_count: rc,
+        },
+      ]);
+    } else {
+      const rc = asNullableNumber(entry);
+      byStageEntries.push([
+        stage,
+        {
+          personaCount: null,
+          persona_count: null,
+          runtimeCount: rc,
+          runtime_count: rc,
+        },
+      ]);
+    }
+  }
+  const byStage = Object.fromEntries(byStageEntries);
+  return {
+    ...raw,
+    status,
+    tenantId,
+    tenant_id: tenantId,
+    personaCount,
+    persona_count: personaCount,
+    runtimeCount,
+    runtime_count: runtimeCount,
+    verifiedRuntimeCount,
+    verified_runtime_count: verifiedRuntimeCount,
+    ...(excludedProbeCount !== null
+      ? { excludedProbeCount, excluded_probe_count: excludedProbeCount }
+      : {}),
+    reason,
+    byStage,
+    by_stage: byStage,
+  };
+}
+
+function normalizeTradingPulsePnlGroups(
+  value: unknown,
+): ManagementTradingPulsePnlGroup[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isObject).map((item) => {
+    const stage = nullableString(item.stage ?? item.deploymentStage ?? item.deployment_stage);
+    const currency = nullableString(item.currency ?? item.pnlCurrency ?? item.pnl_currency);
+    const periodStartAt = nullableString(item.periodStartAt ?? item.period_start_at);
+    const periodEndAt = nullableString(
+      item.periodEndAt ?? item.period_end_at ?? item.asOf ?? item.as_of,
+    );
+    const periodLabel = nullableString(item.periodLabel ?? item.period_label ?? item.period);
+    const asOf = nullableString(
+      item.asOf ?? item.as_of ?? item.periodEndAt ?? item.period_end_at,
+    );
+    const pnlDefinition = nullableString(item.pnlDefinition ?? item.pnl_definition);
+    const groupValue = asNullableNumber(
+      item.value ?? item.pnl ?? item.totalPnl ?? item.total_pnl,
+    );
+    const coveredPersonaCount = asNullableNumber(
+      item.coveredPersonaCount ?? item.covered_persona_count,
+    );
+    const eligiblePersonaCount = asNullableNumber(
+      item.eligiblePersonaCount ?? item.eligible_persona_count,
+    );
+    const coveredRuntimeCount = asNullableNumber(
+      item.coveredRuntimeCount ?? item.covered_runtime_count,
+    );
+    const eligibleRuntimeCount = asNullableNumber(
+      item.eligibleRuntimeCount ?? item.eligible_runtime_count,
+    );
+    return {
+      ...item,
+      stage,
+      currency,
+      periodStartAt,
+      period_start_at: periodStartAt,
+      periodEndAt,
+      period_end_at: periodEndAt,
+      ...(periodLabel !== null ? { periodLabel, period_label: periodLabel } : {}),
+      asOf,
+      as_of: asOf,
+      pnlDefinition,
+      pnl_definition: pnlDefinition,
+      value: groupValue,
+      coveredPersonaCount,
+      covered_persona_count: coveredPersonaCount,
+      eligiblePersonaCount,
+      eligible_persona_count: eligiblePersonaCount,
+      coveredRuntimeCount,
+      covered_runtime_count: coveredRuntimeCount,
+      eligibleRuntimeCount,
+      eligible_runtime_count: eligibleRuntimeCount,
+    };
+  });
+}
+
 // Pull a numeric metric off a live ranking item, tolerating camel/snake names
 // and a few metric aliases the BFF uses (sharpe→sharpeRatio, execution→fillRate).
 function rankingMetricValue(it: Record<string, unknown>, metric: string): number | null {
@@ -3393,72 +4862,335 @@ function rankingMetricValue(it: Record<string, unknown>, metric: string): number
     pnl: ["pnl"],
     drawdown: ["drawdown", "maxDrawdown", "max_drawdown"],
     sharpe: ["sharpeRatio", "sharpe_ratio", "sharpe"],
+    sharpe_ratio: ["sharpe_ratio", "sharpeRatio", "sharpe"],
     execution: ["fillRate", "fill_rate"],
     fill_rate: ["fillRate", "fill_rate"],
-    slippage: ["avgSlippageBps", "avg_slippage_bps"],
+    slippage: ["avgSlippageBps", "avg_slippage_bps", "slippage_bps", "slippageBps"],
+    avg_slippage_bps: ["avg_slippage_bps", "avgSlippageBps", "slippage_bps", "slippageBps"],
   };
   const camel = metric.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
-  const keys = aliases[metric] ?? [metric, camel];
+  const keys = [
+    ...(aliases[metric] ?? [metric, camel]),
+    "ranking_metric_value",
+    "rankingMetricValue",
+    "metricValue",
+    "metric_value",
+  ];
   for (const k of keys) {
-    const v = it[k];
-    if (typeof v === "number") return v;
+    const v = asNullableNumber(it[k]);
+    if (v !== null) return v;
   }
   return null;
 }
 
-function adaptRankings(raw: unknown): TradingPulseRankBlock[] | null {
+function normalizeTradingPulseRankingsSummary(
+  value: unknown,
+  fallbackBlockCount = 0,
+): ManagementTradingPulseRankingsSummary | undefined {
+  if (!isObject(value)) return undefined;
+  const operatorScope = normalizeTradingPulseOperatorScope(
+    value.operatorScope ?? value.operator_scope,
+  );
+  const pnlGroups = normalizeTradingPulsePnlGroups(value.pnlGroups ?? value.pnl_groups);
+  const hasExplicitRuntimeCount =
+    Object.prototype.hasOwnProperty.call(value, "runtimeCount")
+    || Object.prototype.hasOwnProperty.call(value, "runtime_count");
+  const hasExplicitOperatorScope =
+    isObject(value.operatorScope) || isObject(value.operator_scope);
+  const runtimeCount = hasExplicitRuntimeCount
+    ? asNullableNumber(value.runtimeCount ?? value.runtime_count)
+    : hasExplicitOperatorScope
+      ? operatorScope.runtimeCount
+      : null;
+  const rankingBlockCount = asFiniteNumber(
+    value.rankingBlockCount ?? value.ranking_block_count,
+    fallbackBlockCount,
+  );
+  const rankedItemCount = asFiniteNumber(
+    value.rankedItemCount ?? value.ranked_item_count,
+    0,
+  );
+  const eligibleItemCount = asFiniteNumber(
+    value.eligibleItemCount ?? value.eligible_item_count,
+    0,
+  );
+  const missingMetricItemCount = asFiniteNumber(
+    value.missingMetricItemCount ?? value.missing_metric_item_count,
+    0,
+  );
+  const criteria = asStringArray(value.criteria);
+  const limit = asNullableNumber(value.limit);
+  const topRuntimeId = nullableString(value.topRuntimeId ?? value.top_runtime_id);
+  return {
+    ...value,
+    operatorScope,
+    operator_scope: operatorScope,
+    pnlGroups,
+    pnl_groups: pnlGroups,
+    runtimeCount,
+    runtime_count: runtimeCount,
+    rankingBlockCount,
+    ranking_block_count: rankingBlockCount,
+    rankedItemCount,
+    ranked_item_count: rankedItemCount,
+    eligibleItemCount,
+    eligible_item_count: eligibleItemCount,
+    missingMetricItemCount,
+    missing_metric_item_count: missingMetricItemCount,
+    criteria,
+    limit,
+    topRuntimeId,
+    top_runtime_id: topRuntimeId,
+  };
+}
+
+export function adaptTradingPulseRankings(raw: unknown): TradingPulseRankingsList | null {
+  const root = isObject(raw) ? raw : null;
   const data = unwrap(raw);
+  const dataRecord = isObject(data) ? data : null;
   const blocks =
     asArray<Record<string, unknown>>(data) ??
-    (isObject(data)
+    (dataRecord
       ? asArray<Record<string, unknown>>(
-          data.rankingBlocks ?? data.ranking_blocks ?? data.rankings ?? data.blocks ?? data.items,
+          dataRecord.rankingBlocks
+          ?? dataRecord.ranking_blocks
+          ?? dataRecord.rankings
+          ?? dataRecord.blocks
+          ?? dataRecord.items,
         )
       : null);
   if (!blocks) return null;
-  return blocks.map((b) => {
+
+  const adaptedBlocks = blocks.map((b) => {
     // Already FE-shaped (mock seed / older contract) → pass through untouched.
-    if (Array.isArray((b as { rows?: unknown }).rows)) {
+    if (Array.isArray((b as { rows?: unknown }).rows) && !Array.isArray((b as { items?: unknown }).items)) {
       return b as unknown as TradingPulseRankBlock;
     }
-    // Live BFF shape: block.items[] with runtime fields → map to FE rows so the
-    // card renders the entries instead of an empty "no data" state.
-    const metric = String(b.metric ?? "");
+    const metric = asString(b.metric ?? b.kind ?? b.blockId ?? b.block_id);
+    const blockId = asString(b.blockId ?? b.block_id ?? b.kind ?? metric);
+    const label = asString(b.label, metric || blockId);
+    const sortOrder = optionalString(b.sortOrder ?? b.sort_order);
+    const secondaryMetric = optionalString(b.secondaryMetric ?? b.secondary_metric);
+    const rankingBasis = optionalString(b.rankingBasis ?? b.ranking_basis);
+    const rawMetricReasons = isObject(b.metricReasons ?? b.metric_reasons)
+      ? normalizeNullableStringRecord(b.metricReasons ?? b.metric_reasons)
+      : undefined;
     const rawItems = asArray<Record<string, unknown>>(b.items) ?? [];
-    const rows = rawItems.map((it) => {
-      const subjectId = String(
-        it.runtimeBindingId ?? it.runtime_binding_id ?? it.runtimeId ?? it.runtime_id ?? it.subjectId ?? "",
+    const skippedMissingIds: string[] = [];
+
+    const rows: TradingPulseRankRow[] = [];
+    for (const it of rawItems) {
+      if (!isObject(it)) continue;
+      const runtimeId = asString(it.runtimeId ?? it.runtime_id);
+      const runtimeBindingId = asString(it.runtimeBindingId ?? it.runtime_binding_id);
+      const deploymentStage = asString(it.deploymentStage ?? it.deployment_stage);
+      const personaId = nullableString(it.personaId ?? it.persona_id);
+      const personaName = nullableString(it.personaName ?? it.persona_name);
+      const strategyId = nullableString(it.strategyId ?? it.strategy_id);
+      const strategyName = nullableString(it.strategyName ?? it.strategy_name);
+      const underlyingSymbol = nullableString(it.underlyingSymbol ?? it.underlying_symbol);
+      const tenantId = nullableString(it.tenantId ?? it.tenant_id);
+      const hasPerfContext = isObject(it.performanceContext ?? it.performance_context);
+      const performanceContext = hasPerfContext
+        ? normalizeTradingPulsePerformanceContext(it)
+        : null;
+      if (
+        it.rankingEligible === false
+        || it.ranking_eligible === false
+        || (
+          performanceContext !== null
+          && (
+            performanceContext.sourceStatus === "stale"
+            || performanceContext.sourceStatus === "unavailable"
+            || Boolean(performanceContext.metricReasons[metric])
+            || (
+              (metric === "fill_rate" || metric === "execution")
+              && (
+                !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
+                || Boolean(performanceContext.metricReasons.fill_rate)
+              )
+            )
+          )
+        )
+      ) {
+        if (runtimeId) skippedMissingIds.push(runtimeId);
+        continue;
+      }
+      if (
+        metric === "pnl"
+        && performanceContext !== null
+        && (
+          !performanceContext.pnlCurrency
+          || !performanceContext.pnlPeriodStartAt
+          || !performanceContext.pnlAt
+          || !performanceContext.pnlDefinition
+        )
+      ) {
+        if (runtimeId) skippedMissingIds.push(runtimeId);
+        continue;
+      }
+      const metricValue = rankingMetricValue(it, metric);
+      if (metricValue === null) {
+        if (runtimeId) skippedMissingIds.push(runtimeId);
+        continue;
+      }
+
+      const hasLatestOutcome = isObject(it.latestOutcome ?? it.latest_outcome);
+      const latestOutcome = hasLatestOutcome
+        ? normalizeTradingPulseLatestOutcome(it.latestOutcome ?? it.latest_outcome)
+        : null;
+      const comparisonScope = normalizeTradingPulseComparisonScope(
+        it.comparisonScope ?? it.comparison_scope,
       );
-      return {
+      const unit = nullableString(
+        it.metricUnit
+        ?? it.metric_unit
+        ?? it.rankingUnit
+        ?? it.ranking_unit
+        ?? comparisonScope?.unit
+        ?? performanceContext?.metricUnits?.[metric],
+      );
+      const links = normalizeTradingPulseLinks(it, {
+        personaId,
+        strategyId,
+        journeyId: latestOutcome?.journeyId ?? nullableString(it.journeyId ?? it.journey_id),
+        decisionId: latestOutcome?.decisionId ?? nullableString(it.decisionId ?? it.decision_id),
+        orderId: latestOutcome?.orderId ?? nullableString(it.orderId ?? it.order_id),
+        brokerOrderId: latestOutcome?.brokerOrderId ?? nullableString(it.brokerOrderId ?? it.broker_order_id),
+        tenantId,
+        deploymentStage: deploymentStage || null,
+      });
+      if (latestOutcome && links?.journeyHref) {
+        latestOutcome.journeyHref = links.journeyHref;
+        latestOutcome.journey_href = links.journeyHref;
+      }
+      const subjectId = asString(
+        it.subjectId ?? (runtimeBindingId || personaId || runtimeId),
+      );
+      const subjectLabel =
+        nullableString(it.subjectLabel)
+        ?? personaName
+        ?? strategyName
+        ?? (runtimeId || subjectId);
+      const rank = asNullableNumber(it.rank) ?? (rows.length + 1);
+      const rankingMetric = asString(it.rankingMetric ?? it.ranking_metric, metric);
+      const rankingBlockId = asString(it.rankingBlockId ?? it.ranking_block_id, blockId);
+      const avgSlippageBps = asNullableNumber(
+        it.avgSlippageBps ?? it.avg_slippage_bps ?? it.slippageBps ?? it.slippage_bps,
+      );
+
+      const row: TradingPulseRankRow = {
         ...it,
         subjectId,
-        subjectLabel: String(it.runtimeId ?? it.runtime_id ?? it.subjectLabel ?? subjectId ?? "—"),
-        metric: String(b.label ?? metric),
-        metricValue: rankingMetricValue(it, metric),
-        metricUnit: undefined,
-        links: undefined,
-        rankingEligible: Boolean(it.rankingEligible ?? it.ranking_eligible ?? true),
-        ranking_eligible: Boolean(it.ranking_eligible ?? it.rankingEligible ?? true),
+        subjectLabel,
+        metric: label,
+        metricValue,
+        metricUnit: unit ?? undefined,
+        metric_unit: unit,
+        rankingUnit: unit,
+        ranking_unit: unit,
+        rankingMetric,
+        ranking_metric: rankingMetric,
+        rankingMetricValue: metricValue,
+        ranking_metric_value: metricValue,
+        rankingBlockId,
+        ranking_block_id: rankingBlockId,
+        rank,
+        ...(avgSlippageBps !== null ? { avgSlippageBps, avg_slippage_bps: avgSlippageBps } : {}),
+        personaId,
+        persona_id: personaId,
+        personaName,
+        persona_name: personaName,
+        strategyId,
+        strategy_id: strategyId,
+        strategyName,
+        strategy_name: strategyName,
+        underlyingSymbol,
+        underlying_symbol: underlyingSymbol,
+        tenantId,
+        tenant_id: tenantId,
+        runtimeId,
+        runtime_id: runtimeId,
+        runtimeBindingId,
+        runtime_binding_id: runtimeBindingId,
+        deploymentStage,
+        deployment_stage: deploymentStage,
+        status: asString(it.status),
+        comparisonScope,
+        comparison_scope: comparisonScope,
+        performanceContext,
+        performance_context: performanceContext,
+        latestOutcome,
+        latest_outcome: latestOutcome,
+        links,
+        rankingEligible: true,
+        ranking_eligible: true,
       };
-    });
-    return {
+      if (links === undefined) {
+        delete row.links;
+      }
+      rows.push(row);
+    }
+
+    const wireMissingIds = Array.isArray(b.missingMetricRuntimeIds ?? b.missing_metric_runtime_ids)
+      ? asStringArray(b.missingMetricRuntimeIds ?? b.missing_metric_runtime_ids)
+      : [];
+    const missingMetricRuntimeIds = Array.from(new Set([...wireMissingIds, ...skippedMissingIds]));
+    const missingMetricCount = asFiniteNumber(
+      b.missingMetricCount ?? b.missing_metric_count,
+      missingMetricRuntimeIds.length,
+    );
+    const eligibleItemCount = asFiniteNumber(
+      b.eligibleItemCount ?? b.eligible_item_count,
+      rows.length,
+    );
+
+    const block: TradingPulseRankBlock = {
       ...b,
-      kind: String(b.blockId ?? b.block_id ?? b.kind ?? metric),
-      label: String(b.label ?? metric),
+      kind: blockId,
+      blockId,
+      block_id: blockId,
+      label,
+      metric,
+      ...(sortOrder !== undefined ? { sortOrder, sort_order: sortOrder } : {}),
+      ...(secondaryMetric !== undefined ? { secondaryMetric, secondary_metric: secondaryMetric } : {}),
+      ...(rankingBasis !== undefined ? { rankingBasis, ranking_basis: rankingBasis } : {}),
+      ...(rawMetricReasons !== undefined ? { metricReasons: rawMetricReasons, metric_reasons: rawMetricReasons } : {}),
       rows,
-      eligibleItemCount: asFiniteNumber(b.eligibleItemCount ?? b.eligible_item_count, rows.length),
-      eligible_item_count: asFiniteNumber(b.eligible_item_count ?? b.eligibleItemCount, rows.length),
-      missingMetricCount: asFiniteNumber(b.missingMetricCount ?? b.missing_metric_count, 0),
-      missing_metric_count: asFiniteNumber(b.missing_metric_count ?? b.missingMetricCount, 0),
-      missingMetricRuntimeIds: Array.isArray(b.missingMetricRuntimeIds ?? b.missing_metric_runtime_ids)
-        ? (b.missingMetricRuntimeIds ?? b.missing_metric_runtime_ids) as string[]
-        : [],
-      missing_metric_runtime_ids: Array.isArray(b.missing_metric_runtime_ids ?? b.missingMetricRuntimeIds)
-        ? (b.missing_metric_runtime_ids ?? b.missingMetricRuntimeIds) as string[]
-        : [],
-    } as unknown as TradingPulseRankBlock;
-  });
+      items: rows,
+      eligibleItemCount,
+      eligible_item_count: eligibleItemCount,
+      missingMetricCount,
+      missing_metric_count: missingMetricCount,
+      missingMetricRuntimeIds,
+      missing_metric_runtime_ids: missingMetricRuntimeIds,
+    };
+    return block;
+  }) as TradingPulseRankingsList;
+
+  const rawSummary = dataRecord?.summary ?? root?.summary;
+  const normalizedSummary = normalizeTradingPulseRankingsSummary(rawSummary, adaptedBlocks.length);
+  if (normalizedSummary !== undefined) {
+    Object.defineProperty(adaptedBlocks, "summary", {
+      value: normalizedSummary,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  }
+  const rawMeta = root?.meta ?? dataRecord?.meta;
+  if (isObject(rawMeta)) {
+    Object.defineProperty(adaptedBlocks, "meta", {
+      value: normalizeTradingPulseMeta(rawMeta),
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return adaptedBlocks;
 }
+
+const adaptRankings = adaptTradingPulseRankings;
 
 function normalizeTradingPulseSurface(value: unknown): ManagementTradingPulseSurface {
   if (typeof value === "string") {
@@ -3652,6 +5384,32 @@ function normalizeTradingPulseSummary(
 ): ManagementTradingPulseSummary {
   const record = isObject(value) ? value : {};
   const coverage = coverageOverride ?? normalizeTradingPulseCoverage(record.coverage, undefined, record);
+  const operatorScope = normalizeTradingPulseOperatorScope(
+    record.operatorScope ?? record.operator_scope,
+  );
+  const pnlGroups = normalizeTradingPulsePnlGroups(
+    record.pnlGroups ?? record.pnl_groups,
+  );
+  const fillRateAggregation = nullableString(
+    record.fillRateAggregation ?? record.fill_rate_aggregation,
+  );
+  const snapshotAt = optionalString(record.snapshotAt ?? record.snapshot_at);
+  const hasExplicitRuntimeCount =
+    Object.prototype.hasOwnProperty.call(record, "runtimeCount")
+    || Object.prototype.hasOwnProperty.call(record, "runtime_count");
+  const hasExplicitOperatorScope =
+    isObject(record.operatorScope) || isObject(record.operator_scope);
+  const runtimeCount = hasExplicitRuntimeCount
+    ? asNullableNumber(record.runtimeCount ?? record.runtime_count)
+    : hasExplicitOperatorScope
+      ? operatorScope.runtimeCount
+      : (asNullableNumber(coverage?.runtimeCount) ?? 0);
+  const hasExplicitTotalTrades =
+    Object.prototype.hasOwnProperty.call(record, "totalTrades")
+    || Object.prototype.hasOwnProperty.call(record, "total_trades");
+  const totalTrades = hasExplicitTotalTrades
+    ? asNullableNumber(record.totalTrades ?? record.total_trades)
+    : null;
   const monitoringCoverageCount = asNullableNumber(
     record.monitoringCoverageCount ?? record.monitoring_coverage_count ?? coverage?.monitoringCoverageCount,
   );
@@ -3698,10 +5456,18 @@ function normalizeTradingPulseSummary(
 
   const out: ManagementTradingPulseSummary = {
     ...record,
-    runtimeCount: asFiniteNumber(
-      record.runtimeCount ?? record.runtime_count ?? coverage?.runtimeCount,
-      0,
-    ),
+    operatorScope,
+    operator_scope: operatorScope,
+    pnlGroups,
+    pnl_groups: pnlGroups,
+    ...(fillRateAggregation !== null
+      ? { fillRateAggregation, fill_rate_aggregation: fillRateAggregation }
+      : {}),
+    ...(snapshotAt !== undefined
+      ? { snapshotAt, snapshot_at: snapshotAt }
+      : {}),
+    runtimeCount,
+    runtime_count: runtimeCount,
     telemetryCoverageCount: asFiniteNumber(
       record.telemetryCoverageCount ?? record.telemetry_coverage_count ?? coverage?.telemetryCoverageCount,
       0,
@@ -3716,7 +5482,8 @@ function normalizeTradingPulseSummary(
     worstDrawdown: asNullableNumber(record.worstDrawdown ?? record.worst_drawdown),
     averageFillRate: asNullableNumber(record.averageFillRate ?? record.average_fill_rate),
     worstSlippageBps: asNullableNumber(record.worstSlippageBps ?? record.worst_slippage_bps),
-    totalTrades: asFiniteNumber(record.totalTrades ?? record.total_trades, 0),
+    totalTrades,
+    total_trades: totalTrades,
     byStatus: asCountRecord(record.byStatus ?? record.by_status),
     byStage: asCountRecord(record.byStage ?? record.by_stage),
     byBaselineStatus: asCountRecord(record.byBaselineStatus ?? record.by_baseline_status),
@@ -3957,18 +5724,95 @@ function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow |
   const runtimeId = asString(value.runtimeId ?? value.runtime_id);
   const runtimeBindingId = asString(value.runtimeBindingId ?? value.runtime_binding_id);
   const deploymentStage = asString(value.deploymentStage ?? value.deployment_stage);
+  const personaId = nullableString(value.personaId ?? value.persona_id);
+  const personaName = nullableString(value.personaName ?? value.persona_name);
+  const strategyId = asString(value.strategyId ?? value.strategy_id);
+  const strategyName = nullableString(value.strategyName ?? value.strategy_name);
+  const underlyingSymbol = nullableString(value.underlyingSymbol ?? value.underlying_symbol);
+  const tenantId = nullableString(value.tenantId ?? value.tenant_id);
   const telemetrySummary = isObject(value.telemetrySummary ?? value.telemetry_summary)
     ? (value.telemetrySummary ?? value.telemetry_summary) as Record<string, unknown>
     : undefined;
-  const metrics = isObject(telemetrySummary?.metrics)
-    ? telemetrySummary.metrics as Record<string, unknown>
-    : (isObject(value.metrics) ? value.metrics : {});
+  const rawMetrics: Record<string, unknown> = {
+    ...(isObject(value.metrics) ? value.metrics : {}),
+    ...(isObject(telemetrySummary?.metrics) ? (telemetrySummary.metrics as Record<string, unknown>) : {}),
+  };
+  const performanceContext = normalizeTradingPulsePerformanceContext(value, telemetrySummary, rawMetrics);
+  const metrics: Record<string, unknown> = { ...rawMetrics };
+  if (performanceContext.ledgerFillCount !== null && performanceContext.ledgerFillCount >= 0) {
+    metrics.total_trades = performanceContext.ledgerFillCount;
+  }
+  const hasExplicitNullFillRate =
+    (Object.prototype.hasOwnProperty.call(rawMetrics, "fill_rate") && rawMetrics.fill_rate === null)
+    || (Object.prototype.hasOwnProperty.call(rawMetrics, "fillRate") && rawMetrics.fillRate === null);
+  const fillRateUnavailable =
+    performanceContext.sourceStatus === "unavailable"
+    || performanceContext.sourceStatus === "stale"
+    || !isTradingPulseFillRateKnown(performanceContext.fillRateDetails)
+    || Boolean(performanceContext.metricReasons.fill_rate);
+  if (fillRateUnavailable) {
+    metrics.fill_rate = null;
+    if ("fillRate" in metrics) metrics.fillRate = null;
+  } else if (
+    !hasExplicitNullFillRate
+    && performanceContext.fillRateDetails !== null
+    && asNullableNumber(metrics.fill_rate ?? metrics.fillRate) === null
+  ) {
+    const num = performanceContext.fillRateDetails.numerator;
+    const den = performanceContext.fillRateDetails.denominator;
+    if (num !== null && den !== null && den > 0) {
+      metrics.fill_rate = num / den;
+    }
+  }
+  const executedTradeCount = performanceContext.ledgerFillCount !== null && performanceContext.ledgerFillCount >= 0
+    ? performanceContext.ledgerFillCount
+    : asNullableNumber(
+        value.executedTradeCount
+        ?? value.executed_trade_count
+        ?? telemetrySummary?.executed_trade_count
+        ?? telemetrySummary?.executedTradeCount,
+      );
+  const totalTrades = performanceContext.ledgerFillCount !== null && performanceContext.ledgerFillCount >= 0
+    ? performanceContext.ledgerFillCount
+    : asNullableNumber(
+        value.totalTrades
+        ?? value.total_trades
+        ?? metrics.total_trades
+        ?? metrics.totalTrades,
+      );
+  const positionCount = asNullableNumber(
+    value.positionCount
+    ?? value.position_count
+    ?? telemetrySummary?.position_count
+    ?? telemetrySummary?.positionCount,
+  );
+  const latestOutcome = normalizeTradingPulseLatestOutcome(
+    value.latestOutcome ?? value.latest_outcome,
+  );
+  const links = normalizeTradingPulseLinks(value, {
+    personaId,
+    strategyId: strategyId || null,
+    journeyId: latestOutcome.journeyId,
+    decisionId: latestOutcome.decisionId,
+    orderId: latestOutcome.orderId,
+    brokerOrderId: latestOutcome.brokerOrderId,
+    tenantId,
+    deploymentStage: deploymentStage || null,
+  });
+  if (links?.journeyHref) {
+    latestOutcome.journeyHref = links.journeyHref;
+    latestOutcome.journey_href = links.journeyHref;
+  }
   const baselineComparison = normalizeBaselineComparison(value.baselineComparison ?? value.baseline_comparison);
   const rowHealth = isObject(value.rowHealth ?? value.row_health)
     ? (value.rowHealth ?? value.row_health) as Record<string, unknown>
     : undefined;
-  return {
+  const lastUpdatedAt = asString(value.lastUpdatedAt ?? value.last_updated_at);
+  const out: ManagementTradingPulseRuntimeRow = {
     ...value,
+    ...(personaId !== null ? { personaId, persona_id: personaId } : {}),
+    personaName,
+    persona_name: personaName,
     runtimeId,
     runtime_id: runtimeId,
     runtimeBindingId,
@@ -3976,18 +5820,158 @@ function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow |
     deploymentStage,
     deployment_stage: deploymentStage,
     status: asString(value.status),
-    strategyId: asString(value.strategyId ?? value.strategy_id),
-    strategy_id: asString(value.strategyId ?? value.strategy_id),
+    strategyId,
+    strategy_id: strategyId,
+    strategyName,
+    strategy_name: strategyName,
+    underlyingSymbol,
+    underlying_symbol: underlyingSymbol,
+    tenantId,
+    tenant_id: tenantId,
+    executedTradeCount,
+    executed_trade_count: executedTradeCount,
+    totalTrades,
+    total_trades: totalTrades,
+    positionCount,
+    position_count: positionCount,
     metrics,
     telemetrySummary,
     telemetry_summary: telemetrySummary,
+    performanceContext,
+    performance_context: performanceContext,
+    latestOutcome,
+    latest_outcome: latestOutcome,
+    ...(links !== undefined ? { links } : {}),
     baselineComparison,
     baseline_comparison: baselineComparison,
     rowHealth,
     row_health: rowHealth,
-    lastUpdatedAt: asString(value.lastUpdatedAt ?? value.last_updated_at),
-    last_updated_at: asString(value.last_updated_at ?? value.lastUpdatedAt),
+    lastUpdatedAt,
+    last_updated_at: lastUpdatedAt,
   };
+  if (links === undefined) {
+    delete out.links;
+  }
+  return out;
+}
+
+function normalizeTradingPulseRankingEntry(
+  value: unknown,
+): ManagementTradingPulseRankingEntry | null {
+  if (!isObject(value)) return null;
+  const runtimeId = asString(value.runtimeId ?? value.runtime_id);
+  const runtimeBindingId = asString(value.runtimeBindingId ?? value.runtime_binding_id);
+  const deploymentStage = asString(value.deploymentStage ?? value.deployment_stage);
+  const personaId = nullableString(value.personaId ?? value.persona_id);
+  const personaName = nullableString(value.personaName ?? value.persona_name);
+  const strategyId = nullableString(value.strategyId ?? value.strategy_id);
+  const strategyName = nullableString(value.strategyName ?? value.strategy_name);
+  const underlyingSymbol = nullableString(value.underlyingSymbol ?? value.underlying_symbol);
+  const tenantId = nullableString(value.tenantId ?? value.tenant_id);
+  const pnl = asNullableNumber(value.pnl);
+  const drawdown = asNullableNumber(value.drawdown ?? value.maxDrawdown ?? value.max_drawdown);
+  const sharpeRatio = asNullableNumber(value.sharpeRatio ?? value.sharpe_ratio ?? value.sharpe);
+  const rawFillRate = asNullableNumber(value.fillRate ?? value.fill_rate);
+  const avgSlippageBps = asNullableNumber(
+    value.avgSlippageBps ?? value.avg_slippage_bps ?? value.slippageBps ?? value.slippage_bps,
+  );
+  const performanceContext = normalizeTradingPulsePerformanceContext(value, undefined, {
+    pnl,
+    drawdown,
+    sharpe_ratio: sharpeRatio,
+    fill_rate: rawFillRate,
+    avg_slippage_bps: avgSlippageBps,
+  });
+  const fillRate =
+    (!isTradingPulseFillRateKnown(performanceContext.fillRateDetails) || Boolean(performanceContext.metricReasons.fill_rate))
+      ? null
+      : rawFillRate;
+  const totalTrades = performanceContext.ledgerFillCount !== null && performanceContext.ledgerFillCount >= 0
+    ? performanceContext.ledgerFillCount
+    : asNullableNumber(value.totalTrades ?? value.total_trades);
+  const latestOutcome = normalizeTradingPulseLatestOutcome(
+    value.latestOutcome ?? value.latest_outcome,
+  );
+  const links = normalizeTradingPulseLinks(value, {
+    personaId,
+    strategyId,
+    journeyId: latestOutcome.journeyId ?? nullableString(value.journeyId ?? value.journey_id),
+    decisionId: latestOutcome.decisionId ?? nullableString(value.decisionId ?? value.decision_id),
+    orderId: latestOutcome.orderId ?? nullableString(value.orderId ?? value.order_id),
+    brokerOrderId: latestOutcome.brokerOrderId ?? nullableString(value.brokerOrderId ?? value.broker_order_id),
+    tenantId,
+    deploymentStage: deploymentStage || null,
+  });
+  if (links?.journeyHref) {
+    latestOutcome.journeyHref = links.journeyHref;
+    latestOutcome.journey_href = links.journeyHref;
+  }
+  const lastUpdatedAt = nullableString(value.lastUpdatedAt ?? value.last_updated_at);
+  const baselineComparisonStatus = nullableString(
+    value.baselineComparisonStatus ?? value.baseline_comparison_status,
+  );
+  const breachedMetricCount = asNullableNumber(
+    value.breachedMetricCount ?? value.breached_metric_count,
+  );
+  const rowHealthStatus = nullableString(
+    value.rowHealthStatus ?? value.row_health_status,
+  );
+  const rowHealthDegradedChecks = asStringArray(
+    value.rowHealthDegradedChecks ?? value.row_health_degraded_checks,
+  );
+  const rank = asNullableNumber(value.rank);
+  const out: ManagementTradingPulseRankingEntry = {
+    ...value,
+    ...(rank !== null ? { rank } : {}),
+    personaId,
+    persona_id: personaId,
+    personaName,
+    persona_name: personaName,
+    strategyId,
+    strategy_id: strategyId,
+    strategyName,
+    strategy_name: strategyName,
+    underlyingSymbol,
+    underlying_symbol: underlyingSymbol,
+    tenantId,
+    tenant_id: tenantId,
+    runtimeId,
+    runtime_id: runtimeId,
+    runtimeBindingId,
+    runtime_binding_id: runtimeBindingId,
+    deploymentStage,
+    deployment_stage: deploymentStage,
+    status: asString(value.status),
+    pnl,
+    drawdown,
+    sharpeRatio,
+    sharpe_ratio: sharpeRatio,
+    fillRate,
+    fill_rate: fillRate,
+    avgSlippageBps,
+    avg_slippage_bps: avgSlippageBps,
+    totalTrades,
+    total_trades: totalTrades,
+    lastUpdatedAt,
+    last_updated_at: lastUpdatedAt,
+    baselineComparisonStatus,
+    baseline_comparison_status: baselineComparisonStatus,
+    breachedMetricCount,
+    breached_metric_count: breachedMetricCount,
+    rowHealthStatus,
+    row_health_status: rowHealthStatus,
+    rowHealthDegradedChecks,
+    row_health_degraded_checks: rowHealthDegradedChecks,
+    performanceContext,
+    performance_context: performanceContext,
+    latestOutcome,
+    latest_outcome: latestOutcome,
+    ...(links !== undefined ? { links } : {}),
+  };
+  if (links === undefined) {
+    delete out.links;
+  }
+  return out;
 }
 
 function legacyPulseRowsToModel(
@@ -4109,15 +6093,22 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
   const rankings = firstArray<unknown>(
     dataRecord.rankings,
     root?.rankings,
-  );
+  )
+    .map(normalizeTradingPulseRankingEntry)
+    .filter((entry): entry is ManagementTradingPulseRankingEntry => entry !== null);
   const summary = normalizeTradingPulseSummary(rawSummary, coverage);
 
+  const hasPulseEnvelope =
+    (rawSummaryRecord !== undefined && Object.keys(rawSummaryRecord).length > 0)
+    || Object.keys(meta.surfaces).length > 0;
+
   if (
-    cards.length === 0
+    !hasPulseEnvelope
+    && cards.length === 0
     && runtimeRows.length === 0
     && baselineComparisons.length === 0
     && Object.keys(summary.byStatus).length === 0
-    && summary.runtimeCount === 0
+    && (summary.runtimeCount === 0 || summary.runtimeCount === null)
   ) {
     return null;
   }
@@ -4146,6 +6137,10 @@ export type ManagementEvolutionJournalEvidenceClass =
   | "unclassified";
 
 export interface ManagementEvolutionJournalAutoProposalCounts {
+  /** BFF-EVO-JOURNAL-POOL-VERSIONS: threshold + incident_followup + incident_severity + other + infrastructure == total. */
+  threshold: number;
+  other: number;
+  infrastructure: number;
   incident_followup: number;
   incident_severity: number;
   postmortem_draft: number;
@@ -4170,6 +6165,13 @@ export interface ManagementEvolutionJournalSummary {
   rollbackCount: number;
   freeze_order_count: number;
   freezeOrderCount: number;
+  /** Pool version rows (each owner version of each paper_owner persona). */
+  pool_version_count: number | null;
+  refused_pool_version_count: number | null;
+  /** Hidden infrastructure/test entries (view=history without include_system). */
+  hidden_system_counts: Record<string, number> | null;
+  unclassified_decision_count: number | null;
+  decision_subject_class_counts: Record<string, number> | null;
   pending_review_count: number;
   pendingReviewCount: number;
   active_freeze_count: number;
@@ -4215,6 +6217,12 @@ function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
          (isObject(data) ? asArray<T>(data.items) : null);
 }
 
+/** Adds the BFF `include_system=true` flag (view=history hides infrastructure/test entries without it). */
+function withIncludeSystem(path: string, includeSystem?: boolean): string {
+  if (!includeSystem) return path;
+  return path + (path.includes("?") ? "&" : "?") + "include_system=true";
+}
+
 export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unknown): EvolutionJournalList<T> | null {
   const arr = adaptArrayPassthrough<T>(raw);
   if (!arr) return null;
@@ -4234,6 +6242,10 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
     const postmortemCount = asFiniteNumber(rawSummary.postmortem_count ?? rawSummary.postmortemCount, 0);
     const rollbackCount = asFiniteNumber(rawSummary.rollback_count ?? rawSummary.rollbackCount, 0);
     const freezeOrderCount = asFiniteNumber(rawSummary.freeze_order_count ?? rawSummary.freezeOrderCount, 0);
+    const optCount = (v: unknown): number | null =>
+      typeof v === "number" && Number.isFinite(v) ? v : null;
+    const optCounts = (v: unknown): Record<string, number> | null =>
+      isObject(v) ? asCountRecord(v) : null;
     const pendingReviewCount = asFiniteNumber(rawSummary.pending_review_count ?? rawSummary.pendingReviewCount, 0);
     const activeFreezeCount = asFiniteNumber(rawSummary.active_freeze_count ?? rawSummary.activeFreezeCount, 0);
     const completedRollbackCount = asFiniteNumber(rawSummary.completed_rollback_count ?? rawSummary.completedRollbackCount, 0);
@@ -4256,6 +6268,11 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
       rollbackCount,
       freeze_order_count: freezeOrderCount,
       freezeOrderCount,
+      pool_version_count: optCount(rawSummary.pool_version_count ?? rawSummary.poolVersionCount),
+      refused_pool_version_count: optCount(rawSummary.refused_pool_version_count ?? rawSummary.refusedPoolVersionCount),
+      hidden_system_counts: optCounts(rawSummary.hidden_system_counts ?? rawSummary.hiddenSystemCounts),
+      unclassified_decision_count: optCount(rawSummary.unclassified_decision_count ?? rawSummary.unclassifiedDecisionCount),
+      decision_subject_class_counts: optCounts(rawSummary.decision_subject_class_counts ?? rawSummary.decisionSubjectClassCounts),
       pending_review_count: pendingReviewCount,
       pendingReviewCount,
       active_freeze_count: activeFreezeCount,
@@ -4286,8 +6303,14 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
     const incidentFollowup = asFiniteNumber(rawCounts.incident_followup ?? rawCounts.incidentFollowup, 0);
     const incidentSeverity = asFiniteNumber(rawCounts.incident_severity ?? rawCounts.incidentSeverity, 0);
     const postmortemDraft = asFiniteNumber(rawCounts.postmortem_draft ?? rawCounts.postmortemDraft, 0);
-    const total = asFiniteNumber(rawCounts.total, incidentFollowup + incidentSeverity + postmortemDraft);
+    const threshold = asFiniteNumber(rawCounts.threshold, 0);
+    const other = asFiniteNumber(rawCounts.other, 0);
+    const infrastructure = asFiniteNumber(rawCounts.infrastructure, 0);
+    const total = asFiniteNumber(rawCounts.total, threshold + incidentFollowup + incidentSeverity + other + infrastructure);
     const counts: ManagementEvolutionJournalAutoProposalCounts = {
+      threshold,
+      other,
+      infrastructure,
       incident_followup: incidentFollowup,
       incident_severity: incidentSeverity,
       postmortem_draft: postmortemDraft,
@@ -4379,6 +6402,42 @@ function adaptEvolutionQualificationDecisionItem(raw: unknown): EvolutionQualifi
   };
 }
 
+function adaptMemberBaselines(raw: unknown): EvolutionMemberBaseline[] | null {
+  if (!Array.isArray(raw)) return null;
+  const rows: EvolutionMemberBaseline[] = [];
+  for (const item of raw) {
+    if (!isObject(item)) continue;
+    const artifactRef = asString(item.artifact_ref ?? item.artifactRef);
+    const personaId = asString(item.persona_id ?? item.personaId);
+    if (!artifactRef || !personaId) continue;
+    const rw = item.risk_weight ?? item.riskWeight;
+    const pv = item.pool_version ?? item.poolVersion;
+    rows.push({
+      persona_id: personaId,
+      persona_name: nullableString(item.persona_name ?? item.personaName),
+      artifact_ref: artifactRef,
+      stage: nullableString(item.stage),
+      risk_weight: typeof rw === "number" && Number.isFinite(rw) ? rw : null,
+      pool_version: typeof pv === "number" && Number.isFinite(pv) ? pv : null,
+      status: asString(item.status, "unavailable"),
+      reason: nullableString(item.reason),
+    });
+  }
+  return rows;
+}
+
+function adaptMemberBaselinesSurface(raw: unknown): EvolutionMemberBaselinesSurface | null {
+  if (!isObject(raw)) return null;
+  const n = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return {
+    status: asString(raw.status, "unknown"),
+    reason: nullableString(raw.reason),
+    approved: n(raw.approved),
+    not_approved: n(raw.not_approved ?? raw.notApproved),
+    unavailable: n(raw.unavailable),
+  };
+}
+
 export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualificationReport | null {
   const data = unwrap(raw);
   if (!isObject(data)) return null;
@@ -4398,6 +6457,7 @@ export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualif
     "evaluatedAt" in data ||
     "failure_reason" in data ||
     "failureReason" in data ||
+    "member_baselines" in data ||
     items.length > 0;
   if (!hasReportFields) return null;
   const rawCounts = isObject(data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion)
@@ -4427,6 +6487,8 @@ export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualif
     counts_by_first_failing_criterion: countsByFirstFailingCriterion,
     failure_reason: nullableString(data.failure_reason ?? data.failureReason),
     items,
+    member_baselines: adaptMemberBaselines(data.member_baselines ?? data.memberBaselines),
+    member_baselines_surface: adaptMemberBaselinesSurface(data.member_baselines_surface ?? data.memberBaselinesSurface),
     total: asFiniteNumber(data.total, evaluated),
     limit: asFiniteNumber(data.limit, 50),
     offset: asFiniteNumber(data.offset, 0),
@@ -5789,19 +7851,31 @@ export const mgmt = {
   },
 
   tradingPulse: {
-    rankingsLiveOnly: (opts?: { signal?: AbortSignal }): Promise<TradingPulseRankBlock[]> =>
+    rankingsLiveOnly: (opts?: { signal?: AbortSignal }): Promise<TradingPulseRankingsList> =>
       liveOnlyList<TradingPulseRankBlock>(
         { method: "GET", path: paths.mgmtTradingRankings(), signal: opts?.signal },
-        adaptRankings,
-      ),
+        adaptTradingPulseRankings,
+      ) as Promise<TradingPulseRankingsList>,
     rankings: (seedFn: () => TradingPulseRankBlock[] = defaultPulseRankings):
-      Promise<TradingPulseRankBlock[]> =>
-      mgmtRead("mgmt.tradingRankings", { method: "GET", path: paths.mgmtTradingRankings() }, seedFn, adaptRankings),
+      Promise<TradingPulseRankingsList> =>
+      detectMode() === "mock"
+        ? Promise.resolve(seedFn())
+        : (liveOnlyList<TradingPulseRankBlock>(
+            { method: "GET", path: paths.mgmtTradingRankings() },
+            adaptTradingPulseRankings,
+          ) as Promise<TradingPulseRankingsList>),
     /** PM-4 main pulse overview — live BFF aggregate, not the legacy seed rows. */
     get: (
       seedFn: () => ManagementTradingPulseModel = defaultTradingPulseModel,
     ): Promise<ManagementTradingPulseModel> =>
-      mgmtRead("mgmt.tradingPulse", { method: "GET", path: paths.mgmtTradingPulse() }, seedFn, adaptTradingPulseOverview),
+      detectMode() === "mock"
+        ? Promise.resolve(seedFn())
+        : mgmtRead(
+            "mgmt.tradingPulse",
+            { method: "GET", path: paths.mgmtTradingPulse() },
+            defaultTradingPulseModel,
+            adaptTradingPulseOverview,
+          ),
     getLiveOnly: (opts?: { signal?: AbortSignal }): Promise<ManagementTradingPulseModel | undefined> =>
       liveOnlyRead<ManagementTradingPulseModel>(
         { method: "GET", path: paths.mgmtTradingPulse(), signal: opts?.signal },
@@ -5866,13 +7940,18 @@ export const mgmt = {
         persona?: string;
         mutationReview?: string;
         decision?: string;
+        includeSystem?: boolean;
         pageSize?: number;
         pageToken?: string | null;
       },
     ): Promise<EvolutionJournalList<T>> =>
       mgmtRead(
         "mgmt.evolutionJournal.list",
-        { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal },
+        {
+          method: "GET",
+          path: withIncludeSystem(paths.mgmtEvolutionJournal(opts), opts?.includeSystem),
+          signal: opts?.signal,
+        },
         seedFn as () => EvolutionJournalList<T>,
         adaptEvolutionJournalList<T>,
       ),
@@ -5944,9 +8023,12 @@ export const mgmt = {
       page_token?: string | null;
       pageSize?: number;
       page_size?: number;
+      /** "ingested" asks for raw ingest explicitly; omitted keeps the server default. */
+      scope?: "ingested";
       signal?: AbortSignal;
     }): Promise<ManagementEvidenceOverview | undefined> => {
       const params = new URLSearchParams();
+      if (opts?.scope) params.set("scope", opts.scope);
       const pageSize = opts?.pageSize ?? opts?.page_size;
       const pageToken = opts?.pageToken ?? opts?.page_token;
       if (pageSize !== undefined) params.set("page_size", String(pageSize));
@@ -5966,8 +8048,25 @@ export const mgmt = {
     detailLiveOnly: (refId: string, opts?: { signal?: AbortSignal }): Promise<ManagementEvidenceDetail | undefined> =>
       liveOnlyRead<ManagementEvidenceDetail>(
         { method: "GET", path: paths.mgmtEvidenceRef(refId), signal: opts?.signal },
-        adaptManagementEvidenceDetail,
+        (raw) => adaptManagementEvidenceDetail(raw, refId),
       ),
+    /**
+     * References that decisions, meetings, approvals and research cite
+     * (`scope=cited`). Raw ingest is `overviewLiveOnly({ scope: "ingested" })`.
+     */
+    citedLiveOnly: (opts?: {
+      pageToken?: string | null;
+      pageSize?: number;
+      signal?: AbortSignal;
+    }): Promise<ManagementCitedEvidenceList | undefined> => {
+      const params = new URLSearchParams({ scope: "cited" });
+      if (opts?.pageSize !== undefined) params.set("page_size", String(opts.pageSize));
+      if (opts?.pageToken) params.set("page_token", String(opts.pageToken));
+      return liveOnlyRead<ManagementCitedEvidenceList>(
+        { method: "GET", path: `${paths.mgmtEvidenceExplorer()}?${params.toString()}`, signal: opts?.signal },
+        adaptManagementCitedEvidence,
+      );
+    },
   },
 
   personaIntent: {

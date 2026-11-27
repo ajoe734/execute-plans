@@ -1,0 +1,138 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-LINEAGE-LOOKUP-20261125",
+  "taskId": "FE-LINEAGE-LOOKUP-20261125",
+  "title": "Lineage page looks up one object by name and detail pages show their own lineage",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-LINEAGE-LOOKUP-20261125",
+  "base_commit": "19e0403b71f85f9db6fec050714b3a1083b80441",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T12:10:00Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
+    "hosted_read_only_diagnosis": "2026-11-25 06:35Z to 07:16Z on BFF adc027da9: opening /management/lineage requested the unrooted 240-node graph where every node label equaled its raw ID; typing persona-ee71 fired 11 GET /bff/lineage requests; searching 衡岳 found nothing; ArtifactDetail.tsx line 240 never called GET /bff/lineage."
+  },
+  "modified_surfaces": [
+    "src/management/pages/phase2/LineageExplorer.tsx",
+    "src/management/pages/phase2/LineageExplorer.test.tsx",
+    "src/platform/components/LineageGraph.tsx",
+    "src/platform/components/LineageGraph.test.tsx",
+    "src/lib/bff-v1/managementConsoleReads.ts",
+    "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts",
+    "src/management/pages/ArtifactDetail.tsx",
+    "src/management/pages/ArtifactDetail.test.tsx",
+    "src/management/pages/StrategyDetail.tsx",
+    "src/management/pages/StrategyDetail.lineage.test.tsx",
+    "src/lib/enumLabels.ts",
+    "src/lib/__tests__/enumLabels.test.ts",
+    "e2e/21-management-canonical-reads.spec.ts",
+    "e2e/24-persona-fleet-click-map.spec.ts",
+    "scripts/lib/management-routes.mjs",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/lineage-page-1274x627.png",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/lineage-page-390w.png",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/strategy-detail-lineage-1274x627.png",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/strategy-detail-lineage-390w.png",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/artifact-detail-lineage-1274x627.png",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/artifact-detail-lineage-390w.png",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_lineage_page_single_object_lookup_by_name_or_id": {
+      "passed": true,
+      "details": [
+        "Opening /management/lineage without ?root= sends zero GET /bff/lineage requests, renders data-testid='lineage-lookup-prompt', and loads current strategies (bffV1.strategies.listNonDraft({ hideRetiredPersonas: true }) filtered by isCurrentStrategyRow) and current personas (bffV1.personas.list filtered by listScope === 'current' else dropping state === 'retired') offered by name with secondary ID.",
+        "Typing in the root lookup input (including typing 'persona-ee71' character by character or typing Chinese name '衡岳') updates only queryInput and filters the candidate options without firing any GET /bff/lineage request.",
+        "GET /bff/lineage?root_id=<id> is sent only when the user selects a candidate option, presses Enter, or opens a ?root=<id> deep link; after selection, the full candidates listbox collapses to the chosen object (data-testid='lineage-lookup-selected') with a Change button (data-testid='lineage-lookup-change') so the graph stays above the fold at 1274x627."
+      ]
+    },
+    "AC2_node_display_name_secondary_id_name_missing_fallback_and_i18n": {
+      "passed": true,
+      "details": [
+        "adaptLineageNode in src/lib/bff-v1/managementConsoleReads.ts preserves display_name, name_missing, strategy_id, and version from REGISTRY-LINEAGE-NODE-NAMES-20261125 while remaining backward-compatible when those fields are absent.",
+        "resolveLineageNodeLabel in src/lib/enumLabels.ts renders display_name as primary text with the full node id on [data-node-secondary-id], and falls back to localized plain kind plus short id (e.g. '資金池 a81b4fd1' / 'Capital Pool a81b4fd1', '產出物 a81b4fd1-v2' / 'Artifact a81b4fd1-v2', '實驗 a81b4fd1' / 'Experiment a81b4fd1') when name_missing is true or when display_name is absent and label equals id.",
+        "Node headers in LineageGraph.tsx use lineageNodeTypeLabel(n.type, t) (keeping raw type only in data-node-type), and type filter labels (BFF_LINEAGE_NODE_TYPES: 策略/Strategy, Persona, 產出物/Artifact, 資金池/Capital Pool, 實驗/Experiment, 資料集/Dataset), edge labels (BFF_LINEAGE_EDGE_TYPES including source_dataset: 來源資料集/Source Dataset), empty (lineage.empty: 尚無血緣資料。/No lineage available.), and unavailable (lineageExplorer.unavailable: 血緣服務不可用。/Lineage surface unavailable.) are translated in both zh-TW and en-US."
+      ]
+    },
+    "AC3_strategy_and_artifact_detail_lineage_tabs": {
+      "passed": true,
+      "details": [
+        "StrategyDetail.tsx and ArtifactDetail.tsx both read managementConsoleReads.lineage(id) for their lineage tab, render LineageGraph when ready, distinguish unavailable (strategy-lineage-unavailable / artifact-lineage-unavailable) from empty (lineage-empty), and highlight the current object.",
+        "highlightLineageNodesForRoot matches both direct node IDs (for artifacts, personas, and capital pools) and Strategy spec nodes (by strategy_id or reg-strategy-spec-<suffix>) when rooted at a strategy ID such as strategy-persona-a81b4fd15944698341aa."
+      ]
+    },
+    "AC4_1274x627_and_390px_layout_geometry_and_screenshots": {
+      "passed": true,
+      "screenshots": [
+        "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/lineage-page-1274x627.png",
+        "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/lineage-page-390w.png",
+        "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/strategy-detail-lineage-1274x627.png",
+        "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/strategy-detail-lineage-390w.png",
+        "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/artifact-detail-lineage-1274x627.png",
+        "docs/deployment/evidence/FE-LINEAGE-LOOKUP-20261125/artifact-detail-lineage-390w.png"
+      ],
+      "details": [
+        "LineageGraph.tsx uses CJK-aware estimateTextPx and fitText so full-width Chinese titles stay inside [NODE_PAD_X, NODE_W - NODE_PAD_X] and widens colGap for translated edge labels so edge labels stay strictly inside inter-column gaps.",
+        "Verified in real Chromium at 1274x627 and 390x844 across /management/lineage, /management/strategies/strategy-persona-a81b4fd15944698341aa (Lineage tab), and /management/artifacts/artifact-persona-pool-a81b4fd15944698341aa-v2 (Lineage tab) that clippedNodes=[] and overlappingEdges=[]."
+      ]
+    },
+    "AC5_crawl_and_e2e_updated_to_root_and_changed_assertions_justified": {
+      "passed": true,
+      "changed_assertions_justification": [
+        {
+          "file": "src/management/pages/phase2/LineageExplorer.test.tsx",
+          "change": "Updated the three existing graph-rendering test entries from unrooted '/management/lineage' to rooted '/management/lineage?root=...', updated type filter button lookup and feature_set node type header to use localized lineageNodeTypeLabel(c.type, i18n.t) while keeping raw data-node-type, and dispatched Enter after rootInput change when testing root reload.",
+          "reason": "Per AC1, AC2, and AC5, opening /management/lineage without ?root= no longer requests an unrooted graph, type filter buttons and node type headers are now localized in zh-TW and en-US instead of hardcoded English enum keys, and root reload triggers on Enter or selection rather than on every keystroke."
+        },
+        {
+          "file": "src/platform/components/LineageGraph.test.tsx",
+          "change": "Updated zh-TW node type header expectations in 'localizes lineage edge types, node types, and node states via enumLabels' from 'Artifact · 已核准' and 'Strategy · 已部署' to '產出物 · 已核准' and '策略 · 已部署' while asserting data-node-type retains raw 'Artifact' and 'Strategy'.",
+          "reason": "Per AC2, LineageGraph node headers now localize node types via lineageNodeTypeLabel(n.type, t) and keep the raw type only in data-node-type."
+        },
+        {
+          "file": "src/management/pages/StrategyDetail.lineage.test.tsx",
+          "change": "Updated empty-state text expectation on data-testid='lineage-empty' from hardcoded English 'No lineage available.' to /No lineage available\\.|尚無血緣資料。/.",
+          "reason": "Per AC2, LineageGraph empty state is now localized through t('lineage.empty') in zh-TW ('尚無血緣資料。') and en-US ('No lineage available.')."
+        },
+        {
+          "file": "e2e/21-management-canonical-reads.spec.ts",
+          "change": "Updated the canonical lineage read case from '/management/lineage' to '/management/lineage?root=artifact-canonical'.",
+          "reason": "Per AC1 and AC5, unrooted /management/lineage sends no /bff/lineage graph request; rooted ?root=artifact-canonical verifies the canonical /bff/lineage graph read."
+        }
+      ]
+    }
+  },
+  "validation": [
+    {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0,
+      "result": "passed (0 errors)"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/lib/__tests__/enumLabels.test.ts src/lib/bff-v1/__tests__/managementConsoleReads.test.ts src/platform/components/LineageGraph.test.tsx src/management/pages/phase2/LineageExplorer.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/ArtifactDetail.test.tsx src/test/accept-management-route-attribution.test.ts src/test/accept-management-honest-not-found.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "result": "9 test files passed, 117 tests passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/StrategyDetail.test.tsx src/management/pages/StrategyDetail.spec.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/StrategyDetail.discovery.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx",
+      "exit_code": 0,
+      "result": "5 test files passed, 29 tests passed"
+    },
+    {
+      "command": "./node_modules/.bin/playwright test e2e/21-management-canonical-reads.spec.ts e2e/24-persona-fleet-click-map.spec.ts",
+      "exit_code": 0,
+      "result": "5 passed (canonical reads, lineage lookup + detail tabs + 1274x627 & 390w geometry + screenshots, and persona fleet click-map regression)"
+    }
+  ],
+  "runtime_budget": {
+    "persistent_product_writers": 0,
+    "recurring_jobs": 0,
+    "added_tables_files_caches": 0
+  },
+  "residual_findings": []
+}

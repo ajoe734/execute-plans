@@ -1,0 +1,177 @@
+import { expect, test, type Page, type Route } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
+
+// FE-EVO-JOURNAL-DIRECTION-20261125: functional screenshots of the evolution journal and the
+// evolution direction pages against a fixture BFF (no hosted access).
+const EVIDENCE_DIR = "./docs/deployment/evidence/FE-EVO-JOURNAL-DIRECTION-20261125";
+
+function frontendUrl(path = "/"): string {
+  const base =
+    process.env.PANTHEON_FE_BASE_URL ||
+    process.env.FRONTEND_BASE_URL ||
+    process.env.PLAYWRIGHT_BASE_URL ||
+    "http://127.0.0.1:5173";
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+function corsHeaders(route: Route): Record<string, string> {
+  const origin = route.request().headers()["origin"] ?? "*";
+  return {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers":
+      "accept,authorization,content-type,idempotency-key,if-match,x-bff-api-version,x-correlation-id,x-locale,x-request-id,x-tenant-id,x-trace-id",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Expose-Headers": "x-bff-api-version,x-correlation-id,x-request-id",
+  };
+}
+
+async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
+  await route.fulfill({ body: JSON.stringify(body), contentType: "application/json", headers: corsHeaders(route), status });
+}
+
+const members2 = [
+  { artifact_ref: "strat-momentum-tw@1.2.0", stage: "active", risk_weight: 0.5 },
+  { artifact_ref: "strat-meanrev-tw@0.9.1", stage: "trial", risk_weight: 0.5 },
+];
+const MACHINE = "Daily evolution sweep derived a governed flag_for_review proposal from incident inc-drift-87d6930c62ee.";
+
+const journalItems = [
+  {
+    id: "pool_version:persona-ee71:3", entry_type: "pool_version", persona_id: "persona-ee71", persona_name: "衡岳",
+    pool_version: 3, action: "remove_member", decision_status: "refused", status: "refused", refused: true, membership_changed: false,
+    reasons: ["移除 strat-meanrev-tw 會讓策略池低於最小成員數"], members_before: members2, members_after: members2,
+    occurred_at: "2026-11-25T02:00:00Z",
+  },
+  {
+    id: "pool_version:persona-ee71:2", entry_type: "pool_version", persona_id: "persona-ee71", persona_name: "衡岳",
+    pool_version: 2, action: "add_member", decision_status: "applied", status: "applied", refused: false, membership_changed: true,
+    reasons: ["紙上交易夏普值通過閘門"],
+    members_before: [{ artifact_ref: "strat-momentum-tw@1.2.0", stage: "trial", risk_weight: 1 }], members_after: members2,
+    occurred_at: "2026-11-24T02:00:00Z",
+  },
+  {
+    id: "pool_version:persona-ee71:1", entry_type: "pool_version", persona_id: "persona-ee71", persona_name: "衡岳",
+    pool_version: 1, action: "initial", decision_status: "applied", status: "applied", refused: false, membership_changed: true,
+    reasons: [], members_before: [], members_after: [{ artifact_ref: "strat-momentum-tw@1.2.0", stage: "trial", risk_weight: 1 }],
+    occurred_at: "2026-11-20T02:00:00Z",
+  },
+  {
+    id: "evolution_decision:evo-sweep-inc-drift-87d6930c62ee", entry_type: "evolution_decision", source_id: "evo-sweep-inc-drift-87d6930c62ee",
+    title: MACHINE, summary: MACHINE, status: "proposed", action_type: "flag_for_review", persona_name: "衡岳",
+    target: { type: "persona", id: "persona-ee71" }, subject_class: "unclassified", evidence_class: "incident_followup",
+    occurred_at: "2026-11-23T02:00:00Z",
+  },
+];
+
+function journalBody(includeSystem: boolean): unknown {
+  const items = includeSystem
+    ? [...journalItems, {
+        id: "evolution_decision:evo-infra-1", entry_type: "evolution_decision", source_id: "evo-infra-1", title: "Infra drift check",
+        status: "proposed", action_type: "freeze", subject_class: "infrastructure", target: { type: "binding", id: "infra-subject-gw" },
+      }]
+    : journalItems;
+  return {
+    data: {
+      items,
+      summary: {
+        total_items: items.length, returned_items: items.length, decision_count: 2, mutation_review_count: 0, postmortem_count: 0,
+        rollback_count: 0, freeze_order_count: 0, pool_version_count: 3, refused_pool_version_count: 1,
+        hidden_system_counts: includeSystem ? {} : { infrastructure: 4, test: 2 },
+        decision_subject_class_counts: includeSystem ? { strategy: 0, unclassified: 1, infrastructure: 1 } : { unclassified: 1 },
+        unclassified_decision_count: 1,
+      },
+      auto_proposal_counts: { threshold: 3, incident_followup: 2, incident_severity: 1, other: 1, infrastructure: 5, postmortem_draft: 7, total: 12 },
+    },
+    page_info: { next_page_token: null, total: items.length, page_size: 20 },
+    meta: { surfaces: { evolution_decisions: { status: "ok" }, postmortems: { status: "ok" }, strategy_pools: { status: "ok" } } },
+  };
+}
+
+const qualification = {
+  policy_version: "evolution-qualification.v1", evaluated_at: "2026-11-25T04:00:00Z", evaluated: 3, qualified: 0, drafted: 0,
+  counts_by_first_failing_criterion: { real_threshold_signal: 2, persistent_breach: 1 }, failure_reason: null, items: [], total: 3, limit: 50, offset: 0,
+  member_baselines: [
+    { persona_id: "persona-ee71", persona_name: "衡岳", artifact_ref: "strat-momentum-tw@1.2.0", stage: "active", risk_weight: 0.5, pool_version: 3, status: "approved", reason: null },
+    { persona_id: "persona-ee71", persona_name: "衡岳", artifact_ref: "strat-meanrev-tw@0.9.1", stage: "trial", risk_weight: 0.5, pool_version: 3, status: "no_approved_baseline", reason: "gate_not_passed" },
+    { persona_id: "persona-ee71", persona_name: "衡岳", artifact_ref: "strat-carry-tw@0.1.0", stage: "trial", risk_weight: 0.1, pool_version: 3, status: "no_approved_baseline", reason: "some_future_reason_code" },
+    { persona_id: "persona-ee71", persona_name: "衡岳", artifact_ref: "strat-value-tw@0.2.0", stage: "trial", risk_weight: 0.1, pool_version: 3, status: "unavailable", reason: "registry_entry_unreadable:TimeoutError" },
+  ],
+  member_baselines_surface: { status: "ok", reason: null, approved: 1, not_approved: 2, unavailable: 1 },
+};
+
+const programs = [
+  { id: "evp-real-1", program_id: "evp-real-1", name: "動能體制方案", status: "under_review", origin: "auto_qualified", source_decision_ids: ["dec-1"], run_ids: [], updated_at: "2026-11-24T03:00:00Z" },
+  { id: "evp-c0ce26091e8b443495bfa61e3dac34ff", program_id: "evp-c0ce26091e8b443495bfa61e3dac34ff", name: "DEV ACCEPTANCE ONLY 1793924182061", status: "draft", origin: "manual", record_class: "acceptance", source_decision_ids: [], run_ids: [], updated_at: "2026-11-04T10:00:00Z" },
+];
+
+async function install(page: Page, journalCalls: string[]): Promise<void> {
+  await page.route(/^https?:\/\/[^/]+\/(?:bff|health|healthz|readyz).*/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (request.method() === "OPTIONS") return route.fulfill({ headers: corsHeaders(route), status: 204 });
+    if (path === "/bff/events/stream") return route.fulfill({ body: ": connected\n\n", contentType: "text/event-stream", headers: corsHeaders(route), status: 200 });
+    if (path === "/health" || path === "/healthz" || path === "/readyz") return fulfillJson(route, { status: "ok", live: true, ready: true });
+    if (path === "/bff/me") {
+      return fulfillJson(route, { data: { environment: { name: "playwright", strict_auth: false }, tenant_id: "pantheon-dev", user: { id: "op-1", roles: ["operator", "reviewer", "approver"] } } });
+    }
+    if (path === "/bff/management/evolution-journal") {
+      journalCalls.push(url.search);
+      return fulfillJson(route, journalBody(url.searchParams.get("include_system") === "true"));
+    }
+    if (path === "/bff/management/evolution-qualification") return fulfillJson(route, { data: qualification });
+    if (path === "/bff/evolution-programs") return fulfillJson(route, { data: programs, total: programs.length, total_complete: true, cursor: { next: null } });
+    return fulfillJson(route, { data: { items: [] }, items: [], meta: { status: "ok" }, page_info: { page_size: 0, total: 0 } });
+  });
+  await installOidcDevLogin(page, { goto: false, roles: ["operator", "reviewer", "approver"], tenantId: "pantheon-dev", token: LOCAL_FIXTURE_AUTH_TOKEN });
+}
+
+test.describe("FE-EVO-JOURNAL-DIRECTION-20261125", () => {
+  test("journal and direction pages say in plain words what changed and why nothing qualifies", async ({ page }) => {
+    test.skip(targetsExternalE2eEnvironment(), "route-mocked fixture coverage is loopback-only");
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    const journalCalls: string[] = [];
+    await install(page, journalCalls);
+    await page.setViewportSize({ width: 1274, height: 900 });
+
+    await page.goto(frontendUrl("/management/evolution-journal"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.getByTestId("evolution-pool-version-title").first()).toHaveText("衡岳 · 策略池第 3 版");
+    await expect(page.getByTestId("evolution-pool-version-pool_version:per-x:1")).toHaveCount(0);
+    await expect(page.getByTestId("evolution-pool-version-status").first()).toHaveText("已拒絕");
+    await expect(page.getByTestId("evolution-machine-title")).toContainText("Daily evolution sweep");
+    await expect(page.getByTestId("evolution-system-hidden-count")).toContainText("已隱藏 6 筆");
+    expect(journalCalls[0]).toContain("view=history");
+    expect(journalCalls[0]).not.toContain("include_system");
+    await page.screenshot({ path: `${EVIDENCE_DIR}/journal-1274x900.png`, fullPage: true });
+
+    await page.getByTestId("evolution-system-toggle").click();
+    await expect.poll(() => journalCalls.some((q) => q.includes("include_system=true"))).toBe(true);
+    await expect(page.getByTestId("evolution-system-toggle")).toContainText("隱藏系統與測試項目");
+    await page.screenshot({ path: `${EVIDENCE_DIR}/journal-system-shown-1274x900.png`, fullPage: true });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(frontendUrl("/management/evolution-journal"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.getByTestId("evolution-pool-version-title").first()).toBeVisible();
+    await page.screenshot({ path: `${EVIDENCE_DIR}/journal-390w.png`, fullPage: true });
+
+    await page.setViewportSize({ width: 1274, height: 900 });
+    await page.goto(frontendUrl("/management/evolution"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.getByTestId("member-baselines")).toContainText("尚無核准基準");
+    await expect(page.getByTestId("member-baselines")).toContainText("閘門檢查沒有通過。");
+    await expect(page.getByTestId("member-baselines")).toContainText("代碼：some_future_reason_code");
+    await expect(page.getByText("動能體制方案")).toBeVisible();
+    await expect(page.getByText("DEV ACCEPTANCE ONLY 1793924182061")).toHaveCount(0);
+    await expect(page.getByTestId("evolution-toggle-test-records")).toContainText("顯示測試紀錄（1）");
+    await page.screenshot({ path: `${EVIDENCE_DIR}/direction-1274x900.png`, fullPage: true });
+
+    await page.getByTestId("evolution-toggle-test-records").click();
+    await expect(page.getByText("DEV ACCEPTANCE ONLY 1793924182061")).toBeVisible();
+    await page.screenshot({ path: `${EVIDENCE_DIR}/direction-test-records-shown-1274x900.png`, fullPage: true });
+  });
+});

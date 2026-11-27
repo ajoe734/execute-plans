@@ -4,6 +4,7 @@ import { Activity, Database, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
   getAgoraOperationalReadiness,
+  type AgoraFreshness,
   type AgoraOperationalReadiness,
   type AgoraOperationalReadinessSurface,
 } from "@/lib/bff-v1/agora/operationalReadiness";
@@ -15,18 +16,177 @@ type ReadinessLoadState = "loading" | "ready" | "unavailable";
 
 const SURFACES_TO_SHOW = ["signals", "decision_events", "candidates"];
 
-function ageLabel(ageSeconds: number | null, slaSeconds: number): string {
-  if (ageSeconds === null) return "age not reported";
-  if (ageSeconds < 60) return `${Math.round(ageSeconds)}s old of ${slaSeconds}s SLA`;
-  if (ageSeconds < 3600) return `${Math.round(ageSeconds / 60)}m old of ${slaSeconds}s SLA`;
-  return `${(ageSeconds / 3600).toFixed(1)}h old of ${slaSeconds}s SLA`;
+const GENERIC_FRESHNESS_REASONS = new Set([
+  "",
+  "ok",
+  "healthy",
+  "fresh",
+  "stale",
+  "nan",
+  "null",
+  "undefined",
+]);
+
+const SESSION_FRESH_REASON_RE =
+  /session|holiday|weekend|calendar|non[\s_-]*trading|market[\s_-]*close|carry/i;
+
+export type DataSourceFreshnessInput = {
+  age_seconds?: number | null;
+  ageSeconds?: number | null;
+  sla_seconds?: number | null;
+  slaSeconds?: number | null;
+  freshness?: AgoraFreshness | string | null;
+  freshness_status?: AgoraFreshness | string | null;
+  freshnessStatus?: AgoraFreshness | string | null;
+  freshness_reason?: string | null;
+  freshnessReason?: string | null;
+  reason?: string | null;
+  calendar_reason?: string | null;
+};
+
+export function formatDuration(seconds: number | null | undefined): string | null {
+  if (
+    seconds === null ||
+    seconds === undefined ||
+    typeof seconds !== "number" ||
+    !Number.isFinite(seconds) ||
+    seconds < 0
+  ) {
+    return null;
+  }
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) {
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    return "1h";
+  }
+  const hours = (seconds / 3600).toFixed(1).replace(/\.0$/, "");
+  return `${hours}h`;
 }
 
-function readinessExplanation(readiness: AgoraOperationalReadiness): string {
-  switch (readiness.source.freshness) {
+function cleanFreshnessReason(rawReason?: string | null): string | null {
+  if (typeof rawReason !== "string") return null;
+  const trimmed = rawReason.trim();
+  if (!trimmed || GENERIC_FRESHNESS_REASONS.has(trimmed.toLowerCase())) {
+    return null;
+  }
+  return trimmed.replace(/_/g, " ");
+}
+
+function resolveFreshnessDetails(input: DataSourceFreshnessInput) {
+  const rawAge = input.age_seconds ?? input.ageSeconds ?? null;
+  const ageSeconds =
+    typeof rawAge === "number" && Number.isFinite(rawAge) && rawAge >= 0
+      ? rawAge
+      : null;
+  const rawSla = input.sla_seconds ?? input.slaSeconds ?? null;
+  const slaSeconds =
+    typeof rawSla === "number" && Number.isFinite(rawSla) && rawSla > 0
+      ? rawSla
+      : null;
+  const rawFreshness =
+    input.freshness ?? input.freshness_status ?? input.freshnessStatus ?? null;
+  const freshness =
+    typeof rawFreshness === "string" && rawFreshness.trim()
+      ? rawFreshness.trim().toLowerCase()
+      : null;
+  const reason = cleanFreshnessReason(
+    input.freshness_reason ??
+      input.freshnessReason ??
+      input.calendar_reason ??
+      input.reason ??
+      null,
+  );
+  const ageText = formatDuration(ageSeconds);
+  const slaText = formatDuration(slaSeconds);
+  const exceedsNominalSla =
+    ageSeconds !== null && slaSeconds !== null && ageSeconds > slaSeconds;
+  const isFreshStatus = freshness === "fresh" || freshness === "empty_fresh";
+  const hasSessionReason = Boolean(reason && SESSION_FRESH_REASON_RE.test(reason));
+  const isSessionAwareFresh =
+    isFreshStatus && (exceedsNominalSla || hasSessionReason);
+
+  return {
+    ageSeconds,
+    slaSeconds,
+    freshness,
+    reason,
+    ageText,
+    slaText,
+    exceedsNominalSla,
+    isSessionAwareFresh,
+  };
+}
+
+export function formatAgeVsSla(
+  ageOrSource: number | null | undefined | DataSourceFreshnessInput,
+  slaSeconds?: number | null,
+  freshnessOrOptions?: AgoraFreshness | string | DataSourceFreshnessInput | null,
+  freshnessReason?: string | null,
+): string {
+  let input: DataSourceFreshnessInput;
+  if (typeof ageOrSource === "number" || ageOrSource === null || ageOrSource === undefined) {
+    const numericAge: number | null = typeof ageOrSource === "number" ? ageOrSource : null;
+    if (typeof freshnessOrOptions === "string" || freshnessOrOptions === null || freshnessOrOptions === undefined) {
+      const stringFreshness: string | null =
+        typeof freshnessOrOptions === "string" ? freshnessOrOptions : null;
+      input = {
+        age_seconds: numericAge,
+        sla_seconds: slaSeconds ?? null,
+        freshness: stringFreshness,
+        freshness_reason: freshnessReason ?? null,
+      };
+    } else {
+      input = {
+        ...freshnessOrOptions,
+        age_seconds: numericAge,
+        sla_seconds: slaSeconds ?? freshnessOrOptions.sla_seconds ?? null,
+      };
+    }
+  } else {
+    input = ageOrSource;
+  }
+
+  const {
+    ageText,
+    slaText,
+    freshness,
+    reason,
+    exceedsNominalSla,
+    isSessionAwareFresh,
+  } = resolveFreshnessDetails(input);
+
+  if (ageText === null) return "age not reported";
+
+  if (isSessionAwareFresh) {
+    const reasonSuffix = reason ? ` · ${reason}` : "";
+    if (slaText) {
+      return `${ageText} wall-clock age · session-fresh across non-trading session/holiday (${slaText} trading-day SLA${reasonSuffix})`;
+    }
+    return `${ageText} wall-clock age · session-fresh across non-trading session/holiday${reasonSuffix}`;
+  }
+
+  if (freshness === "stale" && exceedsNominalSla && slaText) {
+    return `${ageText} old of ${slaText} SLA (exceeded)`;
+  }
+
+  return slaText ? `${ageText} old of ${slaText} SLA` : `${ageText} old`;
+}
+
+export const ageLabel = formatAgeVsSla;
+
+export function readinessExplanation(readiness: AgoraOperationalReadiness): string {
+  const sourceInput = readiness.source as DataSourceFreshnessInput;
+  const { freshness, ageText, slaText, reason, isSessionAwareFresh } =
+    resolveFreshnessDetails(sourceInput);
+
+  switch (freshness) {
     case "stale":
       return "The active snapshot exceeded its source SLA. Dependent surfaces may be unavailable until a fresh snapshot arrives.";
     case "empty_fresh":
+      if (isSessionAwareFresh) {
+        return `The source remains session-fresh from the latest market close (${ageText ?? "reported"} wall-clock age across a non-trading session or holiday against the ${slaText ?? "nominal"} trading-day SLA) and produced zero qualifying signals. This is a confirmed empty result, not an outage.`;
+      }
       return "The source is fresh but produced zero qualifying signals. This is a confirmed empty result, not an outage.";
     case "unavailable":
     case "not_configured":
@@ -34,6 +194,10 @@ function readinessExplanation(readiness: AgoraOperationalReadiness): string {
     case "degraded":
       return "The source or its producer is degraded. Downstream values should not be treated as fully current.";
     default:
+      if (isSessionAwareFresh) {
+        const reasonClause = reason ? ` (${reason})` : "";
+        return `The active source snapshot remains session-fresh from the latest market close${reasonClause}. Its ${ageText ?? "reported"} wall-clock age exceeds the nominal ${slaText ?? "24h"} trading-day SLA because the market session or holiday calendar is closed.`;
+      }
       return "The active source snapshot and its dependent producer were read from the operational readiness projection.";
   }
 }
@@ -94,6 +258,9 @@ function DataSourcesOperationalReadiness() {
   }
 
   const source = readiness.source;
+  const sourceInput = source as DataSourceFreshnessInput;
+  const sourceFreshness =
+    source.freshness ?? sourceInput.freshness_status ?? "unavailable";
   const producer = readiness.signal_producer;
   return (
     <Card
@@ -110,7 +277,9 @@ function DataSourcesOperationalReadiness() {
           {readiness.status}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">{readinessExplanation(readiness)}</p>
+      <p className="text-xs text-muted-foreground" data-testid="data-source-readiness-explanation">
+        {readinessExplanation(readiness)}
+      </p>
 
       <div className="grid gap-3 text-xs md:grid-cols-2 xl:grid-cols-4">
         <div>
@@ -125,9 +294,11 @@ function DataSourcesOperationalReadiness() {
         <div>
           <div className="text-muted-foreground">Freshness</div>
           <div className="mt-0.5 font-medium text-foreground" data-testid="data-source-readiness-freshness">
-            {source.freshness}
+            {sourceFreshness}
           </div>
-          <div className="mt-1 text-muted-foreground">{ageLabel(source.age_seconds, source.sla_seconds)}</div>
+          <div className="mt-1 text-muted-foreground" data-testid="data-source-readiness-age">
+            {formatAgeVsSla(sourceInput)}
+          </div>
           <div className="mt-1 text-muted-foreground">{safeDateTime(source.source_timestamp)}</div>
         </div>
         <div>

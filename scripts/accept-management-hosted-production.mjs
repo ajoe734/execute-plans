@@ -42,12 +42,6 @@ import { installPinnedBffBearer, pinnedTargetProblem } from "./lib/pinned-browse
 import { readabilityResult, summarizeReadability, readabilityMarkdown } from "./lib/management-readability.mjs";
 import { BASELINE_ROUTES, expectedCanonicalPath, ENTITY_LIST_ENDPOINTS } from "./lib/management-routes.mjs";
 
-// An honest not-found message may legitimately be short (zh-TW "找不到策略
-// stg_001。" is 14 chars); only non-not-found content is held to the minimum.
-function shortContentIncomplete(content, honestNotFound) {
-  return !honestNotFound && String(content).trim().length <= 15;
-}
-
 // --- argv / env --------------------------------------------------------
 
 function parseArgs(argv) {
@@ -205,11 +199,41 @@ async function gotoRouteWithRetry(page, targetUrl, transport, beforeAttempt = ()
   return lastError;
 }
 
+// An honest not-found message may legitimately be short (zh-TW "找不到策略
+// stg_001。" is 14 chars); only non-not-found content is held to the minimum.
+function shortContentIncomplete(content, honestNotFound) {
+  return !honestNotFound && String(content).trim().length <= 15;
+}
+
 // These routes deliberately have no finite route-specific BFF read. Shell/auth
 // reads and all other readiness/error rules still apply; no implicit exemption.
 const NO_ROUTE_DATA_READS = Object.freeze({
   "/management/settings": "Local preferences and static forms; no route-specific BFF data is read.",
 });
+
+const SHADOW_PROMPT_NO_DATA_READ_REASON =
+  'Shadow comparison prompt awaits an operator-supplied decision id ([data-testid="shadow-prompt"]); no route-specific BFF data is read until a decision id is submitted.';
+
+const LOADING_TEXT_PATTERN =
+  /(?:^|\n)\s*(?:Loading(?:\s*[.…]+)?|Verifying (?:Pantheon session|Agora access)[.…]*|正在載入(?:中)?(?:\s*[.…]+)?|(?:資料)?載入中(?:\s*[.…]+)?|載入\s*[.…]+)\s*(?:$|\n)/iu;
+
+function resolveNoDataReadReason(routePath, snapshot) {
+  const requestedPathname = String(routePath || "").split("?")[0];
+  if (Object.hasOwn(NO_ROUTE_DATA_READS, requestedPathname)) {
+    return NO_ROUTE_DATA_READS[requestedPathname];
+  }
+  if (requestedPathname === "/management/performance" && snapshot?.shadowPrompt) {
+    try {
+      const params = new URL(String(routePath || ""), "http://local").searchParams;
+      if (params.get("tab") === "shadow" && !(params.get("decision") || "").trim()) {
+        return SHADOW_PROMPT_NO_DATA_READ_REASON;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 async function crawlRoute(page, route, { source, transport }) {
   const requests = [];
@@ -328,6 +352,7 @@ async function crawlRoute(page, route, { source, transport }) {
   let finalUrl = "";
   let bodyText = "";
   let dataReasons = ["navigation_incomplete"];
+  let noDataReadReason = NO_ROUTE_DATA_READS[requestedPathname] || null;
   let verdictReads = [];
   let verdictRequests = [];
   const freezeEvidence = () => {
@@ -346,9 +371,18 @@ async function crawlRoute(page, route, { source, transport }) {
     do {
       const snapshot = await page.evaluate(() => {
         const content = document.querySelector("main") || document.body;
+        const clone = content ? content.cloneNode(true) : null;
+        if (clone) {
+          clone.querySelectorAll('button, [role="button"], input, select, textarea').forEach((el) => el.remove());
+          clone.querySelectorAll(
+            "address, article, aside, blockquote, br, details, dialog, dd, div, dl, dt, fieldset, figcaption, figure, footer, form, h1, h2, h3, h4, h5, h6, header, hgroup, hr, li, main, nav, ol, p, pre, section, table, tbody, td, tfoot, th, thead, tr, ul",
+          ).forEach((el) => { el.before("\n"); el.after("\n"); });
+        }
         return {
           path: window.location.pathname, finalUrl: window.location.pathname + window.location.search,
           body: document.body?.innerText || "", content: content?.innerText || "",
+          loadingText: clone ? (clone.innerText || clone.textContent || "") : (content?.innerText || ""),
+          shadowPrompt: Boolean(content?.querySelector('[data-testid="shadow-prompt"]') || document.querySelector('[data-testid="shadow-prompt"]')),
           busy: Boolean(document.querySelector('[data-testid="route-chunk-loading"]') ||
             content?.matches('[aria-busy="true"], [data-state="loading"]') ||
             content?.querySelector('[aria-busy="true"], [data-state="loading"]')),
@@ -357,12 +391,13 @@ async function crawlRoute(page, route, { source, transport }) {
       });
       finalUrl = snapshot.finalUrl;
       bodyText = snapshot.body;
-      const loading = /(?:^|\n)\s*(?:Loading(?:\s*[.…]+)?|Verifying (?:Pantheon session|Agora access)[.…]*|(?:正在)?載入(?:中)?[.…]*|資料載入中[.…]*)\s*(?:$|\n)/iu.test(snapshot.content);
+      const loading = LOADING_TEXT_PATTERN.test(snapshot.loadingText ?? snapshot.content);
       const dataError = /(?:^|\n)\s*(?:Failed to (?:load|fetch)|Unable to load|載入失敗|無法載入|資料讀取失敗)/iu.test(snapshot.content);
       // Historical fixture ids may honestly render not-found. Live-id details
       // must return real data; a 404 there is a failure.
       const honestNotFound = route.kind === "detail-or-alias" && source === "baseline-or-live-nav" &&
         /not found|找不到|不存在/iu.test(snapshot.content);
+      noDataReadReason = resolveNoDataReadReason(route.path, snapshot);
       // Freeze reads and request evidence at this verdict boundary; a pending
       // res.json() or later navigation must not mutate the returned result.
       freezeEvidence();
@@ -386,7 +421,7 @@ async function crawlRoute(page, route, { source, transport }) {
         (snapshot.busy || loading) && "loading_unresolved",
         dataError && "rendered_data_error",
         shortContentIncomplete(snapshot.content, honestNotFound) && "content_incomplete",
-        validReads.length === 0 && !Object.hasOwn(NO_ROUTE_DATA_READS, requestedPathname) && "no_completed_route_data",
+        validReads.length === 0 && !noDataReadReason && "no_completed_route_data",
         (failedReads.length > 0 || apiFailure) && "api_data_failure",
         !entityDataReady && "entity_detail_data_missing",
         (verdictReads.length !== routeRequests.size || verdictReads.some((read) => !read.complete)) && "data_reads_incomplete",
@@ -461,7 +496,7 @@ async function crawlRoute(page, route, { source, transport }) {
     alias,
     controls,
     dataCheck: { pass: status === "ok", reasons: dataReasons, reads: verdictReads,
-      noDataReadReason: NO_ROUTE_DATA_READS[requestedPathname] || null },
+      noDataReadReason },
     timing: { startedAt: new Date(startedAt).toISOString(), elapsedMs: elapsed(), navigationAttempts },
     bffRequests: verdictRequests,
     bffRequestCount: requests.length,
@@ -550,12 +585,15 @@ const GENERIC_ID_KEYS = ["id", "itemId", "entityId", "refId", "ref_id", "strateg
 const ENTITY_ID_KEYS = {
   evolution: ["id", "program_id", "programId", "evolution_program_id"],
   deployments: ["id", "plan_id", "planId", "deployment_id"],
+  experiments: ["task_id", "taskId", "id"],
 };
 
 function firstLiveId(body, entity) {
   const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data || [];
   if (!Array.isArray(items) || items.length === 0) return null;
-  const first = items[0];
+  const first = entity === "experiments"
+    ? items.find((item) => item?.task_type !== "collector_query_plan")
+    : items[0];
   for (const key of ENTITY_ID_KEYS[entity] || GENERIC_ID_KEYS) {
     if (first && typeof first[key] === "string" && first[key]) return first[key];
   }
@@ -572,7 +610,8 @@ async function resolveLiveIdRoutes() {
   }
   for (const [entity, fixturePath] of entities) {
     const endpoint = ENTITY_LIST_ENDPOINTS[entity];
-    const { status, body, error } = await fetchJson(`${BFF_BASE}${endpoint}`, authHeaders(BEARER_TOKEN, TENANT_ID));
+    const query = entity === "experiments" ? "?view=research" : "";
+    const { status, body, error } = await fetchJson(`${BFF_BASE}${endpoint}${query}`, authHeaders(BEARER_TOKEN, TENANT_ID));
     const items = Array.isArray(body) ? body : body?.items || body?.data?.items || body?.data;
     if (status !== 200 || !body || body.error || body.ok === false || body.success === false || !Array.isArray(items)) {
       results.push({ entity, endpoint, status, error: error || "non-200 or invalid list data", liveId: null });

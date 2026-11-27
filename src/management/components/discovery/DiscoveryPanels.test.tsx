@@ -10,6 +10,7 @@ import zh from "@/i18n/locales/zh-TW";
 import { normalizeDiscovery } from "@/lib/bff-v1/discovery";
 import {
   AttributionNote,
+  discoveryRecordHref,
   DiscoverySections,
   HypothesisCardPanel,
   LineagePanel,
@@ -82,7 +83,10 @@ describe("Discovery panels — fields present", () => {
     expect(screen.getByTestId("discovery-hypothesis-signal-inputs")).toHaveTextContent("earnings_surprise, ohlcv");
     const citations = screen.getByTestId("discovery-hypothesis-citations");
     expect(citations).toHaveTextContent("Momentum in TWSE");
-    expect(citations.querySelector("a")).toHaveAttribute("href", "/management/evidence/src-paper-001");
+    // FE-EVIDENCE-CITED-20261125: a source-ingestion record id is not an
+    // evidence item, so the item route cannot find it; it renders as text.
+    expect(citations.querySelector("a")).toBeNull();
+    expect(citations).toHaveTextContent("src-paper-001");
 
     expect(screen.getByTestId("discovery-metrics-in-sharpe_ratio")).toHaveTextContent("1.50");
     expect(screen.getByTestId("discovery-metrics-out-sharpe_ratio")).toHaveTextContent("0.70");
@@ -232,5 +236,40 @@ describe("Discovery i18n", () => {
     expect(screen.getByText("假說卡")).toBeInTheDocument();
     expect(screen.getByText("樣本內 vs 樣本外")).toBeInTheDocument();
     expect(screen.getByText("血緣")).toBeInTheDocument();
+  });
+});
+
+describe("Discovery record links (FE-EVIDENCE-CITED-20261125)", () => {
+  it("links only ids the evidence item route resolves", () => {
+    expect(discoveryRecordHref("src-paper-001", "/bff/management/evidence/src-paper-001")).toBeNull();
+    expect(discoveryRecordHref("evi-1217cd1c8ccc7274", "/bff/management/evidence/evi-1217cd1c8ccc7274")).toBe(
+      "/management/evidence/evi-1217cd1c8ccc7274",
+    );
+    expect(discoveryRecordHref("evref-rart-20260615-002", "/management/evidence/evref-rart-20260615-002")).toBe(
+      "/management/evidence/evref-rart-20260615-002",
+    );
+    expect(discoveryRecordHref("evi-1217cd1c8ccc7274", null)).toBeNull();
+  });
+
+  it("renders an evidence item source record as a link and a raw source record as text", () => {
+    wrap(
+      <DiscoverySections
+        record={{
+          ...FULL,
+          lineage: {
+            ...FULL.lineage,
+            source_records: [
+              { source_record_id: "evi-1217cd1c8ccc7274", href: "/bff/management/evidence/evi-1217cd1c8ccc7274" },
+              { source_record_id: "src-paper-001", href: "/bff/management/evidence/src-paper-001" },
+            ],
+          },
+        }}
+      />,
+    );
+    const records = screen.getByTestId("discovery-lineage-source-records");
+    const links = records.querySelectorAll("a");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/management/evidence/evi-1217cd1c8ccc7274");
+    expect(records).toHaveTextContent("src-paper-001");
   });
 });

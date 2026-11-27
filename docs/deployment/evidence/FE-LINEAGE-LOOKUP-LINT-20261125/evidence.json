@@ -1,0 +1,83 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-LINEAGE-LOOKUP-LINT-20261125",
+  "taskId": "FE-LINEAGE-LOOKUP-LINT-20261125",
+  "title": "Remove the lint error that rolls back every frontend release",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-LINEAGE-LOOKUP-LINT-20261125",
+  "base_commit": "755a3dab25a754cb4e30d99fb13a1b3b5f34c43f",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-25T19:25:00Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC1 / RC6",
+    "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)",
+    "hosted_read_only_diagnosis": "Dev Root 45671666876 (BFF b3f93d448; FE 7b33a5c44) was rolled back at 19:15Z because execute-plans release candidate 45679247274 failed Gate 1 npm run lint with one error: src/management/pages/phase2/LineageExplorer.tsx 274:25 no-control-regex on /[^\\x00-\\x7f]/ from b8f57d36e (PR #1091)."
+  },
+  "modified_surfaces": [
+    "src/management/pages/phase2/LineageExplorer.tsx",
+    "src/management/pages/phase2/LineageExplorer.test.tsx",
+    "docs/deployment/evidence/FE-LINEAGE-LOOKUP-LINT-20261125/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_non_ascii_regex_without_control_character_and_tests": {
+      "passed": true,
+      "details": [
+        "LineageExplorer.tsx line 274 replaces /[^\\x00-\\x7f]/.test(raw) with /[^\\p{ASCII}]/u.test(raw), testing for non-ASCII input without any control character in the pattern.",
+        "Behaviour is identical for Chinese names (both exact Chinese names like '衡岳' and partial non-ASCII queries like '0050 台股') and plain ASCII IDs (both candidate IDs like 'strategy-persona-fd1281847a3b1c6a9735' and direct artifact IDs like 'artifact-persona-pool-a81b4fd15944698341aa-v2').",
+        "All 4 existing tests in src/management/pages/phase2/LineageExplorer.test.tsx pass unchanged, and a 5th test ('resolves Chinese name input and plain id input on submit via the Unicode ASCII property check') covers both Chinese name lookup and plain ID lookup using real BFF row shapes."
+      ]
+    },
+    "AC2_npm_run_lint_zero_errors_and_scoped_changes_only": {
+      "passed": true,
+      "lint_summary": {
+        "command": "npm run lint",
+        "exit_code": 0,
+        "errors": 0,
+        "warnings": 120,
+        "output_summary": "✖ 120 problems (0 errors, 120 warnings)"
+      },
+      "details": [
+        "npm run lint exits 0 with 0 errors (120 pre-existing warnings, 0 warnings/errors in LineageExplorer.tsx and LineageExplorer.test.tsx).",
+        "No files outside the declared artifact scope were changed."
+      ]
+    },
+    "AC3_no_existing_test_weakened_or_deleted": {
+      "passed": true,
+      "changed_assertions_justification": [],
+      "details": [
+        "Zero existing tests or assertions in LineageExplorer.test.tsx were modified, weakened, or deleted; only one additive test was appended."
+      ]
+    }
+  },
+  "validation": [
+    {
+      "command": "npm run lint",
+      "exit_code": 0,
+      "result": "passed (0 errors, 120 warnings; ✖ 120 problems (0 errors, 120 warnings))"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/phase2/LineageExplorer.tsx src/management/pages/phase2/LineageExplorer.test.tsx",
+      "exit_code": 0,
+      "result": "passed (0 errors, 0 warnings)"
+    },
+    {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0,
+      "result": "passed (0 errors)"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/phase2/LineageExplorer.test.tsx",
+      "exit_code": 0,
+      "result": "1 test file passed, 5 tests passed"
+    }
+  ],
+  "runtime_budget": {
+    "persistent_product_writers": 0,
+    "recurring_jobs": 0,
+    "added_tables_files_caches": 0
+  },
+  "residual_findings": []
+}

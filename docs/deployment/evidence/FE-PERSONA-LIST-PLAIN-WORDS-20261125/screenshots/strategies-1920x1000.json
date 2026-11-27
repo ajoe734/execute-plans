@@ -1,0 +1,117 @@
+{
+  "rowCount": 8,
+  "viewportWidth": 1920,
+  "clientWidth": 1600,
+  "scrollWidth": 1600,
+  "docOverflow": 0,
+  "headers": [
+    "Name",
+    "State",
+    "Runtime",
+    "Symbols",
+    "Cumulative paper result",
+    "Drawdown",
+    "Trades",
+    "Persona"
+  ],
+  "colWidths": [
+    400,
+    99,
+    172,
+    176,
+    220,
+    105,
+    84,
+    345
+  ],
+  "nameWidth": 400,
+  "lastRight": 1880,
+  "rowHeights": [
+    53,
+    55,
+    53,
+    53,
+    53,
+    53,
+    53,
+    53
+  ],
+  "maxRowHeight": 55,
+  "rowNames": [
+    "衡岳｜2330 台股 Paper 學習 R2strategy-persona-a81b4fd15944698341aa",
+    "青禾｜2330 台股 Paper 學習 R2strategy-persona-06d4775a9b6a8f63b311",
+    "澄川｜2330 台股 Paper 學習 R2strategy-persona-039ad01f8bcd2b4aa466",
+    "Pantheon Dev Paper Release 42123862167 Attempt 1strategy-persona-59b2143dcecf205acbf1",
+    "Pantheon Dev Paper Release 3623d82dbfb3 Attempt 1strategy-persona-3623d82dbfb3d31f75d8",
+    "Pantheon Dev Paper Release 52b322fff22e Attempt 1strategy-persona-52b322fff22ec21d3219",
+    "Pantheon Dev Paper Release 9d4ee0847468 Attempt 1strategy-persona-9d4ee0847468a04a6146",
+    "Pantheon Dev Paper Release ba58ac9dcc83 Attempt 1strategy-persona-ba58ac9dcc83b246d235"
+  ],
+  "types": [],
+  "owners": [],
+  "symbolItems": [
+    {
+      "text": "2330.TWSE",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 430
+    },
+    {
+      "text": "2330.TWSE,",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 483
+    },
+    {
+      "text": "2317.TWSE",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 483
+    },
+    {
+      "text": "2317.TW",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 537
+    },
+    {
+      "text": "2330.TW",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 590
+    },
+    {
+      "text": "2330.TW",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 643
+    },
+    {
+      "text": "2330.TW",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 696
+    },
+    {
+      "text": "2330.TW",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 749
+    },
+    {
+      "text": "2330.TW",
+      "height": 16,
+      "clientRectCount": 1,
+      "top": 802
+    }
+  ],
+  "scopeButtons": [],
+  "stateButtons": [
+    "Default (hide drafts) (25)",
+    "Approved (14)",
+    "In Review (0)",
+    "Retired (2)",
+    "Draft (4205)",
+    "All (4219)"
+  ]
+}

@@ -110,13 +110,62 @@ const EVIDENCE_RESPONSE = {
   meta: { snapshot_at: nowIso(), surfaces: { management_evidence: { status: "ok" } } },
 };
 
+// FE-EVIDENCE-CITED-20261125: the default Evidence list reads
+// GET /bff/management/evidence?scope=cited (BFF-EVIDENCE-CITED-LIST-20261125);
+// EVIDENCE_RESPONSE stays the scope=ingested answer.
+const CITED_SOURCES = Object.fromEntries(
+  ["meeting_proposals", "meeting_positions", "governance_approvals", "evolution_proposals", "research_demands", "research_tickets", "persona_cycles"].map(
+    (key) => [key, { status: "ok", reason: null, read_count: 1, truncated: false, failed_count: 0, citation_count: key === "meeting_positions" ? 1 : 0, withheld_count: 0, calls: 1, response_bytes: 900 }],
+  ),
+);
+const CITED_EVIDENCE_RESPONSE = {
+  data: {
+    id: "management-evidence-cited",
+    scope: "cited",
+    items: [
+      {
+        id: "evref-load-001",
+        ref_id: "evref-load-001",
+        ref_kind: "evidence_item",
+        source_owner: "source_ingest",
+        label: "Load baseline evidence packet",
+        name_missing: false,
+        label_parts: {},
+        source_class: "evidence",
+        resolved_link: { route_href: "/management/evidence/evref-load-001", evidence_ref_id: "evref-load-001" },
+        route_href: "/management/evidence/evref-load-001",
+        cited_as: ["evref-load-001"],
+        cited_by: [
+          {
+            entity_type: "meeting_position",
+            entity_ref: "mtg-6edaff7d0ff76275",
+            label: "Load baseline review",
+            parts: { meeting_id: "mtg-6edaff7d0ff76275", round: 1, position: "A", persona_id: "persona-ee7112a829d38b9135ac" },
+            route_href: "/management/meetings/mtg-6edaff7d0ff76275",
+            time: nowIso(),
+            source: "meeting_positions",
+          },
+        ],
+        citation_count: 1,
+        last_cited_at: nowIso(),
+        redacted: false,
+      },
+    ],
+    summary: { scope: "cited", complete: true, incomplete: false, reference_total: 1, returned: 1, references_truncated: false, max_references: 500, redacted_count: 0 },
+    sources: CITED_SOURCES,
+  },
+  page_info: { next_page_token: null, total: 1, page_size: 20 },
+  meta: { snapshot_at: nowIso(), surfaces: { cited_evidence: { status: "ok" }, cited_evidence_sources: CITED_SOURCES } },
+};
+
 const EMPTY_ENVELOPE = { items: [], cursor: {}, pageSize: 0, estimatedTotal: 0, totalCountExact: true, meta: { snapshot_at: nowIso() } };
 
 async function installEvidenceFixtures(page: Page): Promise<Record<string, number>> {
   const counters: Record<string, number> = { me: 0, shellSummary: 0, approvals: 0, alerts: 0, jobs: 0, health: 0, evidence: 0 };
   await onRoute(page, PRIMARY_API_PATTERN, async (route) => {
     counters.evidence += 1;
-    await fulfillJson(route, EVIDENCE_RESPONSE);
+    const cited = new URL(route.request().url()).searchParams.get("scope") === "cited";
+    await fulfillJson(route, cited ? CITED_EVIDENCE_RESPONSE : EVIDENCE_RESPONSE);
   });
   for (const [key, pattern] of SHELL_FANOUT_PATTERNS) {
     await onRoute(page, pattern, async (route) => {

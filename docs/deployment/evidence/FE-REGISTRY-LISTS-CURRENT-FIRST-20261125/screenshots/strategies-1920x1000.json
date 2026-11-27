@@ -1,0 +1,39 @@
+{
+  "rowCount": 8,
+  "viewportWidth": 1920,
+  "clientWidth": 1600,
+  "scrollWidth": 1600,
+  "docOverflow": 0,
+  "headers": [
+    "Name",
+    "State",
+    "Runtime",
+    "Symbols",
+    "Cumulative paper result",
+    "Drawdown",
+    "Trades",
+    "Persona"
+  ],
+  "colWidths": [
+    423,
+    104,
+    182,
+    94,
+    233,
+    111,
+    89,
+    365
+  ],
+  "nameWidth": 423,
+  "lastRight": 1880,
+  "maxRowHeight": 55,
+  "scopeButtons": [],
+  "stateButtons": [
+    "Default (hide drafts) (25)",
+    "Approved (14)",
+    "In Review (0)",
+    "Retired (2)",
+    "Draft (4205)",
+    "All (4219)"
+  ]
+}

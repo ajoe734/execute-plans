@@ -278,4 +278,198 @@ describe("ArtifactDetail load states", () => {
       "Run output artifacts do not have versioned compare lineage.",
     );
   });
+
+  it("renders the artifact lineage graph from /bff/lineage?root_id=:id with display_name, highlights the current artifact, and separates empty from unavailable", async () => {
+    const LIVE_TOKEN = "a81b4fd15944698341aa";
+    const LIVE_PERSONA_ID = "persona-ee7112a829d38b9135ac";
+    const LIVE_STRATEGY_ID = `strategy-persona-${LIVE_TOKEN}`;
+    const LIVE_ARTIFACT_ID = `artifact-persona-pool-${LIVE_TOKEN}-v2`;
+    const LIVE_POOL_ID = `pool-persona-paper-${LIVE_TOKEN}`;
+    const LIVE_STRATEGY_TITLE = "衡岳｜0050 台股 Paper 學習 R2";
+
+    const artifactPayload = {
+      data: {
+        id: LIVE_ARTIFACT_ID,
+        registry_id: LIVE_ARTIFACT_ID,
+        artifact_id: LIVE_ARTIFACT_ID,
+        strategy_id: LIVE_STRATEGY_ID,
+        artifact_type: "execution_bundle",
+        version: "1.2.0",
+        checksum: "sha256:a81b4fd15944698341aa",
+        artifact_state: "approved",
+        name: LIVE_STRATEGY_TITLE,
+        kind: "execution_bundle",
+        state: "approved",
+        risk: "low",
+        hash: "sha256:a81b4fd15944698341aa",
+        owner: "operator",
+        updatedAt: "2026-11-25T06:35:00Z",
+        source_kind: "registry",
+      },
+      meta: {
+        snapshot_at: "2026-11-25T06:35:00Z",
+        surfaces: { artifact_detail: { status: "ok", source: "registry" } },
+      },
+    };
+
+    const lineageGraphPayload = {
+      data: {
+        id: "lineage",
+        nodes: [
+          {
+            id: `reg-strategy-spec-persona-${LIVE_TOKEN}`,
+            label: `reg-strategy-spec-persona-${LIVE_TOKEN}`,
+            type: "Strategy",
+            state: "approved",
+            strategy_id: LIVE_STRATEGY_ID,
+            version: "1.0.1",
+            display_name: LIVE_STRATEGY_TITLE,
+            name_missing: false,
+          },
+          {
+            id: LIVE_ARTIFACT_ID,
+            label: LIVE_ARTIFACT_ID,
+            type: "Artifact",
+            state: "approved",
+            strategy_id: LIVE_STRATEGY_ID,
+            version: "1.2.0",
+            display_name: LIVE_STRATEGY_TITLE,
+            name_missing: false,
+          },
+          {
+            id: LIVE_PERSONA_ID,
+            label: LIVE_PERSONA_ID,
+            type: "Persona",
+            display_name: "衡岳",
+            name_missing: false,
+          },
+          {
+            id: LIVE_POOL_ID,
+            label: LIVE_POOL_ID,
+            type: "CapitalPool",
+            display_name: `${LIVE_STRATEGY_TITLE} (CapitalPool)`,
+            name_missing: false,
+          },
+        ],
+        edges: [
+          {
+            id: `reg-strategy-spec-persona-${LIVE_TOKEN}|source_strategy_spec|${LIVE_ARTIFACT_ID}`,
+            from: `reg-strategy-spec-persona-${LIVE_TOKEN}`,
+            to: LIVE_ARTIFACT_ID,
+            label: "source_strategy_spec",
+          },
+          {
+            id: `${LIVE_ARTIFACT_ID}|persona|${LIVE_PERSONA_ID}`,
+            from: LIVE_ARTIFACT_ID,
+            to: LIVE_PERSONA_ID,
+            label: "persona",
+          },
+          {
+            id: `${LIVE_ARTIFACT_ID}|capital_pool|${LIVE_POOL_ID}`,
+            from: LIVE_ARTIFACT_ID,
+            to: LIVE_POOL_ID,
+            label: "capital_pool",
+          },
+        ],
+        status: "ok",
+        source: "service_client",
+      },
+      items: [],
+      page_info: { next_page_token: null, total: 3, page_size: 3, returned: 3, has_more: false },
+      meta: {
+        snapshot_at: "2026-11-25T06:35:00Z",
+        status: "ok",
+        source: "service_client",
+        surfaces: {
+          lineage: { status: "ok", source: "service_client" },
+          display_names: { status: "ok", source: "display_name_resolver" },
+        },
+      },
+    };
+
+    const lineageRequests: string[] = [];
+    let lineageMode: "graph" | "empty" | "unavailable" = "graph";
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes(`/bff/artifacts/${LIVE_ARTIFACT_ID}`)) {
+        return jsonResponse(artifactPayload, 200);
+      }
+      if (url.includes("/bff/lineage")) {
+        lineageRequests.push(url);
+        if (lineageMode === "graph") {
+          return jsonResponse(lineageGraphPayload, 200);
+        }
+        if (lineageMode === "empty") {
+          return jsonResponse(
+            {
+              data: { id: "lineage", nodes: [], edges: [], status: "ok", source: "service_client" },
+              items: [],
+              page_info: { next_page_token: null, total: 0, page_size: 0, returned: 0, has_more: false },
+              meta: {
+                snapshot_at: "2026-11-25T06:35:00Z",
+                status: "ok",
+                source: "service_client",
+                surfaces: { lineage: { status: "ok", source: "service_client" } },
+              },
+            },
+            200,
+          );
+        }
+        return jsonResponse(
+          {
+            data: { id: "lineage", nodes: [], edges: [], status: "unavailable", source: "unavailable" },
+            items: [],
+            page_info: { next_page_token: null, total: 0, page_size: 0, returned: 0, has_more: false },
+            meta: {
+              snapshot_at: "2026-11-25T06:35:00Z",
+              status: "unavailable",
+              source: "unavailable",
+              surfaces: { lineage: { status: "unavailable", source: "unavailable" } },
+            },
+          },
+          200,
+        );
+      }
+      return jsonResponse({ data: [], items: [] }, 200);
+    });
+
+    // 1. Graph rendered and current artifact highlighted
+    const view1 = renderArtifactDetail(`/management/artifacts/${LIVE_ARTIFACT_ID}`);
+    const lineageTab1 = await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i });
+    fireEvent.mouseDown(lineageTab1);
+    fireEvent.click(lineageTab1);
+
+    expect(lineageRequests.some((u) => u.includes(`root_id=${LIVE_ARTIFACT_ID}`))).toBe(true);
+    const currentArtNode = await screen.findByTestId(`lineage-node-${LIVE_ARTIFACT_ID}`);
+    expect(currentArtNode).toHaveAttribute("data-node-highlight", "true");
+    expect(currentArtNode.querySelector("[data-node-label]")?.textContent).toContain("衡岳｜0050");
+
+    const personaNode = screen.getByTestId(`lineage-node-${LIVE_PERSONA_ID}`);
+    expect(personaNode).toHaveAttribute("data-node-highlight", "false");
+    expect(personaNode.querySelector("[data-node-label]")?.textContent).toBe("衡岳");
+    view1.unmount();
+
+    // 2. Empty graph (status ok, 0 nodes)
+    lineageMode = "empty";
+    const view2 = renderArtifactDetail(`/management/artifacts/${LIVE_ARTIFACT_ID}`);
+    const lineageTab2 = await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i });
+    fireEvent.mouseDown(lineageTab2);
+    fireEvent.click(lineageTab2);
+    expect(await screen.findByTestId("lineage-empty")).toHaveTextContent(/No lineage available\.|尚無血緣資料。/);
+    expect(screen.queryByTestId("artifact-lineage-unavailable")).not.toBeInTheDocument();
+    view2.unmount();
+
+    // 3. Unavailable lineage surface
+    lineageMode = "unavailable";
+    const view3 = renderArtifactDetail(`/management/artifacts/${LIVE_ARTIFACT_ID}`);
+    const lineageTab3 = await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i });
+    fireEvent.mouseDown(lineageTab3);
+    fireEvent.click(lineageTab3);
+    expect(await screen.findByTestId("artifact-lineage-unavailable")).toHaveTextContent(
+      /Lineage surface unavailable\.|血緣服務不可用。/,
+    );
+    expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
+    view3.unmount();
+  });
 });

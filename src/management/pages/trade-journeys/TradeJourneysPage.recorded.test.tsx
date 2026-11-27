@@ -14,14 +14,34 @@ import varianceTimeline from "./__fixtures__/recorded/timeline_tj_29473e86-63ff-
 
 vi.mock("@/lib/auth/AuthProvider", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/auth/AuthProvider")>();
-  return { ...actual, useAuth: () => ({ session: null, user: null, bffSession: null, bffError: null, loading: false, retryBffSession: vi.fn(), signOut: vi.fn(), devLogin: vi.fn() }) };
+  return {
+    ...actual,
+    useAuth: () => ({
+      session: null,
+      user: null,
+      bffSession: null,
+      bffError: null,
+      loading: false,
+      retryBffSession: vi.fn(),
+      signOut: vi.fn(),
+      devLogin: vi.fn(),
+    }),
+  };
 });
 vi.mock("@/lib/bff-v1/tradeJourneys", async importOriginal => {
   const actual = await importOriginal<typeof api>();
-  return { ...actual, listTradeJourneys: vi.fn(), getTradeJourney: vi.fn(), getTradeJourneyTimeline: vi.fn(), getTradeJourneyEvidence: vi.fn(), resolveTradeJourney: vi.fn(), subscribeTradeJourneys: vi.fn(() => ({ close() {} })) };
+  return {
+    ...actual,
+    listTradeJourneys: vi.fn(),
+    getTradeJourney: vi.fn(),
+    getTradeJourneyTimeline: vi.fn(),
+    getTradeJourneyEvidence: vi.fn(),
+    resolveTradeJourney: vi.fn(),
+    subscribeTradeJourneys: vi.fn(() => ({ close() {} })),
+  };
 });
 
-const RAW = /\b(succeeded|failed|skipped|rejected|partial|degraded)\b/;
+const RAW = /\b(succeeded|failed|skipped|rejected|partial|degraded|not_submitted|unverified)\b/;
 const asEnvelope = (body: unknown) => body as never;
 
 function renderDetail(detail: unknown, timeline: unknown) {
@@ -29,39 +49,61 @@ function renderDetail(detail: unknown, timeline: unknown) {
   vi.mocked(api.getTradeJourney).mockResolvedValue(asEnvelope(detail));
   vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue(asEnvelope(timeline));
   vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: (detail as { meta: never }).meta });
-  return render(<MemoryRouter initialEntries={[`/management/trade-journeys/${id}`]}><Routes><Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} /></Routes></MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={[`/management/trade-journeys/${id}`]}>
+      <Routes>
+        <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
 }
 // the evidence <pre> is raw JSON by design; check the readable surface only
-const readable = () => Array.from(document.querySelectorAll("section")).map(s => { const c = s.cloneNode(true) as HTMLElement; c.querySelectorAll("pre,code,details").forEach(n => n.remove()); return c.textContent; }).join("\n");
+const readable = () =>
+  Array.from(document.querySelectorAll("section"))
+    .map(s => {
+      const c = s.cloneNode(true) as HTMLElement;
+      c.querySelectorAll("pre,code,details").forEach(n => n.remove());
+      return c.textContent;
+    })
+    .join("\n");
 
-beforeEach(async () => { vi.clearAllMocks(); await i18n.changeLanguage("zh-TW"); });
+beforeEach(async () => {
+  vi.clearAllMocks();
+  await i18n.changeLanguage("zh-TW");
+});
 afterEach(cleanup);
 
 describe("recorded hosted bodies (post-deploy 12:40Z)", () => {
-  it("rejected journey: stage cells and timeline show 成功/失敗 in tone, no raw word, no 未知來源", async () => {
+  it("rejected journey: pre-broker refusal shows 風險評估 風控駁回 and 下單送出 未送單 with insufficient evidence, no raw word, no 未知來源", async () => {
     renderDetail(rejectedDetail, rejectedTimeline);
     const stages = await screen.findByLabelText("旅程階段");
     const decision = within(stages).getByLabelText(/交易決策|trade decision/i);
     expect(decision).toHaveTextContent("成功");
     expect(decision.querySelector("svg")).toHaveClass("text-emerald-600");
-    const order = within(stages).getByLabelText(/下單|order/i);
-    expect(order).toHaveTextContent("失敗");
-    expect(order).toHaveClass("bg-red-500/10");
+    const risk = within(stages).getByLabelText("風險評估: 風控駁回");
+    expect(risk).toHaveTextContent("風控駁回");
+    expect(risk).toHaveClass("bg-red-500/10");
+    const order = within(stages).getByLabelText("下單送出: 未送單");
+    expect(order).toHaveTextContent("未送單");
     expect(readable()).not.toMatch(RAW);
     expect(document.body.textContent).not.toContain("未知來源");
     expect(screen.getAllByText(/· 成功/).length).toBe(2);
-    expect(screen.getByText(/· 失敗/)).toBeInTheDocument();
+    expect(screen.getByText("風險評估 · 風控駁回 · 未送單")).toBeInTheDocument();
     // long_cash is an expression choice code, not a rejection reason: never read as a cash shortfall.
     expect(document.body.textContent).toContain("此筆記錄沒有保存原因");
+    expect(document.body.textContent).toContain("證據不足（缺少：駁回原因）");
     expect(document.body.textContent).not.toContain("現金不足");
-    expect(document.body.textContent).not.toContain("long_cash");
+    expect(readable()).not.toContain("long_cash");
   });
 
-  it("variance journey: eight stages read 成功 except reconciliation 失敗", async () => {
+  it("unrecorded variance journey: seven stages read 成功 and reconciliation reads 對帳待確認 with explicit insufficient evidence", async () => {
     renderDetail(varianceDetail, varianceTimeline);
     const stages = await screen.findByLabelText("旅程階段");
     expect(within(stages).getAllByText("成功")).toHaveLength(7);
-    expect(within(stages).getAllByText("失敗")).toHaveLength(1);
+    expect(within(stages).getByLabelText("對帳: 對帳待確認")).toHaveTextContent(
+      "此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）",
+    );
+    expect(screen.getByText("對帳 · 對帳待確認")).toBeInTheDocument();
     expect(readable()).not.toMatch(RAW);
     expect(document.body.textContent).not.toContain("未知來源");
   });
@@ -77,7 +119,13 @@ describe("recorded hosted bodies (post-deploy 12:40Z)", () => {
 
   it("list: the partial row reads as a phrase and the banner counts the rows lacking stage records", async () => {
     vi.mocked(api.listTradeJourneys).mockResolvedValue(asEnvelope(listBody));
-    render(<MemoryRouter initialEntries={["/management/trade-journeys"]}><Routes><Route path="/management/trade-journeys" element={<TradeJourneysPage />} /></Routes></MemoryRouter>);
+    render(
+      <MemoryRouter initialEntries={["/management/trade-journeys"]}>
+        <Routes>
+          <Route path="/management/trade-journeys" element={<TradeJourneysPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
     await screen.findAllByRole("link");
     const lacking = listBody.data.items.filter(r => r.read_state !== "formal").length;
     expect(lacking).toBeGreaterThan(0);

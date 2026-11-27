@@ -1,15 +1,17 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { setMockResolver } from "@/lib/bff-v1/client";
 import { adaptHumanInboxList, adaptPerformanceAttributionResult } from "@/lib/bff-v1/management";
 import {
   HumanInboxPage,
   PerformanceAttributionTestPersonaBanner,
   extractAttributionHiddenTestCounts,
 } from "./_core";
+import { HumanGateDetailPage } from "./HumanGateDetail";
 import type { HumanInboxItem, HumanInboxList } from "@/lib/v5/management/humanInbox";
 
 const mocks = vi.hoisted(() => ({
@@ -82,6 +84,11 @@ function promotionReviewItem(reviewId = "review-persona-paper-1", title = "Paper
 describe("HumanInboxPage", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
+    setMockResolver(undefined);
+  });
+
+  afterEach(() => {
+    setMockResolver(undefined);
   });
 
   it("links evidence-bearing readiness blockers to the detail evidence section", () => {
@@ -998,5 +1005,336 @@ describe("HumanInboxPage", () => {
     expect(toggleBtn).toHaveTextContent("Show test strategies (8)");
     fireEvent.click(toggleBtn);
     expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it("adapts verbatim BFF _human_input_ticket_items for direct-human submit and Persona provide_input, enforces operator vs viewer can_respond permission, sends canonical PATCH, and reads back canonical GET after the ticket leaves the human_actionable queue (FE-MEETING-ACTION-FOLLOWTHROUGH-20261123)", async () => {
+    await i18n.changeLanguage("en-US");
+
+    // Verbatim field-for-field payload emitted by BFF _human_input_ticket_items (b3596a8eb)
+    const makeVerbatimDirectHumanRow = (canRespond: boolean) => ({
+      id: "meeting_action:tkt-human-001",
+      item_id: "tkt-human-001",
+      inbox_id: "meeting_action:tkt-human-001",
+      ticket_id: "tkt-human-001",
+      kind: "meeting_action",
+      inbox_type: "meeting",
+      inboxType: "meeting",
+      source_type: "meeting_action",
+      source_id: "tkt-human-001",
+      meeting_id: "mtg-w48-001",
+      meeting_type: "MT-1",
+      persona_id: "persona-alpha",
+      owner_kind: "human",
+      owner_id: "operator",
+      deliverable: "external_action",
+      requested_material: "external_action",
+      acceptance_criterion: "Attach signed vendor data license terms",
+      human_requirement: "Vendor contract terms require operator confirmation.",
+      reason: "Vendor contract terms require operator confirmation.",
+      review_reason: null,
+      status: "open",
+      action_state: "pending",
+      response_action: "submit",
+      resumes_with: "Chair review in next MT-1 meeting",
+      required_role: "operator",
+      required_actor: "operator",
+      can_respond: canRespond,
+      can_decide: canRespond,
+      can_proceed: false,
+      revision: 2,
+      due_at: "2026-11-30T00:00:00Z",
+      next_review: "MT-1",
+      overdue: false,
+      evidence_refs: [{ kind: "research_artifact", artifact_id: "artifact-license-draft" }],
+      blocking_reasons: ["Vendor contract terms require operator confirmation."],
+      title: "Confirm external data license scope",
+      summary:
+        "Meeting mtg-w48-001 (MT-1) assigned direct human work: Confirm external data license scope (deliverable: external_action).",
+      href: "/management/meetings/mtg-w48-001?action=tkt-human-001",
+      route: "/management/meetings/mtg-w48-001?action=tkt-human-001",
+      detail_href: "/management/human-inbox/meeting_action%3Atkt-human-001",
+      links: {
+        manageHref: "/management/meetings/mtg-w48-001?action=tkt-human-001",
+        primaryObjectHref: "/management/meetings/mtg-w48-001?action=tkt-human-001",
+        meeting: "/management/meetings/mtg-w48-001",
+        ticket: "/api/v1/research/tickets/tkt-human-001",
+      },
+    });
+
+    const verbatimPersonaWaitRow = {
+      id: "meeting_action:tkt-persona-002",
+      item_id: "tkt-persona-002",
+      inbox_id: "meeting_action:tkt-persona-002",
+      ticket_id: "tkt-persona-002",
+      kind: "meeting_action",
+      inbox_type: "meeting",
+      inboxType: "meeting",
+      source_type: "meeting_action",
+      source_id: "tkt-persona-002",
+      meeting_id: "mtg-w48-001",
+      meeting_type: "MT-1",
+      persona_id: "persona-alpha",
+      owner_kind: "persona",
+      owner_id: "persona-alpha",
+      deliverable: "experiment_spec",
+      requested_material: "Clarify benchmark exclusion list for 2330 chip factor",
+      acceptance_criterion: "60d out-of-sample IC > 0.03",
+      human_requirement: "Persona execution requires human input on benchmark universe",
+      reason: "Awaiting operator input on benchmark exclusion list",
+      review_reason: "Returned in prior meeting for universe clarification",
+      status: "waiting_for_input",
+      action_state: "blocked",
+      response_action: "provide_input",
+      resumes_with: "Persona execution on persona-alpha",
+      required_role: "operator",
+      required_actor: "operator",
+      can_respond: true,
+      can_decide: true,
+      can_proceed: false,
+      revision: 4,
+      due_at: null,
+      next_review: "MT-1",
+      overdue: false,
+      evidence_refs: [],
+      blocking_reasons: ["Awaiting operator input on benchmark exclusion list"],
+      title: "Backtest 2330 chip factor with exclusion filter",
+      summary:
+        "Persona action tkt-persona-002 from meeting mtg-w48-001 is waiting for human input.",
+      href: "/management/meetings/mtg-w48-001?action=tkt-persona-002",
+      route: "/management/meetings/mtg-w48-001?action=tkt-persona-002",
+      detail_href: "/management/human-inbox/meeting_action%3Atkt-persona-002",
+      links: {
+        manageHref: "/management/meetings/mtg-w48-001?action=tkt-persona-002",
+        primaryObjectHref: "/management/meetings/mtg-w48-001?action=tkt-persona-002",
+        meeting: "/management/meetings/mtg-w48-001",
+        ticket: "/api/v1/research/tickets/tkt-persona-002",
+      },
+    };
+
+    // 1. Viewer permission (can_respond: false): form is hidden and read-only explanation is shown
+    const viewerList = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [makeVerbatimDirectHumanRow(false)],
+      },
+    })!;
+    expect(viewerList[0].meetingAction?.canRespond).toBe(false);
+    expect(viewerList[0].meetingAction?.responseAction).toBe("submit");
+    expect(viewerList[0].meetingAction?.humanRequirement).toBe(
+      "Vendor contract terms require operator confirmation.",
+    );
+    expect(viewerList[0].meetingAction?.deliverable).toBe("external_action");
+
+    mocks.useV5Live.mockReturnValue({
+      data: viewerList,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    const { unmount: unmountViewer } = renderInbox();
+    const viewerCard = screen.getByTestId("inbox-card-meeting_action:tkt-human-001");
+    expect(within(viewerCard).getByTestId("inbox-meeting-action-card")).toBeInTheDocument();
+    expect(within(viewerCard).getByTestId("inbox-meeting-action-view-only")).toBeInTheDocument();
+    expect(
+      within(viewerCard).queryByTestId("inbox-meeting-action-form"),
+    ).not.toBeInTheDocument();
+    unmountViewer();
+
+    // 2. Operator permission (can_respond: true): both direct-human and Persona waiting-for-input cards render
+    let actionableList = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [makeVerbatimDirectHumanRow(true), verbatimPersonaWaitRow],
+      },
+    })!;
+    expect(actionableList).toHaveLength(2);
+    expect(actionableList[0].meetingAction?.nextTransition).toBe("submit");
+    expect(actionableList[0].meetingAction?.resumesLabel).toBe("Chair review in next MT-1 meeting");
+    expect(actionableList[1].meetingAction?.nextTransition).toBe("provide_input");
+    expect(actionableList[1].meetingAction?.humanRequirement).toBe(
+      "Persona execution requires human input on benchmark universe",
+    );
+    expect(actionableList[1].meetingAction?.requestedMaterial).toBe(
+      "Clarify benchmark exclusion list for 2330 chip factor",
+    );
+
+    let capturedPatchHeaders: Record<string, string> = {};
+    let capturedPatchBody: unknown = null;
+    let ticketGetCalls = 0;
+
+    setMockResolver((method, path) => {
+      if (method === "PATCH" && path === "/api/v1/research/tickets/tkt-human-001") {
+        return (req) => {
+          capturedPatchHeaders = req.headers;
+          capturedPatchBody = req.body;
+          return {
+            kind: "json",
+            status: 200,
+            body: {
+              status: "ok",
+              owner: "research",
+              data: {
+                ticket_id: "tkt-human-001",
+                title: "Confirm external data license scope",
+                status: "submitted",
+                revision: 3,
+                evidence_refs: [{ kind: "research_artifact", artifact_id: "artifact-license-draft" }],
+                evidence_notes: [
+                  {
+                    note_id: "note-human-1",
+                    title: "Signed vendor addendum",
+                    body: "Confirmed redistribution and paper-trading clauses with vendor legal.",
+                    source_refs: [],
+                  },
+                ],
+                meeting_action: {
+                  meeting_id: "mtg-w48-001",
+                  meeting_type: "MT-1",
+                  owner_kind: "human",
+                  owner_id: "operator",
+                  deliverable: "external_action",
+                  acceptance_criterion: "Attach signed vendor data license terms",
+                },
+              },
+            },
+          };
+        };
+      }
+      if (method === "GET" && path === "/api/v1/research/tickets/tkt-human-001") {
+        return () => {
+          ticketGetCalls += 1;
+          return {
+            kind: "json",
+            status: 200,
+            body: {
+              status: "ok",
+              owner: "research",
+              data: {
+                ticket_id: "tkt-human-001",
+                title: "Confirm external data license scope",
+                status: "submitted",
+                revision: 3,
+                evidence_refs: [{ kind: "research_artifact", artifact_id: "artifact-license-draft" }],
+                evidence_notes: [
+                  {
+                    note_id: "note-human-1",
+                    title: "Signed vendor addendum",
+                    body: "Confirmed redistribution and paper-trading clauses with vendor legal.",
+                    source_refs: [],
+                  },
+                ],
+                meeting_action: {
+                  meeting_id: "mtg-w48-001",
+                  meeting_type: "MT-1",
+                  owner_kind: "human",
+                  owner_id: "operator",
+                  deliverable: "external_action",
+                  acceptance_criterion: "Attach signed vendor data license terms",
+                },
+              },
+            },
+          };
+        };
+      }
+      return undefined;
+    });
+
+    const refreshSpy = vi.fn(() => {
+      // Simulate the submitted ticket leaving the human_actionable=true list on refresh
+      actionableList = adaptHumanInboxList({
+        data: {
+          id: "human_inbox",
+          items: [verbatimPersonaWaitRow],
+        },
+      })!;
+    });
+
+    mocks.useV5Live.mockImplementation(() => ({
+      data: actionableList,
+      loading: false,
+      error: null,
+      refresh: refreshSpy,
+    }));
+
+    const { rerender, unmount: unmountOp } = renderInbox();
+
+    // Direct-human reason and separate deliverable are both visible
+    const humanCard = screen.getByTestId("inbox-card-meeting_action:tkt-human-001");
+    expect(humanCard).toHaveTextContent("Vendor contract terms require operator confirmation.");
+    expect(humanCard).toHaveTextContent("external_action");
+    expect(humanCard).toHaveTextContent("Attach signed vendor data license terms");
+    expect(humanCard).toHaveTextContent("Chair review in next MT-1 meeting");
+
+    // Persona waiting-for-input card shows separate human_requirement, reason, and requested_material
+    const personaCard = screen.getByTestId("inbox-card-meeting_action:tkt-persona-002");
+    expect(personaCard).toHaveTextContent("Awaiting operator input on benchmark exclusion list");
+    expect(personaCard).toHaveTextContent(
+      "Persona execution requires human input on benchmark universe",
+    );
+    expect(personaCard).toHaveTextContent(
+      "Clarify benchmark exclusion list for 2330 chip factor",
+    );
+
+    // Submit response on tkt-human-001
+    fireEvent.change(document.getElementById("meeting-action-title-tkt-human-001")!, {
+      target: { value: "Signed vendor addendum" },
+    });
+    fireEvent.change(document.getElementById("meeting-action-body-tkt-human-001")!, {
+      target: {
+        value: "Confirmed redistribution and paper-trading clauses with vendor legal.",
+      },
+    });
+    fireEvent.click(within(humanCard).getByTestId("inbox-meeting-action-submit"));
+
+    const continuedHumanCard = await screen.findByTestId("inbox-continued-ticket-tkt-human-001");
+
+    expect(capturedPatchHeaders["Idempotency-Key"]).toBeTruthy();
+    expect(capturedPatchBody).toEqual({
+      action: "submit",
+      expected_revision: 2,
+      evidence_note: {
+        title: "Signed vendor addendum",
+        body: "Confirmed redistribution and paper-trading clauses with vendor legal.",
+      },
+    });
+    expect(ticketGetCalls).toBeGreaterThanOrEqual(1);
+    expect(refreshSpy).toHaveBeenCalled();
+
+    // After refresh removed tkt-human-001 from the human_actionable list,
+    // the continued ticket card and its canonical GET evidence_notes body remain visible on the same ticket_id!
+    expect(continuedHumanCard).toHaveTextContent("Submitted, not yet accepted");
+    const continuation = within(continuedHumanCard).getByTestId("inbox-meeting-action-continuation");
+    expect(continuation).toHaveTextContent("tkt-human-001");
+    expect(continuation).toHaveTextContent("Signed vendor addendum");
+    expect(continuation).toHaveTextContent(
+      "Confirmed redistribution and paper-trading clauses with vendor legal.",
+    );
+    unmountOp();
+
+    // 3. Direct reload of /management/human-inbox/meeting_action%3Atkt-human-001 after it left the actionable list
+    // falls back to canonical GET /api/v1/research/tickets/tkt-human-001 and displays the resolved ticket & evidence_notes
+    mocks.useV5Live.mockReturnValue({
+      data: null,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/human-inbox/meeting_action%3Atkt-human-001"]}>
+          <Routes>
+            <Route path="/management/human-inbox/:id" element={<HumanGateDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    const detailContinuation = await screen.findByTestId("inbox-meeting-action-continuation");
+    expect(detailContinuation).toHaveTextContent("tkt-human-001");
+    expect(detailContinuation).toHaveTextContent(
+      "Confirmed redistribution and paper-trading clauses with vendor legal.",
+    );
   });
 });

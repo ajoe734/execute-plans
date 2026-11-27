@@ -116,6 +116,12 @@ export interface LineageNodeRecord {
   state?: string;
   risk?: RiskLevel;
   highlight?: boolean;
+  display_name?: string | null;
+  displayName?: string | null;
+  name_missing?: boolean;
+  nameMissing?: boolean;
+  strategy_id?: string | null;
+  version?: string | null;
 }
 
 export interface LineageEdgeRecord {
@@ -641,6 +647,20 @@ export const toLineageRisk = (value: unknown): RiskLevel | undefined => {
 
 export const adaptLineageNode = (record: UnknownRecord, index = 0): LineageNodeRecord => {
   const id = asString(record.id, record.node_id, record.artifact_id, record.ref) ?? `node-${index + 1}`;
+  const hasDisplayNameKey =
+    Object.prototype.hasOwnProperty.call(record, "display_name") ||
+    Object.prototype.hasOwnProperty.call(record, "displayName");
+  const displayName = asString(record.display_name, record.displayName) ?? null;
+  const hasNameMissingKey =
+    Object.prototype.hasOwnProperty.call(record, "name_missing") ||
+    Object.prototype.hasOwnProperty.call(record, "nameMissing");
+  const nameMissing = hasNameMissingKey
+    ? asBoolean(record.name_missing ?? record.nameMissing, displayName === null)
+    : hasDisplayNameKey
+      ? displayName === null
+      : undefined;
+  const strategyId = asString(record.strategy_id, record.strategyId);
+  const version = asString(record.version, record.artifact_version);
   return {
     id,
     label: asString(record.label, record.name, record.title, id) ?? `Node ${index + 1}`,
@@ -648,7 +668,43 @@ export const adaptLineageNode = (record: UnknownRecord, index = 0): LineageNodeR
     state: asString(record.state, record.artifact_state, record.status),
     risk: toLineageRisk(record.risk ?? record.risk_level),
     highlight: asBoolean(record.highlight, false),
+    ...(hasDisplayNameKey ? { display_name: displayName } : {}),
+    ...(nameMissing !== undefined ? { name_missing: nameMissing } : {}),
+    ...(strategyId ? { strategy_id: strategyId } : {}),
+    ...(version ? { version } : {}),
   };
+};
+
+export const highlightLineageNodesForRoot = (
+  nodes: LineageNodeRecord[],
+  rootId?: string | null,
+): LineageNodeRecord[] => {
+  const target = typeof rootId === "string" ? rootId.trim() : "";
+  if (!target) return nodes;
+  const specIdFromStrategy = target.startsWith("strategy-")
+    ? `reg-strategy-spec-${target.slice("strategy-".length)}`
+    : "";
+  const isPrimaryMatch = (node: LineageNodeRecord): boolean => {
+    if (node.id === target) return true;
+    if (specIdFromStrategy && node.id === specIdFromStrategy) return true;
+    if (
+      node.type === "Strategy" &&
+      node.strategy_id === target &&
+      !node.id.includes("-baseline-")
+    ) {
+      return true;
+    }
+    return false;
+  };
+  const hasPrimary = nodes.some(isPrimaryMatch);
+  return nodes.map((node) => ({
+    ...node,
+    highlight:
+      Boolean(node.highlight) ||
+      (hasPrimary
+        ? isPrimaryMatch(node)
+        : node.type === "Strategy" && node.strategy_id === target),
+  }));
 };
 
 export const adaptLineageEdge = (record: UnknownRecord): LineageEdgeRecord | undefined => {

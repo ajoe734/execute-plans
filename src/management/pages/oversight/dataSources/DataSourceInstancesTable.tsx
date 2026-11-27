@@ -380,7 +380,7 @@ function V2DataSourceRow({
             </div>
             {dto.observed.last_run.evidence_bundle_id && (
               <div className="font-mono text-[10px] text-muted-foreground truncate max-w-[160px]">
-                <Link to="/management/evidence" className="text-primary hover:underline">
+                <Link to="/management/evidence?scope=ingested" className="text-primary hover:underline">
                   {dto.observed.last_run.evidence_bundle_id}
                 </Link>
               </div>
