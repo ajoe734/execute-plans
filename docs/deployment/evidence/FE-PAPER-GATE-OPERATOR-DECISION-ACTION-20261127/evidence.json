@@ -1,0 +1,107 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PAPER-GATE-OPERATOR-DECISION-ACTION-20261127",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-PAPER-GATE-OPERATOR-DECISION-ACTION-20261127",
+  "base_commit": "9df335e6f57346349a44ed1d62edb03db47a1aec",
+  "anchor_commits": [
+    "3318794e456ae90ea9e5c6156470f6857250134a",
+    "d07169489019a0952213010d823b58f4f5a25187"
+  ],
+  "artifacts": [
+    {
+      "path": "src/management/pages/oversight/_core.tsx",
+      "sha256": "95394e176b054a820d76466e904430e764ebc412dfd1b0935a75888f8c86f30c"
+    },
+    {
+      "path": "src/management/pages/oversight/EvolutionJournalPage.test.tsx",
+      "sha256": "e9006c33a38230b2230a22d61ac7ff0850d3435e55251a0d74a425f5c7ee7567"
+    },
+    {
+      "path": "src/management/components/ooda/OodaPacketDrawer.tsx",
+      "sha256": "d5281a40f80eb6a71b6109e3833364491763a7046f935ea029afbef6c2a038cf"
+    },
+    {
+      "path": "src/management/components/ooda/OodaPacketDrawer.test.tsx",
+      "sha256": "44720d09d538ada8310388670206efbb8956f4ed965376eb453537708add856b"
+    }
+  ],
+  "delivery_scope": "Management journal decision detail/actions, focused tests, OODA navigation and this evidence. Existing BFF write facade, backend semantics and deploy profiles are unchanged.",
+  "source_contract": {
+    "runtime_sha": "6ec4b99b81562a2380c12c81f04ed9de30bb2bd5",
+    "journal": "Pantheon services/control-plane/bff/evolution/service.py:evolution_journal_decision_item retains the owner decision and record, source_id, rationale, evidence_refs and metadata.",
+    "producer": "services/persona/pool_autonomy_cycle.py:queue_operator_decision and services/persona/pool_publish_port.py:queue_publication_operator_decision produce flag_for_review with metadata.operator_required=true and paper_only=true, consultation_decision_id and service_handoff evidence.",
+    "role_authority": "useAuth().bffSession.identity.roles; aligned with services/control-plane/bff/auth/policy.py _WRITE_ROLES (operator, approver, admin, reviewer). The browser-editable display role is not used to authorize these actions.",
+    "write": "Existing src/lib/bff-v1/writes.ts:decideEvolutionReview(id, approve|reject, {memo}); no new write client. Submission rechecks authenticated roles, pending paper gate eligibility and realWritesEnabled().",
+    "confirmation": "Existing HighRiskConfirm uses high risk policy (40-character required audit memo); double submission is blocked. Owner response/status is preserved without assuming approval.",
+    "navigation": "OODA decision links use /management/evolution-journal?decision=<encoded id>, which is registered in src/App.tsx; exact source ids auto-open the detail."
+  },
+  "verification": [
+    {
+      "command": "timeout 120 npm test -- src/management/pages/oversight/EvolutionJournalPage.test.tsx src/management/components/ooda/OodaPacketDrawer.test.tsx",
+      "exit_code": 0,
+      "passed": 43,
+      "failed": 0,
+      "log_sha256": "8bc37d9b628037053326f93760f64752f38a9f75baccea2d8abdfce032540c53"
+    },
+    {
+      "command": "timeout 180 npm run typecheck",
+      "exit_code": 0,
+      "log_sha256": "e38c26b5e7b0982ac7fdacb4832749746b5c3c678e6de661d1a003afe6ce9d6d"
+    },
+    {
+      "command": "timeout 60 npx eslint src/management/pages/oversight/_core.tsx src/management/pages/oversight/EvolutionJournalPage.test.tsx src/management/components/ooda/OodaPacketDrawer.tsx src/management/components/ooda/OodaPacketDrawer.test.tsx",
+      "exit_code": 0,
+      "warnings": "Three existing react-refresh/only-export-components warnings; no errors.",
+      "log_sha256": "d7e1bc390807649105cd910946a7c43f150c08e4d551fd9ccabcc65d5beaa9d9"
+    },
+    {
+      "command": "timeout 180 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "warnings": "Existing large-chunk warnings.",
+      "log_sha256": "a583670da25c8c453dae6ae3b9a96dfeec5d3ac83b8d3ac778831dfd9a12b7ca"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "coverage": [
+    "Trial admission and pool publication rows open rationale, evidence refs and consultation decision ID.",
+    "Authenticated operator sees actions; viewer with local admin display role sees no actions and a readable permission note; absent command roles fail closed.",
+    "Writes disabled visibly disables both actions without calling the command.",
+    "Approve and reject require a memo and call the existing facade with the source id and exact memo.",
+    "Actual returned receipt, typed BffError envelope (HTTP status, message, code, details, correlation id), and HTTP-success refusal envelope remain visible.",
+    "Receipt remains open when refresh removes the decided row from the pending queue.",
+    "Approved, rejected, superseded and canceled rows have no decision actions.",
+    "Keyboard entry/close, exact deep link and encoded OODA journal navigation."
+  ],
+  "bff_refusal_residual": {
+    "live_command_attempted": false,
+    "observed_live_refusal": null,
+    "test_refusals_are_synthetic": true,
+    "handoff": "This task did not exercise a real ApproveEvolutionDecision against hosted dev. Do not interpret the synthetic ILLEGAL_TRANSITION / unsupported_decision_kind fixtures as a live finding. If a governed operator attempt is refused after deploy, retain exact HTTP status, code, message, details and correlation id for a Pantheon follow-up task."
+  },
+  "hosted_acceptance": {
+    "claimed": false,
+    "deployment_updated_by_this_task": false,
+    "attempted_business_writes": 0,
+    "before_change_read_only_observation": {
+      "url": "https://app.dev.mvl-cap.tw/deployment.json",
+      "commit": "fb2c4f1bfc18b115f95449b2d3a7445f5b7a3bfe",
+      "observed_at": "2026-11-27T12:05Z",
+      "build_real_writes": "true",
+      "note": "Existing hosted deployment only; this task's validation build uses real writes false and did not change hosting configuration."
+    },
+    "required_after_review_and_deploy": "Supervisor merges the exact independently approved head into dev. Confirm the integration gate and VM deploy for that commit, deployment.json commit identity and direct FE/BFF browser gate. The persona-loop owner then records a current queued paper gate with rationale/evidence and disabled operator actions under safe defaults, plus the viewer no-actions permission note. The original three publication decisions may have been superseded; use a current decision. Real command execution requires explicitly authorized governed write testing."
+  },
+  "review_and_integration": {
+    "status": "pending independent exact-head review by Antigravity",
+    "auto_merge": false,
+    "merge_authority": "supervisor integration runner after canonical approval",
+    "dev_deployment_updated": false
+  }
+}

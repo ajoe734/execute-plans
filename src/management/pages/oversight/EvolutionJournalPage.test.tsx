@@ -39,7 +39,7 @@ function journalElement(initialEntry = "/management/evolution-journal") {
           <Route path="/management/evolution-journal" element={<EvolutionJournalPage />} />
         </Routes>
       </MemoryRouter>
-    </I18nextProvider>,
+    </I18nextProvider>
   );
 }
 
