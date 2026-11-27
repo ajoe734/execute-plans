@@ -2,7 +2,19 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { AgoraLayoutRoute, AgoraStrategyPerformanceRoute, AgoraStrategyWorkshopRoute, safeWorkshopReturnPath } from "./agora";
+import {
+  AgoraAskLegacyRoute,
+  AgoraDailyLegacyRoute,
+  AgoraJournalLegacyRoute,
+  AgoraLayoutRoute,
+  AgoraNotebookLegacyRoute,
+  AgoraSignalsLegacyRoute,
+  AgoraStrategyPerformanceRoute,
+  AgoraStrategyWorkshopRoute,
+  AgoraTrainerLegacyRoute,
+  AgoraWatchlistLegacyRoute,
+  safeWorkshopReturnPath,
+} from "./agora";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
@@ -156,7 +168,7 @@ describe("AgoraLayoutRoute", () => {
     vi.mocked(getWorkshop).mockResolvedValue(workshop);
 
     renderAgoraShell("/agora/strategy-workshop/ws-9");
-    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    fireEvent.click(screen.getByRole("button", { name: /交易僕人抽屜/ }));
 
     await waitFor(() => {
       expect(getWorkshop).toHaveBeenCalledWith("ws-9");
@@ -232,5 +244,101 @@ describe("AgoraStrategyPerformanceRoute", () => {
 
     expect(screen.getByTestId("mock-strategy-performance-page")).toBeDefined();
     expect(routeMocks.strategyPerformancePage).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Agora IA 05 legacy route redirects and workshop committee entry", () => {
+  function LegacyRouteHarness({ initialPath }: { initialPath: string }) {
+    return (
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route path="/agora" element={<AgoraLayoutRoute />}>
+            <Route path="trading-room" element={<LocationProbe />} />
+            <Route path="strategy-workshop" element={<AgoraStrategyWorkshopRoute />} />
+            <Route path="committee" element={<div data-testid="committee-page">Committee Page</div>} />
+            <Route path="daily" element={<AgoraDailyLegacyRoute />} />
+            <Route path="watchlist" element={<AgoraWatchlistLegacyRoute />} />
+            <Route path="signals" element={<AgoraSignalsLegacyRoute />} />
+            <Route path="notebook" element={<AgoraNotebookLegacyRoute />} />
+            <Route path="ask" element={<AgoraAskLegacyRoute />} />
+            <Route path="journal" element={<AgoraJournalLegacyRoute />} />
+            <Route path="trainer" element={<AgoraTrainerLegacyRoute />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+  }
+
+  it("redirects /agora/daily to /agora/trading-room", () => {
+    render(<LegacyRouteHarness initialPath="/agora/daily" />);
+    expect(screen.getByTestId("trading-room-location").getAttribute("data-pathname")).toBe(
+      "/agora/trading-room",
+    );
+  });
+
+  it("redirects /agora/watchlist to /agora/trading-room?drawer=watchlist", () => {
+    function SearchProbe() {
+      const location = useLocation();
+      return <div data-search={location.search} data-testid="search-probe">{location.pathname}</div>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/agora/watchlist"]}>
+        <Routes>
+          <Route path="/agora/watchlist" element={<AgoraWatchlistLegacyRoute />} />
+          <Route path="/agora/trading-room" element={<SearchProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const probe = screen.getByTestId("search-probe");
+    expect(probe.textContent).toBe("/agora/trading-room");
+    expect(probe.getAttribute("data-search")).toBe("?drawer=watchlist");
+  });
+
+  it("redirects /agora/signals to /agora/trading-room?view=decision-queue", () => {
+    function SearchProbe() {
+      const location = useLocation();
+      return <div data-search={location.search} data-testid="search-probe">{location.pathname}</div>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/agora/signals"]}>
+        <Routes>
+          <Route path="/agora/signals" element={<AgoraSignalsLegacyRoute />} />
+          <Route path="/agora/trading-room" element={<SearchProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const probe = screen.getByTestId("search-probe");
+    expect(probe.textContent).toBe("/agora/trading-room");
+    expect(probe.getAttribute("data-search")).toBe("?view=decision-queue");
+  });
+
+  it("redirects /agora/notebook to /agora/strategy-workshop and reaches Committee from the workshop", () => {
+    render(<LegacyRouteHarness initialPath="/agora/notebook" />);
+    const committeeLink = screen.getByTestId("workshop-open-committee");
+    expect(committeeLink).toBeDefined();
+    fireEvent.click(committeeLink);
+    expect(screen.getByTestId("committee-page")).toBeDefined();
+  });
+
+  it("redirects /agora/ask, /agora/journal, and /agora/trainer to the trading room (opening servant drawer for ask and trainer)", () => {
+    const askView = render(<LegacyRouteHarness initialPath="/agora/ask" />);
+    expect(screen.getByTestId("trading-room-location").getAttribute("data-pathname")).toBe(
+      "/agora/trading-room",
+    );
+    expect(screen.getByTestId("trading-desk-servant-drawer")).toBeDefined();
+    askView.unmount();
+
+    const journalView = render(<LegacyRouteHarness initialPath="/agora/journal" />);
+    expect(screen.getByTestId("trading-room-location").getAttribute("data-pathname")).toBe(
+      "/agora/trading-room",
+    );
+    journalView.unmount();
+
+    const trainerView = render(<LegacyRouteHarness initialPath="/agora/trainer" />);
+    expect(screen.getByTestId("trading-room-location").getAttribute("data-pathname")).toBe(
+      "/agora/trading-room",
+    );
+    expect(screen.getByTestId("trading-desk-servant-drawer")).toBeDefined();
+    trainerView.unmount();
   });
 });

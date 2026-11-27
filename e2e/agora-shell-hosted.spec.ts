@@ -40,6 +40,12 @@ const VIEWPORTS = [
   { name: "desktop-wide", width: 2560, height: 1440 },
 ] as const;
 
+const ORIGINAL_IA_VIEWPORTS = [
+  { name: "1600px", width: 1600, height: 960 },
+  { name: "720px", width: 720, height: 960 },
+  { name: "390px", width: 390, height: 844 },
+] as const;
+
 const TABS = [
   { name: "trading-room", path: "/agora/trading-room" },
   { name: "strategy-workshop", path: "/agora/strategy-workshop" },
@@ -110,5 +116,63 @@ test.describe("AG-UIPOL-002 hosted standalone Agora shell", () => {
         });
       });
     }
+  }
+
+  for (const viewport of ORIGINAL_IA_VIEWPORTS) {
+    test(`FE-AGORA-SHELL-ORIGINAL-IA-20261127 header, three zh-TW tabs, command bar, and round trip at ${viewport.name}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await installOidcDevLogin(page, {
+        goto: false,
+        pageBaseUrl: FE_BASE_URL,
+        tenantId: TENANT_ID,
+        token: AUTH_TOKEN,
+      });
+
+      await page.goto(`${FE_BASE_URL}/agora/trading-room`);
+      await expect(page.getByTestId("agora-standalone-shell")).toBeVisible({ timeout: 30_000 });
+      await expectSinglePageScrollOwner(page);
+
+      const tabBar = page.getByTestId("trading-desk-tab-bar");
+      const tabButtons = tabBar.locator("button");
+      await expect(tabButtons).toHaveCount(3);
+      await expect(tabButtons.nth(0)).toHaveText("交易操盤室");
+      await expect(tabButtons.nth(1)).toHaveText("策略工坊");
+      await expect(tabButtons.nth(2)).toHaveText("策略執行與績效");
+      await expect(page.getByTestId("trading-desk-bottom-strip")).toHaveCount(0);
+
+      const commandBar = page.getByTestId("trading-desk-command-bar");
+      await expect(page.getByTestId("trader-display-name")).toBeVisible();
+      await expect(page.getByTestId("trader-style")).toBeVisible();
+      await expect(page.getByTestId("trading-desk-market-state")).toContainText("市場狀態：");
+      await expect(commandBar).not.toContainText("Agora Servant");
+      await expect(page.getByTestId("trading-desk-sign-out")).toHaveText("登出");
+      await expect(page.getByTestId("trading-desk-quick-tasks").locator("button")).toHaveCount(10);
+
+      mkdirSync(EVIDENCE_DIR, { recursive: true });
+      const shellShot = `${EVIDENCE_DIR}/fe-agora-shell-original-ia-20261127-shell-${viewport.name}.png`;
+      await page.screenshot({ path: shellShot });
+      await testInfo.attach(`fe-agora-shell-original-ia-20261127-shell-${viewport.name}`, {
+        path: shellShot,
+        contentType: "image/png",
+      });
+
+      if (viewport.width === 1600) {
+        const input = page.getByTestId("trading-desk-command-input");
+        await expect(input).toBeEnabled({ timeout: 30_000 });
+        await input.fill("檢查目前策略視角與進場條件");
+        await page.getByTestId("trading-desk-command-submit").click();
+        await expect(page.getByTestId("trading-desk-servant-drawer")).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId("servant-command-reply")).toBeVisible({ timeout: 60_000 });
+
+        const roundTripShot = `${EVIDENCE_DIR}/fe-agora-shell-original-ia-20261127-command-roundtrip-${viewport.name}.png`;
+        await page.screenshot({ path: roundTripShot });
+        await testInfo.attach(`fe-agora-shell-original-ia-20261127-command-roundtrip-${viewport.name}`, {
+          path: roundTripShot,
+          contentType: "image/png",
+        });
+      }
+    });
   }
 });

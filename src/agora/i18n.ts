@@ -1,3 +1,4 @@
+import "@/i18n";
 import type { TFunction } from "i18next";
 
 /** Resolve additive BFF copy keys without ever exposing a raw key to operators. */
