@@ -1,0 +1,55 @@
+{
+  "schema_version": "pantheon.fe-evidence-unnamed-kind-once.evidence.v1",
+  "task_id": "FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127",
+  "base_commit": "619891d5ebe1d3079d365c7e924f3d03a240b253",
+  "timestamp": "2026-11-27T16:55:15Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "summary": "Hosted FE 9b0df6622 (with #1118) at 1274x627: an unnamed meeting_action_ticket row in the cited evidence list rendered '會議行動單' as the primary name and then rendered '會議行動單' again in the kind line underneath, before the refId 'facts:meeting_action_ticket:rt-action-16f4b51de06f6629684a6ab4402dbc5a' and '這筆證據沒有記錄名稱。'. #1118 only collapsed the kind · source_class duplicate."
+  },
+  "modified_surfaces": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+    "docs/deployment/evidence/FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_unnamed_cited_row_shows_kind_label_once": {
+      "passed": true,
+      "implementation": "Extracted citedRowRecordedName(row) in src/management/pages/oversight/_core.tsx and updated EvidenceCitedList row rendering so showKind is true only when the row has a recorded display name (recordedName !== null && displayName !== kindLabel). When a cited row has no recorded name, the name line carries citedKindLabel(t, row.refKind) and the kind line underneath omits kindLabel—rendering either no kind line at all when sourceClassLabel equals kindLabel (or is '—'), or only sourceClassLabel when sourceClassLabel differs from kindLabel. The refId line and the name-missing note remain unchanged, and rows with a recorded name keep their kind line unchanged.",
+      "tests": [
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > Evidence page: cited list (FE-EVIDENCE-CITED-20261125) > FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127: shows the kind label once for an unnamed meeting_action_ticket row while keeping the id line, name-missing note, differing source class on unnamed rows, and the kind line on a named registry_entry row"
+      ]
+    },
+    "AC2_recorded_hosted_row_tests_lint_and_tsc": {
+      "passed": true,
+      "changed_test_assertions_justification": [
+        {
+          "test": "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > Evidence page: cited list (FE-EVIDENCE-CITED-20261125) > FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127",
+          "change": "Updated zhKindLines from ['會議行動單', '策略（登錄） · 登錄紀錄', '登錄項目 · 登錄紀錄'] to ['策略（登錄） · 登錄紀錄', '登錄紀錄'] (and enKindLines from ['Meeting action ticket', 'Strategy (registry) · Registry record', 'Registry entry · Registry record'] to ['Strategy (registry) · Registry record', 'Registry record']).",
+          "justification": "FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127 kept the kind line on unnamed rows. Under FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127 AC1, the unnamed meeting_action_ticket row (item 0) already carries '會議行動單' / 'Meeting action ticket' on its name line so its kind line is omitted, and the unnamed registry_entry row (item 2) already carries '登錄項目' / 'Registry entry' on its name line so its kind line shows only the differing source class label '登錄紀錄' / 'Registry record'."
+        }
+      ],
+      "tests": [
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx (32 passed)"
+      ]
+    }
+  },
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "note": "Pure frontend presentation change; adds no recurring jobs, emitters, or persistent writers."
+  },
+  "residual_findings": [],
+  "verification": {
+    "commands": [
+      "npm run lint -> 0 errors (143 pre-existing warnings), exit 0",
+      "./node_modules/.bin/tsc --noEmit -> 0 errors, exit 0",
+      "./node_modules/.bin/vitest run src/management/pages/oversight/EvidenceExplorerPage.test.tsx -> 1 file, 32 passed, exit 0"
+    ]
+  }
+}
