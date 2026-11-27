@@ -4,13 +4,19 @@
 //
 // PersonaIntent + readiness pages live in their own files.
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
+import { BffError } from "@/lib/bff-v1/errors";
+import { decideEvolutionReview, type EvolutionReviewDecision } from "@/lib/bff-v1/writes";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
 import type { QuarterlyRankingFormula, QuarterlyRankingRow, QuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
@@ -3960,6 +3966,9 @@ interface EvolutionEntry {
   members_before?: unknown;
   members_after?: unknown;
   subject_class?: string;
+  metadata?: Record<string, unknown>;
+  rationale?: string;
+  evidence_refs?: unknown;
 }
 
 const FORMAL_EVOLUTION_ENTRY_TYPES = new Set(["evolution_decision", "mutation_review"]);
@@ -4050,6 +4059,110 @@ const verdictTone = (v?: string) =>
       ? "bg-status-failed/15 text-status-failed border-status-failed/30"
       : "bg-muted text-muted-foreground border-border";
 
+function journalDecisionId(entry: EvolutionEntry): string {
+  return cleanJournalFieldText(entry.source_id || entry.decision?.decision_id || entry.record?.decision_id || entry.id)
+    .replace(/^(evolution_decision|mutation_review):/, "").trim();
+}
+
+function EvolutionJournalDecisionDetail({ entry, onClose, onSaved }: {
+  entry: EvolutionEntry;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { i18n } = useTranslation();
+  const zh = i18n.resolvedLanguage?.startsWith("zh");
+  const text = (en: string, tw: string) => zh ? tw : en;
+  const { bffSession } = useAuth();
+  // Match BFF operator command roles; the browser's editable display role is not authority.
+  const canDecide = bffSession?.identity.roles.some((role) => ["operator", "approver", "admin", "reviewer"].includes(role)) === true;
+  const record = entry.decision ?? entry.record ?? entry.mutation_review ?? {};
+  const metadata = (record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+    ? record.metadata : entry.metadata ?? {}) as Record<string, unknown>;
+  const id = journalDecisionId(entry);
+  const status = cleanJournalFieldText(entry.status ?? record.status).toLowerCase();
+  const paperGate = (entry.action_type ?? record.action_type) === "flag_for_review"
+    && metadata.operator_required === true && metadata.paper_only === true;
+  const pending = ["proposed", "pending", "pending_approval", "pending_review"].includes(status);
+  const writesEnabled = realWritesEnabled();
+  const [action, setAction] = useState<EvolutionReviewDecision | null>(null);
+  const [result, setResult] = useState<{ failed: boolean; body: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const inFlight = useRef(false);
+  const rationale = cleanJournalFieldText(record.rationale ?? entry.rationale ?? entry.summary);
+  const refs = record.evidence_refs ?? entry.evidence_refs ?? [];
+  const consultationId = cleanJournalFieldText(metadata.consultation_decision_id);
+  const reason = cleanJournalFieldText(metadata.reason);
+
+  const submit = async (memo: string) => {
+    if (!action || !memo.trim() || !canDecide || !realWritesEnabled() || !paperGate || !pending || submitted || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setResult(null);
+    try {
+      const response = await decideEvolutionReview(id, action, { memo });
+      // Preserve the owner receipt, including a refusal returned with HTTP 200.
+      setResult({ failed: false, body: JSON.stringify(response, null, 2) });
+      setSubmitted(true);
+      onSaved();
+    } catch (error) {
+      setResult({ failed: true, body: error instanceof BffError
+        ? JSON.stringify({ status: error.status, ...error.envelope }, null, 2)
+        : error instanceof Error ? error.message : String(error) });
+    } finally {
+      setAction(null);
+      setBusy(false);
+      inFlight.current = false;
+    }
+  };
+
+  return (
+    <Sheet open onOpenChange={(open) => { if (!open && !inFlight.current) onClose(); }}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>{text("Evolution decision", "演化決策")}</SheetTitle>
+          <SheetDescription className="[overflow-wrap:anywhere]">{id}</SheetDescription>
+        </SheetHeader>
+        <div className="mt-4 space-y-4 text-sm [overflow-wrap:anywhere]">
+          <Badge variant="outline">{status || text("Unknown status", "狀態未知")}</Badge>
+          {metadata.paper_only === true && <Badge variant="outline">{text("Paper only", "僅限紙上")}</Badge>}
+          <dl className="space-y-3">
+            <div><dt className="font-medium">{text("Rationale", "決策理由")}</dt><dd>{rationale || "—"}</dd></div>
+            {reason && <div><dt className="font-medium">{text("Gate reason", "關卡原因")}</dt><dd>{reason}</dd></div>}
+            <div><dt className="font-medium">{text("Consultation decision ID", "會診決策 ID")}</dt><dd>{consultationId || "—"}</dd></div>
+            <div><dt className="font-medium">{text("Evidence references", "證據參照")}</dt>
+              <dd><pre className="whitespace-pre-wrap text-xs">{JSON.stringify(refs, null, 2)}</pre></dd></div>
+          </dl>
+          {paperGate && !canDecide && <p role="note">{text("You do not have permission to decide this request. An operator role is required.", "您沒有決定此請求的權限，需要營運者角色。")}</p>}
+          {paperGate && pending && canDecide && <div className="space-y-2">
+            {!writesEnabled && <p role="note">{text("Writes are disabled in this environment. Approval and rejection are unavailable.", "此環境已停用寫入，無法核准或駁回。")}</p>}
+            <div className="flex gap-2">
+              <Button disabled={!writesEnabled || busy || submitted} onClick={() => setAction("approve")}>{text("Approve", "核准")}</Button>
+              <Button variant="destructive" disabled={!writesEnabled || busy || submitted} onClick={() => setAction("reject")}>{text("Reject", "駁回")}</Button>
+            </div>
+          </div>}
+          {result && <div role={result.failed ? "alert" : "status"}>
+            <p className="font-medium">{text("BFF result", "BFF 回覆")}</p>
+            <pre className="whitespace-pre-wrap text-xs">{result.body}</pre>
+          </div>}
+        </div>
+        {action && canDecide && writesEnabled && <HighRiskConfirm
+          key={action}
+          open
+          onOpenChange={(open) => { if (!open && !inFlight.current) setAction(null); }}
+          title={action === "approve" ? text("Approve paper gate decision", "核准紙上關卡決策") : text("Reject paper gate decision", "駁回紙上關卡決策")}
+          target={{ type: "EvolutionDecision", id, name: id }}
+          currentState={status}
+          newState={action === "approve" ? "approved" : "rejected"}
+          risk="high"
+          destructive={action === "reject"}
+          onConfirm={submit}
+        />}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -4124,6 +4237,21 @@ export const EvolutionJournalPage = () => {
     [fleetRows, focus.matched, mutationFocus, personaFocus],
   );
   const visibleRows = fleetFallback ? [fleetFallback] : focus.rows;
+  const [openedDecision, setOpenedDecision] = useState<{ focus: string; entry: EvolutionEntry } | null>(null);
+  const focusedEntry = rows.find((entry) =>
+    FORMAL_EVOLUTION_ENTRY_TYPES.has(entry.entry_type ?? entry.entryType ?? "")
+    && journalDecisionId(entry) === mutationFocus);
+  useEffect(() => {
+    if (focusedEntry) setOpenedDecision({ focus: mutationFocus, entry: focusedEntry });
+  }, [focusedEntry, mutationFocus]);
+  // Keep the opened record and receipt readable when a decided row leaves the pending queue.
+  const selectedEntry = openedDecision?.focus === mutationFocus ? openedDecision.entry : focusedEntry;
+  const closeDecision = () => {
+    setOpenedDecision(null);
+    const next = new URLSearchParams(searchParams);
+    for (const key of ["decision", "mutation_review", "item"]) next.delete(key);
+    setSearchParams(next);
+  };
   const hasFocus = Boolean(personaFocus || mutationFocus);
 
   const sourceFocus = normalizeEvolutionFocusToken(searchParams.get("source"));
@@ -4647,7 +4775,18 @@ export const EvolutionJournalPage = () => {
               })
             : undefined;
         return (
-          <Card key={e.id} className="p-4 space-y-2">
+          <Card key={e.id} className="p-4 space-y-2"
+            role={isFormalEntry ? "button" : undefined}
+            tabIndex={isFormalEntry ? 0 : undefined}
+            aria-label={isFormalEntry ? headline : undefined}
+            onClick={isFormalEntry ? () => setOpenedDecision({ focus: mutationFocus, entry: e }) : undefined}
+            onKeyDown={isFormalEntry ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setOpenedDecision({ focus: mutationFocus, entry: e });
+              }
+            } : undefined}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm font-medium text-foreground">{plainTitle ?? headline}</div>
               <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -4712,6 +4851,9 @@ export const EvolutionJournalPage = () => {
           </Card>
         );
       })}
+      {selectedEntry && !isReadFailed && !isDenied && <EvolutionJournalDecisionDetail
+        key={journalDecisionId(selectedEntry)} entry={selectedEntry} onClose={closeDecision} onSaved={() => refresh?.()}
+      />}
       {!isReadFailed && !isFleetSummary && (visibleRows.length > 0 || pageIndex > 0 || nextPageToken !== null) && (
         <div
           className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"

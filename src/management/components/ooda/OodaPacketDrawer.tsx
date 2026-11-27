@@ -101,7 +101,7 @@ function recordFrom(value: unknown): Record<string, unknown> {
 
 function reviewHref(decisionId: unknown): string | undefined {
   const id = String(decisionId ?? "").trim();
-  return id ? `/evolution/mutation-review/${encodeURIComponent(id)}` : undefined;
+  return id ? `/management/evolution-journal?decision=${encodeURIComponent(id)}` : undefined;
 }
 
 function approvalHref(approvalId: unknown): string | undefined {
