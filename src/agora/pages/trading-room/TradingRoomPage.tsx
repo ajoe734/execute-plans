@@ -1,102 +1,33 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import {
-  acceptTradingRoomWorkspaceProposalWithMeta,
-  createTradingRoomWorkspaceProposal,
   getTradingRoom,
   listDecisionEvents,
-  decideOnEvent,
+  subscribeTradingRoomStream,
   type TradingRoomAggregate,
   type TradingRoomStrategyEntry,
   type TradingDecisionEvent,
-  type DecisionChoice,
-  type TradingRoomWorkspaceResult,
+  type TradingRoomStreamMode,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import {
   getAgoraOperationalReadiness,
   type AgoraOperationalReadiness,
 } from "@/lib/bff-v1/agora/operationalReadiness";
-import { BffError } from "@/lib/bff-v1/errors";
-import type {
-  TradingRoomWorkspaceProposal,
-} from "@/lib/bff-v1/agora/tradingRoomTypes";
-import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
-import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
-import { TradeDecisionCard } from "@/agora/components/TradeDecisionCard";
 import { CandidateReviewDrawer as SharedCandidateReviewDrawer } from "@/agora/components/CandidateReviewDrawer";
 import { lookupCandidatePool } from "@/lib/bff-v1/agora/candidatePool";
 import {
+  RiskBanner,
   TradingRoomWorkspace,
   StrategyWorkspaceView,
 } from "./TradingRoomWorkspace";
-import { AttributionReportView } from "./AttributionReportView";
 
-export { TradingRoomWorkspace, AttributionReportView };
+export { TradingRoomWorkspace };
 
-function newUUID(): string {
-  return crypto.randomUUID();
-}
-
-interface TradingRoomUiError {
-  message: string;
-  status?: number;
-  code?: string;
-}
-
-function tradingRoomErrorMessage(err: BffError, fallback: string, t: TFunction): string {
-  switch (err.status) {
-    case 403:
-      return t("agora.tradingRoom.errors.readForbidden");
-    case 404:
-      return t("agora.tradingRoom.errors.proposalNotFound");
-    case 409:
-      return t("agora.tradingRoom.errors.proposalConflict");
-    case 412:
-      return t("agora.tradingRoom.errors.proposalStale");
-    case 501:
-      return t("agora.tradingRoom.errors.notImplemented");
-    default:
-      return err.message || fallback;
-  }
-}
-
-function toTradingRoomUiError(err: unknown, fallback: string, t: TFunction): TradingRoomUiError {
-  if (err instanceof BffError) {
-    return {
-      code: err.code,
-      message: tradingRoomErrorMessage(err, fallback, t),
-      status: err.status,
-    };
-  }
-  return {
-    message: err instanceof Error ? err.message : fallback,
-  };
-}
-
-function shouldClearStaleWorkspaceState(error: TradingRoomUiError): boolean {
-  if (
-    error.status === 403 ||
-    error.status === 404 ||
-    error.status === 409 ||
-    error.status === 412 ||
-    error.status === 501
-  ) {
-    return true;
-  }
-  return (
-    error.code === "PERMISSION_DENIED" ||
-    error.code === "TENANT_SCOPE_MISMATCH" ||
-    error.code === "RESOURCE_NOT_FOUND" ||
-    error.code === "STATE_CONFLICT" ||
-    error.code === "ILLEGAL_TRANSITION" ||
-    error.code === "IDEMPOTENCY_CONFLICT" ||
-    error.code === "CAPABILITY_MISSING" ||
-    error.code === "FEATURE_DISABLED"
-  );
-}
+/** Debounce for stream-driven resyncs so a burst of events re-reads once. */
+const STREAM_RESYNC_DEBOUNCE_MS = 250;
 
 // ── Strategy Workspace Switcher ───────────────────────────────────────────────
 
@@ -121,7 +52,7 @@ function StrategyLensSwitcher({
     >
       {strategies.length === 0 ? (
         <span data-testid="strategy-workspace-empty" style={{ color: "#8c96a6", fontSize: 12 }}>
-          No StrategySpec workspace is currently available.
+          {t("agora.tradingRoom.candidateContext.noStrategyWorkspace")}
         </span>
       ) : strategies.map((strategy) => {
         const selected = strategy.strategy_id === activeStrategyId;
@@ -143,54 +74,11 @@ function StrategyLensSwitcher({
           >
             <span>{strategy.title}</span>
             <span style={{ display: "block", fontSize: 10, marginTop: 2, opacity: 0.8 }}>
-              {strategy.strategy_spec_registry_id} · {strategy.readiness_state}
+              {strategy.strategy_spec_registry_id} · {statusLabel(strategy.readiness_state, t)}
             </span>
           </button>
         );
       })}
-    </div>
-  );
-}
-
-// ── Risk Banner ───────────────────────────────────────────────────────────────
-
-const RISK_COLORS: Record<string, string> = {
-  normal: "#111417",
-  watch: "#1e1c0e",
-  warning: "#231808",
-  critical: "#230e0e",
-};
-
-interface RiskBannerProps {
-  state: string;
-  summary?: string;
-  alerts?: string[];
-}
-
-function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | null {
-  const { t } = useTranslation();
-  if (state === "normal") return null;
-  return (
-    <div
-      data-testid="risk-banner"
-      data-risk-state={state}
-      style={{
-        padding: "6px 16px",
-        background: RISK_COLORS[state] ?? RISK_COLORS.warning,
-        borderBottom: "1px solid #2a2e38",
-        fontSize: 13,
-        color: "#f0ece4",
-      }}
-    >
-      <strong>{t("agora.tradingRoom.page.risk", { state })}</strong>
-      {summary ? ` — ${summary}` : null}
-      {alerts && alerts.length > 0 ? (
-        <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
-          {alerts.map((a, i) => (
-            <li key={i}>{a}</li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }
@@ -225,156 +113,6 @@ function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStr
       <span data-testid="queue-reduce-count">{t("agora.tradingRoom.page.queue.reduce", { count: reduce })}</span>
       <span data-testid="queue-exit-count">{t("agora.tradingRoom.page.queue.exit", { count: exit })}</span>
       <span data-testid="queue-review-count">{t("agora.tradingRoom.page.queue.review", { count: review })}</span>
-    </div>
-  );
-}
-
-// ── Decision Event Detail Panel ───────────────────────────────────────────────
-
-type DecisionCallState = "idle" | "loading" | "success" | "error";
-
-interface DecisionEventDetailPanelProps {
-  event: TradingDecisionEvent;
-  etag?: string | null;
-}
-
-function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps): JSX.Element {
-  return (
-    <tr data-testid={`event-detail-${event.decision_event_id}`}>
-      <td colSpan={5} style={{ padding: "12px 16px", background: "#11151d", borderBottom: "2px solid #2a2e38" }}>
-        <div style={{ maxWidth: 800, margin: "0 auto" }}>
-          <TradeDecisionCard event={event} etag={etag ?? undefined} />
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-// ── Trading Event Queue ───────────────────────────────────────────────────────
-
-const EVENT_KIND_LABEL: Record<string, string> = {
-  entry: "Entry",
-  add: "Add",
-  reduce: "Reduce",
-  exit: "Exit",
-  review: "Review",
-};
-
-const STATE_LABEL: Record<string, string> = {
-  approaching: "Approaching",
-  triggered: "Triggered",
-  pending_review: "Pending Review",
-  decided: "Decided",
-  expired: "Expired",
-  invalidated: "Invalidated",
-  superseded: "Superseded",
-};
-
-interface TradingEventQueueProps {
-  events: TradingDecisionEvent[];
-  loading: boolean;
-  /** ETag from listDecisionEvents — forwarded to each DecisionEventDetailPanel as If-Match. */
-  eventsEtag?: string | null;
-}
-
-function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueueProps): JSX.Element {
-  const { t } = useTranslation();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  function toggleExpand(id: string) {
-    setExpandedId((prev) => (prev === id ? null : id));
-  }
-
-  return (
-    <div data-testid="trading-event-queue" style={{ flex: 1, overflow: "auto" }}>
-      <div style={{ padding: "8px 16px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
-        {t("agora.tradingRoom.page.eventQueue")}
-      </div>
-      {loading ? (
-        <div data-testid="event-queue-loading" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
-          {t("agora.tradingRoom.page.loadingEvents")}
-        </div>
-      ) : events.length === 0 ? (
-        <div data-testid="event-queue-empty" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
-          {t("agora.tradingRoom.page.noEvents")}
-        </div>
-      ) : (
-        <table
-          data-testid="event-queue-table"
-          style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
-        >
-          <thead>
-            <tr style={{ borderBottom: "1px solid #2a2e38" }}>
-              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.symbol")}</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.kind")}</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.state")}</th>
-              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.confidence")}</th>
-              <th style={{ textAlign: "right", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>EV (net)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((ev) => (
-              <React.Fragment key={ev.decision_event_id}>
-                <tr
-                  data-testid={`event-row-${ev.decision_event_id}`}
-                  aria-expanded={expandedId === ev.decision_event_id}
-                  style={{
-                    borderBottom: expandedId === ev.decision_event_id ? "none" : "1px solid #2a2e38",
-                    cursor: "pointer",
-                    background: expandedId === ev.decision_event_id ? "#1a2030" : undefined,
-                  }}
-                  onClick={() => toggleExpand(ev.decision_event_id)}
-                >
-                  <td style={{ padding: "6px 16px" }}>{ev.subject.symbol}</td>
-                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.eventKinds.${ev.event_kind}`, { defaultValue: EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind })}</td>
-                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.states.${ev.state}`, { defaultValue: STATE_LABEL[ev.state] ?? ev.state })}</td>
-                  <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                    {(ev.confidence.value * 100).toFixed(0)}%
-                  </td>
-                  <td style={{ padding: "6px 16px", textAlign: "right" }}>
-                    {ev.expected_value.net > 0 ? "+" : ""}
-                    {ev.expected_value.net.toFixed(2)}
-                  </td>
-                </tr>
-                {expandedId === ev.decision_event_id && (
-                  <DecisionEventDetailPanel event={ev} etag={eventsEtag} />
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
-// ── Position Action Queue ─────────────────────────────────────────────────────
-
-interface PositionActionQueueProps {
-  positionSummaries: unknown[];
-}
-
-function PositionActionQueue({ positionSummaries }: PositionActionQueueProps): JSX.Element {
-  const { t } = useTranslation();
-  return (
-    <div
-      data-testid="position-action-queue"
-      style={{ borderLeft: "1px solid #2a2e38", width: 240, overflow: "auto", flexShrink: 0, background: "#171b22" }}
-    >
-      <div style={{ padding: "8px 12px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
-        {t("agora.tradingRoom.page.positionActions")}
-      </div>
-      {positionSummaries.length === 0 ? (
-        <div style={{ padding: 12, fontSize: 13, color: "#737d8e" }}>{t("agora.tradingRoom.page.noPositions")}</div>
-      ) : (
-        <ul style={{ margin: 0, padding: "8px 12px", listStyle: "none" }}>
-          {positionSummaries.map((p, i) => (
-            <li key={i} style={{ fontSize: 13, borderBottom: "1px solid #2a2e38", padding: "4px 0" }}>
-              {JSON.stringify(p)}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
@@ -496,8 +234,8 @@ function TradingRoomDefaultEntry({
         <div data-testid="trading-room-readiness-entry">
           {strategies.map((strategy) => (
             <div key={strategy.strategy_id} data-testid={`trading-room-readiness-${strategy.strategy_id}`}>
-              <button data-testid={`trading-room-open-strategy-${strategy.strategy_id}`} onClick={() => onStrategySelect(strategy.strategy_id)} type="button">Open</button>
-              <button data-testid={`trading-room-open-workshop-${strategy.strategy_id}`} onClick={onOpenWorkshop} type="button">Workshop</button>
+              <button data-testid={`trading-room-open-strategy-${strategy.strategy_id}`} onClick={() => onStrategySelect(strategy.strategy_id)} type="button">{t("agora.tradingRoom.candidateContext.open")}</button>
+              <button data-testid={`trading-room-open-workshop-${strategy.strategy_id}`} onClick={onOpenWorkshop} type="button">{t("agora.tradingRoom.candidateContext.workshop")}</button>
             </div>
           ))}
         </div>
@@ -716,6 +454,9 @@ export function TradingRoomPage({
   const [candidatePoolError, setCandidatePoolError] = useState<string | null>(null);
   const [activeStrategyIdOverride, setActiveStrategyIdOverride] = useState<string | null>(null);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [streamMode, setStreamMode] = useState<TradingRoomStreamMode>("connecting");
+  const [queueUpdatedAt, setQueueUpdatedAt] = useState<string | null>(null);
+  const resyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -788,7 +529,7 @@ export function TradingRoomPage({
         if (!active) return;
         setCandidatePoolId(null);
         setCandidatePoolState("error");
-        setCandidatePoolError(error instanceof Error ? error.message : "Candidate pool lookup failed");
+        setCandidatePoolError(error instanceof Error ? error.message : null);
       });
 
     return () => { active = false; };
@@ -804,6 +545,7 @@ export function TradingRoomPage({
         setEvents(items);
         setEventsEtag(etag);
         setEventsLoading(false);
+        setQueueUpdatedAt(new Date().toISOString());
       })
       .catch(() => {
         if (!cancelled) setEventsLoading(false);
@@ -813,6 +555,36 @@ export function TradingRoomPage({
       cancelled = true;
     };
   }, []);
+
+  // Live decision queue (SA AD-AG-06): the authenticated SSE stream — or its
+  // bounded polling fallback — triggers a silent re-read of the resync routes
+  // so the queue updates without reloading the page.
+  const resyncQueue = useCallback(() => {
+    listDecisionEvents()
+      .then(({ items, etag }) => {
+        setEvents(items);
+        setEventsEtag(etag);
+        setQueueUpdatedAt(new Date().toISOString());
+      })
+      .catch(() => undefined);
+    getTradingRoom()
+      .then((agg) => setAggregate(agg))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTradingRoomStream({
+      onChange: () => {
+        if (resyncTimer.current) clearTimeout(resyncTimer.current);
+        resyncTimer.current = setTimeout(resyncQueue, STREAM_RESYNC_DEBOUNCE_MS);
+      },
+      onModeChange: setStreamMode,
+    });
+    return () => {
+      unsubscribe();
+      if (resyncTimer.current) clearTimeout(resyncTimer.current);
+    };
+  }, [resyncQueue]);
 
   const handleStrategySelect = (id: string | undefined) => {
     setActiveStrategyIdOverride(id ?? "none");
@@ -880,17 +652,21 @@ export function TradingRoomPage({
         data-testid="trading-room-mobile-priority"
       >
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#8c96a6]">Current task</div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#8c96a6]">{t("agora.tradingRoom.mobile.currentTask")}</div>
           <div className="truncate text-xs font-semibold text-[#f0ece4]">
-            {activeStrategy?.title ?? "Trading Room"}
+            {activeStrategy?.title ?? t("agora.tradingRoom.mobile.tradingRoom")}
           </div>
         </div>
         <div className="shrink-0 text-right">
           <div className={aggregate.risk_summary.state === "normal" ? "text-xs font-bold text-[#43cf94]" : "text-xs font-bold text-[#f05c61]"}>
-            Risk: {aggregate.risk_summary.state}
+            {t("agora.tradingRoom.mobile.risk", {
+              state: t(`agora.tradingRoom.riskStates.${aggregate.risk_summary.state}`, { defaultValue: aggregate.risk_summary.state }),
+            })}
           </div>
           <div className="text-[10px] text-[#e8b750]">
-            Pending {Object.values(aggregate.queue_summary).reduce((total, count) => total + count, 0)}
+            {t("agora.tradingRoom.mobile.pending", {
+              count: Object.values(aggregate.queue_summary).reduce((total, count) => total + count, 0),
+            })}
           </div>
         </div>
         <button
@@ -899,7 +675,7 @@ export function TradingRoomPage({
           onClick={() => setMobileNavigationOpen((open) => !open)}
           type="button"
         >
-          {mobileNavigationOpen ? "Hide strategies" : "Strategies"}
+          {mobileNavigationOpen ? t("agora.tradingRoom.mobile.hideStrategies") : t("agora.tradingRoom.mobile.strategies")}
         </button>
       </div>
 
@@ -929,22 +705,22 @@ export function TradingRoomPage({
       >
         <span style={{ color: "#8c96a6", fontSize: 12 }}>
           {selectedStrategyForPool
-            ? `StrategySpec: ${selectedStrategyForPool.strategy_spec_registry_id}`
-            : "Select a canonical strategy to review its candidate pool."}
+            ? t("agora.tradingRoom.candidateContext.strategySpec", { id: selectedStrategyForPool.strategy_spec_registry_id })
+            : t("agora.tradingRoom.candidateContext.selectStrategy")}
         </span>
         {candidatePoolState === "loading" && (
           <span data-testid="candidate-pool-loading" style={{ color: "#e8b750", fontSize: 12 }}>
-            Resolving candidate pool…
+            {t("agora.tradingRoom.candidateContext.resolving")}
           </span>
         )}
         {candidatePoolState === "unavailable" && (
           <span data-testid="candidate-pool-unavailable" style={{ color: "#8c96a6", fontSize: 12 }}>
-            Candidate pool unavailable for this StrategySpec.
+            {t("agora.tradingRoom.candidateContext.unavailable")}
           </span>
         )}
         {candidatePoolState === "error" && (
           <span data-testid="candidate-pool-error" style={{ color: "#f87171", fontSize: 12 }}>
-            {candidatePoolError ?? "Candidate pool lookup failed"}
+            {candidatePoolError ?? t("agora.tradingRoom.candidateContext.lookupFailed")}
           </span>
         )}
         <button
@@ -964,7 +740,7 @@ export function TradingRoomPage({
           }}
           type="button"
         >
-          Review candidates
+          {t("agora.tradingRoom.candidateContext.review")}
         </button>
       </div>
 
@@ -981,6 +757,8 @@ export function TradingRoomPage({
           readinessAssessmentId={readinessAssessmentId}
           readinessGate={readinessGate}
           strategyVersion={strategyVersion}
+          streamMode={streamMode}
+          queueUpdatedAt={queueUpdatedAt}
         />
       ) : (
         <TradingRoomDefaultEntry

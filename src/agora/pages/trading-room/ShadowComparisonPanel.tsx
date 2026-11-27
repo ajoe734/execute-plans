@@ -88,6 +88,8 @@ function formatValue(val: unknown): string {
 }
 
 const DEFAULT_ARM_LABELS: Record<string, string> = {
+  human_actual: "My decision (actual)",
+  committee_variant: "Committee variant",
   trader: "My decision (Trader)",
   private_servant: "Private Servant suggestion",
   base_strategy: "Base strategy",

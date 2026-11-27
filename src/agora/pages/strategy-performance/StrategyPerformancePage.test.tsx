@@ -16,6 +16,8 @@ import { StrategyPerformancePage } from "./StrategyPerformancePage";
 
 const tradingRoomMocks = vi.hoisted(() => ({
   getTradingRoom: vi.fn(),
+  listDecisionEvents: vi.fn(),
+  getTradingRoomShadowComparison: vi.fn(),
 }));
 
 const performanceMocks = vi.hoisted(() => ({
@@ -32,6 +34,8 @@ const zhPerformance = i18n.getFixedT("zh-TW", undefined, "agora.performance");
 
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   getTradingRoom: tradingRoomMocks.getTradingRoom,
+  listDecisionEvents: tradingRoomMocks.listDecisionEvents,
+  getTradingRoomShadowComparison: tradingRoomMocks.getTradingRoomShadowComparison,
 }));
 
 vi.mock("@/lib/bff-v1/agora/performance", () => ({
@@ -277,6 +281,8 @@ function arrangeLoaded(
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("crypto", { randomUUID: () => "00000000-0000-4000-8000-000000000001" });
+  tradingRoomMocks.listDecisionEvents.mockResolvedValue({ items: [], etag: null });
+  tradingRoomMocks.getTradingRoomShadowComparison.mockResolvedValue({ state: "not_found", reason: "decision_not_found" });
   accessMocks.useAgoraWriteAccess.mockReturnValue({
     actorId: "operator-1",
     agoraCapabilities: ["agora.performance.truth.v1"],
@@ -455,6 +461,68 @@ describe("StrategyPerformancePage", () => {
     expect(screen.getByText(/決策 1 · 訂單 1 · 成交 1 · 對帳 1/)).toBeDefined();
     expect(screen.getByText("canonical_trade_journey_projector")).toBeDefined();
     expect(screen.queryByText("order-1")).toBeNull();
+  });
+
+  it("shows the rule-versus-human comparison side by side for a linked intervention (V6 §15.5)", async () => {
+    const detail = performanceEnvelope();
+    detail.data.interventions.items = [{
+      intervention_id: "intervention-1",
+      kind: "manual_override",
+      status: "recorded",
+      occurred_at: "2026-07-22T09:00:00Z",
+      source_id: "intervention-ledger",
+      evidence_refs: ["evt-linked"],
+    }];
+    arrangeLoaded(baseAggregate, attributionResponse(), detail);
+    tradingRoomMocks.listDecisionEvents.mockResolvedValue({
+      items: [{
+        decision_event_id: "evt-linked", strategy_id: "strat-alpha", event_kind: "reduce", state: "decided",
+        subject: { symbol: "2330.TW" }, suggested_action: "reduce", triggered_at: "2026-07-22T08:00:00Z",
+      }],
+      etag: null,
+    });
+    tradingRoomMocks.getTradingRoomShadowComparison.mockResolvedValue({
+      state: "ok",
+      data: {
+        decision_id: "hd-1", decision_event_id: "evt-linked", comparison_state: "settled",
+        execution_authority: "none", no_order_route_proof: "agora_decision_support_only",
+        arms: [
+          { arm: "human_actual", decision_detail: { available: true, decision: "defer", rationale: "財報前先觀望" }, settlement_source: "pantheon_paper_proxy", settlement_source_kind: "paper_proxy", outcome: { pnl: 0.012 }, settled_at: "2026-07-23T00:00:00Z", unavailable_reason: null },
+          { arm: "base_strategy", decision_detail: { available: true, suggested_action: "reduce" }, settlement_source: "market_data_replay", settlement_source_kind: "market_data_replay", outcome: { pnl: -0.008 }, settled_at: "2026-07-23T00:00:00Z", unavailable_reason: null },
+        ],
+      },
+    });
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+    await screen.findByText("Policy compliance");
+
+    fireEvent.click(screen.getByRole("button", { name: "干預追蹤" }));
+    await screen.findByTestId("rule-vs-human-intervention-1");
+    expect(screen.getByText("照規則 vs 人工干預")).toBeDefined();
+    await waitFor(() => expect(screen.getByTestId("rule-vs-human-intervention-1-reason").textContent).toContain("財報前先觀望"));
+    expect(screen.getByTestId("rule-vs-human-intervention-1-rule").textContent).toContain("reduce");
+    expect(screen.getByTestId("rule-vs-human-intervention-1-human").textContent).toContain("延後觀察");
+    expect(screen.getByTestId("rule-vs-human-intervention-1-result").textContent).toContain("pnl: +1.20%");
+    expect(screen.getByTestId("rule-vs-human-intervention-1-shadow").textContent).toContain("pnl: -0.80%");
+    expect(tradingRoomMocks.getTradingRoomShadowComparison).toHaveBeenCalledWith("evt-linked");
+    // The shadow comparison section reads decisions through the Agora owner route client.
+    expect(screen.getByTestId("performance-shadow-section")).toBeDefined();
+  });
+
+  it("reads missing rule-versus-human values in zh-TW and never guesses a decision link", async () => {
+    arrangeLoaded();
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+    await screen.findByText("Policy compliance");
+
+    fireEvent.click(screen.getByRole("button", { name: "干預追蹤" }));
+    const rule = await screen.findByTestId("rule-vs-human-intervention-1-rule");
+    expect(rule.textContent).toContain("未回報");
+    expect(screen.getByTestId("rule-vs-human-intervention-1-reason").textContent).toContain("未回報");
+    expect(screen.getByTestId("rule-vs-human-intervention-1-result").textContent).toContain("未回報");
+    expect(screen.getByTestId("rule-vs-human-intervention-1-shadow").textContent).toContain("未回報");
+    expect(screen.getByTestId("rule-vs-human-intervention-1-unlinked").textContent).toContain("未連結裁示事件");
+    expect(tradingRoomMocks.getTradingRoomShadowComparison).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toMatch(/not reported/i);
+    expect(screen.getByTestId("performance-shadow-empty").textContent).toContain("沒有可比較的裁示事件");
   });
 
   it("keeps one explicit narrow pane active with keyboard-addressable controls", async () => {

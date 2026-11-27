@@ -272,6 +272,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
     request,
   }, testInfo) => {
     const evidenceScreenshots: string[] = [];
+    let decisionQueueObserved = false;
     const events = collectNetwork(page);
     const isMobileProject = testInfo.project.name.startsWith("mobile");
 
@@ -306,20 +307,42 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       await screenshot(page, testInfo, "02-live-workspace-proposal", evidenceScreenshots);
       await page.getByTestId("workspace-proposal-accept").click();
       await expect(page.getByTestId("trading-room-workspace-shell")).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v1/, { timeout: 20_000 });
+      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/儀表板 v1/, { timeout: 20_000 });
       await screenshot(page, testInfo, "03-live-workspace-accepted", evidenceScreenshots);
+    });
+
+    await test.step("show the live decision queue (entry/add/reduce/exit) inside the generated view", async () => {
+      // V11 View A carries the Decision Queue widget; its four lanes are always visible together.
+      const queue = page.getByTestId("decision-queue-widget");
+      if ((await queue.count()) > 0) {
+        await expect(queue.first()).toBeVisible({ timeout: 20_000 });
+        for (const lane of ["entry", "add", "reduce", "exit"]) {
+          await expect(page.getByTestId(`decision-queue-lane-${lane}`).first()).toBeVisible();
+        }
+        await expect(page.getByTestId("decision-queue-stream-mode").first()).toBeVisible();
+        decisionQueueObserved = true;
+      }
+      await screenshot(page, testInfo, "03a-live-decision-queue", evidenceScreenshots);
     });
 
     const widgetId = await firstWidgetId(page);
 
+    await test.step("header 交代僕人 asks the trader to pick a widget when none is selected", async () => {
+      await page.getByTestId("workspace-header-ask-servant").click();
+      await expect(page.getByTestId("workspace-error")).toHaveText("請先點選要交代僕人修改的元件，再按「交代僕人」。");
+      await expect(page.getByTestId("workspace-widget-revision-drawer")).toBeHidden();
+    });
+
     await test.step("edit the grid and save a new live dashboard version", async () => {
       await page.getByTestId("workspace-edit-mode-toggle").click();
+      await expect(page.getByTestId("workspace-edit-mode-toggle")).toHaveText("完成調整");
+      await screenshot(page, testInfo, "03b-live-edit-mode", evidenceScreenshots);
       await page.getByTestId(`workspace-widget-menu-${widgetId}`).click();
       await page.getByRole("button", { name: "複製 Widget" }).click();
-      await expect(page.getByTestId("workspace-unsaved-bar")).toContainText("unsaved", { timeout: 10_000 });
+      await expect(page.getByTestId("workspace-unsaved-bar")).toContainText("未儲存", { timeout: 10_000 });
       await screenshot(page, testInfo, "04-live-grid-unsaved", evidenceScreenshots);
       await page.getByTestId("workspace-save-layout").click();
-      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v2/, { timeout: 30_000 });
+      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/儀表板 v2/, { timeout: 30_000 });
       await screenshot(page, testInfo, "05-live-grid-saved-v2", evidenceScreenshots);
     });
 
@@ -338,7 +361,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       await screenshot(page, testInfo, "06-live-widget-revision-preview", evidenceScreenshots);
       await page.getByTestId("workspace-widget-revision-keep-copy").click();
       await expect(page.getByTestId("workspace-widget-revision-drawer")).toBeHidden({ timeout: 30_000 });
-      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v3/, { timeout: 30_000 });
+      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/儀表板 v3/, { timeout: 30_000 });
       await screenshot(page, testInfo, "07-live-widget-revision-v3", evidenceScreenshots);
     });
 
@@ -351,9 +374,10 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
       }).toBeGreaterThan(1);
       const rollbackButton = page.locator('[data-testid^="workspace-rollback-"]:not(:disabled)').first();
       await expect(rollbackButton).toBeVisible({ timeout: 20_000 });
+      await expect(rollbackButton).toHaveText("回滾到此版本");
       await screenshot(page, testInfo, "08-live-version-history", evidenceScreenshots);
       await rollbackButton.click();
-      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/Dashboard v[4-9][0-9]*/, { timeout: 30_000 });
+      await expect(page.getByTestId("workspace-dashboard-version")).toHaveText(/儀表板 v[4-9][0-9]*/, { timeout: 30_000 });
       await screenshot(page, testInfo, "09-live-rollback-applied", evidenceScreenshots);
     });
 
@@ -370,6 +394,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
           auth_actor: AUTH_TOKEN.split(":")[0],
           bff_base_url: BFF_BASE_URL,
           card_types: live.cards.map((card) => card.card_type),
+          decision_queue_widget_observed: decisionQueueObserved,
           evidence_screenshots: evidenceScreenshots,
           fe_base_url: FE_BASE_URL,
           readiness_highest_gate: live.readiness.highest_ready_gate,
@@ -383,6 +408,7 @@ test.describe("AG-DYNUI-FULL-006 hosted live Winner Branch gate", () => {
             "Strategy Workshop Add to Trading Room handoff",
             "workspace proposal",
             "proposal accept",
+            "decision queue lanes",
             "grid edit save",
             "widget revision keep-copy",
             "version history",
