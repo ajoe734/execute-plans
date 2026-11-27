@@ -175,4 +175,87 @@ test.describe("AG-UIPOL-002 hosted standalone Agora shell", () => {
       }
     });
   }
+
+  test("FE-AGORA-GLOBAL-DRAWERS-20261127 opens all six global drawers and submits & reads back a 修正助理 feedback item", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1600, height: 960 });
+    await installOidcDevLogin(page, {
+      goto: false,
+      pageBaseUrl: FE_BASE_URL,
+      tenantId: TENANT_ID,
+      token: AUTH_TOKEN,
+    });
+
+    await page.goto(`${FE_BASE_URL}/agora/trading-room`);
+    await expect(page.getByTestId("agora-standalone-shell")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("trading-desk-global-drawers")).toBeVisible();
+
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+
+    const drawerSteps = [
+      {
+        trigger: "global-drawer-trigger-servant",
+        drawer: "trading-desk-servant-drawer",
+        name: "01-servant-tasks-drawer",
+      },
+      {
+        trigger: "global-drawer-trigger-shadow",
+        drawer: "trading-desk-shadow-drawer",
+        name: "02-shadow-drawer",
+      },
+      {
+        trigger: "global-drawer-trigger-journal",
+        drawer: "trading-desk-journal-drawer",
+        name: "03-journal-replay-drawer",
+      },
+      {
+        trigger: "global-drawer-trigger-expert-review",
+        drawer: "trading-desk-expert-review-drawer",
+        name: "04-expert-review-drawer",
+      },
+      {
+        trigger: "global-drawer-trigger-layout",
+        drawer: "trading-desk-layout-drawer",
+        name: "05-layout-adjustment-drawer",
+      },
+      {
+        trigger: "global-drawer-trigger-personalization",
+        drawer: "trading-desk-personalization-drawer",
+        name: "06-personalization-drawer",
+      },
+    ] as const;
+
+    for (const step of drawerSteps) {
+      await page.getByTestId(step.trigger).click();
+      await expect(page.getByTestId(step.drawer)).toBeVisible({ timeout: 20_000 });
+      const shotPath = `${EVIDENCE_DIR}/fe-agora-global-drawers-20261127-${step.name}.png`;
+      await page.screenshot({ path: shotPath });
+      await testInfo.attach(`fe-agora-global-drawers-20261127-${step.name}`, {
+        path: shotPath,
+        contentType: "image/png",
+      });
+    }
+
+    // Submit a 修正助理 signal-feedback item and verify readback without typing a persona ID
+    await page.getByTestId("global-drawer-trigger-servant").click();
+    await expect(page.getByTestId("trading-desk-servant-drawer")).toBeVisible();
+    await expect(page.getByTestId("servant-correction-section")).toBeVisible();
+
+    const feedbackText = "量縮跌破五日均量時請先提示減碼，不建議追高";
+    await page.getByTestId("servant-correction-kind-signal-feedback").click();
+    await page.getByTestId("servant-correction-content-input").fill(feedbackText);
+    await page.getByTestId("servant-correction-submit").click();
+    await expect(page.getByTestId("servant-correction-readback-summary")).toContainText(
+      feedbackText,
+      { timeout: 30_000 },
+    );
+
+    const feedbackShot = `${EVIDENCE_DIR}/fe-agora-global-drawers-20261127-07-correction-readback.png`;
+    await page.screenshot({ path: feedbackShot });
+    await testInfo.attach("fe-agora-global-drawers-20261127-07-correction-readback", {
+      path: feedbackShot,
+      contentType: "image/png",
+    });
+  });
 });

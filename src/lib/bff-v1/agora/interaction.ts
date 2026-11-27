@@ -65,9 +65,11 @@ export interface ResolveContextResponse {
   context_binding: ContextBinding;
 }
 
+export type InteractionMode = "ask" | "challenge" | "consult" | "compare" | "propose_action" | "reflect";
+
 export interface EligibilityRequest {
   workshop_id: string;
-  mode: "ask" | "challenge" | "consult" | "propose_action" | "reflect";
+  mode: InteractionMode;
   environment?: "research" | "shadow" | "paper" | "canary" | "live";
   required_capability?: string;
 }

@@ -127,6 +127,16 @@ export function ShadowComparisonPanel({
   }, [decisionId]);
 
   useEffect(() => {
+    if (decisionId !== undefined) return;
+    setActiveDecisionId((prev) => {
+      if (prev) return prev;
+      const firstId = (decisionEvents[0]?.decision_event_id ?? "").trim();
+      if (firstId) setDraftId(firstId);
+      return firstId;
+    });
+  }, [decisionId, decisionEvents]);
+
+  useEffect(() => {
     const cleanId = activeDecisionId.trim();
     if (!cleanId) {
       setLoading(false);
@@ -388,6 +398,7 @@ export function ShadowComparisonPanel({
         </div>
       ) : !activeDecisionId || read === null || read.state === "empty" ? (
         <div
+          data-reason={read?.state === "empty" ? read.reason : "decision_id_required"}
           data-testid="shadow-comparison-empty"
           style={{
             background: "#171b22",
@@ -397,10 +408,14 @@ export function ShadowComparisonPanel({
             padding: "10px 12px",
           }}
         >
-          {t("agora.tradingRoom.shadowComparison.empty", {
-            defaultValue:
-              "Select or enter a decision ID to view your shadow comparison.",
-          })}
+          {read?.state === "empty" && read.reason === "no_decision_recorded"
+            ? t("agora.tradingRoom.shadowComparison.comparisonStates.no_decision_recorded", {
+                defaultValue: "No decision recorded for this event",
+              })
+            : t("agora.tradingRoom.shadowComparison.empty", {
+                defaultValue:
+                  "Select or enter a decision ID to view your shadow comparison.",
+              })}
         </div>
       ) : read.state === "not_found" ? (
         <div
@@ -461,6 +476,36 @@ export function ShadowComparisonPanel({
         </div>
       ) : (
         <div data-testid="shadow-comparison-arms" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {read.data.comparison_state && (
+            <div
+              data-comparison-state={read.data.comparison_state}
+              data-testid="shadow-comparison-state"
+              style={{
+                alignSelf: "flex-start",
+                background:
+                  read.data.comparison_state === "settled"
+                    ? "rgba(34,197,94,0.14)"
+                    : "rgba(232,183,80,0.12)",
+                border:
+                  read.data.comparison_state === "settled"
+                    ? "1px solid rgba(34,197,94,0.35)"
+                    : "1px solid rgba(232,183,80,0.35)",
+                borderRadius: 4,
+                color:
+                  read.data.comparison_state === "settled" ? "#4ade80" : "#e8b750",
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 8px",
+              }}
+            >
+              {t(
+                `agora.tradingRoom.shadowComparison.comparisonStates.${read.data.comparison_state}`,
+                {
+                  defaultValue: read.data.comparison_state,
+                },
+              )}
+            </div>
+          )}
           {read.degraded && Object.keys(read.degraded).length > 0 && (
             <div
               data-testid="shadow-comparison-degraded"

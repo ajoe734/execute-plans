@@ -336,6 +336,106 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
     for (const call of fetchMock.mock.calls) {
       const init = call[1] as RequestInit;
       expect(init.method).toBe("GET");
+      expect(String(call[0])).not.toContain("/bff/management");
+    }
+  });
+
+  it("renders canonical four-party owner route comparison_state and no_decision_recorded empty state without calling /bff/management", async () => {
+    await i18n.changeLanguage("zh-TW");
+    const ownerResponse = {
+      status: "ok",
+      owner: "agora",
+      data: {
+        decision_event_id: "dec-1",
+        decision_id: "dec-1",
+        comparison_state: "settled",
+        arms: [
+          {
+            arm: "human_actual",
+            decision_detail: {
+              available: true,
+              decision: "enter",
+              execution_observation_kind: "pantheon_paper_proxy",
+            },
+            settlement_source: "pantheon_paper_proxy",
+            outcome: { pnl: 0.012 },
+            settled_at: "2026-11-27T00:00:00Z",
+            unavailable_reason: null,
+          },
+          {
+            arm: "private_servant",
+            decision_detail: {
+              available: true,
+              suggested_action: "enter",
+            },
+            settlement_source: "market_data_replay",
+            outcome: { pnl: 0.015 },
+            settled_at: "2026-11-27T00:00:00Z",
+            unavailable_reason: null,
+          },
+          {
+            arm: "base_strategy",
+            decision_detail: {
+              available: true,
+              suggested_action: "enter",
+            },
+            settlement_source: "market_data_replay",
+            outcome: { pnl: 0.01 },
+            settled_at: "2026-11-27T00:00:00Z",
+            unavailable_reason: null,
+          },
+          {
+            arm: "committee_variant",
+            decision_detail: {
+              available: true,
+              suggested_action: "hold",
+            },
+            settlement_source: "market_data_replay",
+            outcome: { pnl: 0.008 },
+            settled_at: "2026-11-27T00:00:00Z",
+            unavailable_reason: null,
+          },
+        ],
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(ownerResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          status: "ok",
+          owner: "agora",
+          data: {
+            decision_event_id: "dec-2",
+            comparison_state: "no_decision_recorded",
+            arms: [],
+          },
+        }),
+      );
+    globalThis.fetch = fetchMock;
+
+    render(
+      <ShadowComparisonPanel
+        baseUrl={BASE}
+        decisionEvents={SAMPLE_EVENTS}
+      />,
+    );
+
+    await screen.findByTestId("shadow-comparison-arms");
+    expect(screen.getByTestId("shadow-comparison-state").textContent).toBe("已結算");
+    expect(screen.getByTestId("shadow-arm-human_actual").textContent).toContain("我的做法（實際裁示）");
+    expect(screen.getByTestId("shadow-arm-private_servant").textContent).toContain("助理建議（私人僕人）");
+    expect(screen.getByTestId("shadow-arm-base_strategy").textContent).toContain("原策略");
+    expect(screen.getByTestId("shadow-arm-committee_variant").textContent).toContain("委員會版本");
+
+    fireEvent.click(screen.getByTestId("shadow-select-dec-2"));
+    const emptyNode = await screen.findByTestId("shadow-comparison-empty");
+    expect(emptyNode).toHaveAttribute("data-reason", "no_decision_recorded");
+    expect(emptyNode.textContent).toContain("此事件尚未記錄裁示");
+
+    for (const call of fetchMock.mock.calls) {
+      expect(String(call[0])).toContain("/bff/agora/trading-room/decision-events/");
+      expect(String(call[0])).not.toContain("/bff/management");
     }
   });
 });

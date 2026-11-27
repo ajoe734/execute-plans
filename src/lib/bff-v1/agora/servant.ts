@@ -12,8 +12,10 @@
 // agora_user_id are always derived server-side from the authenticated subject.
 
 import type { AgoraCapability, AgoraServantPolicy } from "./identity";
-import { bffFetch } from "../client";
-import { BffError, makeBffError } from "../errors";
+import { bffFetch, detectBaseUrl, detectMode } from "../client";
+import { BffError, makeBffError, normalizeBffErrorEnvelope } from "../errors";
+import { buildHeaders } from "../headers";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 
 export type ServantStatus = "active" | "suspended" | "paper_only" | "shadow_only" | "retired";
 export type ServantSessionType = "interactive" | "trainer" | "research_task";
@@ -395,4 +397,197 @@ export async function terminateServantSession(sessionId: string): Promise<Servan
       body: {},
     }),
   );
+}
+
+export interface ServantSessionStreamEvent {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
+}
+
+export interface ServantSessionStreamMessage {
+  message_id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string | null;
+  status: "accepted" | "completed" | "degraded";
+  created_at?: string | null;
+  turn_id?: string | null;
+  reply_to?: string | null;
+  attachment_refs?: string[];
+  error?: Record<string, unknown> | null;
+}
+
+export interface ServantSessionRunningTurn {
+  turn_id: string;
+  message_id?: string | null;
+  status: string;
+}
+
+export interface ServantSessionStreamSnapshot {
+  session_id: string;
+  events: ServantSessionStreamEvent[];
+  messages: ServantSessionStreamMessage[];
+  runningTurns: ServantSessionRunningTurn[];
+  sessionStatus: string | null;
+}
+
+export function parseServantSessionSse(
+  sessionId: string,
+  rawPayload: unknown,
+): ServantSessionStreamSnapshot {
+  const events: ServantSessionStreamEvent[] = [];
+
+  if (typeof rawPayload === "string") {
+    const blocks = rawPayload.split(/\r?\n\r?\n/);
+    for (const block of blocks) {
+      const trimmed = block.trim();
+      if (!trimmed) continue;
+      let id = "";
+      let type = "message";
+      const dataLines: string[] = [];
+      for (const line of trimmed.split(/\r?\n/)) {
+        if (line.startsWith("id:")) {
+          id = line.slice(3).trim();
+        } else if (line.startsWith("event:")) {
+          type = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trim());
+        }
+      }
+      if (!id && dataLines.length === 0) continue;
+      let parsedData: Record<string, unknown> = {};
+      const joined = dataLines.join("\n");
+      if (joined) {
+        try {
+          parsedData = asRecord(JSON.parse(joined));
+        } catch {
+          parsedData = { raw: joined };
+        }
+      }
+      events.push({ id: id || `${sessionId}:${events.length}`, type, data: parsedData });
+    }
+  } else if (Array.isArray(rawPayload)) {
+    for (const item of rawPayload) {
+      const rec = asRecord(item);
+      if (typeof rec.type === "string") {
+        events.push({
+          id: String(rec.id ?? `${sessionId}:${events.length}`),
+          type: rec.type,
+          data: asRecord(rec.data),
+        });
+      }
+    }
+  } else if (rawPayload && typeof rawPayload === "object") {
+    const rec = asRecord(rawPayload);
+    const list = Array.isArray(rec.events)
+      ? rec.events
+      : Array.isArray(rec.data)
+        ? rec.data
+        : [];
+    for (const item of list) {
+      const ev = asRecord(item);
+      if (typeof ev.type === "string") {
+        events.push({
+          id: String(ev.id ?? `${sessionId}:${events.length}`),
+          type: ev.type,
+          data: asRecord(ev.data),
+        });
+      }
+    }
+  }
+
+  const messages: ServantSessionStreamMessage[] = [];
+  const runningTurns: ServantSessionRunningTurn[] = [];
+  let sessionStatus: string | null = null;
+
+  for (const ev of events) {
+    const d = ev.data;
+    if (ev.type === "servant.session.created") {
+      sessionStatus = "active";
+    } else if (ev.type === "servant.session.snapshot") {
+      sessionStatus = typeof d.status === "string" ? d.status : sessionStatus;
+    } else if (ev.type === "servant.session.terminated") {
+      sessionStatus = typeof d.status === "string" ? d.status : "canceled";
+    } else if (ev.type === "servant.message.accepted") {
+      messages.push({
+        message_id: String(d.message_id ?? ev.id),
+        session_id: String(d.session_id ?? sessionId),
+        role: d.role === "assistant" ? "assistant" : "user",
+        content: typeof d.content === "string" ? d.content : null,
+        status: "accepted",
+        created_at: typeof d.created_at === "string" ? d.created_at : null,
+        attachment_refs: Array.isArray(d.attachment_refs)
+          ? (d.attachment_refs.filter((r): r is string => typeof r === "string"))
+          : [],
+      });
+    } else if (ev.type === "servant.message.completed" || ev.type === "servant.message.degraded") {
+      const degraded = ev.type === "servant.message.degraded" || d.provider_status === "degraded";
+      messages.push({
+        message_id: String(d.message_id ?? ev.id),
+        session_id: String(d.session_id ?? sessionId),
+        role: "assistant",
+        content: typeof d.answer === "string" ? d.answer : null,
+        status: degraded ? "degraded" : "completed",
+        created_at: typeof d.created_at === "string" ? d.created_at : null,
+        turn_id: typeof d.turn_id === "string" ? d.turn_id : null,
+        reply_to: typeof d.reply_to === "string" ? d.reply_to : null,
+        error: d.error && typeof d.error === "object" && !Array.isArray(d.error)
+          ? (d.error as Record<string, unknown>)
+          : null,
+      });
+    } else if (ev.type === "servant.message.queued") {
+      const turnId = typeof d.turn_id === "string" && d.turn_id ? d.turn_id : ev.id;
+      runningTurns.push({
+        turn_id: turnId,
+        message_id: typeof d.message_id === "string" ? d.message_id : null,
+        status: typeof d.status === "string" ? d.status : "queued",
+      });
+    }
+  }
+
+  return {
+    session_id: sessionId,
+    events,
+    messages,
+    runningTurns,
+    sessionStatus,
+  };
+}
+
+/** GET /bff/agora/servant/sessions/{session_id}/stream — replays durable session messages and running turns. */
+export async function getServantSessionStream(
+  sessionId: string,
+): Promise<ServantSessionStreamSnapshot> {
+  const path = `/bff/agora/servant/sessions/${encodeURIComponent(sessionId)}/stream`;
+  if (detectMode() === "mock") {
+    const raw = await bffFetch<unknown>({ method: "GET", path });
+    return parseServantSessionSse(sessionId, raw);
+  }
+  const headers = buildHeaders({ method: "GET" });
+  const url = `${detectBaseUrl()}${path}`;
+  const res = await bffSessionFetch(url, {
+    method: "GET",
+    headers,
+    credentials: "include",
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let parsed: unknown;
+    try {
+      parsed = text ? JSON.parse(text) : undefined;
+    } catch {
+      parsed = undefined;
+    }
+    const envelope = normalizeBffErrorEnvelope(parsed, res.status, headers["X-Correlation-Id"]);
+    if (envelope) {
+      throw new BffError(res.status, envelope);
+    }
+    throw makeBffError({
+      code: "UNKNOWN_ERROR",
+      message: `HTTP ${res.status}`,
+      correlationId: headers["X-Request-Id"],
+    });
+  }
+  return parseServantSessionSse(sessionId, text);
 }
