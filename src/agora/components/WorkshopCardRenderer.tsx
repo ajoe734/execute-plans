@@ -736,7 +736,7 @@ function CardBody({
 }) {
   const payload = asRecord(card.payload);
 
-  switch (card.card_type) {
+  switch (card.card_type as string) {
     case "user_strategy_description":
       return <UserStrategyDescription payload={payload} />;
     case "strategy_reconstruction":

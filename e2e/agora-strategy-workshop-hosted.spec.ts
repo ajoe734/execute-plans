@@ -238,11 +238,13 @@ test.describe("AG-DYNUI-LIVE-WORKSHOP-FE-013 hosted Strategy Workshop tab", () =
         await expect(page.getByTestId("completeness-rail")).toBeVisible();
       }
       await expect(page.getByTestId("context-bar")).toBeVisible();
+      await expect(page.getByTestId("servant-default-composer-badge")).toBeVisible();
+      await expect(page.getByTestId("persona-consult-addon-toggle")).toBeVisible();
       await expect(page.getByTestId("mode-selector")).toBeVisible();
       await expect(page.getByTestId("participant-picker")).toBeVisible();
       await expect(page.getByTestId("eligibility-explanation")).toBeVisible();
       await expect(page.getByTestId("eligibility-explanation")).toContainText(
-        /eligible|eligibility|opinion authority|unavailable/i,
+        /eligible|eligibility|opinion authority|unavailable|私人助理|可諮詢/i,
       );
       if (viewport.name === "mobile") {
         await page.getByRole("button", { name: "Next question & readiness" }).click();

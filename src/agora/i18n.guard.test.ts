@@ -24,9 +24,9 @@ const tradingRoomAndPerformanceSources = {
       "./pages/trading-room/**/*.tsx",
       "./trading-room/**/*.tsx",
       "./pages/strategy-performance/**/*.tsx",
+      "./pages/strategy-workshop/**/*.tsx",
       "./widgets/**/*.tsx",
-      "./components/TradeDecisionCard.tsx",
-      "./components/CandidateReviewDrawer.tsx",
+      "./components/*.tsx",
       "!./**/*.test.tsx",
     ],
     { eager: true, import: "default", query: "?raw" },
@@ -48,7 +48,7 @@ function hasTranslation(catalog: unknown, key: string): boolean {
 
 export function staticAgoraKeys(source: string): string[] {
   const keys = new Set<string>();
-  for (const match of source.matchAll(/\bt\(\s*["'](agora\.[A-Za-z0-9_.]+)["']/g)) {
+  for (const match of source.matchAll(/\b(?:t|workshopCopy)\(\s*["'](agora\.[A-Za-z0-9_.]+)["']/g)) {
     keys.add(match[1]);
   }
   return [...keys];
@@ -186,6 +186,7 @@ describe("Agora locale policy", () => {
       "agora.tradingRoom.candidateContext",
       "agora.performance.ruleVsHuman",
       "agora.performance.shadow",
+      "agora.workshop",
     ]) {
       expect(collectLeafKeyPaths(resolveLeaf(zh, path), path)).toEqual(
         collectLeafKeyPaths(resolveLeaf(en, path), path),

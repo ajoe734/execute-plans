@@ -15,6 +15,7 @@ import type {
   WorkshopCard as GeneratedWorkshopCard,
   StrategyReadinessAssessment as GeneratedWorkshopReadinessAssessment,
   WorkshopStreamEvent as GeneratedWorkshopStreamEvent,
+  WorkshopVersionResource,
   WorkshopVersionListEnvelope,
   WorkshopVersionCreateEnvelope,
   WorkshopVersionSelectEnvelope,
@@ -29,6 +30,7 @@ import type {
 
 // Re-export generated v1.13 request/envelope DTO types
 export type {
+  WorkshopVersionResource,
   WorkshopVersionListEnvelope,
   WorkshopVersionCreateEnvelope,
   WorkshopVersionSelectEnvelope,
@@ -169,60 +171,72 @@ export type WorkshopV10BlockState =
   | "conflict";
 
 export interface WorkshopBlockCitation {
-  ref_type: string;
-  ref_id: string;
+  ref_type?: string;
+  ref_id?: string;
   message_number?: number;
   sequence_no?: number;
+  turn_index?: number;
+  turn_id?: string;
+  quote?: string;
+  excerpt?: string;
   decision_id?: string | null;
   option_id?: string | null;
   summary?: string;
 }
 
 export interface WorkshopStrategyBlock {
-  order: number;
+  order?: number;
   block_id: string;
-  block_key: string;
+  block_key?: string;
   block_name?: string;
-  v10_block_id: WorkshopV10BlockId;
-  strategy_map_key: string;
-  mapped_dimension: string;
-  name: string;
-  title: string;
-  label_en: string;
+  v10_block_id?: WorkshopV10BlockId;
+  strategy_map_key?: string;
+  mapped_dimension?: string;
+  name?: string;
+  title?: string;
+  title_zh?: string;
+  label_en?: string;
   state: WorkshopV10BlockState;
-  state_label_zh: "已確認" | "助理推定" | "尚缺" | "薄弱" | "衝突";
-  note: string;
-  summary: string;
+  state_label_zh?: "已確認" | "助理推定" | "尚缺" | "薄弱" | "衝突";
+  note?: string | null;
+  summary?: string | null;
   missing_definitions?: string[];
-  source_citations: WorkshopBlockCitation[];
+  source_citations?: WorkshopBlockCitation[];
   citations?: WorkshopBlockCitation[];
 }
 
 export interface WorkshopDecisionOption {
   option_id: string;
-  id: string;
+  id?: string;
   label: string;
-  text: string;
+  text?: string;
+  summary?: string | null;
   description?: string | null;
-  is_default: boolean;
+  patch_value?: string | null;
+  is_default?: boolean;
 }
 
 export interface WorkshopServantDefault {
   option_id: string;
   label: string;
-  summary: string;
+  summary?: string;
   provisional_assumption?: string;
 }
 
 export interface WorkshopNextDecision {
-  decision_id: string;
-  question_id: string;
-  question: string;
-  text: string;
-  why_now: string;
+  decision_id?: string;
+  question_id?: string;
+  block_id?: string;
+  question?: string;
+  prompt?: string;
+  text?: string;
+  why_now?: string;
+  why_high_value?: string;
   why_it_matters?: string;
-  resolves: string[];
-  target_blocks: string[];
+  rationale?: string | null;
+  resolves?: string[];
+  target_blocks?: string[];
+  impacted_blocks?: string[];
   options: WorkshopDecisionOption[];
   answer_options?: string[];
   default_option_id?: string | null;

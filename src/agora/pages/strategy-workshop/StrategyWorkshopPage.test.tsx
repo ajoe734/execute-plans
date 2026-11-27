@@ -42,6 +42,32 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
     event_id: "evt-message-001",
     sequence_no: 2,
   }),
+  postWorkshopDecision: vi.fn().mockResolvedValue({
+    event_id: "evt-decision-001",
+    sequence_no: 3,
+    decision: {
+      question_id: "q-1",
+      selected_option_id: "opt-1",
+      selected_option_label: "近 60 個交易日",
+      used_servant_default: false,
+      answer_text: "近 60 個交易日",
+    },
+  }),
+  createWorkshopVersion: vi.fn().mockResolvedValue({
+    version: {
+      workshop_version_id: "wsv-new",
+      workshop_id: "ws-abc",
+      strategy_id: "strat-1",
+      strategy_spec_registry_id: "reg-2",
+      parent_workshop_version_id: null,
+      source_event_id: null,
+      sequence_no: 2,
+      document_sha256: "sha-2",
+      created_by: "operator-001",
+      created_at: "2026-11-27T00:00:00Z",
+    },
+  }),
+  selectWorkshopVersion: vi.fn().mockResolvedValue({}),
   reconstructWorkshopStrategy: vi.fn().mockResolvedValue({
     data: { reconstruction_id: "reconstruction-default-001" },
     meta: {},
@@ -585,7 +611,7 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId={LIVE_COMPLETENESS_SNAPSHOT.workshop_id} />);
 
-    expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("Complete");
+    expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("完整");
     expect(screen.getByTestId("completeness-overall-grade")).toBeVisible();
     expect(screen.getByText("100%")).toBeDefined();
     expect(screen.queryByText("NaN%")).toBeNull();
@@ -2476,4 +2502,235 @@ describe("StrategyWorkshopPage", () => {
       expect(screen.getByTestId("workshop-convened-meetings-empty")).toBeInTheDocument();
     },
   );
+
+  it("creates a workshop from a multi-line zh-TW strategy description with derived title and triggers initial reconstruction", async () => {
+    const longDescription =
+      "我想針對台股上市半導體前 30 大標的，觀察法說會前 10 個交易日關鍵勝率分點的連續買超累積訊號。\n進場後預計持有至法說會後 T+1，若跌破 10 日均線則停損出場。";
+    const createdWorkshop: StrategyWorkshop = {
+      ...MOCK_WORKSHOP,
+      workshop_id: "ws-v10-created",
+      subject: {
+        kind: "free_form",
+        ref: "ws-v10-created",
+        title: "我想針對台股上市半導體前 30 大標的，觀察法說會前 10 個交易日關鍵…",
+      },
+    };
+    vi.mocked(workshopsModule.createWorkshop).mockResolvedValue(createdWorkshop);
+    vi.mocked(workshopsModule.listWorkshops)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([createdWorkshop]);
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(createdWorkshop);
+
+    render(<StrategyWorkshopPage />);
+
+    await screen.findByTestId("create-workshop-btn");
+    fireEvent.click(screen.getByTestId("create-workshop-btn"));
+
+    expect(
+      screen.getByText("請把您的完整策略想法直接貼進來，或從研究焦點開始與助理討論"),
+    ).toBeInTheDocument();
+
+    const descInput = screen.getByTestId("create-workshop-description-input");
+    fireEvent.change(descInput, { target: { value: longDescription } });
+
+    expect(screen.getByTestId("create-workshop-derived-title")).toHaveTextContent(
+      "自動衍生策略名稱：我想針對台股上市半導體前 30 大標的，觀察法說會前 10 個交易日關鍵…",
+    );
+
+    fireEvent.click(screen.getByTestId("create-workshop-submit"));
+
+    await waitFor(() => {
+      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith({
+        initial_message: longDescription,
+        title: "我想針對台股上市半導體前 30 大標的，觀察法說會前 10 個交易日關鍵…",
+      });
+    });
+
+    await waitFor(() => {
+      expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-v10-created");
+    });
+  });
+
+  it("allows the trader to send to their own servant with no eligible personas and when the optional Persona add-on is toggled off", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(interaction.participants).mockResolvedValue({
+      data: { included: [], excluded: [] },
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    fireEvent.change(input, { target: { value: "補充停損規則：跌破季線立即出場" } });
+
+    const submit = screen.getByTestId("servant-composer-submit");
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(workshopsModule.postWorkshopMessage).toHaveBeenCalledWith(
+        "ws-abc",
+        { content: "補充停損規則：跌破季線立即出場" },
+        { ifMatch: 'W/"workshop:ws-abc:v7"' },
+      );
+      expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc");
+    });
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
+  });
+
+  it("submits clickable high-value decision options through postWorkshopDecision and refreshes reconstruction", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue({
+      snapshot_id: "snap-1",
+      workshop_id: "ws-abc",
+      strategy_version_id: "v1",
+      is_branch_strategy: true,
+      state_map_json: {},
+      blocking_items_json: [],
+      twelve_blocks: [
+        { block_id: "market_scope", title_zh: "研究對象與市場範圍", state: "confirmed", note: "台股上市半導體" },
+      ],
+      next_decision: {
+        question_id: "q-branch-window",
+        question: "請選擇勝率分點的回溯評估天數",
+        why_high_value: "影響分點評分穩定度",
+        options: [
+          { option_id: "opt-60d", label: "60 個交易日", summary: "反應季度動能" },
+        ],
+      },
+      created_at: "2026-11-27T00:00:00Z",
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const optionBtn = await screen.findByTestId("rail-decision-option-opt-60d");
+    fireEvent.click(optionBtn);
+
+    await waitFor(() => {
+      expect(workshopsModule.postWorkshopDecision).toHaveBeenCalledWith(
+        "ws-abc",
+        {
+          question_id: "q-branch-window",
+          selected_option_id: "opt-60d",
+        },
+        expect.objectContaining({
+          ifMatch: 'W/"workshop:ws-abc:v7"',
+        }),
+      );
+      expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc");
+    });
+  });
+
+  it("shows zh-TW empty state for no_trader_meetings instead of a read failure", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+
+    setMockResolver((method, path) => {
+      if (method === "GET" && path === "/bff/agora/committee/meetings") {
+        return () => ({
+          kind: "json",
+          status: 200,
+          body: {
+            status: "unavailable",
+            reason: "no_trader_meetings",
+            owner: "consultation",
+            data: [],
+            fallback_used: false,
+          },
+        });
+      }
+      return undefined;
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const emptyEl = await screen.findByTestId("workshop-convened-meetings-empty");
+    expect(emptyEl).toHaveTextContent("目前尚無審議會議紀錄");
+    expect(screen.queryByTestId("workshop-meetings-unavailable")).toBeNull();
+  });
+
+  it("wires version selection and VersionCompareCard and prevents Version Patch from submitting an empty patch", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopVersions).mockResolvedValue({
+      data: {
+        versions: [
+          {
+            version: {
+              workshop_version_id: "wsv-1",
+              workshop_id: "ws-abc",
+              strategy_id: "strat-1",
+              strategy_spec_registry_id: "reg-1",
+              parent_workshop_version_id: null,
+              source_event_id: null,
+              sequence_no: 1,
+              document_sha256: "sha-1",
+              created_by: "operator-001",
+              created_at: "2026-11-27T00:00:00Z",
+            },
+            strategy_spec: {
+              entry: {
+                registry_id: "reg-1",
+                strategy_id: "strat-1",
+                version: "1",
+                metadata: { strategy_spec: { stop_loss: "10d_ma" } },
+              },
+            },
+          },
+          {
+            version: {
+              workshop_version_id: "wsv-2",
+              workshop_id: "ws-abc",
+              strategy_id: "strat-1",
+              strategy_spec_registry_id: "reg-2",
+              parent_workshop_version_id: "wsv-1",
+              source_event_id: null,
+              sequence_no: 2,
+              document_sha256: "sha-2",
+              created_by: "operator-001",
+              created_at: "2026-11-27T01:00:00Z",
+            },
+            strategy_spec: {
+              entry: {
+                registry_id: "reg-2",
+                strategy_id: "strat-1",
+                version: "2",
+                metadata: { strategy_spec: { stop_loss: "20d_ma" } },
+              },
+            },
+          },
+        ],
+        selected_version_id: "wsv-1",
+        active_strategy_spec_registry_id: "reg-1",
+      },
+      meta: {},
+    } as never);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    expect(await screen.findByTestId("workshop-versions-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("workshop-version-compare-section")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("select-version-btn-wsv-2"));
+    await waitFor(() => {
+      expect(workshopsModule.selectWorkshopVersion).toHaveBeenCalledWith("ws-abc", 2);
+    });
+
+    // Clicking + Version Patch with empty composer input never calls createWorkshopVersion
+    fireEvent.click(screen.getByTestId("cmd-version-btn"));
+    expect(workshopsModule.createWorkshopVersion).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
+      "版本修補內容不可為空",
+    );
+
+    // Entering patch description submits a non-empty patch array
+    fireEvent.change(screen.getByTestId("servant-composer-input"), {
+      target: { value: "調整停損至 20 日均線" },
+    });
+    fireEvent.click(screen.getByTestId("cmd-version-btn"));
+    await waitFor(() => {
+      expect(workshopsModule.createWorkshopVersion).toHaveBeenCalledWith("ws-abc", {
+        summary: "調整停損至 20 日均線",
+        reason: "調整停損至 20 日均線",
+        patch: [{ op: "replace", path: "/notes", value: "調整停損至 20 日均線" }],
+      });
+    });
+  });
 });

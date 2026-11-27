@@ -355,7 +355,7 @@ describe("postWorkshopDecision", () => {
 describe("createWorkshopVersion", () => {
   it("never submits an empty patch array", async () => {
     await expect(
-      createWorkshopVersion("ws-001", { summary: "Empty patch", patch: [] }),
+      createWorkshopVersion("ws-001", { reason: "Empty patch", patch: [] }),
     ).rejects.toThrow("Version patch requires at least one non-empty patch operation.");
     expect(bffFetch).not.toHaveBeenCalled();
   });

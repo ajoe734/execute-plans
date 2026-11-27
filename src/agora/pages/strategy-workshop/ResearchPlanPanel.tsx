@@ -82,10 +82,10 @@ export function ResearchPlanPanel({ workshopId, strategySpec }: ResearchPlanPane
     entry.snapshot.allowedActions.some((name) => name.replace(/^can(?=[A-Z_-])[_-]?/, "").toLowerCase() === action);
 
   return (
-    <section className="space-y-2 border-t border-slate-100 pt-2" data-testid="research-plan-panel">
+    <section className="space-y-2 border-t border-border/70 pt-2" data-testid="research-plan-panel">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Research Plans</span>
-        <span className="text-[10px] text-slate-400">Research only · never live or canary</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Research Plans</span>
+        <span className="text-[10px] text-muted-foreground">Research only · never live or canary</span>
         <Button
           variant="outline"
           size="sm"
@@ -104,18 +104,18 @@ export function ResearchPlanPanel({ workshopId, strategySpec }: ResearchPlanPane
           + Research Plan
         </Button>
       </div>
-      {createReason ? <p className="text-[11px] text-slate-500" data-testid="research-plan-disabled-reason">{createReason}</p> : null}
-      {error ? <p className="text-xs text-red-600" role="alert" data-testid="research-plan-error">{error}</p> : null}
+      {createReason ? <p className="text-[11px] text-muted-foreground" data-testid="research-plan-disabled-reason">{createReason}</p> : null}
+      {error ? <p className="text-xs text-rose-400" role="alert" data-testid="research-plan-error">{error}</p> : null}
       {entries.map((entry) => {
         const { plan, etag } = entry.snapshot;
         const guard = (action: string) => busy || !!writeReason || !etag || !can(entry, action);
         const opts = { ifMatch: etag ?? undefined };
         return (
-          <div key={plan.plan_id} className="rounded border border-slate-200 p-2 space-y-2" data-testid={`research-plan-${plan.plan_id}`}>
+          <div key={plan.plan_id} className="rounded border border-border bg-card/60 p-2 space-y-2" data-testid={`research-plan-${plan.plan_id}`}>
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-mono text-[11px] text-slate-400">{plan.plan_id}</span>
-              <span className="font-semibold" data-testid="research-plan-status">{plan.status}</span>
-              <span className="text-slate-500">{(plan.stages ?? []).map((s) => s.stage_type).join(" → ")}</span>
+              <span className="font-mono text-[11px] text-muted-foreground">{plan.plan_id}</span>
+              <span className="font-semibold text-foreground" data-testid="research-plan-status">{plan.status}</span>
+              <span className="text-muted-foreground">{(plan.stages ?? []).map((s) => s.stage_type).join(" → ")}</span>
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" className="h-6 text-xs" type="button" data-testid="research-plan-approve"

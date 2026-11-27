@@ -3407,7 +3407,7 @@ export default {
         contradictions: "矛盾", proposed_next_actions: "建議後續動作", overall_grade: "整體等級",
         research_ready: "研究就緒", change: "變更", dimension_updates: "維度更新", blockers: "阻擋項目",
         readiness_gates: "就緒閘門", category: "類別", severity: "嚴重度", can_defer: "可延後",
-        missing_definition: "缺少的定義", why_it_matters: "重要原因", blocked_capabilities: "受阻能力",
+        why_it_matters: "重要原因", blocked_capabilities: "受阻能力",
         temporary_assumption: "暫時假設", answer_options: "回答選項", deferral_consequence: "延後影響",
         question: "問題", score: "分數", freeform: "自由填寫", defer: "延後", why_now: "為何現在",
         score_components: "分數組成", defer_consequence: "延後影響", plan: "計畫", stage: "階段",
