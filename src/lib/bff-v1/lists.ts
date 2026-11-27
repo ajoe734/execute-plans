@@ -33,7 +33,7 @@ import {
 } from "./domainReads";
 import { normalizeEvolutionProgram } from "./evolution";
 import { normalizeJobFields } from "./operations";
-import { normalizeResearchTask } from "./research";
+import { normalizeResearchDemandsSurface, normalizeResearchTask } from "./research";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -445,6 +445,8 @@ export const LIST_CLASS_BY_KEY = {
 
 export interface ResearchListOptions {
   includeNonReal?: boolean;
+  view?: "research" | "collector_checks";
+  pageToken?: string;
 }
 
 export async function listResearchTasksEnvelope(
@@ -453,14 +455,21 @@ export async function listResearchTasksEnvelope(
   const data = await bffFetch<unknown>({
     method: "GET",
     path: paths.researchTasks(),
-    query: { include_non_real: options?.includeNonReal ? "true" : "false" },
+    query: {
+      include_non_real: options?.includeNonReal ? "true" : "false",
+      view: options?.view,
+      page_token: options?.pageToken,
+    },
   });
   const env = normalizeLiveListResponse<unknown>(data, "entityRegistry");
   const all = env.items
     .map((item) => normalizeResearchTask(item))
     .filter((item): item is ResearchTask => Boolean(item));
   const items = options?.includeNonReal ? all : all.filter((row) => row.is_non_real !== true);
-  return { ...env, items, pageSize: items.length } as ListEnvelope<ResearchTask>;
+  // The envelope normaliser keeps only `meta`; carry the demand surface in it for the page.
+  const demands = options?.view === "collector_checks" ? null : normalizeResearchDemandsSurface(data);
+  const meta = demands ? { ...(asRecord(env.meta) ?? {}), research_demands_read: demands } : env.meta;
+  return { ...env, items, meta };
 }
 
 

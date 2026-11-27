@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { ResearchExperiment, Skill } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import { normalizeResearchTask } from "@/lib/bff-v1/research";
 import { ResearchDetail } from "./ResearchDetail";
 import { SkillSandboxStudio } from "./studios/SkillSandboxStudio";
 
 const mocks = vi.hoisted(() => ({
   researchGet: vi.fn(),
+  artifactGet: vi.fn(),
   auditList: vi.fn(),
   personaFleetGet: vi.fn(),
   runActionSafe: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
     bffV1: {
       ...actual.bffV1,
       research: { ...actual.bffV1.research, get: mocks.researchGet },
+      artifacts: { ...actual.bffV1.artifacts, get: mocks.artifactGet },
       audit: { ...actual.bffV1.audit, list: mocks.auditList },
       skills: { ...actual.bffV1.skills, list: mocks.skillsList },
       jobs: { ...actual.bffV1.jobs, cancel: mocks.jobsCancel },
@@ -109,6 +112,7 @@ function fleetRow(): ManagementPersonaFleetRow {
 describe("ResearchDetail", () => {
   beforeEach(() => {
     mocks.researchGet.mockReset();
+    mocks.artifactGet.mockReset().mockResolvedValue(undefined);
     mocks.auditList.mockReset();
     mocks.personaFleetGet.mockReset();
     mocks.runActionSafe.mockReset();
@@ -122,7 +126,9 @@ describe("ResearchDetail", () => {
     renderDetail();
 
     await waitFor(() => expect(screen.getByText("Management research context")).toBeInTheDocument());
-    expect(screen.getByText("TW-Index-Arbitrage")).toBeInTheDocument();
+    // The section heading renders from research.get; the Persona row comes from the
+    // separate personaFleet.get read, so wait for that row before the sync assertions.
+    expect(await screen.findByText("TW-Index-Arbitrage")).toBeInTheDocument();
     expect(screen.getByText("persona-20260528-5937dea1")).toBeInTheDocument();
     expect(screen.getByText("MGMT-QLIB-006")).toBeInTheDocument();
     expect(screen.getByText("qlib / vectorbt / statsmodels")).toBeInTheDocument();
@@ -283,6 +289,76 @@ describe("ResearchDetail", () => {
     expect(stubRunCard).toHaveTextContent("rrun-20261024-stub");
     expect(stubRunCard).toHaveTextContent("stub");
     expect(stubRunCard).toHaveTextContent("Stub / manual record — not a real execution (stub / stub)");
+  });
+
+  it("links saved run outputs and shows only recorded parameters", async () => {
+    mocks.artifactGet.mockImplementation(async (id: string) => id === "rart-saved" ? { id } : undefined);
+    mocks.researchGet.mockResolvedValue(normalizeResearchTask({
+      id: "research-with-output",
+      task_type: "rapid_eval",
+      name: "rapid eval",
+      runs: [{
+        run_id: "run-with-output",
+        status: "completed",
+        parameters: { symbol: "2330", folds: 3 },
+        artifact_refs: [{ artifact_id: "rart-saved" }, { artifact_id: "rart-missing" }, { uri: "file:///var/private/other" }],
+      }],
+    }));
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+    renderDetail();
+    const link = await screen.findByRole("link", { name: "View output 1" });
+    expect(link).toHaveAttribute("href", "/management/artifacts/rart-saved");
+    expect(mocks.artifactGet).toHaveBeenCalledWith("rart-missing");
+    expect(screen.getByText("Some result files could not be opened.")).toBeInTheDocument();
+    expect(screen.queryByText("No result files are available to open.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View output 2" })).not.toBeInTheDocument();
+    expect(screen.getByText("Recorded run parameters")).toBeInTheDocument();
+    expect(screen.queryByText("2018-2025")).not.toBeInTheDocument();
+  });
+
+  it("shows recorded candidate evaluation values and omits the generated lineage link", async () => {
+    mocks.researchGet.mockResolvedValue(normalizeResearchTask({
+      id: "legacy-evaluation",
+      name: "rapid eval",
+      task_type: "rapid_eval",
+      runs: [{
+        run_id: "candidate-run",
+        status: "completed",
+        artifact_refs: ["artifact-sic-example"],
+        metadata: {
+          candidate_id: "sic-example",
+          policy_learning_handoff: true,
+          evaluation_summary: { action_match_rate: 0.509567713104, return_gap: 0, kl_divergence: 1.978105521242 },
+        },
+      }],
+    }));
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+    renderDetail();
+    expect(await screen.findByText("50.96%")).toBeInTheDocument();
+    expect(screen.getByText("0", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("1.9781")).toBeInTheDocument();
+    expect(screen.getByText("No result files are available to open.")).toBeInTheDocument();
+    expect(mocks.artifactGet).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link", { name: /view output/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a weekly collector change in the same detail route as a read-only check", async () => {
+    mocks.researchGet.mockResolvedValue(normalizeResearchTask({
+      id: "collector-weekly",
+      task_type: "collector_query_plan",
+      title: "Collector query proposal 2026-W47",
+      status: "proposed",
+      query_plan: { week: "2026-W47", changes: { "collector-paper-arxiv": { before: ["momentum"], after: ["momentum", "value"] } } },
+    }));
+    renderDetail();
+    expect(await screen.findByText("Keyword changes suggested")).toBeInTheDocument();
+    expect(screen.getByText("arXiv papers")).toBeInTheDocument();
+    expect(screen.getByText("momentum, value")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /promote/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Research results")).not.toBeInTheDocument();
+    expect(mocks.personaFleetGet).not.toHaveBeenCalled();
   });
 
   it("shows the existing not-found state when GET /bff/research-tasks/{task_id} returns 404", async () => {

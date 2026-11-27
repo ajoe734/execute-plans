@@ -3,6 +3,7 @@ import {
   adaptKnowledge,
   adaptLineageEdge,
   adaptLineageNode,
+  highlightLineageNodesForRoot,
   managementConsoleReads,
   toKnowledgeKind,
   toKnowledgeRisk,
@@ -396,5 +397,87 @@ describe("managementConsoleReads — registry lineage graph truth (FE-LINEAGE-RE
     expect(unavailableGraph.edges).toEqual([]);
     expect(unavailableGraph.has_more).toBe(false);
     expect(unavailableGraph.meta.status).toBe("unavailable");
+  });
+
+  it("preserves display_name, name_missing, strategy_id, and version from REGISTRY-LINEAGE-NODE-NAMES-20261125 and highlights the rooted strategy or artifact", () => {
+    const LIVE_TOKEN = "a81b4fd15944698341aa";
+    const LIVE_PERSONA_ID = "persona-ee7112a829d38b9135ac";
+    const LIVE_STRATEGY_ID = `strategy-persona-${LIVE_TOKEN}`;
+    const LIVE_ARTIFACT_ID = `artifact-persona-pool-${LIVE_TOKEN}-v2`;
+    const LIVE_POOL_ID = `pool-persona-paper-${LIVE_TOKEN}`;
+    const LIVE_STRATEGY_TITLE = "衡岳｜0050 台股 Paper 學習 R2";
+
+    const namedPersona = adaptLineageNode({
+      id: LIVE_PERSONA_ID,
+      label: LIVE_PERSONA_ID,
+      type: "Persona",
+      display_name: "衡岳",
+      name_missing: false,
+    });
+    expect(namedPersona).toEqual({
+      id: LIVE_PERSONA_ID,
+      label: LIVE_PERSONA_ID,
+      type: "Persona",
+      state: undefined,
+      risk: undefined,
+      highlight: false,
+      display_name: "衡岳",
+      name_missing: false,
+    });
+
+    const namedSpec = adaptLineageNode({
+      id: `reg-strategy-spec-persona-${LIVE_TOKEN}`,
+      label: `reg-strategy-spec-persona-${LIVE_TOKEN}`,
+      type: "Strategy",
+      state: "approved",
+      strategy_id: LIVE_STRATEGY_ID,
+      version: "1.0.1",
+      display_name: LIVE_STRATEGY_TITLE,
+      name_missing: false,
+    });
+    const baselineSpec = adaptLineageNode({
+      id: `reg-strategy-spec-persona-baseline-${LIVE_TOKEN}`,
+      label: `reg-strategy-spec-persona-baseline-${LIVE_TOKEN}`,
+      type: "Strategy",
+      state: "draft",
+      strategy_id: LIVE_STRATEGY_ID,
+      version: "1.0.0",
+      display_name: LIVE_STRATEGY_TITLE,
+      name_missing: false,
+    });
+    const namedArtifact = adaptLineageNode({
+      id: LIVE_ARTIFACT_ID,
+      label: LIVE_ARTIFACT_ID,
+      type: "Artifact",
+      state: "approved",
+      strategy_id: LIVE_STRATEGY_ID,
+      version: "1.2.0",
+      display_name: LIVE_STRATEGY_TITLE,
+      name_missing: false,
+    });
+    const unnamedPool = adaptLineageNode({
+      id: LIVE_POOL_ID,
+      label: LIVE_POOL_ID,
+      type: "CapitalPool",
+      display_name: null,
+      name_missing: true,
+    });
+    expect(unnamedPool.display_name).toBeNull();
+    expect(unnamedPool.name_missing).toBe(true);
+
+    const highlightedForStrategy = highlightLineageNodesForRoot(
+      [baselineSpec, namedSpec, namedArtifact, namedPersona, unnamedPool],
+      LIVE_STRATEGY_ID,
+    );
+    expect(highlightedForStrategy.find((n) => n.id === namedSpec.id)?.highlight).toBe(true);
+    expect(highlightedForStrategy.find((n) => n.id === baselineSpec.id)?.highlight).toBe(false);
+    expect(highlightedForStrategy.find((n) => n.id === LIVE_ARTIFACT_ID)?.highlight).toBe(false);
+
+    const highlightedForArtifact = highlightLineageNodesForRoot(
+      [baselineSpec, namedSpec, namedArtifact, namedPersona, unnamedPool],
+      LIVE_ARTIFACT_ID,
+    );
+    expect(highlightedForArtifact.find((n) => n.id === LIVE_ARTIFACT_ID)?.highlight).toBe(true);
+    expect(highlightedForArtifact.find((n) => n.id === namedSpec.id)?.highlight).toBe(false);
   });
 });

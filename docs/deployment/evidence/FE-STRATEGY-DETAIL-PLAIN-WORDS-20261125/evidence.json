@@ -1,0 +1,166 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125",
+  "taskId": "FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125",
+  "title": "Strategy detail says in plain words what the strategy does and how it is doing",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "base": "dev",
+  "branch": "task/FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125",
+  "status": "ready_for_review",
+  "scope": "functional evidence only; hosted verification is done later by the operator acceptance task. No VM or SSH access was used and no operator key was read.",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好)"
+  },
+  "acceptance_coverage": {
+    "1_rules_summary_order_collapsed_baseline_and_plain_pool_sentences": {
+      "passed": true,
+      "details": [
+        "deduplicateStrategyRules in strategyRuleText.ts orders traded rules (pool_envelope, pool_member, trading) first and rollback_baseline rules last.",
+        "StrategyRulesList in StrategySpecTab.tsx renders rollback_baseline in a collapsed <details> line at the end of the list with a plain-language summary hint and full rule details inside.",
+        "formatPoolCombinationRule and formatPoolRiskLimits format clipped_weighted_sum_v1, max_net_strength, and gross_weight_limit as plain sentences in zh-TW and en-US with the raw code preserved in the title tooltip, and render any unknown code as secondary monospace text."
+      ]
+    },
+    "2_performance_block_cumulative_result_runtime_status_and_absent_fields_never_zero": {
+      "passed": true,
+      "details": [
+        "The overview performance block (data-testid='strategy-performance-block') renders four StatCards: Cumulative Paper PnL (with metricsAsOf hint or recorded metricsReason when missing), Drawdown (with recorded metricsReason when missing), Trades (totalTrades or recorded reason/No data when absent), and Runtime status (runtimeStatus with plain runtimeStatusReason sentence and raw reason code in tooltip, falling back to operationalStatus when runtimeStatus is absent).",
+        "PnL 30d, Sharpe, and Alpha rows/subtitles are removed from the overview.",
+        "When the new BFF fields (pnl, drawdown, totalTrades, runtimeStatus, metricsReason) are absent, all missing cards render No data / 無資料 and nothing is shown as zero."
+      ]
+    },
+    "3_strategy_state_block_translated_and_persona_pool_deployment": {
+      "passed": true,
+      "details": [
+        "The Strategy State card (data-testid='strategy-triple-state-card'), its three axes (Lifecycle / Review / Deployment), every lifecycle/review/deployment value, and invariant ok ('狀態一致' / 'State consistent') are translated in zh-TW and en-US via strategyLifecycleLabel, strategyReviewLabel, and strategyDeploymentLabel.",
+        "A strategy that runs through its persona pool (has capitalPoolId, pool_envelope/pool_member rules, or active bound persona runtime) renders '透過 Persona 策略池執行' / 'Runs through persona pool' instead of deployment 'none'."
+      ]
+    },
+    "4_action_buttons_plain_names_and_disabled_reasons": {
+      "passed": true,
+      "details": [
+        "Header and tab action buttons use localized plain names via actionLabel(tr.action, t) and t('strategyDetail.actions.inspect') without arrow text such as 'promote_paper → paper' or 'archive → archived'.",
+        "Disabled NonProductionActionButton controls provide plain-language reasons in zh-TW and en-US explaining why they are disabled on this read-only page, with a visible read-only hint in the action bar and no changes to action behaviour or permissions."
+      ]
+    },
+    "5_ids_secondary_once_three_live_strategies_screenshot_and_locale_parity": {
+      "passed": true,
+      "details": [
+        "Every object ID on StrategyDetail overview (strategy.id, personaId, capitalPoolId, and each rule registryId) is rendered as secondary text exactly once per object.",
+        "Focused tests in StrategyDetail.test.tsx and poolRules.ts exercise the recorded rules and runtime/metric shapes of the three live strategies: strategy-persona-a81b4fd15944698341aa, strategy-persona-06d4775a9b6a8f63b311, and strategy-persona-039ad01f8bcd2b4aa466.",
+        "At 1274x627, e2e/06-entity-registry.spec.ts captures a Chromium browser screenshot of the overview for strategy-persona-a81b4fd15944698341aa against the fixture BFF at docs/deployment/evidence/FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125/strategy-detail-overview-1274x627.png.",
+        "1:1 zh-TW and en-US locale parity is verified in enumLabels.test.ts and i18nParity.test.ts."
+      ]
+    }
+  },
+  "row_shapes_used": [
+    {
+      "id": "strategy-persona-a81b4fd15944698341aa",
+      "pnl": -9.988691250022384,
+      "drawdown": 9.988691250022385e-05,
+      "totalTrades": 2,
+      "metricsAsOf": "2026-11-23T23:34:52Z",
+      "metricsResolution": "fresh",
+      "runtimeStatus": "running",
+      "rules": [
+        "artifact-persona-paper-baseline-a81b4fd15944698341aa (rollback_baseline)",
+        "artifact-persona-paper-a81b4fd15944698341aa (pool_member)",
+        "artifact-persona-pool-a81b4fd15944698341aa-v2 (pool_envelope: clipped_weighted_sum_v1, max_net_strength=1, gross_weight_limit=1)"
+      ]
+    },
+    {
+      "id": "strategy-persona-06d4775a9b6a8f63b311",
+      "pnl": -186.89087499999732,
+      "drawdown": 0.0018689087499999732,
+      "totalTrades": 2,
+      "metricsAsOf": "2026-11-25T07:16:00Z",
+      "metricsResolution": "fresh",
+      "runtimeStatus": "paused_market_input",
+      "runtimeStatusReason": "market_input_stale",
+      "rules": [
+        "artifact-persona-paper-baseline-06d4775a9b6a8f63b311 (rollback_baseline)",
+        "artifact-persona-paper-06d4775a9b6a8f63b311 (pool_member)",
+        "artifact-persona-pool-06d4775a9b6a8f63b311-v2 (pool_envelope: clipped_weighted_sum_v1, max_net_strength=1, gross_weight_limit=1)"
+      ]
+    },
+    {
+      "id": "strategy-persona-039ad01f8bcd2b4aa466",
+      "pnl": null,
+      "drawdown": null,
+      "totalTrades": 0,
+      "metricsAsOf": null,
+      "metricsResolution": "missing",
+      "metricsReason": "no_fills",
+      "runtimeStatus": "running",
+      "rules": [
+        "artifact-persona-paper-baseline-039ad01f8bcd2b4aa466 (rollback_baseline)",
+        "artifact-persona-paper-039ad01f8bcd2b4aa466 (pool_member)",
+        "artifact-persona-pool-039ad01f8bcd2b4aa466-v2 (pool_envelope: clipped_weighted_sum_v1, max_net_strength=1, gross_weight_limit=1)"
+      ]
+    }
+  ],
+  "screenshots": {
+    "overview_1274x627": "docs/deployment/evidence/FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125/strategy-detail-overview-1274x627.png"
+  },
+  "changed_assertions": [
+    {
+      "file": "src/management/pages/StrategyDetail.test.tsx",
+      "what": "strategy-rule-combination and strategy-rule-risk-limits text assertions updated from raw 'clipped_weighted_sum_v1', 'max_net_strength=1', 'gross_weight_limit=1' to their zh-TW plain sentences with raw codes asserted on title tooltips, plus rule ordering and collapsed <details> assertions",
+      "why": "Acceptance 1 requires pool combination and risk limits to be sentences in zh-TW and en-US with the code as tooltip, traded rules listed first, and rollback_baseline last in a collapsed line."
+    },
+    {
+      "file": "src/management/components/detail/StrategySpecTab.poolRules.test.tsx",
+      "what": "pool_envelope test updated from asserting raw 'clipped_weighted_sum_v1' and 'gross_weight_limit=1' in textContent to asserting the localized sentences, code tooltips, unknown code secondary text, and collapsed rollback_baseline ordering last",
+      "why": "Acceptance 1 replaces raw pool combination and risk limit codes in visible text with plain sentences while keeping codes in title tooltips and showing unknown codes as secondary text."
+    },
+    {
+      "file": "src/management/pages/StrategyDetail.metrics.test.tsx",
+      "what": "StrategyDetail overview tests updated: removed assertions that 'alpha.momo.v1 · strat-paper-running-01', 'PnL 30d', and 'Sharpe' appear on overview; added assertions that those rows are absent, strategy ID appears once, and Trades (3) and Runtime (Running) cards render; updated null-metrics test card list from [Cumulative Paper PnL, PnL 30d, Sharpe, Drawdown] (7 'No data') to [Cumulative Paper PnL, Drawdown, Trades, Runtime] (6 'No data')",
+      "why": "Acceptance 2 removes 30-day PnL, Sharpe, and Alpha rows and adds Trades and Runtime status to the performance block; Acceptance 5 requires object IDs to appear once as secondary text."
+    },
+    {
+      "file": "e2e/06-entity-registry.spec.ts",
+      "what": "StrategyDetail timing/overview test updated from expecting 'clipped_weighted_sum_v1' in visible text of strategy-rule-combination to expecting the plain-language sentence, verifying absence of raw codes/arrows/English triple-state labels, and saving the 1274x627 overview screenshot",
+      "why": "Acceptance 1, 2, 3, 4, and 5 require plain sentences for pool rules, translated triple state, plain action names, and a 1274x627 browser screenshot of the overview in evidence."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "result": "pass"
+    },
+    {
+      "command": "./node_modules/.bin/eslint <14 modified files>",
+      "exit_code": 0,
+      "result": "0 errors"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/lib/__tests__/enumLabels.test.ts src/management/components/detail/StrategySpecTab.poolRules.test.tsx src/management/components/detail/strategyRuleText.test.ts src/management/pages/StrategyDetail.test.tsx src/management/pages/StrategyDetail.spec.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/StrategyDetail.discovery.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "result": "10 test files passed, 75 tests passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/__tests__/fullOperationAssembly.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/pages/ObjectListPage.test.tsx src/management/pages/RiskCenter.test.tsx",
+      "exit_code": 0,
+      "result": "4 test files passed, 70 tests passed"
+    },
+    {
+      "command": "./node_modules/.bin/playwright test e2e/06-entity-registry.spec.ts",
+      "exit_code": 0,
+      "result": "5 passed, 1 skipped (live BFF opt-in); 1274x627 overview screenshot captured"
+    }
+  ],
+  "runtime_budget": {
+    "persistent_product_writers": 0,
+    "recurring_jobs": 0,
+    "added_tables_files_caches": 0,
+    "new_network_requests": 0
+  },
+  "residual_findings": [
+    "e2e/management-product-journey.spec.ts:527-531 asserts the English literal 'Strategy state · lifecycle × review × deployment' and lowercase 'lifecycle', 'review', 'deployment' on StrategyDetail; that hosted acceptance spec is outside this task's artifact contract and should be updated to match the localized Strategy State block.",
+    "src/management/components/detail/StrategyTripleStateCard.tsx is no longer imported by StrategyDetail.tsx (outside this task's artifact contract)."
+  ]
+}

@@ -353,6 +353,69 @@ describe("VI-1 lists facade", () => {
     expect(deploymentsEnv.cursor).toEqual({});
   });
 
+  it("keeps the BFF runtime, metric-reason, list-scope and null win-rate fields through the real strategy, persona and artifact loaders (FE-REGISTRY-LISTS-CURRENT-FIRST-20261125)", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const noFills = {
+      id: "strategy-persona-039ad01f8bcd2b4aa466",
+      name: "澄川｜2330 台股 Paper 學習 R2",
+      state: "approved",
+      risk: "low",
+      pnl: null,
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+      totalTrades: 0,
+      metricsAsOf: null,
+      metricsResolution: "missing",
+      metricsReason: "no_fills",
+      runtimeStatus: "running",
+      runtimeStatusReason: null,
+      personaIds: ["persona-6507750312870d03a241"],
+      persona_display_names: { "persona-6507750312870d03a241": "澄川｜2330 台股 Paper 學習 R2" },
+    };
+    const live = { id: "persona-ee7112a829d38b9135ac", name: "衡岳｜2330 台股 Paper 學習 R2", state: "approved", risk: "low", archetype: "momentum", routedStrategies: 1, successRate: null, listScope: "current" };
+    const test = { id: "persona-clone-1", name: "Pantheon Dev Paper Baseline 3", state: "failed", risk: "low", archetype: "momentum", routedStrategies: 1, successRate: null, listScope: "test" };
+    const bundle = { id: "artifact-persona-paper-8088", name: "strategy-persona-8088", kind: "execution_bundle", version: "1.0.0", state: "approved", risk: "low", hash: "sha256:" + "a".repeat(64), owner: "pantheon-dev-paper-provisioner", updatedAt: "2026-11-06T09:02:23Z", source_kind: "registry", list_scope: "test" };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const body = (items: unknown[], meta: Record<string, unknown> = {}) =>
+        new Response(JSON.stringify({ data: items, items, meta, page_info: { page_size: 200, total: items.length, next_page_token: null } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      if (url.startsWith("/bff/strategies")) {
+        return body([noFills], { state_counts: { draft: 7421 }, visible_state_counts: { draft: 4205, approved: 14, retired: 2 } });
+      }
+      if (url.startsWith("/bff/personas")) return body([live, test]);
+      if (url.startsWith("/bff/artifacts")) return body([bundle], { persona_directory_status: "ok" });
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const strategies = await lists.strategies({ page_size: 20 });
+    expect(strategies.items[0]).toMatchObject({
+      pnl: null,
+      metricsReason: "no_fills",
+      runtimeStatus: "running",
+      runtimeStatusReason: null,
+      totalTrades: 0,
+    });
+    expect((strategies.meta as { visible_state_counts?: unknown }).visible_state_counts).toEqual({ draft: 4205, approved: 14, retired: 2 });
+
+    const personas = await lists.personas();
+    expect(personas.items.map((p) => (p as { listScope?: string }).listScope)).toEqual(["current", "test"]);
+    // A recorded-nothing win rate stays null; the loader never turns it into 0.
+    expect(personas.items.every((p) => (p as { successRate: unknown }).successRate === null)).toBe(true);
+
+    const artifacts = await lists.artifacts();
+    expect(artifacts.items[0]).toMatchObject({ list_scope: "test", source_kind: "registry", kind: "execution_bundle" });
+  });
+
   it("rejects with BACKEND_UNAVAILABLE and returns no partial rows when lists.personas encounters a repeated next_page_token cycle", async () => {
     vi.stubEnv("MODE", "development");
     vi.stubEnv("NODE_ENV", "development");

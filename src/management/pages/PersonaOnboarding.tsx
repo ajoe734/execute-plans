@@ -9,13 +9,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { bffFetch } from "@/lib/bff-v1/client";
-import { getPersona } from "@/lib/bff-v1/personas";
+import {
+  getPersona,
+  isCompletePaperPersonaBundle,
+  resolvePersonaPaperLedgerId,
+  resolvePersonaReportedFailedStep,
+  resolvePersonaRuntimeBindingId,
+} from "@/lib/bff-v1/personas";
 import type { Persona } from "@/lib/bff-v1";
-
-type RepairablePersona = Persona & {
-  paperLedgerId?: string;
-  runtimeBindingId?: string;
-};
 
 export interface PersonaProvisioningReconcileMeta {
   status?: "ok" | "degraded" | string;
@@ -23,6 +24,8 @@ export interface PersonaProvisioningReconcileMeta {
   reconciled_by?: string;
   degraded_dependencies?: string[];
   authoritative_readback?: Record<string, unknown>;
+  failed_step?: string;
+  failedStep?: string;
 }
 
 export interface PersonaProvisioningReconcileResult {
@@ -54,24 +57,18 @@ export async function reconcilePersonaProvisioning(
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function isCompletePaperBundle(persona: Persona | undefined): boolean {
-  if (!persona) return false;
-  const bundle = persona as RepairablePersona;
-  // Persona.state is typed as the generic LifecycleState union (dto.ts), but a
-  // paper-provisioned persona bundle carries the runtime-only "paper_running"
-  // value (see PaperPersonaBundle in lib/bff-v1/personas.ts). Compare against
-  // the real runtime string rather than widening the shared LifecycleState type.
-  return (persona.state as string) === "paper_running" && Boolean(bundle.paperLedgerId) && Boolean(bundle.runtimeBindingId);
+  return isCompletePaperPersonaBundle(persona);
 }
 
 function bundleReference(value: unknown): string {
-  return typeof value === "string" && value.trim() ? value : "pending";
+  return typeof value === "string" && value.trim() ? value.trim() : "pending";
 }
 
 export default function PersonaOnboarding() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const failedStep = searchParams.get("failed_step")?.trim() || "provisioning";
+  const queryFailedStep = searchParams.get("failed_step")?.trim() || undefined;
   const [persona, setPersona] = useState<Persona>();
   const [loading, setLoading] = useState(true);
   const [reconciling, setReconciling] = useState(false);
@@ -155,8 +152,10 @@ export default function PersonaOnboarding() {
     );
   }
 
+  const paperLedgerId = resolvePersonaPaperLedgerId(persona);
+  const runtimeBindingId = resolvePersonaRuntimeBindingId(persona);
+
   if (isCompletePaperBundle(persona)) {
-    const bundle = persona as RepairablePersona;
     return (
       <section className="p-6 max-w-3xl mx-auto">
         <Card className="p-5 space-y-3 border-status-success/40 bg-status-success/5">
@@ -168,8 +167,8 @@ export default function PersonaOnboarding() {
             The durable Persona owner reports a running paper ledger and runtime binding. Repair actions are disabled to prevent duplicate resources.
           </p>
           <dl className="grid gap-2 text-xs sm:grid-cols-2">
-            <div><dt className="text-muted-foreground">Paper ledger</dt><dd className="font-mono">{bundleReference(bundle.paperLedgerId)}</dd></div>
-            <div><dt className="text-muted-foreground">Runtime binding</dt><dd className="font-mono">{bundleReference(bundle.runtimeBindingId)}</dd></div>
+            <div><dt className="text-muted-foreground">Paper ledger</dt><dd className="font-mono">{bundleReference(paperLedgerId)}</dd></div>
+            <div><dt className="text-muted-foreground">Runtime binding</dt><dd className="font-mono">{bundleReference(runtimeBindingId)}</dd></div>
           </dl>
           <Button size="sm" onClick={backToPersona}>View persona</Button>
         </Card>
@@ -177,7 +176,8 @@ export default function PersonaOnboarding() {
     );
   }
 
-  const bundle = persona as RepairablePersona;
+  const reportedFailedStep =
+    queryFailedStep ?? resolvePersonaReportedFailedStep(persona, reconcileMeta);
   const degradedDependencies = reconcileMeta?.degraded_dependencies ?? [];
 
   return (
@@ -199,16 +199,22 @@ export default function PersonaOnboarding() {
           <AlertTriangle className="h-5 w-5 text-status-warning mt-0.5" />
           <div>
             <h2 className="font-semibold">Incomplete durable bundle</h2>
-            <p className="text-sm text-muted-foreground">
-              Reported failed step: <span className="font-mono text-foreground">{failedStep}</span>. The only enabled mutation is owned by the Persona provisioning controller.
-            </p>
+            {reportedFailedStep ? (
+              <p className="text-sm text-muted-foreground">
+                Reported failed step: <span className="font-mono text-foreground">{reportedFailedStep}</span>. The only enabled mutation is owned by the Persona provisioning controller.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                The durable Persona bundle is not yet complete. The only enabled mutation is owned by the Persona provisioning controller.
+              </p>
+            )}
           </div>
         </div>
 
         <dl className="grid gap-3 rounded border border-border p-3 text-xs sm:grid-cols-3">
           <div><dt className="text-muted-foreground">Lifecycle</dt><dd className="font-mono">{persona.state || "unknown"}</dd></div>
-          <div><dt className="text-muted-foreground">Paper ledger</dt><dd className="font-mono">{bundleReference(bundle.paperLedgerId)}</dd></div>
-          <div><dt className="text-muted-foreground">Runtime binding</dt><dd className="font-mono">{bundleReference(bundle.runtimeBindingId)}</dd></div>
+          <div><dt className="text-muted-foreground">Paper ledger</dt><dd className="font-mono">{bundleReference(paperLedgerId)}</dd></div>
+          <div><dt className="text-muted-foreground">Runtime binding</dt><dd className="font-mono">{bundleReference(runtimeBindingId)}</dd></div>
         </dl>
 
         {degradedDependencies.length > 0 && (

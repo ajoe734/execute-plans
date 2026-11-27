@@ -1,10 +1,17 @@
 import type {
+  CollectorQueryPlan,
+  ResearchDemand,
+  ResearchDemandsSurface,
+  ResearchTaskDemandRef,
   ResearchExperiment,
   ResearchTask,
   ResearchTaskLatestRun,
   ResearchTaskRun,
 } from "./dto";
 import { paths } from "./paths";
+import { bffFetch } from "./client";
+import { BffError } from "./errors";
+import { normalizeMeetingAction, type MeetingActionItem } from "./meetings";
 import {
   asRecord,
   liveDetailFrom,
@@ -56,6 +63,7 @@ export function normalizeResearchTask(raw: unknown): ResearchTask | undefined {
     const runStatus = recordString(runRec, "status", "state") ?? "unknown";
     const runCreatedBy = recordString(runRec, "created_by", "createdBy");
     const runCreatedAt = recordString(runRec, "created_at", "createdAt");
+    const artifactRefs = normalizeArtifactIds(runRec.artifact_refs ?? runRec.artifactRefs);
     return {
       ...(runRec as Partial<ResearchTaskRun>),
       id: recordString(runRec, "id", "run_id", "runId") ?? runId,
@@ -73,6 +81,8 @@ export function normalizeResearchTask(raw: unknown): ResearchTask | undefined {
       created_by: runCreatedBy ?? null,
       createdAt: runCreatedAt,
       created_at: runCreatedAt ?? null,
+      artifactRefs,
+      artifact_refs: artifactRefs,
     };
   });
 
@@ -154,10 +164,129 @@ export function normalizeResearchTask(raw: unknown): ResearchTask | undefined {
     latestRun,
     latest_run: latestRun,
     runs,
+    demand: normalizeTaskDemandRef(record.demand),
+    persona_ids: stringList(record.persona_ids),
+    non_real_reason: recordString(record, "non_real_reason") ?? null,
     is_non_real: typeof record.is_non_real === "boolean" ? record.is_non_real : null,
     name_is_fallback_id: typeof record.name_is_fallback_id === "boolean" ? record.name_is_fallback_id : null,
     display_summary: normalizeDisplaySummary(record.display_summary),
+    query_plan: normalizeQueryPlan(record.query_plan),
   };
+}
+
+function stringList(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? raw.flatMap((item) => (typeof item === "string" && item.trim() ? [item.trim()] : []))
+    : [];
+}
+
+function normalizeTaskDemandRef(raw: unknown): ResearchTaskDemandRef | null {
+  const rec = asRecord(raw);
+  const demandId = rec ? recordString(rec, "demand_id") : undefined;
+  if (!rec || !demandId) return null;
+  const attempts = rec.attempt_count;
+  return {
+    demand_id: demandId,
+    persona_id: recordString(rec, "persona_id") ?? null,
+    attempt_count: typeof attempts === "number" && Number.isFinite(attempts) ? attempts : null,
+    last_reason_code: recordString(rec, "last_reason_code") ?? null,
+    short_measure: recordString(rec, "short_measure") ?? null,
+    status: recordString(rec, "status") ?? null,
+  };
+}
+
+export function normalizeResearchDemand(raw: unknown): ResearchDemand | undefined {
+  const rec = asRecord(raw);
+  const demandId = rec ? recordString(rec, "demand_id") : undefined;
+  if (!rec || !demandId) return undefined;
+  const text = (key: string) => recordString(rec, key) ?? null;
+  return {
+    demand_id: demandId,
+    persona_id: text("persona_id"),
+    persona_display_name: text("persona_display_name"),
+    short_measure: text("short_measure"),
+    tried_families: stringList(rec.tried_families),
+    missing_datasets: stringList(rec.missing_datasets),
+    mandate: text("mandate"),
+    created_at: text("created_at"),
+    expires_at: text("expires_at"),
+    status: text("status"),
+    evidence_ref: text("evidence_ref"),
+    last_template_search_reason: text("last_template_search_reason"),
+    last_discovery_reason: text("last_discovery_reason"),
+  };
+}
+
+/**
+ * Reads `open_demands` + `meta.surfaces.research_demands` of the research view.
+ * Returns null when the BFF predates the field (page stays usable, section hidden);
+ * an unavailable owner stays "unavailable" and is never turned into an empty list.
+ */
+export function normalizeResearchDemandsSurface(body: unknown): ResearchDemandsSurface | null {
+  const record = asRecord(body);
+  const surfaces = asRecord(asRecord(record?.meta)?.surfaces);
+  const surface = asRecord(surfaces?.research_demands);
+  const hasList = Array.isArray(record?.open_demands);
+  if (!surface && !hasList) return null;
+  if (surface && surface.status !== "ok" && !(hasList && surface.status === undefined)) {
+    return { state: "unavailable", reason: recordString(surface, "reason") ?? null };
+  }
+  if (!hasList) return { state: "unavailable", reason: "open_demands_missing" };
+  const demands = (record!.open_demands as unknown[])
+    .map(normalizeResearchDemand)
+    .filter((d): d is ResearchDemand => Boolean(d));
+  return { state: "ok", demands };
+}
+
+export type ResearchTicketsRead =
+  | { state: "ok"; tickets: MeetingActionItem[] }
+  | { state: "denied" }
+  | { state: "unavailable"; reason: string };
+
+/** Meeting research tickets: the existing /api/v1/research/tickets read, no second store. */
+export async function listMeetingResearchTickets(): Promise<ResearchTicketsRead> {
+  try {
+    const body = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.researchTickets(),
+      query: { meeting_linked: "true", page_size: "100" },
+    });
+    const record = asRecord(body);
+    const data = asRecord(record?.data);
+    const rows = [record?.items, record?.tickets, data?.items, data?.tickets, record?.data, body].find(Array.isArray) as unknown[] | undefined;
+    if (!rows) return { state: "unavailable", reason: "invalid_owner_response" };
+    const tickets = rows
+      .filter((row) => typeof asRecord(row)?.ticket_id === "string")
+      .map((row) => normalizeMeetingAction(row))
+      .filter((t): t is MeetingActionItem => t !== null);
+    return { state: "ok", tickets };
+  } catch (err) {
+    if (err instanceof BffError && (err.status === 401 || err.status === 403)) return { state: "denied" };
+    return { state: "unavailable", reason: err instanceof Error && err.message ? err.message : "unknown" };
+  }
+}
+
+function normalizeArtifactIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.flatMap((ref) => {
+    const record = asRecord(ref);
+    const id = typeof ref === "string" ? ref.trim() : record && recordString(record, "artifact_id");
+    return id && /^[a-z0-9][a-z0-9_.:-]*$/i.test(id) ? [id] : [];
+  });
+  return [...new Set(ids)];
+}
+
+function normalizeQueryPlan(raw: unknown): CollectorQueryPlan | undefined {
+  const record = asRecord(raw);
+  if (!record) return undefined;
+  const terms = (value: unknown): string[] => Array.isArray(value)
+    ? value.filter((term): term is string => typeof term === "string")
+    : [];
+  const entries = Object.entries(asRecord(record.changes) ?? {}).flatMap(([source, value]) => {
+    const change = asRecord(value);
+    return change ? [[source, { before: terms(change.before), after: terms(change.after) }]] : [];
+  });
+  return { week: recordString(record, "week"), changes: Object.fromEntries(entries) };
 }
 
 function normalizeDisplaySummary(raw: unknown): ResearchTask["display_summary"] {

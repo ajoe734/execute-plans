@@ -166,4 +166,19 @@ describe("PersonaStrategyPoolPanel", () => {
       expect(screen.queryByTestId("observed-pool-version-member_virtual_books")).toBeNull();
     });
   });
+
+  it("shows what an open demand lacks, what was tried, expiry and the plain failed-search reason", () => {
+    render(<PersonaStrategyPoolPanel management={envelope({ openDemands: [{
+      demand_id: "rd-975bb89106f1c696a680", persona_id: "persona-ee7112a829d38b9135ac",
+      mandate: "meeting_research_demand", short_measure: "effective_bets", tried_families: ["momentum"],
+      created_at: "2026-11-25T05:00:00Z", expires_at: "2026-12-02T05:00:00Z", status: "open",
+      discovery: { template_search: { reason: "template_search_unavailable:ValueError:mandate_universe_missing" }, last_run: { reason: "no_external_match" } },
+    }] })} />);
+    const row = screen.getByTestId("pool-demand-row");
+    expect(row.textContent).toContain("缺少：足夠的獨立押注");
+    expect(row.textContent).toContain("已嘗試：momentum");
+    expect(row.textContent).toContain("到期");
+    expect(screen.getByTestId("pool-demand-outcome").textContent).toContain("Persona 任務沒有可交易標的範圍");
+    expect(row.textContent).not.toContain("ValueError");
+  });
 });

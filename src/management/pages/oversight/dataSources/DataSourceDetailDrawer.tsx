@@ -366,7 +366,7 @@ export function DataSourceDetailDrawer({
                             {currentSource.observed.last_run.evidence_bundle_id}
                           </code>
                           <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-xs">
-                            <Link to="/management/evidence">
+                            <Link to="/management/evidence?scope=ingested">
                               <ExternalLink className="h-3 w-3 mr-1" />
                               {t("mgmt.actions.evidence")}
                             </Link>

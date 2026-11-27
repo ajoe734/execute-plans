@@ -207,4 +207,170 @@ describe("KnowledgeInboxPage (FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104)", () => {
     });
     expect(screen.queryByText("Inbox zero.")).not.toBeInTheDocument();
   });
+
+  it("FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125 AC1: lists each unconnected or failed source from meta.surfaces, says empty only when every source was read, removes promote buttons, and translates in en-US and zh-TW", async () => {
+    await i18n.changeLanguage("en-US");
+
+    // 1. Hosted BFF adc027da9 shape: meta.status is ok while knowledge_inbox_insights and knowledge_inbox_memory are unavailable (source: missing)
+    const hostedMissingSourcesResponse = {
+      data: [],
+      items: [],
+      page_info: { next_page_token: null, total: 0, page_size: 20, returned: 0, has_more: false },
+      meta: {
+        snapshot_at: "2026-11-25T06:40:00Z",
+        status: "ok",
+        source: "bff_composed",
+        surfaces: {
+          knowledge_inbox: { status: "ok", source: "bff_composed" },
+          knowledge_inbox_notes: { status: "ok", source: "service_client" },
+          knowledge_inbox_insights: {
+            status: "unavailable",
+            source: "missing",
+            message: "insight_cards has no readable source records.",
+          },
+          knowledge_inbox_memory: {
+            status: "unavailable",
+            source: "missing",
+            message: "institutional_memory_entries has no readable source records.",
+          },
+        },
+        composition: {
+          datasets: ["research_notes", "insight_cards", "institutional_memory_entries"],
+          itemCounts: { research_note: 0, insight: 0, memory_entry: 0 },
+        },
+      },
+    };
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify(hostedMissingSourcesResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const firstRender = renderKnowledgeInbox();
+
+    const issuesCard = await screen.findByTestId("knowledge-source-issues");
+    expect(issuesCard).toBeInTheDocument();
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_insights")).toHaveAttribute(
+      "data-source-state",
+      "not_connected",
+    );
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_insights")).toHaveTextContent(
+      "Insight cards",
+    );
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_insights")).toHaveTextContent(
+      "Source not connected",
+    );
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_memory")).toHaveAttribute(
+      "data-source-state",
+      "not_connected",
+    );
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_memory")).toHaveTextContent(
+      "Institutional memory",
+    );
+    expect(screen.queryByTestId("knowledge-source-knowledge_inbox_notes")).not.toBeInTheDocument();
+    // Must NOT claim empty when sources are missing
+    expect(screen.queryByTestId("knowledge-inbox-empty")).not.toBeInTheDocument();
+
+    // Switch to zh-TW and verify localized source names and statuses
+    await i18n.changeLanguage("zh-TW");
+    firstRender.unmount();
+    __resetV5LiveCacheForTests();
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ...hostedMissingSourcesResponse,
+          meta: {
+            ...hostedMissingSourcesResponse.meta,
+            status: "degraded",
+            surfaces: {
+              ...hostedMissingSourcesResponse.meta.surfaces,
+              knowledge_inbox_notes: {
+                status: "unavailable",
+                source: "unavailable",
+                message: "owner 503",
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const secondRender = renderKnowledgeInbox();
+    await screen.findByTestId("knowledge-source-issues");
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_notes")).toHaveAttribute(
+      "data-source-state",
+      "failed",
+    );
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_notes")).toHaveTextContent("研究筆記");
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_notes")).toHaveTextContent("來源讀取失敗");
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_insights")).toHaveTextContent("洞察卡");
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_insights")).toHaveTextContent("來源未連接");
+    expect(screen.getByTestId("knowledge-source-knowledge_inbox_memory")).toHaveTextContent("機構記憶");
+    expect(screen.queryByTestId("knowledge-inbox-empty")).not.toBeInTheDocument();
+    secondRender.unmount();
+
+    // 2. Every source read (all 3 ok) and 0 items -> says empty
+    __resetV5LiveCacheForTests();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [],
+          items: [],
+          meta: {
+            status: "ok",
+            source: "bff_composed",
+            surfaces: {
+              knowledge_inbox: { status: "ok", source: "bff_composed" },
+              knowledge_inbox_notes: { status: "ok", source: "service_client" },
+              knowledge_inbox_insights: { status: "ok", source: "service_client" },
+              knowledge_inbox_memory: { status: "ok", source: "service_client" },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const thirdRender = renderKnowledgeInbox();
+    expect(await screen.findByTestId("knowledge-inbox-empty")).toHaveTextContent("收件匣已清空。");
+    expect(screen.queryByTestId("knowledge-source-issues")).not.toBeInTheDocument();
+    thirdRender.unmount();
+
+    // 3. When an item is selected, the four promote/dismiss buttons without an executing owner are gone
+    await i18n.changeLanguage("en-US");
+    __resetV5LiveCacheForTests();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              note_id: "note-1",
+              id: "note-1",
+              inboxType: "research_note",
+              sourceDataset: "research_notes",
+              title: "Execution spread observation",
+              summary: "Observed 8 bps improvement on TW open.",
+              updated_at: "2026-11-25T06:00:00Z",
+            },
+          ],
+          meta: {
+            status: "ok",
+            surfaces: {
+              knowledge_inbox: { status: "ok", source: "bff_composed" },
+              knowledge_inbox_notes: { status: "ok", source: "service_client" },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    renderKnowledgeInbox();
+    expect(await screen.findAllByText("Execution spread observation")).not.toHaveLength(0);
+    expect(screen.queryByText(/Promote →/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Dismiss/i })).not.toBeInTheDocument();
+  });
 });

@@ -13,12 +13,14 @@ import vm from "node:vm";
 import { build as esbuild } from "esbuild";
 // @ts-expect-error plain ESM recorded route baseline
 import { BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath } from "../scripts/lib/management-routes.mjs";
+// @ts-expect-error plain ESM readability helper
+import { readabilityMarkdown, readabilityResult, summarizeReadability } from "../scripts/lib/management-readability.mjs";
 import { expect, test, chromium, request, type Browser, type CDPSession } from "@playwright/test";
 // @ts-expect-error plain ESM script helper
 import { installPinnedBffBearer, pinnedTargetProblem } from "../scripts/lib/pinned-browser-bff-bearer.mjs";
 
 const TOKEN = "stream-test-token";
-type Seen = { path: string; authorization?: string; tenant?: string; cookie?: string; marker?: string };
+type Seen = { path: string; method?: string; authorization?: string; tenant?: string; cookie?: string; marker?: string };
 const bffSeen: Seen[] = [];
 const foreignSeen: Seen[] = [];
 let dir: string;
@@ -41,6 +43,7 @@ const listen = (s: http.Server | https.Server) =>
 const record = (list: Seen[], req: http.IncomingMessage) =>
   list.push({
     path: req.url || "",
+    method: req.method,
     authorization: req.headers.authorization as string | undefined,
     tenant: req.headers["x-tenant-id"] as string | undefined,
     cookie: req.headers.cookie,
@@ -61,6 +64,10 @@ test.beforeAll(async () => {
     record(bffSeen, req);
     // A real rejected preflight must not be synthesized into a successful one.
     if (req.url === "/cors-denied" && req.method === "OPTIONS") return void res.writeHead(403).end();
+    if (req.url === "/preflight-pending" && req.method === "OPTIONS") { openSse.add(res); return; }
+    if (req.url === "/preflight-ok" && req.method === "OPTIONS") {
+      return void res.writeHead(204, { ...cors, "access-control-allow-methods": "GET,POST,PUT,OPTIONS" }).end();
+    }
     if (managementFixture && req.url?.startsWith("/bff/") && req.headers.authorization !== `Bearer ${TOKEN}`) {
       return void res.writeHead(401, { ...cors, "content-type": "application/json" }).end("{}");
     }
@@ -294,9 +301,89 @@ test("a genuine denied CORS preflight remains a browser and transport failure", 
     const failure = await c.page.evaluate((u) => fetch(u, { method: "PUT", headers: { "x-fixture-marker": "preflight" } }).then(() => "unexpected success", () => "rejected"), `${bffOrigin}/cors-denied`);
     expect(failure).toBe("rejected");
     expect(bffSeen.filter((r) => r.path === "/cors-denied")).toHaveLength(1);
+    expect(bffSeen.find((r) => r.path === "/cors-denied")).toMatchObject({ method: "OPTIONS", authorization: undefined, tenant: undefined });
     await c.transport.settle();
     expect(() => c.transport.assertHealthy()).toThrow(/cors-denied/);
   } finally { await c.context.close(); await c.transport.settle(); }
+});
+
+test("CORS preflight OPTIONS never receives Authorization or X-Tenant-Id while the follow-up request does, and navigation/same-document/detach preflight aborts settle healthy", async () => {
+  // 1. Approved preflight followed by PUT: OPTIONS omits credentials, PUT receives pinned bearer + tenant.
+  const ok = await open({ tenantId: "tenant-x" });
+  try {
+    const body = await ok.page.evaluate((u) => fetch(u, {
+      method: "PUT",
+      headers: { "x-fixture-marker": "preflight-ok", authorization: "Bearer stale", "x-tenant-id": "stale" },
+    }).then((r) => r.json()), `${bffOrigin}/preflight-ok`);
+    expect(body).toEqual({ ready: true });
+    const preflightSeen = bffSeen.find((r) => r.path === "/preflight-ok" && r.method === "OPTIONS");
+    const putSeen = bffSeen.find((r) => r.path === "/preflight-ok" && r.method === "PUT");
+    expect(preflightSeen).toMatchObject({ path: "/preflight-ok", method: "OPTIONS", authorization: undefined, tenant: undefined });
+    expect(putSeen).toMatchObject({ path: "/preflight-ok", method: "PUT", authorization: `Bearer ${TOKEN}`, tenant: "tenant-x", marker: "preflight-ok" });
+    await ok.transport.settle();
+    ok.transport.assertHealthy();
+  } finally { await ok.context.close(); await ok.transport.settle(); }
+
+  // 2. Navigation cancelling an in-flight OPTIONS preflight (even when Page.frameNavigated is delayed) settles healthy.
+  bffSeen.length = 0;
+  const nav = await openHeldCommit();
+  try {
+    await nav.page.evaluate((u) => { void fetch(u, { headers: { "x-fixture-marker": "nav-cancel" } }).catch(() => {}); }, `${bffOrigin}/preflight-pending`);
+    await expect.poll(() => bffSeen.some((r) => r.path === "/preflight-pending" && r.method === "OPTIONS")).toBe(true);
+    expect(bffSeen.find((r) => r.path === "/preflight-pending" && r.method === "OPTIONS")).toMatchObject({ authorization: undefined, tenant: undefined });
+    await nav.page.goto(`${feOrigin}/live-detail`);
+    await new Promise((r) => setTimeout(r, 120));
+    nav.releaseCommit();
+    await nav.transport.settle();
+    nav.transport.assertHealthy();
+  } finally { nav.releaseCommit(); await nav.context.close(); await nav.transport.settle(); }
+
+  // 3. Same-document navigation and iframe detach cancelling an in-flight OPTIONS preflight settle healthy.
+  bffSeen.length = 0;
+  const sameDoc = await open({ tenantId: "tenant-x" });
+  try {
+    await sameDoc.page.evaluate((u) => {
+      const controller = new AbortController();
+      Object.assign(window, { cancelPreflight: () => controller.abort() });
+      void fetch(u, { headers: { "x-fixture-marker": "same-doc" }, signal: controller.signal }).catch(() => {});
+    }, `${bffOrigin}/preflight-pending`);
+    await expect.poll(() => bffSeen.filter((r) => r.path === "/preflight-pending" && r.method === "OPTIONS").length).toBe(1);
+    await sameDoc.page.evaluate(() => {
+      history.pushState({}, "", "/same-document-preflight");
+      (window as unknown as { cancelPreflight: () => void }).cancelPreflight();
+    });
+    await sameDoc.transport.settle();
+    sameDoc.transport.assertHealthy();
+
+    await sameDoc.page.evaluate((u) => { const f = document.createElement("iframe"); f.src = u; document.body.append(f); }, `${feOrigin}/frame`);
+    await expect.poll(() => sameDoc.page.frames().length).toBe(2);
+    const childFrame = sameDoc.page.frames()[1];
+    await childFrame.waitForLoadState();
+    await childFrame.evaluate((u) => { void fetch(u, { headers: { "x-fixture-marker": "detach" } }).catch(() => {}); }, `${bffOrigin}/preflight-pending`);
+    await expect.poll(() => bffSeen.filter((r) => r.path === "/preflight-pending" && r.method === "OPTIONS").length).toBe(2);
+    await sameDoc.page.evaluate(() => document.querySelector("iframe")!.remove());
+    await sameDoc.transport.settle();
+    sameDoc.transport.assertHealthy();
+  } finally { await sameDoc.context.close(); await sameDoc.transport.settle(); }
+
+  // 4. Negative control: a live abort of an in-flight OPTIONS preflight (not caused by navigation/detach/same-document) still fails assertHealthy().
+  bffSeen.length = 0;
+  const liveAbort = await open();
+  try {
+    await liveAbort.page.evaluate((u) => {
+      const controller = new AbortController();
+      Object.assign(window, { abortLivePreflight: () => controller.abort() });
+      void fetch(u, { headers: { "x-fixture-marker": "live-abort" }, signal: controller.signal }).catch(() => {});
+    }, `${bffOrigin}/preflight-pending`);
+    await expect.poll(() => bffSeen.some((r) => r.path === "/preflight-pending" && r.method === "OPTIONS")).toBe(true);
+    const failed = liveAbort.page.waitForEvent("requestfailed", { predicate: (r) => r.url() === `${bffOrigin}/preflight-pending` });
+    await liveAbort.page.evaluate(() => (window as unknown as { abortLivePreflight: () => void }).abortLivePreflight());
+    await failed;
+    await new Promise((r) => setTimeout(r, 80));
+    await liveAbort.page.goto(`${feOrigin}/later-unrelated`);
+    await liveAbort.transport.settle();
+    expect(() => liveAbort.transport.assertHealthy()).toThrow(/(?:OPTIONS|GET) \/preflight-pending: net::ERR_ABORTED/);
+  } finally { await liveAbort.context.close(); await liveAbort.transport.settle(); }
 });
 
 test("an unrelated transport failure is surfaced, not swallowed; teardown is not", async () => {
@@ -321,8 +408,16 @@ test("tenant selection stays consistent across finite and SSE reads", async () =
     const { context, page } = await open({ tenantId });
     await page.evaluate((u) => fetch(u, { headers: { "x-tenant-id": "stale" } }).then((r) => r.text()), `${bffOrigin}/finite`);
     await startSse(page, `${bffOrigin}/sse`);
-    for (const s of bffSeen) expect(s.tenant).toBe(expected);
-    expect(bffSeen.length).toBeGreaterThanOrEqual(2);
+    const nonPreflight = bffSeen.filter((s) => s.method !== "OPTIONS");
+    for (const s of bffSeen) {
+      if (s.method === "OPTIONS") {
+        expect(s.authorization).toBeUndefined();
+        expect(s.tenant).toBeUndefined();
+      } else {
+        expect(s.tenant).toBe(expected);
+      }
+    }
+    expect(nonPreflight.length).toBeGreaterThanOrEqual(2);
     await context.close();
   }
 });
@@ -1569,7 +1664,7 @@ test(`actual 95-route caller handles a new interception after drain through enti
   const newPage = context.newPage.bind(context);
   probeBrowser.newContext = async () => context;
   context.newPage = async () => page;
-  const fixtureProcess = { exitCode: 0, cwd: () => process.cwd() };
+  const fixtureProcess = { exitCode: 0, env: {}, cwd: () => process.cwd() };
   // The original caller performs Node reads after browser closure; this real
   // HTTPS client must likewise outlive the browser context.
   const api = await request.newContext({ ignoreHTTPSErrors: true });
@@ -1581,7 +1676,8 @@ main`, {
     installPinnedBffBearer: async () => transport,
     pinnedTargetProblem: (opts: object) => pinnedTargetProblem({ ...opts, env: env() }),
     FE_BASE: feOrigin, BFF_BASE: bffOrigin, BASELINE_ROUTES, ENTITY_LIST_ENDPOINTS, expectedCanonicalPath,
-    LOAD_GATE_ONLY: false, LOAD_GATE_MANIFEST: fixtureLoadGate, LOAD_BASELINE_DIR: dir,
+    LOAD_GATE_ONLY: false, READABILITY_ONLY: false, readabilityResult, summarizeReadability, readabilityMarkdown,
+    LOAD_GATE_MANIFEST: fixtureLoadGate, LOAD_BASELINE_DIR: dir,
     OUT_DIR: reportDir, SRC_SCAN_DIR: dir, STRICT_SOURCE_SCAN: true, CLICK_WRITE_CTAS: false,
     ROUTE_TIMEOUT_MS: 5000, SETTLE_TIMEOUT_MS: 4000, BEARER_TOKEN: TOKEN, TENANT_ID: "tenant-local",
     bearerAuthorization: (token: string) => `Bearer ${token}`, RETRYABLE_HTTP_STATUS: new Set(), sleep: () => Promise.resolve(),
@@ -1612,7 +1708,11 @@ main`, {
       expect(report.result).toMatchObject({ pass: false, overall: "fail" });
       expect(report.result.failures).toContain("Pinned BFF transport failed.");
       expect(report.pinnedTransport).toMatchObject({ pass: false, errors: transport.errors });
-      expect(report.routeCounts).toMatchObject({ baseline: 95, crawled: 110, liveIdDetailRoutesCrawled: 15 });
+      expect(report.routeCounts).toMatchObject({
+        baseline: BASELINE_ROUTES.length,
+        crawled: BASELINE_ROUTES.length + Object.keys(ENTITY_LIST_ENDPOINTS).length,
+        liveIdDetailRoutesCrawled: Object.keys(ENTITY_LIST_ENDPOINTS).length,
+      });
       const md = readFileSync(mdPath, "utf8");
       expect(md).toContain("Overall: **fail** (pass=false)");
       expect(md).toContain("Pinned BFF transport: **fail**");
@@ -1653,13 +1753,13 @@ main`, {
     }
     expect(fixtureProcess.exitCode).toBe(0);
     expect(report.result).toMatchObject({ pass: true, overall: "pass", failures: [], missing: [] });
-    expect(report.routeCounts.baseline).toBe(95);
-    expect(report.routeCounts.crawled).toBe(95 + result.liveIdResults.length);
+    expect(report.routeCounts.baseline).toBe(BASELINE_ROUTES.length);
+    expect(report.routeCounts.crawled).toBe(BASELINE_ROUTES.length + result.liveIdResults.length);
     expect(report.sessionRbac.overall).toBe("pass");
     expect(readFileSync(mdPath, "utf8")).toContain("Overall: **pass** (pass=true)");
     await test.info().attach("generated-local-management-report.json", { path: jsonPath, contentType: "application/json" });
     await test.info().attach("generated-local-management-report.md", { path: mdPath, contentType: "text/markdown" });
-    expect(result.results).toHaveLength(95);
+    expect(result.results).toHaveLength(BASELINE_ROUTES.length);
     expect(result.results.every((r: { status: string }) => r.status === "ok")).toBe(true);
     expect(result.liveIdResolution.length).toBeGreaterThan(10);
     if (scopeCase === "canonical id schemas") {

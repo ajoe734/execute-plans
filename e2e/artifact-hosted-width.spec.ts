@@ -108,7 +108,11 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
       await installRoutes(page);
       await page.goto(frontendUrl("/management/artifacts"), { waitUntil: "domcontentloaded", timeout: 30_000 });
       await expect(page.locator("tbody tr").first()).toBeVisible({ timeout: 30_000 });
-      await expect.poll(() => page.locator("tbody tr").count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(273);
+      // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the default view is Current. This genuine capture has
+      // no list_scope (older BFF), so its 271 Registry rows stay visible and the 2 research run outputs
+      // sit under their own tab; "All" still counts all 273.
+      await expect.poll(() => page.locator("tbody tr").count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(271);
+      await expect(page.getByRole("button", { name: /\(273\)$/ })).toBeVisible();
 
       const m = await page.evaluate((owner) => {
         const scroller = document.querySelector<HTMLElement>("[data-management-table-scrollbar='native']")!;
@@ -126,28 +130,34 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
           colWidths: ths.map((th) => Math.round(th.getBoundingClientRect().width)),
           lastRight: last.right,
           maxRowHeight: Math.max(...rows.map((r) => r.getBoundingClientRect().height)),
+          ownerText: (ownerCell.textContent || "").trim(),
           ownerFullAttr: ownerCell.getAttribute("data-full-owner"),
           ownerTitle: ownerCell.getAttribute("title"),
           ownerCellHeight: oc.height,
+          ownerClientWidth: ownerCell.clientWidth,
+          ownerScrollWidth: ownerCell.scrollWidth,
           docOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         };
       }, OWNER);
       console.log(`GEOMETRY@${width} ${JSON.stringify(m)}`);
 
-      expect(m.rowCount).toBe(273);
-      expect(m.headers.length).toBeGreaterThanOrEqual(10);
+      expect(m.rowCount).toBe(271);
+      // Size column removed and state/risk share one column: 8 columns (was 10).
+      expect(m.headers).toHaveLength(8);
+      expect(m.colWidths[0]).toBeGreaterThanOrEqual(220);
+      expect(m.ownerText).toBe("paper-provisioner");
       expect(m.ownerFullAttr).toBe(OWNER);
       expect(m.ownerTitle).toBe(OWNER);
+      expect(m.ownerScrollWidth).toBeLessThanOrEqual(m.ownerClientWidth);
       expect(m.maxRowHeight).toBeLessThanOrEqual(72);
-      if (width === 1600) {
-        expect(m.lastRight).toBeLessThanOrEqual(m.viewportWidth);
-        expect(m.scrollWidth).toBeLessThanOrEqual(m.clientWidth + 1);
-      }
+      // The table now fits both widths without horizontal scrolling (it only did at 1600 before).
+      expect(m.lastRight).toBeLessThanOrEqual(m.viewportWidth);
+      expect(m.scrollWidth).toBeLessThanOrEqual(m.clientWidth + 1);
       await context.close();
     });
   }
 
-  test("strategy owner cell stays readable at 1600 (shared DataTable regression)", async ({ browser }) => {
+  test("strategy table fits at 1600 with a readable name column (shared DataTable regression)", async ({ browser }) => {
     const strategies = loadStrategies();
     test.skip(!strategies, "genuine strategies capture not available");
     const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
@@ -159,8 +169,7 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
       const scroller = document.querySelector<HTMLElement>("[data-management-table-scrollbar='native']")!;
       const ths = Array.from(document.querySelectorAll("thead th"));
       const rows = Array.from(document.querySelectorAll<HTMLElement>("tbody tr"));
-      const ownerIdx = ths.findIndex((th) => /owner|負責|擁有/i.test(th.textContent || ""));
-      const ownerTd = ownerIdx >= 0 ? rows[0].children[ownerIdx] as HTMLElement : null;
+      const nameTd = rows[0].children[0] as HTMLElement;
       return {
         rows: rows.length,
         headers: ths.map((th) => (th.textContent || "").trim()),
@@ -169,19 +178,19 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
         lastRight: ths[ths.length - 1].getBoundingClientRect().right,
         viewportWidth: window.innerWidth,
         maxRowHeight: Math.max(...rows.map((r) => r.getBoundingClientRect().height)),
-        ownerText: ownerTd?.textContent?.trim() ?? null,
-        ownerWidth: ownerTd ? Math.round(ownerTd.getBoundingClientRect().width) : null,
-        ownerHeight: ownerTd ? Math.round(ownerTd.getBoundingClientRect().height) : null,
+        nameWidth: Math.round(nameTd.getBoundingClientRect().width),
+        nameHeight: Math.round(nameTd.getBoundingClientRect().height),
       };
     });
     console.log(`STRATEGY_GEOMETRY@1600 ${JSON.stringify(m)}`);
     expect(m.rows).toBeGreaterThan(0);
-    expect(m.ownerText).toBe("pantheon-bff");
-    // Shared-column regression: the Strategies table already scrolls horizontally at 1600 (11 columns, unchanged by this task);
-    // assert only that the owner cell stays unstacked/readable and rows stay within 72px.
-    expect(m.ownerHeight).toBeLessThanOrEqual(72);
-    expect(m.ownerWidth).toBeGreaterThanOrEqual(110);
-    expect(m.maxRowHeight).toBeLessThanOrEqual(72);
+    // FE-REGISTRY-LISTS-CURRENT-FIRST-20261125: the owner column is gone (the strategy table now shows
+    // name, state, runtime, symbols, cumulative result, drawdown, trades, persona), the table fits the
+    // window without horizontal scrolling, and the name column keeps at least 220px.
+    expect(m.headers).toHaveLength(8);
+    expect(m.scrollWidth).toBeLessThanOrEqual(m.clientWidth + 1);
+    expect(m.nameWidth).toBeGreaterThanOrEqual(220);
+    expect(m.maxRowHeight).toBeLessThanOrEqual(96);
     await context.close();
   });
 });

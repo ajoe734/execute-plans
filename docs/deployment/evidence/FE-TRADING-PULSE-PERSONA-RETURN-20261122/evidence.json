@@ -1,0 +1,82 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADING-PULSE-PERSONA-RETURN-20261122",
+  "title": "補齊交易脈動至 Persona 詳情的窄螢幕回程",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADING-PULSE-PERSONA-RETURN-20261122",
+  "problem_register": {
+    "root_cause_class": "RC6",
+    "work_package": "WP6.4/WP6.5",
+    "resolves_residual_finding": "RF-FE-TRADING-PULSE-390PX-PERSONA-DETAIL-BACK-LINK"
+  },
+  "prerequisites": [
+    {
+      "task_id": "FE-TRADING-PULSE-OPERATOR-PAGE-20261122",
+      "status": "done",
+      "merge_commit": "b5d91e038"
+    },
+    {
+      "task_id": "FE-TRADING-PULSE-BROWSER-WIRE-REPAIR-20261122",
+      "status": "done",
+      "merge_commit": "ff14af909"
+    }
+  ],
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/management/pages/PersonaDetail.tsx",
+    "src/management/pages/PersonaDetail.test.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "scripts/accept-persona-strategy-hosted-readonly.mjs",
+    "scripts/accept-trading-pulse-hosted-readonly.mjs",
+    "scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+    "src/test/persona-strategy-hosted-readonly.test.ts",
+    "docs/deployment/evidence/FE-TRADING-PULSE-PERSONA-RETURN-20261122/evidence.json"
+  ],
+  "acceptance_verification": {
+    "acceptance_1_contextual_persona_detail_return_link": {
+      "passed": true,
+      "summary": "When navigating from a named Persona Link in either TradingPulsePersonaDetailsSection or TradingPulseRankingsSection on /management/trading-pulse, the Link passes React Router state { returnTo: \"/management/trading-pulse\" } while keeping to=\"/management/personas/:id\" unchanged. PersonaDetail resolves location.state via an explicit allowlist helper resolvePersonaTradingPulseReturnHref(state) that returns \"/management/trading-pulse\" only when state.returnTo === \"/management/trading-pulse\", rendering a visible bilingual Link (zh-TW: 返回交易脈動, en-US: Back to Trading Pulse) in ObjectDetailLayout actions on both 390px (where SideNav is hidden below lg) and 1440px desktop. Direct open, navigation from other origins, or arbitrary URLs in state never render a return link."
+    },
+    "acceptance_2_navigation_semantics_and_readonly_helper_alignment": {
+      "passed": true,
+      "summary": "Preserves the rejected Trade Journey roundtrip (return_to=/management/trading-pulse) and all existing routes without adding any new route, screen, tool, write, or deploy gate. Aligns scripts/accept-trading-pulse-hosted-readonly.mjs and scripts/accept-persona-strategy-hosted-readonly.mjs with the real PersonaDetail entity GET (/bff/personas/<id>): (1) readObservedJson matches only primary Persona entity paths (/(?:management\\/)?personas\\/[^/]+$/) so trailing sub-resource GETs (/route-policy, /memory, /governance/status, etc.) do not overwrite or dilute entity observation; (2) persona_detail_roundtrip_keyboard awaits target pathname and HTTP 200 on the primary entity GET before inspecting observed payloads; (3) assessPersona accepts snake_case tenant_id or camelCase tenantId from _project_persona_dto while failing closed on any conflicting tenant/id alias, and strips only explicitly allowed .TWSE/.TPEX exchange suffixes while preserving exact symbol matching for non-Taiwan dotted tickers such as BRK.B."
+    },
+    "acceptance_3_tests_typecheck_and_pr_gate_discipline": {
+      "passed": true,
+      "summary": "All unit tests, component tests, full Chromium 1440px/390px roundtrip acceptance tests, i18n parity tests, and TypeScript checks pass with zero errors."
+    }
+  },
+  "verification_commands": [
+    {
+      "command": "node --test scripts/accept-trading-pulse-hosted-readonly.test.mjs",
+      "exit_code": 0,
+      "passed_tests": 68
+    },
+    {
+      "command": "npx vitest run src/management/pages/PersonaDetail.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/test/persona-strategy-hosted-readonly.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "passed_files": 4,
+      "passed_tests": 94
+    },
+    {
+      "command": "npx tsc --noEmit && git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "routine_daily_growth_bytes": 0,
+    "notes": "Frontend navigation state link, allowlisted PersonaDetail header return link, i18n keys, and read-only acceptance helper alignment only; no recurring jobs, background emitters, or persistent writers added."
+  },
+  "residual_findings": [],
+  "handoff_to_e": {
+    "downstream_task_id": "TRADING-PULSE-HOSTED-ACCEPTANCE-20261122",
+    "delivery_state": "source_branch_ready_for_review_and_dev_merge"
+  }
+}
