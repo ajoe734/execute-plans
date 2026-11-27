@@ -6,8 +6,8 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127",
-  "base_commit": "619891d5ebe1d3079d365c7e924f3d03a240b253",
-  "timestamp": "2026-11-27T16:55:15Z",
+  "base_commit": "3514797c1fd2a236f61cc21d45fb9da411755749",
+  "timestamp": "2026-11-27T18:07:00Z",
   "problem_register_binding": {
     "root_cause_class": "RC6",
     "summary": "Hosted FE 9b0df6622 (with #1118) at 1274x627: an unnamed meeting_action_ticket row in the cited evidence list rendered '會議行動單' as the primary name and then rendered '會議行動單' again in the kind line underneath, before the refId 'facts:meeting_action_ticket:rt-action-16f4b51de06f6629684a6ab4402dbc5a' and '這筆證據沒有記錄名稱。'. #1118 only collapsed the kind · source_class duplicate."
@@ -15,8 +15,19 @@
   "modified_surfaces": [
     "src/management/pages/oversight/_core.tsx",
     "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+    "src/lib/bff-v1/agora/types.ts",
+    "src/lib/bff-v1/agora/contract-snapshot.json",
+    "docs/contracts/agora/frontend-generation-output.v1_13.json",
     "docs/deployment/evidence/FE-EVIDENCE-UNNAMED-KIND-ONCE-20261127/evidence.json"
   ],
+  "agora_contract_alignment": {
+    "pantheon_merge_commit": "50a65493c",
+    "generated_from_contract_commit": "77df37d54f9da6f6091bc150fce03ca711b494ec",
+    "frontend_runtime_commit": "692db8614833ebe7a306efdfa01cfd774ca711e3",
+    "bundle_index_sha256": "f621c694f5e74d15b81d5cf016dd2684e364b8fac849047263acdf69d94943c9",
+    "openapi_sha256": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087",
+    "generated_types_sha256": "2b57c86327dc15e559d41ff22bed425a8e9b5600378301d5c63457fa31630dd9"
+  },
   "acceptance_coverage": {
     "AC1_unnamed_cited_row_shows_kind_label_once": {
       "passed": true,
@@ -42,13 +53,15 @@
   "runtime_budget": {
     "recurring_jobs_added": 0,
     "persistent_writers_added": 0,
-    "note": "Pure frontend presentation change; adds no recurring jobs, emitters, or persistent writers."
+    "note": "Pure frontend presentation change and Agora contract snapshot regeneration; adds no recurring jobs, emitters, or persistent writers."
   },
   "residual_findings": [],
   "verification": {
     "commands": [
-      "npm run lint -> 0 errors (143 pre-existing warnings), exit 0",
+      "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root npm run test:contract -> 11 passed, exit 0",
+      "npm run lint -> 0 errors (149 pre-existing warnings), exit 0",
       "./node_modules/.bin/tsc --noEmit -> 0 errors, exit 0",
+      "npm run typecheck:agora -> 0 errors, exit 0",
       "./node_modules/.bin/vitest run src/management/pages/oversight/EvidenceExplorerPage.test.tsx -> 1 file, 32 passed, exit 0"
     ]
   }
