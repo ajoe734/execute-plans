@@ -681,5 +681,184 @@ export interface HumanEvidenceObservation { items: Array<Record<string, unknown>
 export const getPersonaHumanEvidence = (personaId: string) =>
   read(
     () => bffFetch({ method: "GET", path: paths.agoraPersonaHumanEvidence(personaId) }),
-    (r) => (Array.isArray(r.items) ? ({ items: r.items as Array<Record<string, unknown>>, total: Number(r.total ?? r.items.length) } as HumanEvidenceObservation) : undefined),
+    (r) => {
+      if (Array.isArray(r.items)) {
+        return { items: r.items as Array<Record<string, unknown>>, total: Number(r.total ?? r.items.length) } as HumanEvidenceObservation;
+      }
+      const inner = dataObj<Record<string, unknown>>(r);
+      if (inner && Array.isArray(inner.items)) {
+        return { items: inner.items as Array<Record<string, unknown>>, total: Number(inner.total ?? inner.items.length) } as HumanEvidenceObservation;
+      }
+      return undefined;
+    },
   );
+
+export const getHumanEvidence = (evidenceId: string): Promise<LearningRead<Record<string, unknown>>> =>
+  read(
+    () => bffFetch({ method: "GET", path: `/bff/agora/human-evidence/${encodeURIComponent(evidenceId)}` }),
+    (r) => dataObj<Record<string, unknown>>(r),
+  );
+
+// ─── Decision Journal & Timeline Replay (/bff/agora/journal & /bff/agora/decision-journal) ───
+
+export type AgoraJournalSourceRoute = "/bff/agora/journal" | "/bff/agora/decision-journal";
+
+export interface AgoraJournalEntry {
+  id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  linkedStrategyIds: string[];
+  linkedPersonaIds: string[];
+  visibility: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  canonicalWriteAuthority?: string;
+  persistenceMode?: string;
+  sourceRoute: AgoraJournalSourceRoute;
+  decisionEventId?: string | null;
+  symbol?: string | null;
+  action?: string | null;
+}
+
+export interface AgoraJournalTimeline {
+  entries: AgoraJournalEntry[];
+  journalCount: number;
+  decisionJournalCount: number;
+}
+
+function toStringList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+}
+
+function normalizeJournalEntry(
+  raw: Record<string, unknown>,
+  sourceRoute: AgoraJournalSourceRoute,
+): AgoraJournalEntry | null {
+  const cleaned = stripPrivateMemory(raw);
+  const id = String(cleaned.id ?? cleaned.entry_id ?? cleaned.journal_id ?? "").trim();
+  if (!id) return null;
+  const title = String(cleaned.title ?? cleaned.summary ?? cleaned.headline ?? id).trim();
+  const body = String(cleaned.body ?? cleaned.content ?? cleaned.notes ?? cleaned.rationale ?? "").trim();
+  const tags = toStringList(cleaned.tags);
+  const linkedStrategyIds = toStringList(
+    cleaned.linkedStrategyIds ?? cleaned.linked_strategy_ids ?? (cleaned.strategy_id ? [cleaned.strategy_id] : []),
+  );
+  const linkedPersonaIds = toStringList(
+    cleaned.linkedPersonaIds ?? cleaned.linked_persona_ids ?? (cleaned.persona_id ? [cleaned.persona_id] : []),
+  );
+  const createdAt = String(cleaned.createdAt ?? cleaned.created_at ?? cleaned.recorded_at ?? "").trim();
+  const updatedAt = String(cleaned.updatedAt ?? cleaned.updated_at ?? createdAt).trim();
+  const versionRaw = Number(cleaned.version ?? 1);
+  return {
+    id,
+    title,
+    body,
+    tags,
+    linkedStrategyIds,
+    linkedPersonaIds,
+    visibility: String(cleaned.visibility ?? "private").trim() || "private",
+    createdAt,
+    updatedAt,
+    version: Number.isFinite(versionRaw) && versionRaw > 0 ? versionRaw : 1,
+    canonicalWriteAuthority:
+      typeof cleaned.canonicalWriteAuthority === "string"
+        ? cleaned.canonicalWriteAuthority
+        : typeof cleaned.canonical_write_authority === "string"
+          ? cleaned.canonical_write_authority
+          : undefined,
+    persistenceMode:
+      typeof cleaned.persistenceMode === "string"
+        ? cleaned.persistenceMode
+        : typeof cleaned.persistence_mode === "string"
+          ? cleaned.persistence_mode
+          : undefined,
+    sourceRoute,
+    decisionEventId:
+      typeof cleaned.decision_event_id === "string"
+        ? cleaned.decision_event_id
+        : typeof cleaned.decisionEventId === "string"
+          ? cleaned.decisionEventId
+          : null,
+    symbol: typeof cleaned.symbol === "string" ? cleaned.symbol : null,
+    action: typeof cleaned.action === "string" ? cleaned.action : null,
+  };
+}
+
+function pickJournalEntries(
+  raw: Record<string, unknown>,
+  sourceRoute: AgoraJournalSourceRoute,
+): AgoraJournalEntry[] | undefined {
+  const candidates = Array.isArray(raw.data)
+    ? raw.data
+    : Array.isArray(raw.items)
+      ? raw.items
+      : raw.data && typeof raw.data === "object" && Array.isArray((raw.data as Record<string, unknown>).items)
+        ? ((raw.data as Record<string, unknown>).items as unknown[])
+        : undefined;
+  if (!candidates) return undefined;
+  return candidates
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    .map((item) => normalizeJournalEntry(item, sourceRoute))
+    .filter((entry): entry is AgoraJournalEntry => entry !== null);
+}
+
+export const getAgoraJournal = (query?: { page_size?: number; page_token?: string }): Promise<LearningRead<AgoraJournalEntry[]>> =>
+  read(
+    () => bffFetch({ method: "GET", path: "/bff/agora/journal", query }),
+    (r) => pickJournalEntries(r, "/bff/agora/journal"),
+  );
+
+export const getAgoraDecisionJournal = (query?: { page_size?: number; page_token?: string }): Promise<LearningRead<AgoraJournalEntry[]>> =>
+  read(
+    () => bffFetch({ method: "GET", path: "/bff/agora/decision-journal", query }),
+    (r) => pickJournalEntries(r, "/bff/agora/decision-journal"),
+  );
+
+export async function getAgoraJournalTimeline(query?: { page_size?: number }): Promise<LearningRead<AgoraJournalTimeline>> {
+  const [journalRead, decisionJournalRead] = await Promise.all([
+    getAgoraJournal(query),
+    getAgoraDecisionJournal(query),
+  ]);
+  if (journalRead.state === "unavailable" && decisionJournalRead.state === "unavailable") {
+    return {
+      state: "unavailable",
+      reason: journalRead.reason || decisionJournalRead.reason || REASON_UNKNOWN,
+      owner: journalRead.owner ?? decisionJournalRead.owner,
+    };
+  }
+  const journalEntries = journalRead.state === "ok" ? journalRead.data : [];
+  const decisionEntries = decisionJournalRead.state === "ok" ? decisionJournalRead.data : [];
+  const mergedById = new Map<string, AgoraJournalEntry>();
+  for (const entry of [...decisionEntries, ...journalEntries]) {
+    const existing = mergedById.get(entry.id);
+    if (!existing) {
+      mergedById.set(entry.id, entry);
+    } else {
+      mergedById.set(entry.id, {
+        ...existing,
+        ...entry,
+        tags: Array.from(new Set([...existing.tags, ...entry.tags])),
+        linkedStrategyIds: Array.from(new Set([...existing.linkedStrategyIds, ...entry.linkedStrategyIds])),
+        linkedPersonaIds: Array.from(new Set([...existing.linkedPersonaIds, ...entry.linkedPersonaIds])),
+      });
+    }
+  }
+  const entries = Array.from(mergedById.values()).sort((a, b) => {
+    const tA = a.updatedAt || a.createdAt || "";
+    const tB = b.updatedAt || b.createdAt || "";
+    return tB.localeCompare(tA);
+  });
+  return {
+    state: "ok",
+    data: {
+      entries,
+      journalCount: journalEntries.length,
+      decisionJournalCount: decisionEntries.length,
+    },
+  };
+}

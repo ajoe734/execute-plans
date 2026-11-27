@@ -19,6 +19,8 @@ const operatorComponents = import.meta.glob("./**/*.tsx", {
 const tradingRoomAndPerformanceSources = {
   ...(import.meta.glob(
     [
+      "./TradingDeskLayout.tsx",
+      "./drawers/**/*.tsx",
       "./pages/trading-room/**/*.tsx",
       "./trading-room/**/*.tsx",
       "./pages/strategy-performance/**/*.tsx",
@@ -114,6 +116,27 @@ describe("Agora locale policy", () => {
         shellSource,
         `TradingDeskLayout.tsx contains forbidden hardcoded shell literal: ${literal}`,
       ).not.toContain(literal);
+    }
+  });
+
+  it("keeps agora.drawers in exact zh-TW/en-US key parity with zero dead keys across global drawer sources", () => {
+    const zhDrawerKeys = collectLeafKeyPaths(zh.agora.drawers, "agora.drawers");
+    const enDrawerKeys = collectLeafKeyPaths(en.agora.drawers, "agora.drawers");
+    expect(zhDrawerKeys).toEqual(enDrawerKeys);
+    expect(zhDrawerKeys.length).toBeGreaterThan(80);
+
+    const drawerBundleSource = [
+      operatorComponents["./TradingDeskLayout.tsx"] ?? "",
+      operatorComponents["./drawers/GlobalDrawers.tsx"] ?? "",
+      operatorComponents["./drawers/ServantCorrectionSection.tsx"] ?? "",
+    ].join("\n");
+    expect(drawerBundleSource.length).toBeGreaterThan(0);
+
+    for (const key of zhDrawerKeys) {
+      expect(
+        drawerBundleSource,
+        `agora.drawers key ${key} must be referenced by global drawer sources (no dead keys allowed)`,
+      ).toContain(key);
     }
   });
 

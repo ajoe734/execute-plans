@@ -350,6 +350,7 @@ describe("Agora IA 05 legacy route redirects and workshop committee entry", () =
     expect(screen.getByTestId("trading-room-location").getAttribute("data-pathname")).toBe(
       "/agora/trading-room",
     );
+    expect(screen.getByTestId("trading-desk-journal-drawer")).toBeDefined();
     journalView.unmount();
 
     const trainerView = render(<LegacyRouteHarness initialPath="/agora/trainer" />);
@@ -357,6 +358,7 @@ describe("Agora IA 05 legacy route redirects and workshop committee entry", () =
       "/agora/trading-room",
     );
     expect(screen.getByTestId("trading-desk-servant-drawer")).toBeDefined();
+    expect(screen.getByTestId("servant-correction-section").getAttribute("data-trainer-active")).toBe("true");
     trainerView.unmount();
   });
 });

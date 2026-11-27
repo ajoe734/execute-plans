@@ -47,6 +47,17 @@ import "./i18n";
 import { useIsNarrowViewport } from "./responsive";
 import { useAgoraWriteAccess } from "./useAgoraWriteAccess";
 import { useServantStatus, type ServantStatusState } from "./useServantStatus";
+import {
+  ExpertReviewGlobalDrawer,
+  JournalReplayGlobalDrawer,
+  LayoutAdjustmentGlobalDrawer,
+  PersonalizationGlobalDrawer,
+  ServantSessionTasksSection,
+  ShadowGlobalDrawer,
+  type GlobalDrawerId,
+  type ServantSessionTaskItem,
+} from "./drawers/GlobalDrawers";
+import { ServantCorrectionSection } from "./drawers/ServantCorrectionSection";
 import "./responsive.css";
 
 // ─── Tab definitions (V6 §2.1 & IA 05: only three visible zh-TW main tabs) ────
@@ -221,17 +232,17 @@ export interface ServantCommandTask {
 // ─── CommandBar (Header + Persistent 交代僕人 Command Bar + 10 Quick Tasks) ───
 
 interface CommandBarProps {
+  activeDrawer: GlobalDrawerId | null;
   activeTab: AgoraTab;
   command: string;
   commandEnabled: boolean;
   context: ServantCommandContext;
   disabledReason: string | null;
-  drawerOpen: boolean;
   marketState: string;
   onCommandChange: (value: string) => void;
   onQuickTask: (instruction: string) => void;
   onSubmit: () => void;
-  onToggleDrawer: () => void;
+  onToggleDrawer: (drawer: GlobalDrawerId) => void;
   servant: ReturnType<typeof useServantStatus>;
   submitting: boolean;
   traderDisplayName: string;
@@ -240,12 +251,12 @@ interface CommandBarProps {
 }
 
 function CommandBar({
+  activeDrawer,
   activeTab,
   command,
   commandEnabled,
   context,
   disabledReason,
-  drawerOpen,
   marketState,
   onCommandChange,
   onQuickTask,
@@ -290,12 +301,19 @@ function CommandBar({
     TABS.find((item) => item.id === activeTab)?.labelKey ?? "agora.shell.tabs.tradingRoom",
   );
 
+  const servantDrawerOpen = activeDrawer === "servant";
+  const shadowDrawerOpen = activeDrawer === "shadow";
+  const journalDrawerOpen = activeDrawer === "journal";
+  const expertReviewDrawerOpen = activeDrawer === "expert-review";
+  const layoutDrawerOpen = activeDrawer === "layout";
+  const personalizationDrawerOpen = activeDrawer === "personalization";
+
   return (
     <header
       className="flex shrink-0 flex-col gap-2 border-b border-[#2a2e38] bg-[#1a1d23] px-4 py-2 min-w-0 max-w-full overflow-hidden"
       data-testid="trading-desk-command-bar"
     >
-      {/* Top row: Brand · Trader Name & Style · Market State · Servant State · zh-TW Sign Out */}
+      {/* Top row: Brand · Trader Name & Style · Market State · 6 Global Drawers · Servant State · zh-TW Sign Out */}
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="flex shrink-0 items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#e8b750] text-xs font-black text-[#1a1410]">
@@ -332,54 +350,158 @@ function CommandBar({
 
         <span className="flex-1" />
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2" data-testid="trading-desk-servant-state">
+        <div
+          aria-label={t("agora.drawers.toolbar.ariaLabel")}
+          className="flex shrink-0 flex-wrap items-center gap-1.5"
+          data-testid="trading-desk-global-drawers"
+          role="toolbar"
+        >
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5" data-testid="trading-desk-servant-state">
+            <button
+              ref={triggerRef}
+              aria-label={t(servantDrawerOpen ? "agora.shell.servant.close" : "agora.shell.servant.open")}
+              aria-pressed={servantDrawerOpen}
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                servantDrawerOpen
+                  ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
+                  : "border-[#2a2e38] bg-transparent text-[#c5cad2] hover:bg-[#171b22]",
+              )}
+              data-testid="global-drawer-trigger-servant"
+              onClick={() => onToggleDrawer("servant")}
+              type="button"
+            >
+              <span aria-hidden="true" className="h-3.5 w-3.5 select-none">
+                {servantDrawerOpen ? "✕" : "⚡"}
+              </span>
+              <span>{t("agora.drawers.toolbar.servantTasks")}</span>
+              {servantDisplayName && (
+                <span className="text-[#e8b750]" data-testid="servant-display-name">
+                  · {servantDisplayName}
+                </span>
+              )}
+            </button>
+
+            <span
+              className="text-xs text-[#8c96a6]"
+              data-testid="servant-status"
+              role={servant.state.kind === "error" ? "alert" : undefined}
+            >
+              {servantStatusText(servant.state, t)}
+            </span>
+
+            {servant.state.kind === "missing" && interactionAllowed && (
+              <button
+                className="inline-flex h-8 shrink-0 items-center rounded-md border border-[rgba(232,183,80,0.35)] px-2.5 text-xs font-medium text-[#e8b750] disabled:opacity-60"
+                disabled={servant.creating}
+                onClick={() => void servant.create()}
+                type="button"
+              >
+                {t("agora.shell.header.createServant")}
+              </button>
+            )}
+            {servant.createError && (
+              <span className="text-xs text-[#f87171]" role="alert">
+                {servant.createError}
+              </span>
+            )}
+          </div>
+
           <button
-            ref={triggerRef}
-            aria-label={t(drawerOpen ? "agora.shell.servant.close" : "agora.shell.servant.open")}
-            aria-pressed={drawerOpen}
+            aria-label={t(shadowDrawerOpen ? "agora.drawers.toolbar.closeShadow" : "agora.drawers.toolbar.openShadow")}
+            aria-pressed={shadowDrawerOpen}
             className={cn(
-              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-              drawerOpen
+              "inline-flex h-8 shrink-0 items-center rounded-md border px-2.5 text-xs font-medium transition-colors",
+              shadowDrawerOpen
                 ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
                 : "border-[#2a2e38] bg-transparent text-[#c5cad2] hover:bg-[#171b22]",
             )}
-            onClick={onToggleDrawer}
+            data-testid="global-drawer-trigger-shadow"
+            onClick={() => onToggleDrawer("shadow")}
             type="button"
           >
-            <span aria-hidden="true" className="h-3.5 w-3.5 select-none">
-              {drawerOpen ? "✕" : "⚡"}
-            </span>
-            <span>{t("agora.shell.servant.label")}</span>
-            {servantDisplayName && (
-              <span className="text-[#e8b750]" data-testid="servant-display-name">
-                · {servantDisplayName}
-              </span>
-            )}
+            {t("agora.drawers.toolbar.shadow")}
           </button>
 
-          <span
-            className="text-xs text-[#8c96a6]"
-            data-testid="servant-status"
-            role={servant.state.kind === "error" ? "alert" : undefined}
+          <button
+            aria-label={t(journalDrawerOpen ? "agora.drawers.toolbar.closeJournal" : "agora.drawers.toolbar.openJournal")}
+            aria-pressed={journalDrawerOpen}
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center rounded-md border px-2.5 text-xs font-medium transition-colors",
+              journalDrawerOpen
+                ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
+                : "border-[#2a2e38] bg-transparent text-[#c5cad2] hover:bg-[#171b22]",
+            )}
+            data-testid="global-drawer-trigger-journal"
+            onClick={() => onToggleDrawer("journal")}
+            type="button"
           >
-            {servantStatusText(servant.state, t)}
-          </span>
+            {t("agora.drawers.toolbar.journal")}
+          </button>
 
-          {servant.state.kind === "missing" && interactionAllowed && (
-            <button
-              className="inline-flex h-8 shrink-0 items-center rounded-md border border-[rgba(232,183,80,0.35)] px-2.5 text-xs font-medium text-[#e8b750] disabled:opacity-60"
-              disabled={servant.creating}
-              onClick={() => void servant.create()}
-              type="button"
-            >
-              {t("agora.shell.header.createServant")}
-            </button>
-          )}
-          {servant.createError && (
-            <span className="text-xs text-[#f87171]" role="alert">
-              {servant.createError}
-            </span>
-          )}
+          <button
+            aria-label={t(
+              expertReviewDrawerOpen
+                ? "agora.drawers.toolbar.closeExpertReview"
+                : "agora.drawers.toolbar.openExpertReview",
+            )}
+            aria-pressed={expertReviewDrawerOpen}
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center rounded-md border px-2.5 text-xs font-medium transition-colors",
+              expertReviewDrawerOpen
+                ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
+                : "border-[#2a2e38] bg-transparent text-[#c5cad2] hover:bg-[#171b22]",
+            )}
+            data-testid="global-drawer-trigger-expert-review"
+            onClick={() => onToggleDrawer("expert-review")}
+            type="button"
+          >
+            {t("agora.drawers.toolbar.expertReview")}
+          </button>
+
+          <button
+            aria-label={t(layoutDrawerOpen ? "agora.drawers.toolbar.closeLayout" : "agora.drawers.toolbar.openLayout")}
+            aria-pressed={layoutDrawerOpen}
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center rounded-md border px-2.5 text-xs font-medium transition-colors",
+              layoutDrawerOpen
+                ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
+                : activeTab !== "trading-room"
+                  ? "border-[#2a2e38] bg-transparent text-[#737d8e] hover:bg-[#171b22]"
+                  : "border-[#2a2e38] bg-transparent text-[#c5cad2] hover:bg-[#171b22]",
+            )}
+            data-disabled-outside-trading-room={activeTab !== "trading-room" ? "true" : "false"}
+            data-testid="global-drawer-trigger-layout"
+            onClick={() => onToggleDrawer("layout")}
+            title={
+              activeTab !== "trading-room"
+                ? t("agora.drawers.layout.disabledOutsideTradingRoom")
+                : undefined
+            }
+            type="button"
+          >
+            {t("agora.drawers.toolbar.layout")}
+          </button>
+
+          <button
+            aria-label={t(
+              personalizationDrawerOpen
+                ? "agora.drawers.toolbar.closePersonalization"
+                : "agora.drawers.toolbar.openPersonalization",
+            )}
+            aria-pressed={personalizationDrawerOpen}
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center rounded-md border px-2.5 text-xs font-medium transition-colors",
+              personalizationDrawerOpen
+                ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
+                : "border-[#2a2e38] bg-transparent text-[#c5cad2] hover:bg-[#171b22]",
+            )}
+            data-testid="global-drawer-trigger-personalization"
+            onClick={() => onToggleDrawer("personalization")}
+            type="button"
+          >
+            {t("agora.drawers.toolbar.personalization")}
+          </button>
         </div>
 
         <button
@@ -567,22 +689,30 @@ function useServantWorkshopContext(workshopId: string | undefined, open: boolean
 
 function ServantDrawer({
   activeTab,
+  commandDisabledReason,
+  commandSubmitting,
   context,
   isNarrow,
   onOpenChange,
+  onSubmitCommand,
   open,
   servantState,
   tasks,
+  trainerActive,
   triggerRef,
   workshopId,
 }: {
   activeTab: AgoraTab;
+  commandDisabledReason: string | null;
+  commandSubmitting: boolean;
   context: ServantCommandContext;
   isNarrow: boolean;
   onOpenChange: (open: boolean) => void;
+  onSubmitCommand: (text: string) => Promise<void>;
   open: boolean;
   servantState: ServantStatusState;
   tasks: ServantCommandTask[];
+  trainerActive: boolean;
   triggerRef: React.RefObject<HTMLButtonElement>;
   workshopId?: string;
 }) {
@@ -591,6 +721,28 @@ function ServantDrawer({
   const pageLabel = t(
     TABS.find((item) => item.id === activeTab)?.labelKey ?? "agora.shell.tabs.tradingRoom",
   );
+  const servantPersonaId =
+    servantState.kind === "ready" ? servantState.servant.persona_id : null;
+  const servantDisplayName =
+    servantState.kind === "ready"
+      ? formatServantDisplayName(
+          servantState.servant.display_name,
+          t("agora.shell.header.servantDefaultName"),
+        )
+      : t("agora.shell.header.servantDefaultName");
+  const defaultSubjectRef = context.strategy
+    ? `strategy:${context.strategy}`
+    : `page:${activeTab}`;
+
+  const sessionTaskItems: ServantSessionTaskItem[] = tasks.map((task) => ({
+    id: task.id,
+    command: task.instruction,
+    status: task.status,
+    sessionId: task.sessionId ?? null,
+    answer: task.reply ?? null,
+    errorMessage: task.error ?? null,
+    contextSnapshot: task.context,
+  }));
 
   const drawerBody = (
     <div className="flex-1 overflow-auto p-3 space-y-3" data-testid="servant-drawer-context">
@@ -698,6 +850,23 @@ function ServantDrawer({
           ))
         )}
       </section>
+
+      {open && (
+        <>
+          <ServantSessionTasksSection
+            commandDisabledReason={commandDisabledReason}
+            commandSubmitting={commandSubmitting}
+            onSubmitCommand={onSubmitCommand}
+            tasks={sessionTaskItems}
+          />
+          <ServantCorrectionSection
+            defaultSubjectRef={defaultSubjectRef}
+            servantDisplayName={servantDisplayName}
+            servantPersonaId={servantPersonaId}
+            trainerActive={trainerActive}
+          />
+        </>
+      )}
     </div>
   );
 
@@ -761,6 +930,36 @@ function ServantDrawer({
 
 // ─── Main layout ──────────────────────────────────────────────────────────────
 
+function resolveDrawerRequest(raw: unknown): {
+  drawer: GlobalDrawerId;
+  trainerActive: boolean;
+} | null {
+  if (typeof raw !== "string") return null;
+  const clean = raw.trim().toLowerCase();
+  if (clean === "servant" || clean === "ask") {
+    return { drawer: "servant", trainerActive: false };
+  }
+  if (clean === "trainer") {
+    return { drawer: "servant", trainerActive: true };
+  }
+  if (clean === "shadow") {
+    return { drawer: "shadow", trainerActive: false };
+  }
+  if (clean === "journal" || clean === "replay") {
+    return { drawer: "journal", trainerActive: false };
+  }
+  if (clean === "expert-review" || clean === "expert_review") {
+    return { drawer: "expert-review", trainerActive: false };
+  }
+  if (clean === "layout") {
+    return { drawer: "layout", trainerActive: false };
+  }
+  if (clean === "personalization") {
+    return { drawer: "personalization", trainerActive: false };
+  }
+  return null;
+}
+
 export interface TradingDeskLayoutProps {
   /** Workshop ID propagated to the servant drawer when on strategy-workshop tab. */
   workshopId?: string;
@@ -786,7 +985,8 @@ export function TradingDeskLayout({
   const navigate = useNavigate();
   const params = useParams<{ workshopId?: string; strategyId?: string }>();
   const [searchParams] = useSearchParams();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeDrawer, setActiveDrawer] = useState<GlobalDrawerId | null>(null);
+  const [trainerActive, setTrainerActive] = useState<boolean>(false);
   const [command, setCommand] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [tasks, setTasks] = useState<ServantCommandTask[]>([]);
@@ -835,27 +1035,28 @@ export function TradingDeskLayout({
     };
   }, []);
 
-  // Open the servant drawer when navigated from a legacy drawer route (/agora/ask or /agora/trainer).
+  // Open the matching global drawer when navigated from a legacy drawer route
+  // (/agora/ask, /agora/journal, /agora/trainer) or via ?drawer=<name>.
   useEffect(() => {
     const stateRecord =
       location.state && typeof location.state === "object"
         ? (location.state as Record<string, unknown>)
         : null;
-    const drawerQuery = searchParams.get("drawer");
-    if (
-      stateRecord?.openDrawer === "servant" ||
-      stateRecord?.openDrawer === "trainer" ||
-      drawerQuery === "servant" ||
-      drawerQuery === "trainer"
-    ) {
-      setDrawerOpen(true);
+    const fromState = resolveDrawerRequest(stateRecord?.openDrawer);
+    const fromQuery = resolveDrawerRequest(searchParams.get("drawer"));
+    const target = fromState ?? fromQuery;
+    if (target) {
+      setActiveDrawer(target.drawer);
+      setTrainerActive(target.trainerActive);
     }
   }, [location.state, searchParams]);
+
+  const anyDrawerOpen = activeDrawer !== null;
 
   useEffect(() => {
     const mainRegion = mainRegionRef.current;
     if (!mainRegion) return;
-    if (isNarrow && drawerOpen) {
+    if (isNarrow && anyDrawerOpen) {
       mainRegion.setAttribute("inert", "");
       mainRegion.setAttribute("aria-hidden", "true");
     } else {
@@ -866,7 +1067,7 @@ export function TradingDeskLayout({
       mainRegion.removeAttribute("inert");
       mainRegion.removeAttribute("aria-hidden");
     };
-  }, [drawerOpen, isNarrow]);
+  }, [anyDrawerOpen, isNarrow]);
 
   const activeTab = tabFromPath(location.pathname);
 
@@ -975,7 +1176,7 @@ export function TradingDeskLayout({
     const contextKey = JSON.stringify(snapshotContext);
 
     setSubmitting(true);
-    setDrawerOpen(true);
+    setActiveDrawer("servant");
     setTasks((prev) => [
       {
         id: taskId,
@@ -1072,6 +1273,29 @@ export function TradingDeskLayout({
     }
   };
 
+  const handleToggleDrawer = (drawer: GlobalDrawerId) => {
+    setActiveDrawer((prev) => {
+      const next = prev === drawer ? null : drawer;
+      if (next !== "servant") {
+        setTrainerActive(false);
+      }
+      return next;
+    });
+  };
+
+  const servantPersonaId =
+    servant.state.kind === "ready" ? servant.state.servant.persona_id : null;
+  const servantDisplayName =
+    servant.state.kind === "ready"
+      ? formatServantDisplayName(
+          servant.state.servant.display_name,
+          t("agora.shell.header.servantDefaultName"),
+        )
+      : t("agora.shell.header.servantDefaultName");
+  const defaultSubjectRef = currentStrategy
+    ? `strategy:${currentStrategy}`
+    : `page:${activeTab}`;
+
   return (
     <div
       className={cn("dark flex flex-1 flex-col overflow-hidden min-h-0 bg-[#111417] text-[#f0ece4]", className)}
@@ -1079,12 +1303,12 @@ export function TradingDeskLayout({
       data-viewport={isNarrow ? "mobile" : "desktop"}
     >
       <CommandBar
+        activeDrawer={activeDrawer}
         activeTab={activeTab}
         command={command}
         commandEnabled={commandEnabled}
         context={commandContext}
         disabledReason={disabledReason}
-        drawerOpen={drawerOpen}
         marketState={marketState}
         onCommandChange={setCommand}
         onQuickTask={(instruction) => {
@@ -1092,7 +1316,7 @@ export function TradingDeskLayout({
           void submitServantCommand(instruction);
         }}
         onSubmit={() => void submitServantCommand()}
-        onToggleDrawer={() => setDrawerOpen((v) => !v)}
+        onToggleDrawer={handleToggleDrawer}
         servant={servant}
         submitting={submitting}
         traderDisplayName={traderDisplayName}
@@ -1117,15 +1341,74 @@ export function TradingDeskLayout({
 
         <ServantDrawer
           activeTab={activeTab}
+          commandDisabledReason={disabledReason}
+          commandSubmitting={submitting}
           context={commandContext}
           isNarrow={isNarrow}
-          onOpenChange={setDrawerOpen}
-          open={drawerOpen}
+          onOpenChange={(open) => {
+            setActiveDrawer(open ? "servant" : null);
+            if (!open) setTrainerActive(false);
+          }}
+          onSubmitCommand={(text) => submitServantCommand(text)}
+          open={activeDrawer === "servant"}
           servantState={servant.state}
           tasks={tasks}
+          trainerActive={trainerActive}
           triggerRef={drawerTriggerRef}
           workshopId={servantWorkshopId}
         />
+
+        {activeDrawer === "shadow" && (
+          <ShadowGlobalDrawer
+            isNarrowViewport={isNarrow}
+            onClose={() => setActiveDrawer(null)}
+          />
+        )}
+
+        {activeDrawer === "journal" && (
+          <JournalReplayGlobalDrawer
+            isNarrowViewport={isNarrow}
+            onClose={() => setActiveDrawer(null)}
+          />
+        )}
+
+        {activeDrawer === "expert-review" && (
+          <ExpertReviewGlobalDrawer
+            isNarrowViewport={isNarrow}
+            onClose={() => setActiveDrawer(null)}
+            onNavigateToWorkshop={(path) => {
+              setActiveDrawer(null);
+              navigate(path);
+            }}
+            servantPersonaId={servantPersonaId}
+            strategyId={currentStrategy}
+            workshopId={resolvedWorkshopId ?? null}
+          />
+        )}
+
+        {activeDrawer === "layout" && (
+          <LayoutAdjustmentGlobalDrawer
+            isNarrowViewport={isNarrow}
+            isTradingRoom={activeTab === "trading-room"}
+            onClose={() => setActiveDrawer(null)}
+            onNavigateToTradingRoom={() => {
+              navigate("/agora/trading-room");
+            }}
+            selectedWidget={currentSelectedWidget}
+            strategyId={currentStrategy}
+          />
+        )}
+
+        {activeDrawer === "personalization" && (
+          <PersonalizationGlobalDrawer
+            defaultSubjectRef={defaultSubjectRef}
+            isNarrowViewport={isNarrow}
+            onClose={() => setActiveDrawer(null)}
+            servantDisplayName={servantDisplayName}
+            servantPersonaId={servantPersonaId}
+            strategyId={currentStrategy}
+          />
+        )}
       </div>
     </div>
   );

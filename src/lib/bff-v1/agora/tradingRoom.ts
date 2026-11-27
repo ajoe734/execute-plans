@@ -2029,7 +2029,8 @@ function normalizeShadowComparisonPayload(
       Boolean(item && typeof item === "object" && !Array.isArray(item)),
   );
   if (rawArms.length === 0) {
-    return { state: "empty" };
+    const emptyReason = stringFrom(root.reason) || stringFrom(data.comparison_state);
+    return emptyReason ? { state: "empty", reason: emptyReason } : { state: "empty" };
   }
 
   const arms: TradingRoomShadowArm[] = rawArms.map((armRec) => {

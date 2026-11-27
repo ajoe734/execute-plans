@@ -6,6 +6,8 @@ import {
   formatServantDisplayName,
   getServant,
   getServantSession,
+  getServantSessionStream,
+  parseServantSessionSse,
   sendServantSessionMessage,
   terminateServantSession,
 } from "./servant";
@@ -231,5 +233,73 @@ describe("servant client (strict live)", () => {
 
     const terminated = await terminateServantSession("sess-001");
     expect(terminated.state).toBe("canceled");
+  });
+
+  it("replays durable servant session messages and running turns from /bff/agora/servant/sessions/{id}/stream", async () => {
+    const sseBody = [
+      "id: sess-001:created",
+      "event: servant.session.created",
+      'data: {"session_id":"sess-001","session_type":"interactive","servant_persona_id":"servant-live-001"}',
+      "",
+      "id: msg-u-1",
+      "event: servant.message.accepted",
+      'data: {"session_id":"sess-001","message_id":"msg-u-1","role":"user","content":"分析分點","attachment_refs":["page:trading-room"]}',
+      "",
+      "id: msg-a-1",
+      "event: servant.message.completed",
+      'data: {"session_id":"sess-001","message_id":"msg-a-1","turn_id":"turn-1","reply_to":"msg-u-1","provider_status":"completed","answer":"已完成分點籌碼比對。"}',
+      "",
+      "id: turn-2:running",
+      "event: servant.message.queued",
+      'data: {"session_id":"sess-001","turn_id":"turn-2","message_id":"msg-u-2","status":"running"}',
+      "",
+      "",
+    ].join("\n");
+
+    const spy = mockFetch(() =>
+      Promise.resolve(
+        new Response(sseBody, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      ),
+    );
+
+    const snapshot = await getServantSessionStream("sess-001");
+    const [streamUrl] = spy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(streamUrl).toBe("https://bff.example.test/bff/agora/servant/sessions/sess-001/stream");
+    expect(snapshot.session_id).toBe("sess-001");
+    expect(snapshot.sessionStatus).toBe("active");
+    expect(snapshot.messages).toHaveLength(2);
+    expect(snapshot.messages[0]).toMatchObject({
+      message_id: "msg-u-1",
+      role: "user",
+      content: "分析分點",
+      status: "accepted",
+    });
+    expect(snapshot.messages[1]).toMatchObject({
+      message_id: "msg-a-1",
+      role: "assistant",
+      content: "已完成分點籌碼比對。",
+      status: "completed",
+    });
+    expect(snapshot.runningTurns).toEqual([
+      {
+        turn_id: "turn-2",
+        message_id: "msg-u-2",
+        status: "running",
+      },
+    ]);
+
+    const parsedFromJson = parseServantSessionSse("sess-002", {
+      events: [
+        {
+          id: "sess-002:terminated",
+          type: "servant.session.terminated",
+          data: { session_id: "sess-002", status: "canceled" },
+        },
+      ],
+    });
+    expect(parsedFromJson.sessionStatus).toBe("canceled");
   });
 });
