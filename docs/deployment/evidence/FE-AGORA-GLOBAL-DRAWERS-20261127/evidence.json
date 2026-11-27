@@ -42,8 +42,9 @@
     "docs/deployment/evidence/FE-AGORA-GLOBAL-DRAWERS-20261127/screenshots/08-personalization-drawer.png"
   ],
   "verification": {
-    "typecheck": "npx tsc --noEmit: 0 errors",
+    "typecheck": "npm run typecheck:app && npm run typecheck:agora && npx tsc --noEmit: 0 errors",
     "eslint": "npm run lint (eslint .): 0 errors",
+    "build": "npm run build && npm run scan:bundle-credentials: exit 0",
     "i18n_guard": "npx vitest run src/agora/i18n.guard.test.ts: 8/8 passed",
     "unit_tests": "npx vitest run src/agora/i18n.guard.test.ts src/agora/TradingDeskLayout.test.tsx src/routes/agora.test.tsx src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx src/lib/bff-v1/agora/learning.test.ts src/lib/bff-v1/agora/servant.test.ts src/lib/bff-v1/agora/tradingRoom.test.ts: 7 files, 157/157 passed",
     "playwright_e2e": "npx playwright test e2e/agora-shell-hosted.spec.ts: real Chromium proof with 8 screenshots captured"

@@ -21,8 +21,6 @@ import {
   type ServantSessionStreamSnapshot,
 } from "@/lib/bff-v1/agora/servant";
 import {
-  acceptWidgetRevisionProposal,
-  createWidgetRevisionProposal,
   getTradingRoom,
   getTradingRoomWorkspaceByStrategyWithMeta,
   listDecisionEvents,
@@ -1691,17 +1689,11 @@ export function LayoutAdjustmentGlobalDrawer({
             <WorkspaceWidgetRevisionDrawer
               open={true}
               workspace={workspace}
-              workspaceEtag={workspaceEtag}
+              currentEtag={workspaceEtag}
               view={activeRevisionTarget.view}
               widget={activeRevisionTarget.widget}
               onClose={() => setActiveRevisionTarget(null)}
-              onCreateProposal={(workspaceId, widgetId, request) =>
-                createWidgetRevisionProposal(workspaceId, widgetId, request)
-              }
-              onAcceptProposal={(proposalId, etag, options) =>
-                acceptWidgetRevisionProposal(proposalId, etag, options)
-              }
-              onAccepted={(result) => {
+              onRevisionAccepted={(result) => {
                 setWorkspace(result.workspace);
                 setWorkspaceEtag(result.etag);
                 setActiveRevisionTarget(null);
