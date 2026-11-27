@@ -1689,6 +1689,179 @@ describe("Evidence page: cited list (FE-EVIDENCE-CITED-20261125)", () => {
     expect(screen.getByRole("link", { name: "Registry entry approval" })).toBeInTheDocument();
     unmountEn();
   });
+
+  it("FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127: shows browsable and full counts in the cited pager when references_truncated is true, disables Next on page 25 of 25, names a matching kind/source_class once, and stays unchanged when not truncated or when new BFF fields are absent", async () => {
+    const buildPage = (nextPageToken: string | null) => {
+      const raw = citedPayload({ status: "degraded" }) as {
+        data: {
+          summary: Record<string, unknown>;
+          items: Array<Record<string, unknown>>;
+        };
+        page_info: Record<string, unknown>;
+      };
+      raw.page_info = {
+        next_page_token: nextPageToken,
+        total: 500,
+        page_size: 20,
+      };
+      raw.data.summary = {
+        scope: "cited",
+        complete: false,
+        incomplete: true,
+        reference_total: 1754,
+        returned: 20,
+        references_truncated: true,
+        max_references: 500,
+        redacted_count: 0,
+        excluded: { meeting_topic: 0, private_or_trader: 0, memory_scope_unproven: 0, unparsed: 0 },
+        sources_ok: 7,
+        sources_not_ok: [],
+      };
+      raw.data.items = [
+        {
+          id: "mat-20261127-001",
+          ref_id: "mat-20261127-001",
+          ref_kind: "meeting_action_ticket",
+          source_owner: null,
+          label: "mat-20261127-001",
+          name_missing: true,
+          label_parts: {},
+          source_class: "meeting_action_ticket",
+          resolved_link: null,
+          route_href: null,
+          cited_as: ["mat-20261127-001"],
+          cited_by: [],
+          citation_count: 1,
+          last_cited_at: "2026-11-27T00:30:00Z",
+          redacted: false,
+        },
+        {
+          id: ART_B,
+          ref_id: ART_B,
+          ref_kind: "registry_artifact",
+          source_owner: "registry",
+          label: "TW momentum 20d breakout",
+          name_missing: false,
+          label_parts: { strategy_id: ART_B },
+          source_class: "registry_record",
+          resolved_link: { route_href: `/management/strategies/${ART_B}`, evidence_ref_id: null },
+          route_href: `/management/strategies/${ART_B}`,
+          cited_as: [`facts:registry_entry:${ART_B}`, ART_B],
+          cited_by: [],
+          citation_count: 1,
+          last_cited_at: "2026-11-27T00:29:00Z",
+          redacted: false,
+        },
+        {
+          id: "reg-strategy-spec-persona-715f5875971f2e342d8f",
+          ref_id: "reg-strategy-spec-persona-715f5875971f2e342d8f",
+          ref_kind: "registry_entry",
+          source_owner: "registry",
+          label: "reg-strategy-spec-persona-715f5875971f2e342d8f",
+          name_missing: true,
+          label_parts: {},
+          source_class: "registry_entry",
+          resolved_link: null,
+          route_href: null,
+          cited_as: ["reg-strategy-spec-persona-715f5875971f2e342d8f"],
+          cited_by: [],
+          citation_count: 1,
+          last_cited_at: "2026-11-27T00:28:00Z",
+          redacted: false,
+        },
+      ];
+      return adaptManagementCitedEvidence(raw)!;
+    };
+
+    mocks.useV5Live.mockImplementation((_loader: unknown, deps: unknown[]) => {
+      const token = Array.isArray(deps) && typeof deps[0] === "string" ? deps[0] : "";
+      const offset = token ? Number(token) : 0;
+      const nextToken = String(offset + 20);
+      return {
+        data: buildPage(nextToken),
+        loading: false,
+        refresh: vi.fn(),
+      };
+    });
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = renderEvidence("/management/evidence");
+
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("第 1 / 25 頁 · 列出 500 筆（共 1754 筆）");
+    expect(screen.getByTestId("evidence-pagination")).not.toHaveTextContent("第 1 頁 · 共 1754 筆");
+
+    const zhKindLines = screen.getAllByTestId("evidence-cited-kind-line").map((el) => el.textContent);
+    expect(zhKindLines).toEqual([
+      "會議行動單",
+      "策略（登錄） · 登錄紀錄",
+      "登錄項目 · 登錄紀錄",
+    ]);
+    expect(screen.queryByText("會議行動單 · 會議行動單")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("evidence-cited-name")[0]).toHaveTextContent("會議行動單");
+    expect(screen.getAllByTestId("evidence-cited-ref-id")[0]).toHaveTextContent("mat-20261127-001");
+
+    for (let step = 1; step < 5; step += 1) {
+      fireEvent.click(screen.getByTestId("evidence-pagination-next"));
+    }
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("第 5 / 25 頁 · 列出 500 筆（共 1754 筆）");
+    expect(screen.getByTestId("evidence-pagination-next")).toBeEnabled();
+
+    for (let step = 5; step < 25; step += 1) {
+      fireEvent.click(screen.getByTestId("evidence-pagination-next"));
+    }
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("第 25 / 25 頁 · 列出 500 筆（共 1754 筆）");
+    expect(screen.getByTestId("evidence-pagination-next")).toBeDisabled();
+    expect(screen.getByTestId("evidence-pagination-prev")).toBeEnabled();
+    unmountZh();
+
+    await i18n.changeLanguage("en-US");
+    const { unmount: unmountEn } = renderEvidence("/management/evidence");
+
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("Page 1 of 25 · 500 of 1754 listed");
+    const enKindLines = screen.getAllByTestId("evidence-cited-kind-line").map((el) => el.textContent);
+    expect(enKindLines).toEqual([
+      "Meeting action ticket",
+      "Strategy (registry) · Registry record",
+      "Registry entry · Registry record",
+    ]);
+    expect(screen.queryByText("Meeting action ticket · Meeting action ticket")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("evidence-cited-name")[0]).toHaveTextContent("Meeting action ticket");
+    expect(screen.getAllByTestId("evidence-cited-ref-id")[0]).toHaveTextContent("mat-20261127-001");
+
+    for (let step = 1; step < 5; step += 1) {
+      fireEvent.click(screen.getByTestId("evidence-pagination-next"));
+    }
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("Page 5 of 25 · 500 of 1754 listed");
+    expect(screen.getByTestId("evidence-pagination-next")).toBeEnabled();
+
+    for (let step = 5; step < 25; step += 1) {
+      fireEvent.click(screen.getByTestId("evidence-pagination-next"));
+    }
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("Page 25 of 25 · 500 of 1754 listed");
+    expect(screen.getByTestId("evidence-pagination-next")).toBeDisabled();
+    unmountEn();
+
+    // When not truncated or when the new BFF fields are absent, the pager stays unchanged.
+    const rawAbsentFields = citedPayload();
+    delete (rawAbsentFields.data.summary as Record<string, unknown>).reference_total;
+    delete (rawAbsentFields.data.summary as Record<string, unknown>).references_truncated;
+    delete (rawAbsentFields.data.summary as Record<string, unknown>).max_references;
+    mocks.useV5Live.mockReturnValue({
+      data: adaptManagementCitedEvidence(rawAbsentFields),
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZhUnchanged } = renderEvidence("/management/evidence");
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("第 1 頁 · 共 4 筆");
+    unmountZhUnchanged();
+
+    await i18n.changeLanguage("en-US");
+    const { unmount: unmountEnUnchanged } = renderEvidence("/management/evidence");
+    expect(screen.getByTestId("evidence-pagination")).toHaveTextContent("Page 1 · Total 4");
+    unmountEnUnchanged();
+  });
 });
 
 describe("Evidence page: detail and inbound links (FE-EVIDENCE-CITED-20261125)", () => {

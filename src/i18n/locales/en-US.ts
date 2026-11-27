@@ -6069,6 +6069,7 @@ export default {
         previous: "Previous",
         next: "Next",
         pageFmt: "Page {{page}} · Total {{total}}",
+        truncatedPageFmt: "Page {{page}} of {{pages}} · {{listed}} of {{total}} listed",
       },
       noLinkedDecisions: "No BFF-linked decisions for this evidence ref.",
       redactedDecision: "Redacted decision",
