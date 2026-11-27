@@ -197,6 +197,10 @@ export const MANAGEMENT_SIDEBAR_GROUPS: readonly ManagementNavGroup[] = [
       { id: "evolution-journal", to: "/management/evolution-journal", labelKey: "nav.evolutionJournal", icon: GitBranch },
       { id: "evolution", to: "/management/evolution", labelKey: "nav.evolution", icon: GitBranch },
       { id: "alpha-factory", to: "/management/alpha-factory", labelKey: "nav.alphaFactory", icon: Factory },
+      // FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: persona operator tools moved from Agora.
+      { id: "persona-memory-review", to: "/management/persona-tools/memory", labelKey: "nav.personaMemoryReview", icon: Brain },
+      { id: "persona-lab", to: "/management/persona-tools/lab", labelKey: "nav.personaLab", icon: FlaskConical },
+      { id: "persona-feedback", to: "/management/persona-tools/feedback", labelKey: "nav.personaFeedback", icon: MessagesSquare },
     ],
   },
   {

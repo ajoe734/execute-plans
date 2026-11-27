@@ -12,6 +12,8 @@
  * - JobProgressDrawer does not duplicate /bff/jobs before first row.
  */
 import { expect, test, type Page, type Route } from "@playwright/test";
+// @ts-expect-error plain ESM readability helper
+import { detectReadability } from "../scripts/lib/management-readability.mjs";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const EVIDENCE_PATH = "/management/evidence";
@@ -347,4 +349,48 @@ test.describe("MGMT-LOAD-003 shell fanout reduction", () => {
     expect(counters.approvals).toBe(0);
     expect(counters.alerts).toBe(0);
   });
+});
+
+// FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: memory review, persona lab and
+// per-persona feedback are Management pages now. Each mounts in the shell with
+// the persona picker by name, adds no shell fanout, is reachable from the
+// sidebar, and reads in words (no raw id as the only name, no enum codes).
+const PERSONA_TOOL_PAGES: Array<{ path: string; title: RegExp }> = [
+  { path: "/management/persona-tools/memory", title: /Persona memory review|人格記憶審核/ },
+  { path: "/management/persona-tools/lab", title: /Persona Lab|人格實驗室/ },
+  { path: "/management/persona-tools/feedback", title: /Persona feedback|人格回饋/ },
+];
+
+test.describe("FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127 persona tools in Management", () => {
+  for (const { path, title } of PERSONA_TOOL_PAGES) {
+    test(`${path} mounts with a named persona picker, sidebar entry and readable text`, async ({ page }) => {
+      const counters = await installBaseFixtures(page);
+      await onRoute(page, SHELL_SUMMARY_PATTERN, async (route) => {
+        counters.shellSummary += 1;
+        await fulfillJson(route, shellSummaryResponse("ok"));
+      });
+      await onRoute(page, /\/bff\/personas(?:\?.*)?$/, async (route) => {
+        await fulfillJson(route, {
+          items: [{ id: "persona-e2e-0001", name: "Momentum Desk Persona", archetype: "momentum", owner: "ops", updatedAt: nowIso(), state: "active", risk: "low", routedStrategies: 0, successRate: null }],
+          cursor: {}, pageSize: 1, estimatedTotal: 1, totalCountExact: true, meta: { snapshot_at: nowIso() },
+        });
+      });
+      await onRoute(page, /\/bff\/agora\/memory(?:\?.*)?$/, async (route) => {
+        await fulfillJson(route, { status: "unavailable", reason: "no_memory_records", owner: "memory", data: { entries: [], lesson_candidates: [] } });
+      });
+
+      await page.goto(frontendUrl(path), { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await expect(page.locator("main h1").first()).toHaveText(title, { timeout: 10_000 });
+      const picker = page.getByTestId("persona-tools-picker").getByRole("combobox");
+      await expect(picker).toBeVisible();
+
+      const mainText = await page.locator("main").innerText();
+      const findings = (detectReadability(mainText) as Array<{ detector: string; samples: string[] }>)
+        .filter((f) => ["enum_code", "translation_key", "internal_id"].includes(f.detector));
+      expect(findings, `readability findings on ${path}`).toEqual([]);
+
+      expect(counters.approvals).toBe(0);
+      expect(counters.alerts).toBe(0);
+    });
+  }
 });

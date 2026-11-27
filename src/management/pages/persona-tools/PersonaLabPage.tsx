@@ -7,9 +7,10 @@ import {
   type ChangeLogEntry, type LearningRead,
 } from "@/lib/bff-v1/agora/learning";
 import {
-  OutcomeView, PageShell, PersonaIdField, ReadBoundary, WriteGateNote, textInput,
+  OutcomeView, ReadBoundary, WriteGateNote, textInput,
   useLearningRead, useLearningWriteAccess, usePersonaIdParam, type ActionOutcome,
-} from "./shared";
+} from "@/agora/pages/learning/shared";
+import { EnumText, PersonaPicker, ToolPageShell, useEnumLabel } from "./shared";
 
 function useOutcome() {
   const [outcome, setOutcome] = useState<ActionOutcome | null>(null);
@@ -95,7 +96,7 @@ function PatchesPanel({ personaId, revision }: { personaId: string; revision: nu
           <ul className="space-y-2" data-testid="lab-patches">
             {ids.map((id) => (
               <li key={id} className="rounded border border-border p-2 text-sm" data-testid={`patch-${id}`}>
-                <code>{id}</code> · {state.patches?.[id]?.status ?? t("agora.learning.notReported")}
+                <code>{id}</code> · <EnumText group="state" value={state.patches?.[id]?.status} />
                 <PatchActions personaId={personaId} patchId={id} onDone={reload} />
               </li>
             ))}
@@ -110,6 +111,7 @@ function PatchesPanel({ personaId, revision }: { personaId: string; revision: nu
 
 function EvaluationPanel({ personaId }: { personaId: string }) {
   const { t } = useTranslation();
+  const label = useEnumLabel();
   const suites = useLearningRead(() => getEvaluationSuites(personaId), `suites:${personaId}`).result;
   const runs = useLearningRead(() => getEvaluationRuns(personaId), `runs:${personaId}`).result;
   return (
@@ -124,8 +126,8 @@ function EvaluationPanel({ personaId }: { personaId: string }) {
           <ul className="space-y-1 text-sm">
             {list.map((r) => (
               <li key={r.run_id} className="rounded border border-border p-2">
-                <code>{r.run_id}</code> · {r.status ?? t("agora.learning.notReported")} · {r.decision ?? t("agora.learning.notReported")}
-                {r.reasons.length ? <span> · {r.reasons.join(", ")}</span> : null}
+                <code>{r.run_id}</code> · <EnumText group="state" value={r.status} /> · <EnumText group="decision" value={r.decision} />
+                {r.reasons.length ? <span> · {r.reasons.map((reason) => label("decision", reason)).join(", ")}</span> : null}
               </li>
             ))}
           </ul>
@@ -159,7 +161,7 @@ function ShadowPanel({ personaId }: { personaId: string }) {
                   <tr key={`${row.decision_time ?? "row"}-${i}`}>
                     <td>{fmt(row.decision_time)}</td>
                     {cmp.arms.map((a) => <td key={a}>{fmt((row as unknown as Record<string, unknown>)[a])}</td>)}
-                    <td>{row.decisions_differ === null || row.decisions_differ === undefined ? t("agora.learning.notReported") : String(row.decisions_differ)}</td>
+                    <td>{row.decisions_differ === null || row.decisions_differ === undefined ? t("agora.learning.notReported") : row.decisions_differ ? t("personaTools.yes") : t("personaTools.no")}</td>
                     <td>{fmt(row.virtual_book_delta)}</td>
                   </tr>
                 ))}
@@ -208,7 +210,7 @@ function ChangeEntry({ personaId, entry, onDone }: { personaId: string; entry: C
 
   return (
     <li className="rounded border border-border p-2 text-sm" data-testid={`change-${patchId}`}>
-      <p>v{String(entry.version)} · <code>{patchId}</code> · {entry.status ?? t("agora.learning.notReported")}
+      <p>v{String(entry.version)} · <code>{patchId}</code> · <EnumText group="state" value={entry.status} />
         {entry.active ? <strong> · {t("agora.learning.lab.active")}</strong> : null}</p>
       <p className="text-xs text-muted-foreground">
         {t("agora.learning.lab.evidence")}: {entry.evidence_refs.length ? entry.evidence_refs.join(", ") : t("agora.learning.notReported")}
@@ -270,10 +272,10 @@ export function PersonaLabPage() {
   const [revision, setRevision] = useState(0);
   const bump = () => setRevision((n) => n + 1);
   return (
-    <PageShell title={t("agora.learning.lab.title")} testId="agora-persona-lab-page">
-      <PersonaIdField personaId={personaId} onChange={setPersonaId} />
+    <ToolPageShell title={t("nav.personaLab")} subtitle={t("personaTools.lab.subtitle")} testId="management-persona-lab-page">
+      <PersonaPicker personaId={personaId} onChange={setPersonaId} />
       <WriteGateNote reason={write.reason} />
-      {!personaId ? <p className="text-sm text-muted-foreground" data-testid="learning-persona-required">{t("agora.learning.persona.required")}</p> : (
+      {!personaId ? <p className="text-sm text-muted-foreground" data-testid="learning-persona-required">{t("personaTools.picker.required")}</p> : (
         <div key={personaId} className="space-y-6">
           <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.drafts")}</h2><DraftPanel personaId={personaId} skill={false} onDone={bump} /></section>
           <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.skillCoaching")}</h2><DraftPanel personaId={personaId} skill onDone={bump} /></section>
@@ -283,6 +285,6 @@ export function PersonaLabPage() {
           <section><h2 className="mb-2 font-medium">{t("agora.learning.lab.changeLog")}</h2><ChangeLogPanel personaId={personaId} revision={revision} /></section>
         </div>
       )}
-    </PageShell>
+    </ToolPageShell>
   );
 }

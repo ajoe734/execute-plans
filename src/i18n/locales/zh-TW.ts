@@ -96,7 +96,7 @@ export default {
     trainerStudio: "AI 訓練工作室",
     memoryReview: "記憶回顧",
     skillCoaching: "技能教練",
-    personaLab: "Persona 實驗室",
+    personaLab: "人格實驗室",
     eval: "評估套件",
     evaluations: "評估套件",
     ranking: "排序儀表板",
@@ -158,6 +158,9 @@ export default {
     rankingsCenter: "排名中心",
     governanceDecisions: "治理決策",
     meetingsCenter: "會議中心",
+    // FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127：由 Agora 移入的人格操作工具。
+    personaMemoryReview: "人格記憶審核",
+    personaFeedback: "人格回饋",
     llmProviderAuth: "LLM 供應商授權",
 
   },
@@ -2335,6 +2338,75 @@ export default {
     risk: { editor: "風險預算編輯器", breakdown: "風險預算拆分", queued: "風險預算變更已排入" },
     bindings: { title: "策略 / Persona 綁定", hint: "資金池 {{pool}} 的啟用中綁定。" },
   },
+  // FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127：管理介面的人格操作工具。
+  personaTools: {
+    reference: "參照",
+    state: "狀態",
+    yes: "是",
+    no: "否",
+    picker: {
+      label: "人格",
+      placeholder: "選擇人格…",
+      loading: "讀取人格清單中…",
+      unavailable: "無法讀取人格清單，請改用進階方式指定",
+      empty: "人格登錄中沒有資料",
+      unnamed: "未命名人格",
+      unlisted: "未列於人格登錄的人格（由連結指定）",
+      manual: "進階：以人格 ID 指定",
+      required: "請先選擇人格以讀取此頁面。",
+    },
+    memory: {
+      subtitle: "審核機構與人格記憶條目，並隔離不應採用的經驗教訓候選。",
+      untitledEntry: "記憶條目 {{n}}",
+      untitledCandidate: "未附說明的經驗教訓候選",
+    },
+    lab: {
+      subtitle: "為單一人格起草 Harness 修補、執行影子比對與評估，並處理變更紀錄。",
+    },
+    feedback: {
+      subtitle: "以操作者身分為單一人格提交訊號回饋、筆記、洞察與訓練範例。",
+    },
+    enum: {
+      scope: {
+        both: "人格與機構",
+        persona: "僅人格",
+        institutional: "僅機構",
+      },
+      memoryType: {
+        persona: "人格記憶",
+        institutional: "機構記憶",
+      },
+      state: {
+        proposed: "已提出",
+        pending_review: "待審核",
+        quarantined: "已隔離",
+        approved: "已核准",
+        rejected: "已拒絕",
+        draft: "草稿",
+        submitted: "已送審",
+        adopted: "已採用",
+        rolled_back: "已復原",
+        shadow_running: "影子比對中",
+        complete: "已完成",
+        completed: "已完成",
+        running: "執行中",
+        failed: "失敗",
+      },
+      decision: {
+        adopt: "採用",
+        reject: "不採用",
+        hold: "暫緩",
+        better_pnl: "損益較佳",
+        worse_pnl: "損益較差",
+      },
+      evidenceType: {
+        note: "筆記",
+        insight: "洞察",
+        signal_feedback: "訊號回饋",
+        training_example: "訓練範例",
+      },
+    },
+  },
   confirmDialog: {
     resolveIncident: "結案事件 — {{title}}",
     resolveIncidentDesc: "將此事件標記為已結案，系統會自動建立檢討任務。",
@@ -2346,6 +2418,7 @@ export default {
   agora: {
     learning: {
       unavailable: "無法讀取 — 資料擁有者未回傳資料",
+      technicalDetail: "技術代碼",
       reason: "原因",
       owner: "擁有者",
       loading: "讀取中…",

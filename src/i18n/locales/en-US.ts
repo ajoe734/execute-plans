@@ -166,6 +166,9 @@ export default {
     rankingsCenter: "Rankings Center",
     governanceDecisions: "Governance Decisions",
     meetingsCenter: "Meetings Center",
+    // FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: persona operator tools moved from Agora.
+    personaMemoryReview: "Persona memory review",
+    personaFeedback: "Persona feedback",
     llmProviderAuth: "LLM Provider Auth",
 
   },
@@ -2353,6 +2356,75 @@ export default {
     risk: { editor: "Risk budget editor", breakdown: "Risk budget breakdown", queued: "Risk budget change queued" },
     bindings: { title: "Strategy / persona bindings", hint: "Active bindings for pool {{pool}}." },
   },
+  // FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: Management persona operator tools.
+  personaTools: {
+    reference: "Reference",
+    state: "State",
+    yes: "Yes",
+    no: "No",
+    picker: {
+      label: "Persona",
+      placeholder: "Choose a persona…",
+      loading: "Loading personas…",
+      unavailable: "Persona list unavailable — use the advanced option",
+      empty: "The persona registry is empty",
+      unnamed: "Unnamed persona",
+      unlisted: "Persona not in the registry (from link)",
+      manual: "Advanced: enter a persona ID",
+      required: "Choose a persona to load this page.",
+    },
+    memory: {
+      subtitle: "Review institutional and persona memory entries and quarantine lesson candidates that should not be adopted.",
+      untitledEntry: "Memory entry {{n}}",
+      untitledCandidate: "Lesson candidate without a description",
+    },
+    lab: {
+      subtitle: "Draft harness patches for one persona, run shadow comparisons and evaluations, and act on the change log.",
+    },
+    feedback: {
+      subtitle: "Submit signal feedback, notes, insights, and training examples for one persona as an operator.",
+    },
+    enum: {
+      scope: {
+        both: "Persona and institutional",
+        persona: "Persona only",
+        institutional: "Institutional only",
+      },
+      memoryType: {
+        persona: "Persona memory",
+        institutional: "Institutional memory",
+      },
+      state: {
+        proposed: "Proposed",
+        pending_review: "Pending review",
+        quarantined: "Quarantined",
+        approved: "Approved",
+        rejected: "Rejected",
+        draft: "Draft",
+        submitted: "Submitted",
+        adopted: "Adopted",
+        rolled_back: "Rolled back",
+        shadow_running: "Shadow running",
+        complete: "Complete",
+        completed: "Completed",
+        running: "Running",
+        failed: "Failed",
+      },
+      decision: {
+        adopt: "Adopt",
+        reject: "Reject",
+        hold: "Hold",
+        better_pnl: "Better P&L",
+        worse_pnl: "Worse P&L",
+      },
+      evidenceType: {
+        note: "Note",
+        insight: "Insight",
+        signal_feedback: "Signal feedback",
+        training_example: "Training example",
+      },
+    },
+  },
   confirmDialog: {
     resolveIncident: "Resolve incident — {{title}}",
     resolveIncidentDesc: "Mark this incident as resolved. A post-mortem task will be filed automatically.",
@@ -2364,6 +2436,7 @@ export default {
   agora: {
     learning: {
       unavailable: "Unavailable — the owner returned no data",
+      technicalDetail: "Technical code",
       reason: "Reason",
       owner: "Owner",
       loading: "Loading…",

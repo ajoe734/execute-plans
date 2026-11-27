@@ -5,14 +5,18 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import {
   AgoraAskLegacyRoute,
   AgoraDailyLegacyRoute,
+  AgoraFeedbackRoute,
   AgoraJournalLegacyRoute,
   AgoraLayoutRoute,
+  AgoraMemoryRoute,
   AgoraNotebookLegacyRoute,
+  AgoraPersonaLabRoute,
   AgoraSignalsLegacyRoute,
   AgoraStrategyPerformanceRoute,
   AgoraStrategyWorkshopRoute,
   AgoraTrainerLegacyRoute,
   AgoraWatchlistLegacyRoute,
+  isPersonaToolOperator,
   safeWorkshopReturnPath,
 } from "./agora";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
@@ -23,6 +27,19 @@ const routeMocks = vi.hoisted(() => ({
   strategyPerformancePage: vi.fn(),
   strategyWorkshopPage: vi.fn(),
 }));
+
+// FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: persona-tool redirect tests pin
+// the session roles; every other test keeps the real session hook.
+const sessionMock = vi.hoisted(() => ({ value: null as null | { me: { roles: string[] } | null; loading: boolean } }));
+vi.mock("@/lib/v4/session/me", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/v4/session/me")>();
+  return {
+    ...actual,
+    useMe: (() => (sessionMock.value
+      ? { ...sessionMock.value, error: null, refresh: () => undefined }
+      : actual.useMe())) as typeof actual.useMe,
+  };
+});
 
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshop: vi.fn(),
@@ -87,6 +104,7 @@ afterEach(() => {
   liveStatus._reset();
   routeMocks.strategyPerformancePage.mockClear();
   routeMocks.strategyWorkshopPage.mockClear();
+  sessionMock.value = null;
   vi.restoreAllMocks();
 });
 
@@ -340,5 +358,70 @@ describe("Agora IA 05 legacy route redirects and workshop committee entry", () =
     );
     expect(screen.getByTestId("trading-desk-servant-drawer")).toBeDefined();
     trainerView.unmount();
+  });
+});
+
+describe("persona operator tools moved to Management (FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127)", () => {
+  function Probe() {
+    const location = useLocation();
+    return <div data-pathname={location.pathname} data-search={location.search} data-testid="persona-tool-probe" />;
+  }
+
+  function renderLegacy(initialPath: string) {
+    return render(
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route path="/agora/memory" element={<AgoraMemoryRoute />} />
+          <Route path="/agora/persona-lab" element={<AgoraPersonaLabRoute />} />
+          <Route path="/agora/feedback" element={<AgoraFeedbackRoute />} />
+          <Route path="/agora/trading-room" element={<Probe />} />
+          <Route path="/management/persona-tools/:tool" element={<Probe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  const cases = [
+    ["/agora/memory", "/management/persona-tools/memory"],
+    ["/agora/persona-lab", "/management/persona-tools/lab"],
+    ["/agora/feedback", "/management/persona-tools/feedback"],
+  ] as const;
+
+  it.each(cases)("sends an operator role from %s to %s and keeps only the persona context", (from, to) => {
+    sessionMock.value = { me: { roles: ["operator"] }, loading: false };
+    renderLegacy(`${from}?personaId=p1&drawer=watchlist`);
+    const probe = screen.getByTestId("persona-tool-probe");
+    expect(probe.getAttribute("data-pathname")).toBe(to);
+    expect(probe.getAttribute("data-search")).toBe("?personaId=p1");
+  });
+
+  it.each(cases)("sends a non-operator from %s back to the trading room", (from) => {
+    sessionMock.value = { me: { roles: ["viewer"] }, loading: false };
+    renderLegacy(`${from}?personaId=p1`);
+    const probe = screen.getByTestId("persona-tool-probe");
+    expect(probe.getAttribute("data-pathname")).toBe("/agora/trading-room");
+    expect(probe.getAttribute("data-search")).toBe("");
+  });
+
+  it("sends a session without roles back to the trading room and waits while the session loads", () => {
+    sessionMock.value = { me: null, loading: true };
+    const view = renderLegacy("/agora/memory");
+    expect(screen.getByTestId("agora-persona-tool-redirecting")).toBeDefined();
+    expect(screen.queryByTestId("persona-tool-probe")).toBeNull();
+    view.unmount();
+
+    sessionMock.value = { me: null, loading: false };
+    renderLegacy("/agora/memory");
+    expect(screen.getByTestId("persona-tool-probe").getAttribute("data-pathname")).toBe("/agora/trading-room");
+  });
+
+  it("treats admin, platform admin, ops and research lead as operator roles, case-insensitively", () => {
+    for (const role of ["admin", "PLATFORM_ADMIN", "ops", "research_lead", "reviewer", "approver"]) {
+      expect(isPersonaToolOperator([role])).toBe(true);
+    }
+    for (const roles of [[], ["viewer"], ["portfolio_manager"], ["trader"]]) {
+      expect(isPersonaToolOperator(roles)).toBe(false);
+    }
+    expect(isPersonaToolOperator(undefined)).toBe(false);
   });
 });

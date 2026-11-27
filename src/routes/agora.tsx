@@ -1,10 +1,7 @@
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { TradingDeskLayout } from "@/agora/TradingDeskLayout";
 import { TradingRoomPage } from "@/agora/pages/trading-room/TradingRoomPage";
 import { CommitteePage } from "@/agora/pages/learning/CommitteePage";
-import { MemoryReviewPage } from "@/agora/pages/learning/MemoryReviewPage";
-import { PersonaLabPage } from "@/agora/pages/learning/PersonaLabPage";
-import { FeedbackPage } from "@/agora/pages/learning/FeedbackPage";
 import { StrategyPerformancePage } from "@/agora/pages/strategy-performance/StrategyPerformancePage";
 import {
   StrategyWorkshopPage,
@@ -15,6 +12,7 @@ import {
 import type { WorkshopParticipantPicker } from "@/agora/participantPicker";
 import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import { useLiveSseConnection } from "@/platform/hooks";
+import { useMe } from "@/lib/v4/session/me";
 
 function tradingRoomHandoffQuery(handoff: TradingRoomReadinessHandoff): string {
   const params = new URLSearchParams({
@@ -215,6 +213,45 @@ export function AgoraTrainerLegacyRoute() {
 }
 
 export const AgoraCommitteeRoute = () => <CommitteePage />;
-export const AgoraMemoryRoute = () => <MemoryReviewPage />;
-export const AgoraPersonaLabRoute = () => <PersonaLabPage />;
-export const AgoraFeedbackRoute = () => <FeedbackPage />;
+
+// FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: memory review, persona lab and
+// per-persona feedback are operator tools (institutional memory, JSON harness
+// patches, evaluation suites), not trader screens. Agora is for human traders
+// only, so the old Agora paths send operator roles to the Management pages
+// and everyone else back to the trading room.
+export const PERSONA_TOOL_OPERATOR_ROLES: ReadonlySet<string> = new Set([
+  "admin",
+  "platform_admin",
+  "operator",
+  "ops",
+  "research_lead",
+  "reviewer",
+  "approver",
+]);
+
+export function isPersonaToolOperator(roles: readonly string[] | null | undefined): boolean {
+  return (roles ?? []).some((role) => PERSONA_TOOL_OPERATOR_ROLES.has(String(role).toLowerCase()));
+}
+
+export const PERSONA_TOOL_MANAGEMENT_PATHS = {
+  memory: "/management/persona-tools/memory",
+  "persona-lab": "/management/persona-tools/lab",
+  feedback: "/management/persona-tools/feedback",
+} as const;
+
+function AgoraPersonaToolRedirect({ tool }: { tool: keyof typeof PERSONA_TOOL_MANAGEMENT_PATHS }) {
+  const { me, loading } = useMe();
+  const { search } = useLocation();
+  if (loading && !me) {
+    return <p className="p-4 text-sm text-muted-foreground" data-testid="agora-persona-tool-redirecting">…</p>;
+  }
+  if (!isPersonaToolOperator(me?.roles)) return <Navigate to="/agora/trading-room" replace />;
+  // Only the persona context crosses over; other Agora query keys are dropped.
+  const personaId = new URLSearchParams(search).get("personaId")?.trim();
+  const query = personaId ? `?${new URLSearchParams({ personaId }).toString()}` : "";
+  return <Navigate to={`${PERSONA_TOOL_MANAGEMENT_PATHS[tool]}${query}`} replace />;
+}
+
+export const AgoraMemoryRoute = () => <AgoraPersonaToolRedirect tool="memory" />;
+export const AgoraPersonaLabRoute = () => <AgoraPersonaToolRedirect tool="persona-lab" />;
+export const AgoraFeedbackRoute = () => <AgoraPersonaToolRedirect tool="feedback" />;
