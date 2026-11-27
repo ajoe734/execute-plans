@@ -5,9 +5,18 @@ import {
   getMemoryReview, quarantineLessonCandidate, type LessonCandidate, type MemoryScope,
 } from "@/lib/bff-v1/agora/learning";
 import {
-  OutcomeView, PageShell, PersonaIdField, ReadBoundary, WriteGateNote, textInput,
+  OutcomeView, ReadBoundary, WriteGateNote, textInput,
   useLearningRead, useLearningWriteAccess, usePersonaIdParam, type ActionOutcome,
-} from "./shared";
+} from "@/agora/pages/learning/shared";
+import { EnumText, PersonaPicker, ToolPageShell, useEnumLabel } from "./shared";
+
+function entrySummary(entry: Record<string, unknown>): string | null {
+  for (const key of ["title", "summary", "lesson", "content", "text"]) {
+    const value = entry[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
 
 function Quarantine({ candidate, quarantined, onDone }: { candidate: LessonCandidate; quarantined: boolean; onDone: () => void }) {
   const { t } = useTranslation();
@@ -47,19 +56,20 @@ export function MemoryReviewPage() {
   const [personaId, setPersonaId] = usePersonaIdParam();
   const [scope, setScope] = useState<MemoryScope>(personaId ? "both" : "institutional");
   const write = useLearningWriteAccess();
+  const label = useEnumLabel();
   const { result, reload } = useLearningRead(
     () => getMemoryReview({ personaId: personaId || undefined, scope }),
     `memory:${personaId}:${scope}`,
   );
   return (
-    <PageShell title={t("agora.learning.memory.title")} testId="agora-memory-page">
+    <ToolPageShell title={t("nav.personaMemoryReview")} subtitle={t("personaTools.memory.subtitle")} testId="management-persona-memory-page">
       <div className="flex flex-wrap items-end gap-4">
-        <PersonaIdField personaId={personaId} onChange={setPersonaId} />
+        <PersonaPicker personaId={personaId} onChange={setPersonaId} />
         <label className="flex flex-col text-xs text-muted-foreground">{t("agora.learning.memory.scope")}
           <select className={`${textInput} mt-1`} value={scope} onChange={(e) => setScope(e.target.value as MemoryScope)}>
-            <option value="both">both</option>
-            <option value="persona">persona</option>
-            <option value="institutional">institutional</option>
+            {(["both", "persona", "institutional"] as const).map((value) => (
+              <option key={value} value={value}>{label("scope", value)}</option>
+            ))}
           </select>
         </label>
       </div>
@@ -72,7 +82,8 @@ export function MemoryReviewPage() {
               <ul className="space-y-1 text-sm">
                 {review.entries.map((hit, i) => (
                   <li key={String(hit.entry.memory_id ?? hit.entry.entry_id ?? i)} className="rounded border border-border p-2">
-                    <code>{String(hit.entry.memory_id ?? hit.entry.entry_id)}</code> · {hit.type}
+                    <EnumText group="memoryType" value={hit.type} /> · {entrySummary(hit.entry) ?? t("personaTools.memory.untitledEntry", { n: i + 1 })}
+                    <span className="ml-2 text-xs text-muted-foreground">{t("personaTools.reference")}: <code>{String(hit.entry.memory_id ?? hit.entry.entry_id ?? "")}</code></span>
                   </li>
                 ))}
               </ul>
@@ -82,8 +93,11 @@ export function MemoryReviewPage() {
               <ul className="space-y-2 text-sm">
                 {review.lesson_candidates.map((c) => (
                   <li key={c.lesson_candidate_id} className="rounded border border-border p-2" data-testid={`candidate-${c.lesson_candidate_id}`}>
-                    <code>{c.lesson_candidate_id}</code> · {c.review_state ?? t("agora.learning.notReported")}
-                    {c.proposed_change ? <p>{c.proposed_change}</p> : null}
+                    <p className="font-medium">{c.proposed_change || t("personaTools.memory.untitledCandidate")}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("personaTools.state")}: <EnumText group="state" value={c.review_state} />
+                      {" · "}{t("personaTools.reference")}: <code>{c.lesson_candidate_id}</code>
+                    </p>
                     <Quarantine candidate={c} quarantined={c.review_state === "quarantined"} onDone={reload} />
                   </li>
                 ))}
@@ -92,6 +106,6 @@ export function MemoryReviewPage() {
           </>
         )}
       </ReadBoundary>
-    </PageShell>
+    </ToolPageShell>
   );
 }

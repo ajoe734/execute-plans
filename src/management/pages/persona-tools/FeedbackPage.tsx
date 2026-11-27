@@ -6,9 +6,10 @@ import {
 } from "@/lib/bff-v1/agora/learning";
 import { idempotencyKey } from "@/lib/bff-v1/headers";
 import {
-  OutcomeView, PageShell, PersonaIdField, ReadBoundary, WriteGateNote, textInput,
+  OutcomeView, ReadBoundary, WriteGateNote, textInput,
   useLearningRead, useLearningWriteAccess, usePersonaIdParam, type ActionOutcome,
-} from "./shared";
+} from "@/agora/pages/learning/shared";
+import { EnumText, PersonaPicker, ToolPageShell } from "./shared";
 
 const KINDS: Array<{ kind: HumanEvidenceKind; field: string }> = [
   { kind: "signal-feedback", field: "feedback" },
@@ -85,10 +86,10 @@ export function FeedbackPage() {
   const write = useLearningWriteAccess();
   const { result, reload } = useLearningRead(personaId ? () => getPersonaHumanEvidence(personaId) : null, `evidence:${personaId}`);
   return (
-    <PageShell title={t("agora.learning.feedback.title")} testId="agora-feedback-page">
-      <PersonaIdField personaId={personaId} onChange={setPersonaId} />
+    <ToolPageShell title={t("nav.personaFeedback")} subtitle={t("personaTools.feedback.subtitle")} testId="management-persona-feedback-page">
+      <PersonaPicker personaId={personaId} onChange={setPersonaId} />
       <WriteGateNote reason={write.reason} />
-      {!personaId ? <p className="text-sm text-muted-foreground" data-testid="learning-persona-required">{t("agora.learning.persona.required")}</p> : (
+      {!personaId ? <p className="text-sm text-muted-foreground" data-testid="learning-persona-required">{t("personaTools.picker.required")}</p> : (
         <>
           <div className="grid gap-4 md:grid-cols-2">
             {KINDS.map((k) => <EvidenceForm key={`${personaId}:${k.kind}`} {...k} personaId={personaId} onDone={reload} />)}
@@ -98,13 +99,13 @@ export function FeedbackPage() {
             <ReadBoundary result={result}>
               {(obs) => (
                 <ul className="space-y-1 text-sm">
-                  {obs.items.map((item, i) => <li key={String(item.evidence_id ?? i)} className="rounded border border-border p-2"><code>{String(item.evidence_id ?? "")}</code> · {String(item.evidence_type ?? "")}</li>)}
+                  {obs.items.map((item, i) => <li key={String(item.evidence_id ?? i)} className="rounded border border-border p-2"><EnumText group="evidenceType" value={item.evidence_type} /> · {t("personaTools.reference")}: <code>{String(item.evidence_id ?? "")}</code></li>)}
                 </ul>
               )}
             </ReadBoundary>
           </section>
         </>
       )}
-    </PageShell>
+    </ToolPageShell>
   );
 }

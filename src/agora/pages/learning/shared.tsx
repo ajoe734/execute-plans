@@ -79,9 +79,15 @@ export function UnavailableNotice({ reason, owner }: { reason: string; owner?: s
     <div role="status" data-testid="learning-unavailable" className="rounded border border-dashed border-border p-3 text-sm text-muted-foreground">
       <p className="font-medium text-foreground">{t("agora.learning.unavailable")}</p>
       <p>
-        {t("agora.learning.reason")}: <code>{reason}</code>
-        {owner ? <> · {t("agora.learning.owner")}: <code>{owner}</code></> : null}
+        {t("agora.learning.reason")}: {reason.replace(/[_-]+/g, " ").trim()}
+        {owner ? <> · {t("agora.learning.owner")}: {owner.replace(/[_-]+/g, " ").trim()}</> : null}
       </p>
+      {/* The exact owner codes stay available for support, folded away from the reading text. */}
+      <details className="mt-1 text-xs">
+        <summary className="cursor-pointer">{t("agora.learning.technicalDetail")}</summary>
+        <code>{reason}</code>
+        {owner ? <> · <code>{owner}</code></> : null}
+      </details>
     </div>
   );
 }
