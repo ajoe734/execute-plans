@@ -6049,6 +6049,7 @@ export default {
         previous: "上一頁",
         next: "下一頁",
         pageFmt: "第 {{page}} 頁 · 共 {{total}} 筆",
+        truncatedPageFmt: "第 {{page}} / {{pages}} 頁 · 列出 {{listed}} 筆（共 {{total}} 筆）",
       },
       noLinkedDecisions: "此證據參照沒有 BFF 關聯決策。",
       redactedDecision: "已遮蔽決策",

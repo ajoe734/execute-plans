@@ -5216,6 +5216,8 @@ const EVIDENCE_TABLE_VIEWPORT_CLASS = "h-full min-h-[320px] overflow-auto pb-4";
 const EvidencePager = ({
   page,
   totalLabel,
+  browsableTotal,
+  browsablePages,
   canGoPrev,
   canGoNext,
   loading,
@@ -5224,6 +5226,8 @@ const EvidencePager = ({
 }: {
   page: number;
   totalLabel: ReactNode;
+  browsableTotal?: number | null;
+  browsablePages?: number | null;
   canGoPrev: boolean;
   canGoNext: boolean;
   loading: boolean;
@@ -5231,13 +5235,26 @@ const EvidencePager = ({
   onNext: () => void;
 }) => {
   const { t } = useTranslation();
+  const hasTruncatedCounts =
+    typeof browsableTotal === "number"
+    && Number.isFinite(browsableTotal)
+    && typeof browsablePages === "number"
+    && Number.isFinite(browsablePages);
   return (
     <div
       className="flex shrink-0 items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground"
       data-testid="evidence-pagination"
     >
       <span>
-        {t("mgmt.evidence.pager.pageFmt", { page, total: totalLabel, defaultValue: `Page ${page} · Total ${totalLabel}` })}
+        {hasTruncatedCounts
+          ? t("mgmt.evidence.pager.truncatedPageFmt", {
+              page,
+              pages: browsablePages,
+              listed: browsableTotal,
+              total: totalLabel,
+              defaultValue: `Page ${page} of ${browsablePages} · ${browsableTotal} of ${totalLabel} listed`,
+            })
+          : t("mgmt.evidence.pager.pageFmt", { page, total: totalLabel, defaultValue: `Page ${page} · Total ${totalLabel}` })}
       </span>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" variant="outline" disabled={!canGoPrev || loading} data-testid="evidence-pagination-prev" onClick={onPrev}>
@@ -5412,6 +5429,14 @@ function citedReferenceTotal(model: ManagementCitedEvidenceList | undefined): nu
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
 
+function citedBrowsableTotal(model: ManagementCitedEvidenceList | undefined): number | null {
+  if (!model) return null;
+  const pageTotal = typeof model.total === "number" && Number.isFinite(model.total) ? model.total : null;
+  const maxRefs = typeof model.maxReferences === "number" && Number.isFinite(model.maxReferences) ? model.maxReferences : null;
+  if (pageTotal !== null && maxRefs !== null) return Math.min(pageTotal, maxRefs);
+  return maxRefs ?? pageTotal;
+}
+
 const CitedSourcesNotice = ({ model }: { model: ManagementCitedEvidenceList }) => {
   const { t } = useTranslation();
   const notOkSources = model.sources.filter((source) => source.status !== "ok");
@@ -5496,8 +5521,13 @@ const EvidenceCitedList = () => {
   const sourcesOk = model?.sources.filter((source) => source.status === "ok" && !source.truncated).length ?? 0;
   const sourcesTotal = model?.sources.length ?? 0;
   const nextPageToken = model?.nextPageToken ?? null;
+  const currentPage = pageTokens.length;
+  const pageSize = model?.pageSize && model.pageSize > 0 ? model.pageSize : EVIDENCE_PAGE_SIZE;
+  const browsableTotal = model?.referencesTruncated ? citedBrowsableTotal(model) : null;
+  const browsablePages = browsableTotal !== null && browsableTotal > 0 ? Math.ceil(browsableTotal / pageSize) : null;
+  const atLastBrowsablePage = Boolean(model?.referencesTruncated && browsablePages !== null && currentPage >= browsablePages);
   const canGoPrev = pageTokens.length > 1;
-  const canGoNext = Boolean(nextPageToken);
+  const canGoNext = Boolean(nextPageToken) && !atLastBrowsablePage;
   const listed = status === "ok" || status === "degraded";
 
   return (
@@ -5546,35 +5576,44 @@ const EvidenceCitedList = () => {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
-                  <td className="min-w-0 px-3 py-3 [overflow-wrap:anywhere]">
-                    {citedRowHref(row) ? (
-                      <Link to={citedRowHref(row) ?? ""} className="break-words font-medium text-primary underline-offset-4 hover:underline" data-testid="evidence-cited-name">
-                        {citedRowDisplayName(t, row)}
-                      </Link>
-                    ) : (
-                      <span className="break-words font-medium text-foreground" data-testid="evidence-cited-name">
-                        {citedRowDisplayName(t, row)}
-                      </span>
-                    )}
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      <span data-testid="evidence-cited-kind" title={t("mgmt.evidence.cited.kindHeader")}>{citedKindLabel(t, row.refKind)}</span>
-                      {" · "}
-                      <span data-testid="evidence-cited-source-class" title={t("mgmt.evidence.cited.sourceClassHeader")}>{citedSourceClassLabel(t, row.sourceClass)}</span>
-                    </div>
-                    <div className="mt-1 truncate font-mono text-xs text-muted-foreground" data-testid="evidence-cited-ref-id" title={row.refId}>{row.refId}</div>
-                    {row.nameMissing && (
-                      <div className="mt-1 text-xs text-muted-foreground">{t("mgmt.evidence.cited.nameMissing")}</div>
-                    )}
-                    {row.redacted && (
-                      <Badge variant="outline" className="mt-2">{t("mgmt.evidence.redacted")}</Badge>
-                    )}
-                  </td>
-                  <td className="min-w-0 px-3 py-3"><CitedByList row={row} /></td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground" title={row.lastCitedAt ?? undefined} data-testid="evidence-cited-last-cited">{evidenceTimestamp(row.lastCitedAt)}</td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const kindLabel = citedKindLabel(t, row.refKind);
+                const sourceClassLabel = citedSourceClassLabel(t, row.sourceClass);
+                const showSourceClass = sourceClassLabel !== "—" && sourceClassLabel !== kindLabel;
+                return (
+                  <tr key={row.refId} className="border-b border-border/50 align-top" data-testid="evidence-route-row">
+                    <td className="min-w-0 px-3 py-3 [overflow-wrap:anywhere]">
+                      {citedRowHref(row) ? (
+                        <Link to={citedRowHref(row) ?? ""} className="break-words font-medium text-primary underline-offset-4 hover:underline" data-testid="evidence-cited-name">
+                          {citedRowDisplayName(t, row)}
+                        </Link>
+                      ) : (
+                        <span className="break-words font-medium text-foreground" data-testid="evidence-cited-name">
+                          {citedRowDisplayName(t, row)}
+                        </span>
+                      )}
+                      <div className="mt-1 text-xs text-muted-foreground" data-testid="evidence-cited-kind-line">
+                        <span data-testid="evidence-cited-kind" title={t("mgmt.evidence.cited.kindHeader")}>{kindLabel}</span>
+                        {showSourceClass && (
+                          <>
+                            {" · "}
+                            <span data-testid="evidence-cited-source-class" title={t("mgmt.evidence.cited.sourceClassHeader")}>{sourceClassLabel}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="mt-1 truncate font-mono text-xs text-muted-foreground" data-testid="evidence-cited-ref-id" title={row.refId}>{row.refId}</div>
+                      {row.nameMissing && (
+                        <div className="mt-1 text-xs text-muted-foreground">{t("mgmt.evidence.cited.nameMissing")}</div>
+                      )}
+                      {row.redacted && (
+                        <Badge variant="outline" className="mt-2">{t("mgmt.evidence.redacted")}</Badge>
+                      )}
+                    </td>
+                    <td className="min-w-0 px-3 py-3"><CitedByList row={row} /></td>
+                    <td className="px-3 py-3 text-xs text-muted-foreground" title={row.lastCitedAt ?? undefined} data-testid="evidence-cited-last-cited">{evidenceTimestamp(row.lastCitedAt)}</td>
+                  </tr>
+                );
+              })}
               {rows.length === 0 && !loading && (
                 listed ? (
                   <tr data-testid="evidence-route-empty">
@@ -5595,14 +5634,16 @@ const EvidenceCitedList = () => {
         </ManagementTableScroll>
         {listed && (rows.length > 0 || canGoPrev || canGoNext) && (
           <EvidencePager
-            page={pageTokens.length}
+            page={currentPage}
             totalLabel={totalLabel}
+            browsableTotal={browsableTotal}
+            browsablePages={browsablePages}
             canGoPrev={canGoPrev}
             canGoNext={canGoNext}
             loading={loading}
             onPrev={() => setPageTokens((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))}
             onNext={() => {
-              if (nextPageToken) setPageTokens((prev) => [...prev, nextPageToken]);
+              if (nextPageToken && !atLastBrowsablePage) setPageTokens((prev) => [...prev, nextPageToken]);
             }}
           />
         )}
