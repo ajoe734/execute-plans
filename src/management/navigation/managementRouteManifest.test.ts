@@ -36,16 +36,6 @@ describe("MGMT-PERF-IA-001 canonical route manifest", () => {
     }
   });
 
-  it("lists the persona operator tools moved from Agora under Research and Evolution (FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127)", () => {
-    const group = MANAGEMENT_SIDEBAR_GROUPS.find((g) => g.id === "research-and-evolution");
-    const byId = new Map((group?.items ?? []).map((i) => [i.id, i]));
-    expect(byId.get("persona-memory-review")?.to).toBe("/management/persona-tools/memory");
-    expect(byId.get("persona-lab")?.to).toBe("/management/persona-tools/lab");
-    expect(byId.get("persona-feedback")?.to).toBe("/management/persona-tools/feedback");
-    const allTargets = MANAGEMENT_SIDEBAR_GROUPS.flatMap((g) => g.items.map((i) => i.to));
-    expect(allTargets.some((to) => to.startsWith("/agora/"))).toBe(false);
-  });
-
   it("does not duplicate a group label across groups", () => {
     const groupLabels = MANAGEMENT_SIDEBAR_GROUPS.map((g) => g.labelKey);
     expect(new Set(groupLabels).size).toBe(groupLabels.length);

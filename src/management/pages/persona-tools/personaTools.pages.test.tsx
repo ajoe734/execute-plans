@@ -6,6 +6,7 @@ import "@/i18n";
 import { setMockResolver, type MockHandler } from "@/lib/bff-v1/client";
 import { makeBffError } from "@/lib/bff-v1/errors";
 import type { Persona } from "@/lib/bff-v1";
+import { MANAGEMENT_SIDEBAR_GROUPS } from "@/management/navigation/managementRouteManifest";
 import { MemoryReviewPage } from "./MemoryReviewPage";
 import { PersonaLabPage } from "./PersonaLabPage";
 import { FeedbackPage } from "./FeedbackPage";
@@ -323,5 +324,17 @@ describe("persona picker (Management persona tools)", () => {
     expect(entries.textContent).toContain("Fade opening gaps on low volume");
     const candidate = screen.getByTestId("candidate-lc-9");
     expect(candidate.querySelector('[data-state="pending_review"]')?.textContent).not.toContain("_");
+  });
+});
+
+describe("persona tools navigation (Management)", () => {
+  it("lists the three persona operator tools under Research and Evolution and no Agora target in the sidebar", () => {
+    const group = MANAGEMENT_SIDEBAR_GROUPS.find((g) => g.id === "research-and-evolution");
+    const byId = new Map((group?.items ?? []).map((i) => [i.id, i]));
+    expect(byId.get("persona-memory-review")?.to).toBe("/management/persona-tools/memory");
+    expect(byId.get("persona-lab")?.to).toBe("/management/persona-tools/lab");
+    expect(byId.get("persona-feedback")?.to).toBe("/management/persona-tools/feedback");
+    const allTargets = MANAGEMENT_SIDEBAR_GROUPS.flatMap((g) => g.items.map((i) => i.to));
+    expect(allTargets.some((to) => to.startsWith("/agora/"))).toBe(false);
   });
 });
