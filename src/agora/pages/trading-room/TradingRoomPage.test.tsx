@@ -1824,7 +1824,7 @@ describe("TradingRoomPage", () => {
     fireEvent.click(screen.getByTestId("event-row-evt-001"));
     fireEvent.click(screen.getByTestId("decide-approve-evt-001"));
     await screen.findByTestId("detail-decision-confirmed");
-    expect(screen.getByTestId("detail-decision-confirmed").textContent).toContain("approve");
+    expect(screen.getByTestId("detail-decision-confirmed").textContent).toContain("已記錄裁示：確認執行");
   });
 
   it("shows error message when decideOnEvent fails", async () => {
@@ -1903,7 +1903,7 @@ describe("TradingRoomPage", () => {
     const propIdInput = screen.getByTestId("modify-proposal-id-evt-001");
     const propRevInput = screen.getByTestId("modify-proposal-revision-evt-001");
     const wsIdInput = screen.getByTestId("modify-workshop-id-evt-001");
-    const rationaleInput = screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits...");
+    const rationaleInput = screen.getByPlaceholderText("說明規模、界線或限制的調整…");
 
     fireEvent.change(propIdInput, { target: { value: "prop-xyz" } });
     fireEvent.change(propRevInput, { target: { value: "2" } });

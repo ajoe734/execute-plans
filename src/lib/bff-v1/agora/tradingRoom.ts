@@ -2282,11 +2282,14 @@ export function subscribeTradingRoomStream(options: TradingRoomStreamOptions): (
         failures = 0;
         setMode("live");
       },
-      onError: () => {
+      onError: (error) => {
         if (closed) return;
         failures += 1;
         hadError = true;
-        if (failures >= threshold) startPolling();
+        // The SSE client does not retry after 401/403 (it waits for the auth
+        // layer). Polling goes through the session-aware BFF reads, so fall
+        // back right away instead of leaving the queue silently frozen.
+        if (failures >= threshold || /auth failed/i.test(error.message)) startPolling();
       },
       onResyncRequired: () => {
         if (!closed) options.onChange(null);

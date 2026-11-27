@@ -328,6 +328,9 @@ function WorkspaceWidgetCard({
         onRequestRevision();
       }}
       onFocus={() => onSelect?.()}
+      // The grid's drag handling swallows the click that follows a mouse press
+      // in edit mode, so selection (the 交代僕人 target) is taken on press.
+      onMouseDownCapture={() => onSelect?.()}
       onKeyDown={(event) => {
         if (editMode) return;
         if (event.key === "Enter" || event.key === " ") {

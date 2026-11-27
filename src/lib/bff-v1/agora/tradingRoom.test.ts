@@ -1975,6 +1975,26 @@ describe("subscribeTradingRoomStream (SA AD-AG-06)", () => {
     expect(modes[modes.length - 1]).toBe("closed");
   });
 
+  it("falls back to polling at once when the stream is rejected for auth (401)", async () => {
+    vi.useFakeTimers();
+    const fetchFn = vi.fn().mockResolvedValue(new Response("{}", { status: 401 }));
+    const changes: unknown[] = [];
+    const modes: TradingRoomStreamMode[] = [];
+    const close = subscribeTradingRoomStream({
+      baseUrl: BASE,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      onChange: (event) => changes.push(event),
+      onModeChange: (mode) => modes.push(mode),
+    });
+    for (let i = 0; i < 10 && !modes.includes("polling"); i += 1) {
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(modes).toContain("polling");
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(changes).toEqual([null]);
+    close();
+  });
+
   it("falls back to bounded polling after repeated stream failures", async () => {
     vi.useFakeTimers();
     const fetchFn = vi.fn().mockResolvedValue(new Response("nope", { status: 503 }));

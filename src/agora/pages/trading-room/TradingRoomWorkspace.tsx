@@ -603,12 +603,12 @@ export function TradingRoomWorkspace({
       >
         <div
           data-testid="trading-room-workspace-column"
-          style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}
+          style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, minWidth: 0, overflowX: "hidden", overflowY: "auto" }}
         >
           <div
             data-mobile-pane-hidden={mobilePane !== "workspace"}
             data-testid="trading-room-workspace-surface"
-            style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "hidden" }}
+            style={{ display: "flex", flex: "1 0 560px", flexDirection: "column", minHeight: 560, overflow: "hidden" }}
           >
           {!resolvedStrategyVersion ? (
             <div
@@ -690,7 +690,7 @@ export function TradingRoomWorkspace({
           <div
             data-mobile-pane-hidden={mobilePane !== "decisions"}
             data-testid="trading-room-decision-surface"
-            style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, overflow: "auto" }}
+            style={{ display: "flex", flex: "0 0 auto", flexDirection: "column", minHeight: 0 }}
           >
             <TradingEventQueue
               events={filteredEvents}

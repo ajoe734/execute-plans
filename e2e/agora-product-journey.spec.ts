@@ -1397,6 +1397,20 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       );
     });
 
+    await test.step("show the rule-versus-human comparison and shadow section on Strategy Performance", async () => {
+      await page.getByTestId("performance-tab-intv").click();
+      await expect(
+        page.getByRole("heading", { name: "照規則 vs 人工干預" }),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("performance-shadow-section")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.locator("body")).not.toContainText(/not reported/i);
+      screenshots.push(
+        await captureEvidenceScreenshot(page, runMarker, "05b-performance-rule-vs-human"),
+      );
+    });
+
     const bodyText = await page.locator("body").innerText();
     expect(
       bodyText,
