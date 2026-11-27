@@ -31,8 +31,8 @@ vi.mock("@/management/pages/v5/useV5Live", async (importOriginal) => ({
 
 void i18n.changeLanguage("en-US");
 
-function renderJournal(initialEntry = "/management/evolution-journal") {
-  return render(
+function journalElement(initialEntry = "/management/evolution-journal") {
+  return (
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
@@ -41,6 +41,10 @@ function renderJournal(initialEntry = "/management/evolution-journal") {
       </MemoryRouter>
     </I18nextProvider>,
   );
+}
+
+function renderJournal(initialEntry = "/management/evolution-journal") {
+  return render(journalElement(initialEntry));
 }
 
 describe("Evolution journal paper gate decisions", () => {
@@ -84,8 +88,8 @@ describe("Evolution journal paper gate decisions", () => {
     expect(within(detail).getByText("consult-decision-123")).toBeInTheDocument();
     expect(within(detail).getByText(/consult-request-123/)).toBeInTheDocument();
     expect(within(detail).getByText("risk_veto")).toBeInTheDocument();
-    expect(within(detail).getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
-    expect(within(detail).getByRole("button", { name: "Reject", exact: true })).toBeEnabled();
+    expect(within(detail).getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(within(detail).getByRole("button", { name: "Reject" })).toBeEnabled();
   });
 
   it("opens an exact decision deep link and lets a viewer read without actions despite local admin role", () => {
@@ -93,8 +97,8 @@ describe("Evolution journal paper gate decisions", () => {
     renderJournal(`/management/evolution-journal?decision=${id}`);
     const detail = screen.getByRole("dialog");
     expect(within(detail).getByText("consult-decision-123")).toBeInTheDocument();
-    expect(within(detail).queryByRole("button", { name: "Approve", exact: true })).not.toBeInTheDocument();
-    expect(within(detail).queryByRole("button", { name: "Reject", exact: true })).not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
     expect(within(detail).getByRole("note")).toHaveTextContent("do not have permission");
     expect(mocks.decideEvolutionReview).not.toHaveBeenCalled();
   });
@@ -102,26 +106,68 @@ describe("Evolution journal paper gate decisions", () => {
   it("shows disabled actions with a reason under safe write defaults", () => {
     vi.stubEnv("VITE_BFF_REAL_WRITES", "false");
     renderJournal(`/management/evolution-journal?decision=${id}`);
-    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reject", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
     expect(screen.getByRole("note")).toHaveTextContent("Writes are disabled");
     expect(mocks.decideEvolutionReview).not.toHaveBeenCalled();
+  });
+
+  it("opens the decision with the keyboard and closes the focused deep link", () => {
+    renderJournal();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Paper operator decision" }), { key: "Enter" });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not infer action permission when BFF identity has no roles", () => {
+    mocks.useAuth.mockReturnValue({ bffSession: { identity: { roles: [] } } });
+    renderJournal(`/management/evolution-journal?decision=${id}`);
+    expect(screen.getByRole("note")).toHaveTextContent("do not have permission");
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a refusal returned in an HTTP-success envelope visible without claiming approval", async () => {
+    mocks.decideEvolutionReview.mockResolvedValue({ status: "refused", data: { status: "unsupported_decision_kind" } });
+    renderJournal(`/management/evolution-journal?decision=${id}`);
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    const confirm = screen.getAllByRole("dialog").at(-1)!;
+    fireEvent.change(within(confirm).getByRole("textbox"), { target: { value: memo } });
+    fireEvent.click(within(confirm).getByRole("button", { name: /Confirm/i }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent('"status": "refused"'));
+    expect(screen.getByRole("status")).toHaveTextContent("unsupported_decision_kind");
+    expect(screen.getByText("proposed", { selector: "[role=dialog] *" })).toBeInTheDocument();
+  });
+
+  it("keeps the receipt open after refresh removes a decided row from the pending queue", async () => {
+    mocks.decideEvolutionReview.mockResolvedValue({ status: "accepted", data: { receipt_id: "receipt-removed-row" } });
+    const initialEntry = `/management/evolution-journal?decision=${id}`;
+    const view = renderJournal(initialEntry);
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    const confirm = screen.getAllByRole("dialog").at(-1)!;
+    fireEvent.change(within(confirm).getByRole("textbox"), { target: { value: memo } });
+    fireEvent.click(within(confirm).getByRole("button", { name: /Confirm/i }));
+    await waitFor(() => expect(screen.getByText(/receipt-removed-row/)).toBeInTheDocument());
+    setRows([]);
+    view.rerender(journalElement(initialEntry));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/receipt-removed-row/)).toBeInTheDocument();
   });
 
   it.each(["approve", "reject"] as const)("requires a memo and calls the existing write for %s, displaying the actual receipt", async (action) => {
     mocks.decideEvolutionReview.mockResolvedValue({ status: "accepted", data: { receipt_id: "receipt-paper-123", status: "queued" } });
     renderJournal(`/management/evolution-journal?decision=${id}`);
-    fireEvent.click(screen.getByRole("button", { name: action === "approve" ? "Approve" : "Reject", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: action === "approve" ? "Approve" : "Reject" }));
     const confirm = screen.getAllByRole("dialog").at(-1)!;
     const submit = within(confirm).getByRole("button", { name: /Confirm/i });
     expect(submit).toBeDisabled();
     expect(mocks.decideEvolutionReview).not.toHaveBeenCalled();
-    fireEvent.change(within(confirm).getByRole("textbox", { name: /memo/i }), { target: { value: memo } });
+    fireEvent.change(within(confirm).getByRole("textbox"), { target: { value: memo } });
     fireEvent.click(submit);
     await waitFor(() => expect(mocks.decideEvolutionReview).toHaveBeenCalledExactlyOnceWith(id, action, { memo }));
     await waitFor(() => expect(screen.getByText(/receipt-paper-123/)).toBeInTheDocument());
     expect(refresh).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   });
 
   it("preserves a typed BFF refusal including code, details and correlation id", async () => {
@@ -130,9 +176,9 @@ describe("Evolution journal paper gate decisions", () => {
       details: { decision_kind: "pool_envelope_publication" },
     }));
     renderJournal(`/management/evolution-journal?decision=${id}`);
-    fireEvent.click(screen.getByRole("button", { name: "Approve", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     const confirm = screen.getAllByRole("dialog").at(-1)!;
-    fireEvent.change(within(confirm).getByRole("textbox", { name: /memo/i }), { target: { value: memo } });
+    fireEvent.change(within(confirm).getByRole("textbox"), { target: { value: memo } });
     fireEvent.click(within(confirm).getByRole("button", { name: /Confirm/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("ILLEGAL_TRANSITION"));
     expect(screen.getByRole("alert")).toHaveTextContent("flag_for_review cannot be approved");
@@ -145,8 +191,8 @@ describe("Evolution journal paper gate decisions", () => {
     setRows([decision(id, status)]);
     renderJournal(`/management/evolution-journal?decision=${id}`);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Approve", exact: true })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reject", exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
   });
 });
 

@@ -82,6 +82,13 @@ describe("OodaPacketDrawer", () => {
     vi.restoreAllMocks();
   });
 
+  it("encodes decision ids in the existing Management journal route", () => {
+    renderDrawer({ packet: { ...completePacket, decide: { evolution_decision_id: "pool-publication-op-a/b?x=1" } } });
+    expect(screen.getByRole("link", { name: /Mutation review/i })).toHaveAttribute(
+      "href", "/management/evolution-journal?decision=pool-publication-op-a%2Fb%3Fx%3D1",
+    );
+  });
+
   it("renders the packet replay header, stages, and evidence refs", () => {
     renderDrawer();
 

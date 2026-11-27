@@ -4073,7 +4073,8 @@ function EvolutionJournalDecisionDetail({ entry, onClose, onSaved }: {
   const zh = i18n.resolvedLanguage?.startsWith("zh");
   const text = (en: string, tw: string) => zh ? tw : en;
   const { bffSession } = useAuth();
-  const canDecide = bffSession?.identity.roles.some((role) => role === "operator" || role === "admin") === true;
+  // Match BFF operator command roles; the browser's editable display role is not authority.
+  const canDecide = bffSession?.identity.roles.some((role) => ["operator", "approver", "admin", "reviewer"].includes(role)) === true;
   const record = entry.decision ?? entry.record ?? entry.mutation_review ?? {};
   const metadata = (record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
     ? record.metadata : entry.metadata ?? {}) as Record<string, unknown>;
@@ -4094,7 +4095,7 @@ function EvolutionJournalDecisionDetail({ entry, onClose, onSaved }: {
   const reason = cleanJournalFieldText(metadata.reason);
 
   const submit = async (memo: string) => {
-    if (!action || !canDecide || !realWritesEnabled() || !paperGate || !pending || submitted || inFlight.current) return;
+    if (!action || !memo.trim() || !canDecide || !realWritesEnabled() || !paperGate || !pending || submitted || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setResult(null);
@@ -4153,7 +4154,7 @@ function EvolutionJournalDecisionDetail({ entry, onClose, onSaved }: {
           target={{ type: "EvolutionDecision", id, name: id }}
           currentState={status}
           newState={action === "approve" ? "approved" : "rejected"}
-          risk="medium"
+          risk="high"
           destructive={action === "reject"}
           onConfirm={submit}
         />}
@@ -4236,12 +4237,17 @@ export const EvolutionJournalPage = () => {
     [fleetRows, focus.matched, mutationFocus, personaFocus],
   );
   const visibleRows = fleetFallback ? [fleetFallback] : focus.rows;
-  const [selectedDecision, setSelectedDecision] = useState<string | null>(null);
-  const selectedEntry = rows.find((entry) =>
+  const [openedDecision, setOpenedDecision] = useState<{ focus: string; entry: EvolutionEntry } | null>(null);
+  const focusedEntry = rows.find((entry) =>
     FORMAL_EVOLUTION_ENTRY_TYPES.has(entry.entry_type ?? entry.entryType ?? "")
-    && journalDecisionId(entry) === (selectedDecision ?? mutationFocus));
+    && journalDecisionId(entry) === mutationFocus);
+  useEffect(() => {
+    if (focusedEntry) setOpenedDecision({ focus: mutationFocus, entry: focusedEntry });
+  }, [focusedEntry, mutationFocus]);
+  // Keep the opened record and receipt readable when a decided row leaves the pending queue.
+  const selectedEntry = openedDecision?.focus === mutationFocus ? openedDecision.entry : focusedEntry;
   const closeDecision = () => {
-    setSelectedDecision(null);
+    setOpenedDecision(null);
     const next = new URLSearchParams(searchParams);
     for (const key of ["decision", "mutation_review", "item"]) next.delete(key);
     setSearchParams(next);
@@ -4773,11 +4779,11 @@ export const EvolutionJournalPage = () => {
             role={isFormalEntry ? "button" : undefined}
             tabIndex={isFormalEntry ? 0 : undefined}
             aria-label={isFormalEntry ? headline : undefined}
-            onClick={isFormalEntry ? () => setSelectedDecision(journalDecisionId(e)) : undefined}
+            onClick={isFormalEntry ? () => setOpenedDecision({ focus: mutationFocus, entry: e }) : undefined}
             onKeyDown={isFormalEntry ? (event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                setSelectedDecision(journalDecisionId(e));
+                setOpenedDecision({ focus: mutationFocus, entry: e });
               }
             } : undefined}
           >
