@@ -1,7 +1,8 @@
+import { ReasonText } from "./ResearchReasonText";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ObjectListPage, type ObjectListEmptyStateConfig } from "./ObjectListPage";
-import { collectorCheckStatus, demandMeasureText, demandPersonaName, demandReasonText, isNonRealRun, isTemplateSearchTask, researchTitle } from "./researchPresentation";
+import { collectorCheckStatus, demandMeasureText, demandPersonaName, isNonRealRun, isTemplateSearchTask, researchTitle } from "./researchPresentation";
 import { ServerPager, freshServerPageCursor, useServerPageCursor } from "@/platform/components/ServerPager";
 import {
   bffFetch,
@@ -1990,18 +1991,6 @@ export function extractHiddenNonRealCount(meta: unknown): number | undefined {
   };
   const count = record.hidden_non_real_count ?? record.surfaces?.research_tasks?.hidden_non_real_count;
   return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
-}
-
-function ReasonText({ code, testId }: { code: string | null | undefined; testId?: string }) {
-  const t = useT();
-  const reason = demandReasonText(code, t);
-  if (!reason) return null;
-  return (
-    <span data-testid={testId}>
-      {reason.text}
-      {reason.raw && <span className="ml-1 text-xs text-muted-foreground font-mono" data-testid="research-reason-raw">{t("research.demand.rawCode", { code: reason.raw })}</span>}
-    </span>
-  );
 }
 
 export function ResearchDemandsSection({ surface, rows }: { surface: ResearchDemandsSurface | null; rows: ResearchTask[] }) {

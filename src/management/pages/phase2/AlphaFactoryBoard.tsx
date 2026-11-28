@@ -1,3 +1,4 @@
+import { demandReasonText, KNOWN_REASON_TOKENS } from "../researchPresentation";
 // AlphaFactoryBoard — Spec Part 3 §6.8, reshaped by FE-ALPHA-FACTORY-PIPELINE-TRUTH-20261125.
 // Reads GET /bff/alpha-factory (BFF-ALPHA-FACTORY-PIPELINE-TRUTH-20261125) and shows the real
 // discovery pipeline: who is looking for what, which searches and gate attempts ran, and the
@@ -34,16 +35,10 @@ type TFn = ReturnType<typeof useT>;
 
 /** Typed reason codes the page explains in plain words; anything else shows its raw code as secondary text. */
 const KNOWN_REASON_CODES = [
-  "mandate_universe_missing",
   "survivorship_limited",
   "below_threshold",
   "dataset_unavailable",
   "reason_not_recorded",
-  "run_budget_exhausted",
-  "template_search_unavailable",
-  "owner_credential_unconfigured",
-  "no_external_match",
-  "retrain_failed",
 ] as const;
 
 const KNOWN_UNAVAILABLE_REASONS = [
@@ -77,6 +72,7 @@ function includes(list: readonly string[], value: string | null | undefined): va
 function alphaReasonText(code: string | null | undefined, t: TFn): { text: string; raw: string | null } | null {
   const raw = code?.trim();
   if (!raw) return null;
+  if (raw.split(":").some((part) => includes(KNOWN_REASON_TOKENS, part.trim()))) return demandReasonText(raw, t);
   const token = raw.split(":").map((part) => part.trim()).reverse().find((part) => includes(KNOWN_REASON_CODES, part));
   if (token) return { text: t(`alphaFactory.reasons.${token}`), raw: null };
   return { text: t("alphaFactory.reasons.unknown"), raw };
