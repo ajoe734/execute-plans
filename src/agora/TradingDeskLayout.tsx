@@ -833,7 +833,31 @@ function ServantDrawer({
           {t("agora.shell.servant.currentTask")}
         </p>
         {tasks.length === 0 ? (
-          <p className="text-xs text-[#737d8e]">{t("agora.shell.servant.noTasks")}</p>
+          <div className="space-y-2" data-testid="servant-command-empty-state">
+            <p className="text-xs text-[#737d8e]">{t("agora.shell.servant.noTasks")}</p>
+            <div
+              className="rounded border border-[#2a2e38] bg-[#12161f] p-2 text-[11px] text-[#c5cad2]"
+              data-testid="servant-answer-citations"
+            >
+              <p className="font-semibold text-[#e8b750]">
+                {t("agora.shell.servant.citationsTitle")}
+              </p>
+              <p className="mt-1 text-[11px] text-[#8c96a6]" data-testid="servant-answer-citations-empty">
+                {t("agora.shell.servant.citationsEmpty")}
+              </p>
+            </div>
+            <div
+              className="space-y-1 rounded border border-[rgba(232,183,80,0.4)] bg-[#171b22] p-2.5 text-xs"
+              data-testid="servant-clarification-card"
+            >
+              <p className="text-[11px] font-semibold text-[#e8b750]">
+                {t("agora.shell.servant.clarificationTitle")}
+              </p>
+              <p className="text-[11px] text-[#8c96a6]" data-testid="servant-clarification-empty">
+                {t("agora.shell.servant.clarificationEmpty")}
+              </p>
+            </div>
+          </div>
         ) : (
           tasks.map((task) => (
             <div

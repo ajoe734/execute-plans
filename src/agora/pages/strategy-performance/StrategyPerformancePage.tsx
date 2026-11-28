@@ -1030,6 +1030,14 @@ function StrategyPerformanceLoaded({
                                 : gapInterval?.point_estimate ?? gapInterval?.mean ?? null;
                             return (
                               <div className="space-y-3">
+                                {imitationData.status_label_zh ? (
+                                  <p
+                                    className="rounded border border-[#2a2e38] bg-[#171b22] px-3 py-1.5 text-xs text-[#c5cad2]"
+                                    data-testid="imitation-comparison-status"
+                                  >
+                                    {imitationData.status_label_zh}
+                                  </p>
+                                ) : null}
                                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                   <div
                                     className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3"
@@ -1286,12 +1294,12 @@ function StrategyPerformanceLoaded({
                       </section>
 
                       {/* ── AC4: Read-only Paper Book fills & positions summary ── */}
-                      {paperBookData ? (
-                        <section
-                          className="shrink-0 rounded-xl border border-[#2a2e38] bg-[#101318]/40 p-4"
-                          data-testid="performance-paper-book-section"
-                        >
-                          <div className="mb-2">
+                      <section
+                        className="shrink-0 rounded-xl border border-[#2a2e38] bg-[#101318]/40 p-4"
+                        data-testid="performance-paper-book-section"
+                      >
+                        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                          <div>
                             <h3 className="text-sm font-bold text-[#e8b750]">
                               {t("agora.performance.paperBook.title")}
                             </h3>
@@ -1299,14 +1307,37 @@ function StrategyPerformanceLoaded({
                               {t("agora.performance.paperBook.subtitle")}
                             </p>
                           </div>
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3 text-xs">
-                              <div className="mb-1.5 font-semibold text-[#c5cad2]">
-                                {t("agora.tradingRoom.page.paperBook.positionsHeading", {
-                                  count: paperBookData.positions.length,
-                                })}
-                              </div>
-                              {paperBookData.positions.map((pos) => (
+                          <div className="flex flex-col items-end gap-1">
+                            <span
+                              className="font-mono text-[10px] text-[#38bdf8]"
+                              data-testid="performance-paper-book-proxy-badge"
+                            >
+                              {t("agora.tradingRoom.page.paperBook.proxyBadge")}
+                            </span>
+                            <span
+                              className="text-[10px] text-[#43cf94]"
+                              data-testid="performance-paper-book-no-order-action"
+                            >
+                              {t("agora.tradingRoom.page.paperBook.noOrderNotice")}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3 text-xs">
+                            <div className="mb-1.5 font-semibold text-[#c5cad2]">
+                              {t("agora.tradingRoom.page.paperBook.positionsHeading", {
+                                count: paperBookData?.positions.length ?? 0,
+                              })}
+                            </div>
+                            {!paperBookData || paperBookData.positions.length === 0 ? (
+                              <p
+                                className="text-xs text-[#8c96a6]"
+                                data-testid="performance-paper-book-positions-empty"
+                              >
+                                {t("agora.tradingRoom.page.noPositions")}
+                              </p>
+                            ) : (
+                              paperBookData.positions.map((pos) => (
                                 <div className="border-b border-[#2a2e38]/50 py-1 text-[11px]" key={pos.position_id}>
                                   {t("agora.tradingRoom.page.paperBook.positionLine", {
                                     symbol: pos.symbol,
@@ -1316,15 +1347,24 @@ function StrategyPerformanceLoaded({
                                     markPrice: pos.mark_price ?? "—",
                                   })}
                                 </div>
-                              ))}
+                              ))
+                            )}
+                          </div>
+                          <div className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3 text-xs">
+                            <div className="mb-1.5 font-semibold text-[#c5cad2]">
+                              {t("agora.tradingRoom.page.paperBook.fillsHeading", {
+                                count: paperBookData?.fills.length ?? 0,
+                              })}
                             </div>
-                            <div className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3 text-xs">
-                              <div className="mb-1.5 font-semibold text-[#c5cad2]">
-                                {t("agora.tradingRoom.page.paperBook.fillsHeading", {
-                                  count: paperBookData.fills.length,
-                                })}
-                              </div>
-                              {paperBookData.fills.map((fill) => (
+                            {!paperBookData || paperBookData.fills.length === 0 ? (
+                              <p
+                                className="text-xs text-[#8c96a6]"
+                                data-testid="performance-paper-book-fills-empty"
+                              >
+                                {t("agora.tradingRoom.page.paperBook.noFills")}
+                              </p>
+                            ) : (
+                              paperBookData.fills.map((fill) => (
                                 <div className="border-b border-[#2a2e38]/50 py-1 text-[11px]" key={fill.fill_id}>
                                   {t("agora.tradingRoom.page.paperBook.fillLine", {
                                     symbol: fill.symbol,
@@ -1334,11 +1374,11 @@ function StrategyPerformanceLoaded({
                                     filledAt: fill.filled_at ?? "—",
                                   })}
                                 </div>
-                              ))}
-                            </div>
+                              ))
+                            )}
                           </div>
-                        </section>
-                      ) : null}
+                        </div>
+                      </section>
                     </>
                   ) : null}
 

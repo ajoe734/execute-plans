@@ -2542,21 +2542,38 @@ export interface TraderImitationComparison {
 
 function normalizeBootstrapInterval(raw: unknown): TraderImitationBootstrapInterval {
   const r = recordFrom(raw);
-  const containsZero = r.contains_zero !== false;
-  const isLuck = r.is_luck === true || containsZero || stringFrom(r.label) === "luck";
+  const containsZero =
+    typeof r.contains_zero === "boolean"
+      ? r.contains_zero
+      : typeof r.zero_inside === "boolean"
+        ? r.zero_inside
+        : true;
+  const isLuck =
+    r.is_luck === true ||
+    r.is_luck_candidate === true ||
+    containsZero ||
+    stringFrom(r.label) === "luck";
   const meanVal = finiteNumberOrNull(r.mean) ?? finiteNumberOrNull(r.point_estimate);
+  const ciLower = finiteNumberOrNull(r.ci_lower) ?? finiteNumberOrNull(r.low);
+  const ciUpper = finiteNumberOrNull(r.ci_upper) ?? finiteNumberOrNull(r.high);
+  const confidenceLevel =
+    typeof r.confidence_level === "number"
+      ? r.confidence_level
+      : typeof r.level === "number"
+        ? r.level
+        : 0.9;
   const labelZh =
     stringFrom(r.luck_label_zh_tw) ||
     stringFrom(r.label_zh) ||
     (isLuck ? "可能是運氣" : "統計顯著");
   return {
     sample_size: typeof r.sample_size === "number" ? r.sample_size : 0,
-    resamples: typeof r.resamples === "number" ? r.resamples : 1000,
-    confidence_level: typeof r.confidence_level === "number" ? r.confidence_level : 0.9,
+    resamples: typeof r.resamples === "number" && r.resamples > 0 ? r.resamples : 1000,
+    confidence_level: confidenceLevel,
     mean: meanVal,
     point_estimate: meanVal,
-    ci_lower: finiteNumberOrNull(r.ci_lower),
-    ci_upper: finiteNumberOrNull(r.ci_upper),
+    ci_lower: ciLower,
+    ci_upper: ciUpper,
     contains_zero: containsZero,
     is_luck: isLuck,
     label: stringFrom(r.label) || (isLuck ? "luck" : "significant"),

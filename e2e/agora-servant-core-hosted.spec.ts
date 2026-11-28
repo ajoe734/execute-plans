@@ -997,10 +997,27 @@ test.describe("FE-AGORA-SERVANT-CORE-20261127 hosted dev proof", () => {
   );
   test.setTimeout(120_000);
 
-  test("hosted dev trader walkthrough across Agora servant drawer, personalization habits, trading room paper book, and strategy performance", async ({
+  test("hosted dev trader walkthrough across Agora servant drawer, personalization habits, trading room paper book, and strategy performance asserting AC1-AC7 testids", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+    const personaOpinionCalls: string[] = [];
+    const managementCalls: string[] = [];
+
+    page.on("request", (req) => {
+      const u = req.url();
+      if (u.includes("/bff/management")) {
+        managementCalls.push(`${req.method()} ${u}`);
+      }
+      if (
+        u.includes("/interaction/participants") ||
+        u.includes("/interaction/submit") ||
+        u.includes("/meetings")
+      ) {
+        personaOpinionCalls.push(`${req.method()} ${u}`);
+      }
+    });
+
     await installOidcDevLogin(page, {
       goto: false,
       pageBaseUrl: FE_BASE_URL,
@@ -1008,28 +1025,119 @@ test.describe("FE-AGORA-SERVANT-CORE-20261127 hosted dev proof", () => {
       token: AUTH_TOKEN,
     });
 
-    await page.goto(`${FE_BASE_URL}/agora/trading-room`);
-    await expect(page.getByTestId("agora-standalone-shell")).toBeVisible({
-      timeout: 30_000,
-    });
-    await shot(page, "hosted-01-trading-room");
-
-    await page.getByTestId("global-drawer-trigger-servant").click();
-    await expect(page.getByTestId("trading-desk-servant-drawer")).toBeVisible({
-      timeout: 15_000,
-    });
-    await shot(page, "hosted-02-servant-drawer");
-
-    await page.getByTestId("global-drawer-trigger-personalization").click();
-    await expect(page.getByTestId("trading-desk-personalization-drawer")).toBeVisible({
-      timeout: 15_000,
-    });
-    await shot(page, "hosted-03-personalization-habits");
-
+    // 1. Open Strategy Performance first to inspect AC5 (僕人模仿您), AC6 (reports), AC4 (read-only paper book)
     await page.goto(`${FE_BASE_URL}/agora/strategy-performance`);
     await expect(page.getByTestId("strategy-performance-page")).toBeVisible({
       timeout: 30_000,
     });
-    await shot(page, "hosted-04-strategy-performance");
+
+    // AC5: 僕人模仿您 bootstrap intervals & luck label
+    const imitationSection = page.getByTestId("performance-servant-imitation-section");
+    await expect(imitationSection).toBeVisible({ timeout: 30_000 });
+    await expect(imitationSection).toContainText("僕人模仿您");
+    await expect(page.getByTestId("imitation-agreement-rate-card")).toBeVisible();
+    await expect(page.getByTestId("imitation-agreement-rate-luck-label")).toContainText(
+      "可能是運氣",
+    );
+    await expect(page.getByTestId("imitation-agreement-rate-interval")).toContainText(
+      "1000 次重抽樣",
+    );
+    await expect(page.getByTestId("imitation-outcome-gap-card")).toBeVisible();
+    await expect(page.getByTestId("imitation-outcome-gap-luck-label")).toContainText(
+      "可能是運氣",
+    );
+    await expect(page.getByTestId("imitation-outcome-gap-interval")).toContainText(
+      "1000 次重抽樣",
+    );
+    await shot(page, "hosted-01-strategy-performance-imitation");
+
+    // AC6: Report history & request button
+    const reportsSection = page.getByTestId("performance-trader-reports-section");
+    await expect(reportsSection).toBeVisible();
+    await expect(reportsSection).toContainText("交易員定期與即時報告歷史");
+    await expect(page.getByTestId("request-trader-report-btn")).toBeVisible();
+    await expect(
+      page
+        .getByTestId("trader-report-history-list")
+        .or(page.getByTestId("trader-reports-empty")),
+    ).toBeVisible();
+
+    // AC4 (Strategy Performance paper book read-only summary with no order buttons)
+    const perfPaperBook = page.getByTestId("performance-paper-book-section");
+    await expect(perfPaperBook).toBeVisible();
+    await expect(page.getByTestId("performance-paper-book-proxy-badge")).toContainText(
+      "pantheon_paper_proxy",
+    );
+    await expect(page.getByTestId("performance-paper-book-no-order-action")).toContainText(
+      "僅供唯讀檢視 · 無任何下單按鈕",
+    );
+    await expect(perfPaperBook.locator("button")).toHaveCount(0);
+    await shot(page, "hosted-02-strategy-performance-reports-and-paper-book");
+
+    // 2. Open 交易僕人任務 drawer -> verify AC1 (citations surface), AC2 (clarification card surface), AC6 (drawer report card), AC7 (optional persona consult control)
+    await page.getByTestId("global-drawer-trigger-servant").click();
+    const servantDrawer = page.getByTestId("trading-desk-servant-drawer");
+    await expect(servantDrawer).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("servant-command-history")).toBeVisible();
+    await expect(page.getByTestId("servant-answer-citations")).toBeVisible();
+    await expect(page.getByTestId("servant-answer-citations")).toContainText(
+      "資料出處與新鮮度",
+    );
+    await expect(page.getByTestId("servant-clarification-card")).toBeVisible();
+    await expect(page.getByTestId("servant-clarification-card")).toContainText(
+      "需要您釐清的單一問題",
+    );
+    await expect(
+      page.getByTestId("servant-optional-persona-consult-control"),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("servant-open-optional-persona-consult"),
+    ).toBeVisible();
+    await expect(page.getByTestId("servant-drawer-report-card")).toBeVisible();
+    await expect(page.getByTestId("servant-drawer-request-report")).toBeVisible();
+    await shot(page, "hosted-03-servant-drawer-citations-clarification-optional-consult");
+
+    // 3. Open 個人化紀錄 drawer -> verify AC3 (trader habits profile features & correction form)
+    await page.getByTestId("global-drawer-trigger-personalization").click();
+    await expect(page.getByTestId("trading-desk-personalization-drawer")).toBeVisible({
+      timeout: 15_000,
+    });
+    const habitsSection = page.getByTestId("personalization-servant-habits-section");
+    await expect(habitsSection).toBeVisible({ timeout: 15_000 });
+    await expect(habitsSection).toContainText("交易員習慣側寫與修正");
+    await expect(page.getByTestId("servant-habits-features-list")).toBeVisible();
+    await expect(
+      page.locator('[data-testid^="servant-habit-feature-"]').first(),
+    ).toBeVisible();
+    await expect(page.getByTestId("servant-habit-correction-form")).toBeVisible();
+    await expect(page.getByTestId("servant-habit-feature-select")).toBeVisible();
+    await expect(page.getByTestId("servant-habit-statement-input")).toBeVisible();
+    await expect(page.getByTestId("servant-habit-submit-btn")).toBeVisible();
+    await shot(page, "hosted-04-personalization-habits");
+    await page.getByTestId("trading-desk-personalization-drawer-close").click();
+
+    // 4. Open Trading Room Workspace -> verify AC4 (PositionActionQueue paper book read-only with 0 order buttons)
+    await page.goto(
+      `${FE_BASE_URL}/agora/trading-room/26037823-b24e-43c5-ab67-90098c555a6c`,
+    );
+    const positionQueue = page.getByTestId("position-action-queue");
+    await expect(positionQueue).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("paper-book-proxy-badge")).toContainText(
+      "pantheon_paper_proxy",
+    );
+    await expect(page.getByTestId("paper-book-no-order-action")).toContainText(
+      "僅供唯讀檢視 · 無任何下單按鈕",
+    );
+    await expect(
+      page
+        .getByTestId("paper-book-fills-list")
+        .or(page.getByTestId("paper-book-fills-empty")),
+    ).toBeVisible();
+    await expect(positionQueue.locator("button")).toHaveCount(0);
+    await shot(page, "hosted-05-trading-room-paper-book-read-only");
+
+    // AC7 / SD §10: Zero persona_opinion calls and zero /bff/management calls
+    expect(personaOpinionCalls).toEqual([]);
+    expect(managementCalls).toEqual([]);
   });
 });
