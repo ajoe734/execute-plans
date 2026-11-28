@@ -281,6 +281,41 @@ describe("feedback page", () => {
 });
 
 describe("persona picker (Management persona tools)", () => {
+  it.each([
+    ["memory", MemoryReviewPage],
+    ["lab", PersonaLabPage],
+    ["feedback", FeedbackPage],
+  ] as const)("lists only current-scope personas on %s, including missing scope without name heuristics", async (_name, Page) => {
+    const list = vi.fn(async () => [
+      { id: "probe-current", name: "Pantheon Dev Paper Release", listScope: "current" },
+      { id: "p-test", name: "Trading persona", listScope: "test" },
+      { id: "p-retired", name: "Retired persona", listScope: "retired" },
+      { id: "p-research", name: "Research persona", listScope: "research" },
+      { id: "p-missing", name: "Legacy persona" },
+      { id: "p-unknown", name: "Unknown scope persona", listScope: "unknown" },
+    ]);
+    registry.list = list;
+    renderAt(<Page />);
+    const select = screen.getByRole("combobox", { name: /Persona|人格/ }) as HTMLSelectElement;
+    await waitFor(() => expect(select.disabled).toBe(false));
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(["", "probe-current", "p-missing", "p-unknown"]);
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["test", "retired", "research"])("accepts a manually entered %s persona as an unlisted selection", async (listScope) => {
+    registry.list = async () => [{ id: "p-hidden", name: "Hidden persona", listScope }];
+    renderAt(<PersonaLabPage />);
+    const select = screen.getByRole("combobox", { name: /Persona|人格/ }) as HTMLSelectElement;
+    await waitFor(() => expect(select.disabled).toBe(false));
+    expect(within(select).queryByRole("option", { name: "Hidden persona" })).toBeNull();
+    const manual = screen.getByTestId("persona-tools-manual-id");
+    fireEvent.change(within(manual).getByRole("textbox"), { target: { value: "p-hidden" } });
+    fireEvent.submit(within(manual).getByTestId("learning-persona-form"));
+    await waitFor(() => expect(screen.getByTestId("location-search").textContent).toBe("?personaId=p-hidden"));
+    expect(select.value).toBe("p-hidden");
+    expect(select.selectedOptions[0].textContent).toMatch(/not in the registry|未列/i);
+  });
+
   it("selects a persona by name and writes the persona id into the URL", async () => {
     registry.list = async () => [{ id: "p1", name: "Gap Fader", archetype: "momentum" }, { id: "p2", name: "Mean Reverter" }];
     renderAt(<FeedbackPage />);

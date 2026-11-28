@@ -942,7 +942,7 @@ function currentFirstEmptyState(
   };
 }
 
-const PERSONA_SCOPE_TABS = ["current", "test", "retired", "research", "all"] as const;
+export const PERSONA_SCOPE_TABS = ["current", "test", "retired", "research", "all"] as const;
 
 export const PERSONA_COLUMN_MIN_WIDTHS = {
   name: 230,
