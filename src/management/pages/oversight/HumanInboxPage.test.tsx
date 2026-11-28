@@ -12,6 +12,7 @@ import {
   extractAttributionHiddenTestCounts,
 } from "./_core";
 import { HumanGateDetailPage } from "./HumanGateDetail";
+import { PerformanceAttributionPage } from "./PerformanceAttribution";
 import type { HumanInboxItem, HumanInboxList } from "@/lib/v5/management/humanInbox";
 
 const mocks = vi.hoisted(() => ({
@@ -1008,65 +1009,116 @@ describe("HumanInboxPage", () => {
     expect(onToggle).toHaveBeenCalledWith(true);
     unmount();
 
-    // FE-STRATEGY-HIDDEN-COHORT-BANNER-20261128 AC2: reads meta.hidden_non_trading_persona_count and states non-trading personas separately from test personas.
-    const withNonTradingMeta = {
-      ...adaptedAttr,
+    // FE-STRATEGY-HIDDEN-COHORT-BANNER-20261128 AC2: raw BFF payload with meta.hidden_non_trading_persona_count preserved through adaptPerformanceAttributionResult and rendered on the real PerformanceAttributionPage without post-adapter meta injection.
+    const adaptedWithNonTrading = adaptPerformanceAttributionResult({
+      data: {
+        id: "performance_attribution",
+        dimension: "strategy",
+        window: "30d",
+        items: [],
+      },
       meta: {
         hidden_test_persona_count: 5,
         hidden_non_trading_persona_count: 1,
         hidden_test_strategy_count: 8,
       },
-    };
-    expect(extractAttributionHiddenTestCounts(withNonTradingMeta)).toEqual({
+    });
+    expect(adaptedWithNonTrading.hiddenNonTradingPersonaCount).toBe(1);
+    expect(adaptedWithNonTrading.hidden_non_trading_persona_count).toBe(1);
+    expect(adaptedWithNonTrading.summary?.hidden_non_trading_persona_count).toBe(1);
+    expect(extractAttributionHiddenTestCounts(adaptedWithNonTrading)).toEqual({
       hiddenPersonaCount: 5,
       hiddenNonTradingPersonaCount: 1,
       hiddenStrategyCount: 8,
       includeTestPersonas: false,
     });
 
-    const { unmount: unmountEnBoth } = render(
+    mocks.useV5Live.mockImplementation((_fn: unknown, _deps: unknown, opts?: { cacheKey?: string }) => {
+      if (opts?.cacheKey?.startsWith("oversight.performanceAttribution.")) {
+        return { data: adaptedWithNonTrading, loading: false, refresh: vi.fn() };
+      }
+      return { data: undefined, loading: false, refresh: vi.fn() };
+    });
+
+    const { unmount: unmountPageEn } = render(
       <I18nextProvider i18n={i18n}>
-        <PerformanceAttributionTestPersonaBanner
-          attribution={withNonTradingMeta}
-          onToggleIncludeTestPersonas={onToggle}
-        />
+        <MemoryRouter initialEntries={["/management/performance-attribution"]}>
+          <Routes>
+            <Route path="/management/performance-attribution" element={<PerformanceAttributionPage />} />
+          </Routes>
+        </MemoryRouter>
       </I18nextProvider>,
     );
     expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(
       "8 test-persona strategies (5 test personas) and 1 non-trading personas are hidden by default.",
     );
-    unmountEnBoth();
+    const pageToggleBtn = screen.getByTestId("attribution-toggle-test-personas-button");
+    expect(pageToggleBtn).toHaveTextContent("Show test strategies (8)");
+    expect(pageToggleBtn).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(pageToggleBtn);
+    expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(
+      "Showing test-persona and test-strategy attribution (1 non-trading personas remain hidden).",
+    );
+    expect(screen.getByTestId("attribution-toggle-test-personas-button")).toHaveTextContent("Hide test strategies");
+    expect(screen.getByTestId("attribution-toggle-test-personas-button")).toHaveAttribute("aria-pressed", "true");
+    expect(mocks.useV5Live).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      { cacheKey: "oversight.performanceAttribution.all.latest.includeTestPersonas" },
+    );
+
+    fireEvent.click(screen.getByTestId("attribution-toggle-test-personas-button"));
+    expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(
+      "8 test-persona strategies (5 test personas) and 1 non-trading personas are hidden by default.",
+    );
+    expect(screen.getByTestId("attribution-toggle-test-personas-button")).toHaveAttribute("aria-pressed", "false");
+    unmountPageEn();
 
     await i18n.changeLanguage("zh-TW");
-    const { unmount: unmountZhBoth } = render(
+    const { unmount: unmountPageZh } = render(
       <I18nextProvider i18n={i18n}>
-        <PerformanceAttributionTestPersonaBanner
-          attribution={withNonTradingMeta}
-          onToggleIncludeTestPersonas={onToggle}
-        />
+        <MemoryRouter initialEntries={["/management/performance-attribution"]}>
+          <Routes>
+            <Route path="/management/performance-attribution" element={<PerformanceAttributionPage />} />
+          </Routes>
+        </MemoryRouter>
       </I18nextProvider>,
     );
     expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(
       "預設已隱藏 8 筆測試策略（5 個測試 Persona）與 1 個非交易 Persona。",
     );
-    unmountZhBoth();
+    unmountPageZh();
 
-    const nonTradingOnlyMeta = {
+    const adaptedNonTradingOnly = adaptPerformanceAttributionResult({
+      data: {
+        items: [],
+      },
       meta: {
         hidden_test_persona_count: 0,
         hidden_non_trading_persona_count: 1,
         hidden_test_strategy_count: 0,
       },
-    };
-    expect(extractAttributionHiddenTestCounts(nonTradingOnlyMeta)).toEqual({
+    });
+    expect(extractAttributionHiddenTestCounts(adaptedNonTradingOnly)).toEqual({
       hiddenPersonaCount: 0,
       hiddenNonTradingPersonaCount: 1,
       hiddenStrategyCount: 0,
       includeTestPersonas: false,
     });
+    mocks.useV5Live.mockImplementation((_fn: unknown, _deps: unknown, opts?: { cacheKey?: string }) => {
+      if (opts?.cacheKey?.startsWith("oversight.performanceAttribution.")) {
+        return { data: adaptedNonTradingOnly, loading: false, refresh: vi.fn() };
+      }
+      return { data: undefined, loading: false, refresh: vi.fn() };
+    });
     const { unmount: unmountZhOnly } = render(
       <I18nextProvider i18n={i18n}>
-        <PerformanceAttributionTestPersonaBanner attribution={nonTradingOnlyMeta} />
+        <MemoryRouter initialEntries={["/management/performance-attribution"]}>
+          <Routes>
+            <Route path="/management/performance-attribution" element={<PerformanceAttributionPage />} />
+          </Routes>
+        </MemoryRouter>
       </I18nextProvider>,
     );
     expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(

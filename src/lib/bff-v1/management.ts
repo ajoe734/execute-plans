@@ -6539,13 +6539,18 @@ export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttrib
 export type PerformanceAttributionExtendedResult = PerformanceAttributionResult & {
   hidden_test_persona_count?: number;
   hiddenTestPersonaCount?: number;
+  hidden_non_trading_persona_count?: number;
+  hiddenNonTradingPersonaCount?: number;
   hidden_test_strategy_count?: number;
   hiddenTestStrategyCount?: number;
   include_test_personas?: boolean;
   includeTestPersonas?: boolean;
+  meta?: Record<string, unknown>;
   summary?: NonNullable<PerformanceAttributionResult["summary"]> & {
     hidden_test_persona_count?: number;
     hiddenTestPersonaCount?: number;
+    hidden_non_trading_persona_count?: number;
+    hiddenNonTradingPersonaCount?: number;
     hidden_test_strategy_count?: number;
     hiddenTestStrategyCount?: number;
     include_test_personas?: boolean;
@@ -6575,6 +6580,12 @@ export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttr
       rawMeta.hidden_test_persona_count ??
       rawMeta.hiddenTestPersonaCount,
   );
+  const hiddenNonTradingPersonaCount = optionalFiniteNumber(
+    rawSummary.hidden_non_trading_persona_count ??
+      rawSummary.hiddenNonTradingPersonaCount ??
+      rawMeta.hidden_non_trading_persona_count ??
+      rawMeta.hiddenNonTradingPersonaCount,
+  );
   const hiddenTestStrategyCount = optionalFiniteNumber(
     rawSummary.hidden_test_strategy_count ??
       rawSummary.hiddenTestStrategyCount ??
@@ -6591,6 +6602,7 @@ export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttr
 
   const hasHiddenFields =
     hiddenTestPersonaCount !== undefined ||
+    hiddenNonTradingPersonaCount !== undefined ||
     hiddenTestStrategyCount !== undefined ||
     includeTestPersonas !== undefined;
 
@@ -6599,6 +6611,12 @@ export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttr
       ? {
           hidden_test_persona_count: hiddenTestPersonaCount,
           hiddenTestPersonaCount,
+        }
+      : {}),
+    ...(hiddenNonTradingPersonaCount !== undefined
+      ? {
+          hidden_non_trading_persona_count: hiddenNonTradingPersonaCount,
+          hiddenNonTradingPersonaCount,
         }
       : {}),
     ...(hiddenTestStrategyCount !== undefined
@@ -6627,6 +6645,9 @@ export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttr
     rows,
     period: adaptAttributionPeriodState(raw),
     ...(summary ? { summary } : {}),
+    ...(hasHiddenFields && Object.keys(rawMeta).length > 0
+      ? { meta: { ...rawMeta, ...hiddenPayload } }
+      : {}),
     ...hiddenPayload,
   };
 }

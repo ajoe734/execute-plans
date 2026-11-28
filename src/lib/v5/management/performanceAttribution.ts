@@ -172,12 +172,29 @@ export interface AttributionInstrumentBreakdownRow {
 export interface AttributionSummary {
   instrument_learning?: AttributionInstrumentLearning;
   instrument_breakdown?: AttributionInstrumentBreakdownRow[];
+  hidden_test_persona_count?: number;
+  hiddenTestPersonaCount?: number;
+  hidden_non_trading_persona_count?: number;
+  hiddenNonTradingPersonaCount?: number;
+  hidden_test_strategy_count?: number;
+  hiddenTestStrategyCount?: number;
+  include_test_personas?: boolean;
+  includeTestPersonas?: boolean;
 }
 
 export interface PerformanceAttributionResult {
   rows: PerformanceAttributionRow[];
   period: AttributionPeriodState;
   summary?: AttributionSummary;
+  meta?: Record<string, unknown>;
+  hidden_test_persona_count?: number;
+  hiddenTestPersonaCount?: number;
+  hidden_non_trading_persona_count?: number;
+  hiddenNonTradingPersonaCount?: number;
+  hidden_test_strategy_count?: number;
+  hiddenTestStrategyCount?: number;
+  include_test_personas?: boolean;
+  includeTestPersonas?: boolean;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>

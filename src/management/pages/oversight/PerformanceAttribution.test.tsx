@@ -1590,5 +1590,65 @@ describe("PerformanceAttributionPage", () => {
       expect(bCells[8]).toHaveTextContent("600.25");
       expect(bCells[9]).toHaveTextContent("250");
     });
+
+    it("preserves meta.hidden_non_trading_persona_count through adaptPerformanceAttributionResult and renders the banner and toggle on PerformanceAttributionPage (FE-STRATEGY-HIDDEN-COHORT-BANNER-20261128 AC2)", async () => {
+      const adaptedDefault = adaptPerformanceAttributionResult({
+        data: {
+          period: "latest",
+          items: [],
+        },
+        meta: {
+          period: { requested: "latest", applied: "latest", windowed: false },
+          hidden_test_persona_count: 5,
+          hidden_non_trading_persona_count: 1,
+          hidden_test_strategy_count: 8,
+          include_test_personas: false,
+        },
+      });
+      const adaptedShowing = adaptPerformanceAttributionResult({
+        data: {
+          period: "latest",
+          items: [],
+        },
+        meta: {
+          period: { requested: "latest", applied: "latest", windowed: false },
+          hidden_test_persona_count: 5,
+          hidden_non_trading_persona_count: 1,
+          hidden_test_strategy_count: 8,
+          include_test_personas: true,
+        },
+      });
+
+      mocks.useV5Live.mockImplementation((_fn: unknown, _deps: unknown, opts?: { cacheKey?: string }) => {
+        if (opts?.cacheKey?.endsWith(".includeTestPersonas")) {
+          return { data: adaptedShowing, loading: false, refresh: vi.fn() };
+        }
+        if (opts?.cacheKey?.startsWith("oversight.performanceAttribution.")) {
+          return { data: adaptedDefault, loading: false, refresh: vi.fn() };
+        }
+        return { data: undefined, loading: false, refresh: vi.fn() };
+      });
+
+      renderPage("/management/performance-attribution");
+
+      expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(
+        "8 test-persona strategies (5 test personas) and 1 non-trading personas are hidden by default.",
+      );
+      const toggleBtn = screen.getByTestId("attribution-toggle-test-personas-button");
+      expect(toggleBtn).toHaveTextContent("Show test strategies (8)");
+      expect(toggleBtn).toHaveAttribute("aria-pressed", "false");
+
+      fireEvent.click(toggleBtn);
+      expect(screen.getByTestId("attribution-test-personas-count")).toHaveTextContent(
+        "Showing test-persona and test-strategy attribution (1 non-trading personas remain hidden).",
+      );
+      expect(screen.getByTestId("attribution-toggle-test-personas-button")).toHaveTextContent(
+        "Hide test strategies",
+      );
+      expect(screen.getByTestId("attribution-toggle-test-personas-button")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
   });
 });
