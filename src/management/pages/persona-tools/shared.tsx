@@ -9,7 +9,7 @@ import { bffV1 } from "@/lib/bff-v1";
 import type { Persona } from "@/lib/bff-v1";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { PersonaIdField, textInput } from "@/agora/pages/learning/shared";
-import { classifyCurrentFirstScope, PERSONA_SCOPE_TABS } from "@/management/pages/Lists";
+import { classifyCurrentFirstScope } from "@/management/pages/Lists";
 
 /** `snake_case` / `kebab-case` owner codes rendered as words. */
 export function humanizeCode(value: string): string {
@@ -72,7 +72,7 @@ export function PersonaPicker({ personaId, onChange }: { personaId: string; onCh
   const { t } = useTranslation();
   const registry = usePersonaRegistry();
   const items = registry.state === "ok"
-    ? registry.items.filter((row) => classifyCurrentFirstScope(row, PERSONA_SCOPE_TABS) === "current")
+    ? registry.items.filter((row) => classifyCurrentFirstScope(row, ["current", "test", "retired", "research", "all"]) === "current")
     : [];
   const listed = items.some((p) => p.id === personaId);
   return (
