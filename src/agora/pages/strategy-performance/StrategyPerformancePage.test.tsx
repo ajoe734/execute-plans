@@ -18,6 +18,13 @@ const tradingRoomMocks = vi.hoisted(() => ({
   getTradingRoom: vi.fn(),
   listDecisionEvents: vi.fn(),
   getTradingRoomShadowComparison: vi.fn(),
+  getTraderImitationComparison: vi.fn(),
+  getTradingRoomPaperBook: vi.fn(),
+}));
+
+const servantReportMocks = vi.hoisted(() => ({
+  listServantTraderReports: vi.fn(),
+  createServantTraderReport: vi.fn(),
 }));
 
 const performanceMocks = vi.hoisted(() => ({
@@ -36,6 +43,13 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   getTradingRoom: tradingRoomMocks.getTradingRoom,
   listDecisionEvents: tradingRoomMocks.listDecisionEvents,
   getTradingRoomShadowComparison: tradingRoomMocks.getTradingRoomShadowComparison,
+  getTraderImitationComparison: tradingRoomMocks.getTraderImitationComparison,
+  getTradingRoomPaperBook: tradingRoomMocks.getTradingRoomPaperBook,
+}));
+
+vi.mock("@/lib/bff-v1/agora/servant", () => ({
+  listServantTraderReports: servantReportMocks.listServantTraderReports,
+  createServantTraderReport: servantReportMocks.createServantTraderReport,
 }));
 
 vi.mock("@/lib/bff-v1/agora/performance", () => ({
@@ -690,5 +704,192 @@ describe("StrategyPerformancePage", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("renders 「僕人模仿您」 with 1,000-resample bootstrap intervals and luck label 「可能是運氣」, report history with on-demand request, and read-only paper book (AC4, AC5, AC6)", async () => {
+    arrangeLoaded(baseAggregate, attributionResponse(), performanceEnvelope());
+    tradingRoomMocks.getTraderImitationComparison.mockResolvedValue({
+      agora_user_id: "admintest",
+      strategy_id: "strat-alpha",
+      title_zh_tw: "僕人模仿您",
+      as_of: "2026-11-27T08:00:00Z",
+      settlement_source: "pantheon_paper_proxy",
+      execution_authority: "none",
+      sample_size: 10,
+      agreement_rate: {
+        point_estimate: 0.7,
+        ci_lower: 0.4,
+        ci_upper: 0.9,
+        confidence_level: 0.95,
+        resamples: 1000,
+        sample_size: 10,
+        contains_zero: false,
+        luck_label_zh_tw: null,
+        status: "ready",
+      },
+      outcome_gap_vs_trader: {
+        point_estimate: 0.012,
+        ci_lower: -0.008,
+        ci_upper: 0.031,
+        confidence_level: 0.95,
+        resamples: 1000,
+        sample_size: 10,
+        contains_zero: true,
+        luck_label_zh_tw: "可能是運氣",
+        status: "ready",
+      },
+      differences: [
+        {
+          decision_id: "dec-im-001",
+          symbol: "2330.TW",
+          trader_choice: "approve",
+          servant_choice: "modify",
+          rule_choice: "approve",
+          outcome_gap: 0.015,
+          settled_at: "2026-11-27T06:00:00Z",
+        },
+      ],
+    });
+
+    servantReportMocks.listServantTraderReports.mockResolvedValue({
+      items: [
+        {
+          report_id: "rep-weekly-001",
+          report_kind: "scheduled_weekly",
+          agora_user_id: "admintest",
+          persona_id: "persona-1",
+          strategy_id: "strat-alpha",
+          title: "每週交易員執行與偏離報告",
+          generated_at: "2026-11-27T07:00:00Z",
+          period_start: "2026-11-20T00:00:00Z",
+          period_end: "2026-11-27T07:00:00Z",
+          narrative: "本週共執行 17 筆模擬交易，僕人模仿一致率 70%，結果差距區間跨零屬可能是運氣。",
+          citations: [
+            {
+              fact_id: "fact-01",
+              owner: "performance_attribution",
+              source: "agora_performance",
+              as_of: "2026-11-27T07:00:00Z",
+              statement: "累積模擬損益 +$1,250（共 17 筆成交）",
+            },
+          ],
+          suggested_next_steps: [
+            {
+              suggestion_id: "sug-01",
+              label: "維持五日均量過濾規則並觀察下一週樣本",
+            },
+          ],
+          execution_authority: "none",
+        },
+      ],
+      total: 1,
+      quota: {
+        daily_limit: 5,
+        used_today: 1,
+        remaining_today: 4,
+      },
+    });
+
+    servantReportMocks.createServantTraderReport.mockResolvedValue({
+      report_id: "rep-ondemand-002",
+      report_kind: "on_demand",
+      agora_user_id: "admintest",
+      persona_id: "persona-1",
+      strategy_id: "strat-alpha",
+      title: "即時申請交易員重點報告",
+      generated_at: "2026-11-27T08:15:00Z",
+      period_start: "2026-11-20T00:00:00Z",
+      period_end: "2026-11-27T08:15:00Z",
+      narrative: "即時整理完成：最新模擬部位 2330.TW 持有 1,000 股，未實現損益 +$15,000。",
+      citations: [
+        {
+          fact_id: "fact-02",
+          owner: "paper_execution_book",
+          source: "pantheon_paper_proxy",
+          as_of: "2026-11-27T08:15:00Z",
+          statement: "2330.TW 模擬部位 1,000 股（均價 940）",
+        },
+      ],
+      suggested_next_steps: [
+        {
+          suggestion_id: "sug-02",
+          label: "檢視停利條件是否需於策略工坊微調",
+        },
+      ],
+      execution_authority: "none",
+    });
+
+    tradingRoomMocks.getTradingRoomPaperBook.mockResolvedValue({
+      agora_user_id: "admintest",
+      as_of: "2026-11-27T08:00:00Z",
+      settlement_source: "pantheon_paper_proxy",
+      execution_authority: "none",
+      no_order_route_proof: "agora_paper_book_readback_only",
+      summary: {
+        open_position_count: 1,
+        fill_count: 1,
+        realized_pnl: 0,
+        unrealized_pnl: 15000,
+      },
+      positions: [
+        {
+          position_id: "pos-2330",
+          symbol: "2330.TW",
+          side: "long",
+          quantity: 1000,
+          avg_entry_price: 940,
+          mark_price: 955,
+          unrealized_pnl: 15000,
+          settlement_source: "pantheon_paper_proxy",
+        },
+      ],
+      fills: [
+        {
+          fill_id: "fill-2330-01",
+          symbol: "2330.TW",
+          side: "buy",
+          quantity: 1000,
+          price: 940,
+          filled_at: "2026-11-27T01:30:00Z",
+          settlement_source: "pantheon_paper_proxy",
+        },
+      ],
+    });
+
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    const imitationSection = await screen.findByTestId("performance-servant-imitation-section");
+    expect(imitationSection.textContent).toContain("僕人模仿您");
+    const luckLabel = await screen.findByTestId("imitation-outcome-gap-luck-label");
+    expect(luckLabel.textContent).toBe("可能是運氣");
+    const gapInterval = screen.getByTestId("imitation-outcome-gap-interval");
+    expect(gapInterval.textContent).toContain("[-0.80%, 3.10%]");
+    expect(gapInterval.textContent).toContain("1000 次重抽樣");
+    expect(screen.getByTestId("imitation-diff-row-dec-im-001").textContent).toContain("2330.TW");
+
+    const reportsSection = await screen.findByTestId("performance-trader-reports-section");
+    expect(reportsSection.textContent).toContain("交易員定期與即時報告歷史");
+    expect(screen.getByTestId("trader-report-narrative").textContent).toContain(
+      "本週共執行 17 筆模擬交易",
+    );
+    expect(screen.getByTestId("trader-report-fact-fact-01").textContent).toContain(
+      "performance_attribution · agora_performance",
+    );
+
+    fireEvent.click(screen.getByTestId("request-trader-report-btn"));
+
+    await waitFor(() => {
+      expect(servantReportMocks.createServantTraderReport).toHaveBeenCalledWith({
+        report_kind: "on_demand",
+        strategy_id: "strat-alpha",
+      });
+      expect(screen.getByTestId("trader-report-narrative").textContent).toContain(
+        "即時整理完成：最新模擬部位 2330.TW 持有 1,000 股",
+      );
+    });
+
+    const paperBookSection = await screen.findByTestId("performance-paper-book-section");
+    expect(paperBookSection.textContent).toContain("模擬帳本成交與部位（唯讀 · 無下單動作）");
+    expect(paperBookSection.textContent).toContain("2330.TW");
   });
 });

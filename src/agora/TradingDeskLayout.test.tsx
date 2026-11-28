@@ -33,6 +33,10 @@ const servantSessionMocks = vi.hoisted(() => ({
   getServantSessionStream: vi.fn(),
   sendServantSessionMessage: vi.fn(),
   terminateServantSession: vi.fn(),
+  getServantHabits: vi.fn(),
+  patchServantHabits: vi.fn(),
+  listServantTraderReports: vi.fn(),
+  createServantTraderReport: vi.fn(),
 }));
 
 vi.mock("@/lib/bff-v1/agora/servant", async (importOriginal) => {
@@ -47,6 +51,12 @@ vi.mock("@/lib/bff-v1/agora/servant", async (importOriginal) => {
       servantSessionMocks.sendServantSessionMessage(...args),
     terminateServantSession: (...args: unknown[]) =>
       servantSessionMocks.terminateServantSession(...args),
+    getServantHabits: (...args: unknown[]) => servantSessionMocks.getServantHabits(...args),
+    patchServantHabits: (...args: unknown[]) => servantSessionMocks.patchServantHabits(...args),
+    listServantTraderReports: (...args: unknown[]) =>
+      servantSessionMocks.listServantTraderReports(...args),
+    createServantTraderReport: (...args: unknown[]) =>
+      servantSessionMocks.createServantTraderReport(...args),
   };
 });
 
@@ -1202,5 +1212,221 @@ describe("Six global drawers & 修正助理 (FE-AGORA-GLOBAL-DRAWERS-20261127)",
     const revisionDrawer = await screen.findByTestId("workspace-widget-revision-drawer");
     expect(revisionDrawer.textContent).toContain("交代僕人修改 Widget");
     expect(revisionDrawer.textContent).toContain("分點買賣超熱圖");
+  });
+
+  it("renders zh-TW data citations (source, as_of, freshness) and clickable clarification options and never calls persona_opinion in default flows (AC1, AC2, AC7)", async () => {
+    servantSessionMocks.createServantSession.mockResolvedValueOnce({
+      session_id: "sess-clarify-01",
+      state: "active",
+      tenant_id: "tenant-dev",
+      agora_user_id: "admintest",
+      persona_id: "persona-1",
+    });
+    servantSessionMocks.sendServantSessionMessage
+      .mockResolvedValueOnce({
+        session_id: "sess-clarify-01",
+        message_id: "msg-clarify-01",
+        turn_id: "turn-01",
+        turn_status: "completed",
+        provider: {
+          status: "completed",
+          answer: "2330.TW 近五日主力分點買超集中於凱基台北，需要先確認您的部位加碼時機。",
+        },
+        citations: [
+          {
+            source: "trading_room_readiness",
+            as_of: "2026-11-27T08:00:00Z",
+            freshness: "fresh",
+            detail: "勝率分點日級快照",
+          },
+          {
+            source: "paper_execution_book",
+            as_of: "2026-11-27T08:01:00Z",
+            freshness: "fresh",
+          },
+        ],
+        stated_assumptions: ["預設先以五日均量作為流動性門檻"],
+        clarification: {
+          kind: "clarification_question",
+          decision_id: "dec-entry-01",
+          question_id: "q-entry-timing",
+          question: "當贏家分點連續買超但量能未放大時，您希望如何進場？",
+          why_it_matters: "決定首次建倉比例與滑價容忍度",
+          options: [
+            {
+              option_id: "wait_breakout",
+              label: "等待帶量突破再建倉",
+              description: "突破五日高點且量增 1.5 倍",
+            },
+            {
+              option_id: "scale_in_early",
+              label: "先試單三分之一部位",
+              description: "分批進場降低追高風險",
+            },
+          ],
+          servant_default: "先試單三分之一部位",
+          resolves: ["entry_rules"],
+        },
+      })
+      .mockResolvedValueOnce({
+        session_id: "sess-clarify-01",
+        message_id: "msg-clarify-02",
+        turn_id: "turn-02",
+        turn_status: "completed",
+        provider: {
+          status: "completed",
+          answer: "已依您的選擇「先試單三分之一部位」更新進場規則並記錄決策。",
+        },
+        citations: [
+          {
+            source: "workshop_reconstruction",
+            as_of: "2026-11-27T08:02:00Z",
+            freshness: "fresh",
+          },
+        ],
+      });
+
+    renderTradingDesk("/agora/trading-room/strat-winner-v4");
+
+    fireEvent.change(screen.getByTestId("trading-desk-command-input"), {
+      target: { value: "查詢 2330.TW 分點集中度與加碼條件" },
+    });
+    fireEvent.click(screen.getByTestId("trading-desk-command-submit"));
+
+    const citationsBox = await screen.findByTestId("servant-answer-citations");
+    expect(citationsBox.textContent).toContain("資料出處與新鮮度");
+    expect(citationsBox.textContent).toContain("trading_room_readiness");
+    expect(citationsBox.textContent).toContain("2026-11-27T08:00:00Z");
+    expect(citationsBox.textContent).toContain("fresh");
+
+    const assumptionsBox = screen.getByTestId("servant-stated-assumptions");
+    expect(assumptionsBox.textContent).toContain("預設先以五日均量作為流動性門檻");
+
+    const clarificationCard = screen.getByTestId("servant-clarification-card");
+    expect(clarificationCard.textContent).toContain(
+      "當贏家分點連續買超但量能未放大時，您希望如何進場？",
+    );
+
+    const optionBtn = screen.getByTestId("servant-clarification-option-scale_in_early");
+    fireEvent.click(optionBtn);
+
+    await waitFor(() => {
+      expect(servantSessionMocks.sendServantSessionMessage).toHaveBeenCalledTimes(2);
+      expect(servantSessionMocks.sendServantSessionMessage).toHaveBeenLastCalledWith(
+        "sess-clarify-01",
+        expect.objectContaining({
+          content: "先試單三分之一部位",
+          clarification_choice: {
+            decision_id: "dec-entry-01",
+            question_id: "q-entry-timing",
+            option_id: "scale_in_early",
+            selected_option_id: "scale_in_early",
+            option_label: "先試單三分之一部位",
+            resolves: ["entry_rules"],
+          },
+        }),
+      );
+    });
+
+    const selectedNotice = await screen.findByTestId("servant-clarification-selected");
+    expect(selectedNotice.textContent).toContain("先試單三分之一部位");
+
+    // AC7 / SD §10: Zero persona_opinion calls during default servant Q&A + clarification flow
+    expect(interactionMocks.participants).not.toHaveBeenCalled();
+    expect(interactionMocks.submit).not.toHaveBeenCalled();
+    expect(screen.getByTestId("servant-optional-persona-consult-control")).toBeInTheDocument();
+  });
+
+  it("displays the trader habits profile and sends reject, replace, and add habit corrections in 個人化紀錄 drawer (AC3, AC7)", async () => {
+    const initialHabits = {
+      agora_user_id: "admintest",
+      persona_id: "persona-1",
+      visibility: "persona_private",
+      habit_profile: {
+        window: "90d",
+        min_sample: 5,
+        as_of: "2026-11-27T08:00:00Z",
+        features: [
+          {
+            key: "holding_horizon",
+            label_zh_tw: "持有週期偏好",
+            status: "ready",
+            sample_size: 12,
+            min_sample: 5,
+            value: 7.5,
+            unit: "days",
+          },
+          {
+            key: "stop_loss_discipline",
+            label_zh_tw: "停損紀律",
+            status: "insufficient_sample",
+            sample_size: 2,
+            min_sample: 5,
+            value: null,
+          },
+        ],
+      },
+      servant_interpretations: [
+        {
+          interpretation_id: "hab-int-01",
+          feature_key: "holding_horizon",
+          statement: "交易員偏好波段持有約 7 至 8 個交易日。",
+          status: "active",
+          visibility: "persona_private",
+        },
+      ],
+    };
+
+    servantSessionMocks.getServantHabits.mockResolvedValueOnce(initialHabits);
+    servantSessionMocks.patchServantHabits.mockResolvedValueOnce({
+      ...initialHabits,
+      servant_interpretations: [
+        {
+          interpretation_id: "hab-int-01",
+          feature_key: "holding_horizon",
+          statement: "交易員偏好波段持有約 7 至 8 個交易日。",
+          status: "rejected",
+          visibility: "persona_private",
+        },
+      ],
+      training_example: {
+        id: "te-hab-001",
+        visibility: "persona_private",
+      },
+      correction_receipt: {
+        correction_id: "corr-hab-001",
+        action: "reject",
+      },
+    });
+
+    renderTradingDesk("/agora/trading-room/strat-winner-v4");
+    fireEvent.click(screen.getByTestId("global-drawer-trigger-personalization"));
+
+    const habitsSection = await screen.findByTestId("personalization-servant-habits-section");
+    expect(habitsSection.textContent).toContain("交易員習慣側寫與修正");
+
+    const holdingFeature = await screen.findByTestId("servant-habit-feature-holding_horizon");
+    expect(holdingFeature.textContent).toContain("持有週期偏好");
+    expect(holdingFeature.textContent).toContain("7.5 days");
+    expect(holdingFeature.textContent).toContain("樣本 12/5");
+
+    const stopLossFeature = screen.getByTestId("servant-habit-feature-stop_loss_discipline");
+    expect(stopLossFeature.textContent).toContain("樣本不足");
+
+    const rejectBtn = screen.getByTestId("servant-habit-reject-hab-int-01");
+    fireEvent.click(rejectBtn);
+
+    await waitFor(() => {
+      expect(servantSessionMocks.patchServantHabits).toHaveBeenCalledWith({
+        action: "reject",
+        interpretation_id: "hab-int-01",
+        feature_key: "holding_horizon",
+        statement: undefined,
+      });
+    });
+
+    const savedBanner = await screen.findByTestId("servant-habit-correction-saved");
+    expect(savedBanner.textContent).toContain("te-hab-001");
+    expect(interactionMocks.participants).not.toHaveBeenCalled();
   });
 });

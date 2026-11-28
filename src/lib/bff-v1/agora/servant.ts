@@ -81,6 +81,7 @@ export interface ServantCitation {
   id?: string;
   fact_id?: string;
   label?: string;
+  detail?: string;
   value?: unknown;
   unit?: string;
   source: string;
@@ -131,6 +132,9 @@ export interface ServantMessageRequest {
   attachment_refs?: string[];
   context?: {
     page?: string;
+    route?: string | null;
+    strategy?: string | null;
+    selected_widget?: string | null;
     strategy_id?: string;
     widget_id?: string;
     selected_symbols?: string[];
@@ -148,6 +152,9 @@ export interface ServantProviderReply {
     status_code?: number;
     message?: string;
   } | null;
+  citations?: ServantCitation[];
+  clarification?: ServantClarificationCard | null;
+  stated_assumptions?: string[];
 }
 
 export interface ServantMessageReceipt {
@@ -818,11 +825,14 @@ export async function getServantSessionStream(
 export interface ServantHabitFeature {
   key: string;
   label: string;
+  label_zh_tw?: string;
+  status?: string;
   sample_size: number;
   min_sample: number;
   shown: boolean;
   unavailable_reason: string | null;
-  value: Record<string, unknown> | null;
+  value: Record<string, unknown> | number | string | null;
+  unit?: string | null;
   headline: {
     metric?: string;
     value?: unknown;
@@ -843,6 +853,8 @@ export interface ServantHabitProfile {
   interaction_count: number;
   min_sample: number;
   computed_at: string;
+  window?: string;
+  as_of?: string;
   features: ServantHabitFeature[];
 }
 
@@ -854,6 +866,8 @@ export interface ServantHabitInterpretation {
   statement: string;
   origin: "servant" | "trader_correction" | string;
   status: string;
+  visibility?: string;
+  updated_at?: string;
   fact_refs: string[];
   profile_version?: number;
   written_at?: string;
@@ -861,8 +875,13 @@ export interface ServantHabitInterpretation {
 
 export interface ServantHabitsResponse {
   servant_persona_id: string;
+  agora_user_id?: string;
+  persona_id?: string;
+  visibility?: string;
   profile: ServantHabitProfile;
+  habit_profile?: ServantHabitProfile;
   interpretations: ServantHabitInterpretation[];
+  servant_interpretations?: ServantHabitInterpretation[];
   interpretations_status: {
     status: "ok" | "unavailable" | string;
     reason: string | null;
@@ -873,6 +892,8 @@ export interface ServantHabitsResponse {
     superseded_interpretation_id?: string | null;
     training_example?: Record<string, unknown> | null;
   } | null;
+  training_example?: { id?: string; visibility?: string } | Record<string, unknown> | null;
+  correction_receipt?: { correction_id?: string; action?: string } | null;
 }
 
 export interface ServantHabitCorrectionRequest {
@@ -887,17 +908,36 @@ export interface ServantHabitCorrectionRequest {
 function normalizeHabitFeature(raw: unknown): ServantHabitFeature {
   const r = asRecord(raw);
   const headlineRaw = r.headline && typeof r.headline === "object" ? asRecord(r.headline) : null;
+  const label = String(r.label_zh_tw ?? r.label ?? r.key ?? "");
+  const shown = typeof r.shown === "boolean" ? r.shown : r.status !== "insufficient_sample";
+  const unit =
+    typeof r.unit === "string"
+      ? r.unit
+      : headlineRaw && typeof headlineRaw.unit === "string"
+        ? headlineRaw.unit
+        : null;
+  const rawVal =
+    r.value !== undefined && r.value !== null
+      ? r.value
+      : headlineRaw && headlineRaw.value !== undefined
+        ? headlineRaw.value
+        : null;
   return {
     key: String(r.key ?? ""),
-    label: String(r.label ?? r.key ?? ""),
+    label,
+    label_zh_tw: label,
+    status: typeof r.status === "string" ? r.status : shown ? "ready" : "insufficient_sample",
     sample_size: typeof r.sample_size === "number" ? r.sample_size : 0,
     min_sample: typeof r.min_sample === "number" ? r.min_sample : 10,
-    shown: r.shown === true,
+    shown,
     unavailable_reason: typeof r.unavailable_reason === "string" ? r.unavailable_reason : null,
     value:
-      r.value && typeof r.value === "object" && !Array.isArray(r.value)
-        ? (r.value as Record<string, unknown>)
-        : null,
+      typeof rawVal === "number" || typeof rawVal === "string"
+        ? rawVal
+        : rawVal && typeof rawVal === "object" && !Array.isArray(rawVal)
+          ? (rawVal as Record<string, unknown>)
+          : null,
+    unit,
     headline: headlineRaw
       ? {
           metric: typeof headlineRaw.metric === "string" ? headlineRaw.metric : undefined,
@@ -920,6 +960,8 @@ function normalizeHabitInterpretation(raw: unknown): ServantHabitInterpretation 
     statement: String(r.statement ?? ""),
     origin: typeof r.origin === "string" && r.origin ? r.origin : "servant",
     status: typeof r.status === "string" && r.status ? r.status : "active",
+    visibility: typeof r.visibility === "string" ? r.visibility : "persona_private",
+    updated_at: typeof r.updated_at === "string" ? r.updated_at : undefined,
     fact_refs: Array.isArray(r.fact_refs) ? r.fact_refs.map(String) : [],
     profile_version: typeof r.profile_version === "number" ? r.profile_version : undefined,
     written_at: typeof r.written_at === "string" ? r.written_at : undefined,
@@ -928,32 +970,47 @@ function normalizeHabitInterpretation(raw: unknown): ServantHabitInterpretation 
 
 function normalizeServantHabitsResponse(raw: unknown): ServantHabitsResponse {
   const r = unwrapData(raw);
-  const p = asRecord(r.profile);
+  const p = Object.keys(asRecord(r.profile)).length > 0 ? asRecord(r.profile) : asRecord(r.habit_profile);
   const features = Array.isArray(p.features)
     ? p.features.map((item) => normalizeHabitFeature(item))
     : [];
-  const interpretations = Array.isArray(r.interpretations)
-    ? r.interpretations.map((item) => normalizeHabitInterpretation(item))
-    : [];
+  const rawInterps = Array.isArray(r.interpretations)
+    ? r.interpretations
+    : Array.isArray(r.servant_interpretations)
+      ? r.servant_interpretations
+      : [];
+  const interpretations = rawInterps.map((item) => normalizeHabitInterpretation(item));
   const statusRaw = asRecord(r.interpretations_status);
   const corrRaw = r.correction && typeof r.correction === "object" ? asRecord(r.correction) : null;
+  const computedAt = String(p.computed_at ?? p.as_of ?? "");
+  const normalizedProfile: ServantHabitProfile = {
+    profile_key: String(p.profile_key ?? ""),
+    version: typeof p.version === "number" ? p.version : 1,
+    tenant_id: String(p.tenant_id ?? ""),
+    user_id: String(p.user_id ?? ""),
+    strategy_id: String(p.strategy_id ?? "*"),
+    decision_count: typeof p.decision_count === "number" ? p.decision_count : 0,
+    journal_count: typeof p.journal_count === "number" ? p.journal_count : 0,
+    interaction_count: typeof p.interaction_count === "number" ? p.interaction_count : 0,
+    min_sample: typeof p.min_sample === "number" ? p.min_sample : 10,
+    computed_at: computedAt,
+    window: typeof p.window === "string" ? p.window : "90d",
+    as_of: computedAt,
+    features,
+  };
+  const topTrainingExample =
+    r.training_example && typeof r.training_example === "object"
+      ? asRecord(r.training_example)
+      : corrRaw && corrRaw.training_example && typeof corrRaw.training_example === "object"
+        ? asRecord(corrRaw.training_example)
+        : null;
 
   return {
-    servant_persona_id: String(r.servant_persona_id ?? ""),
-    profile: {
-      profile_key: String(p.profile_key ?? ""),
-      version: typeof p.version === "number" ? p.version : 1,
-      tenant_id: String(p.tenant_id ?? ""),
-      user_id: String(p.user_id ?? ""),
-      strategy_id: String(p.strategy_id ?? "*"),
-      decision_count: typeof p.decision_count === "number" ? p.decision_count : 0,
-      journal_count: typeof p.journal_count === "number" ? p.journal_count : 0,
-      interaction_count: typeof p.interaction_count === "number" ? p.interaction_count : 0,
-      min_sample: typeof p.min_sample === "number" ? p.min_sample : 10,
-      computed_at: String(p.computed_at ?? ""),
-      features,
-    },
+    servant_persona_id: String(r.servant_persona_id ?? r.persona_id ?? ""),
+    profile: normalizedProfile,
+    habit_profile: normalizedProfile,
     interpretations,
+    servant_interpretations: interpretations,
     interpretations_status: {
       status: typeof statusRaw.status === "string" ? statusRaw.status : "ok",
       reason: typeof statusRaw.reason === "string" ? statusRaw.reason : null,
@@ -966,12 +1023,14 @@ function normalizeServantHabitsResponse(raw: unknown): ServantHabitsResponse {
             typeof corrRaw.superseded_interpretation_id === "string"
               ? corrRaw.superseded_interpretation_id
               : null,
-          training_example:
-            corrRaw.training_example && typeof corrRaw.training_example === "object"
-              ? asRecord(corrRaw.training_example)
-              : null,
+          training_example: topTrainingExample,
         }
       : null,
+    training_example: topTrainingExample,
+    correction_receipt:
+      r.correction_receipt && typeof r.correction_receipt === "object"
+        ? (r.correction_receipt as { correction_id?: string; action?: string })
+        : null,
   };
 }
 
@@ -1015,6 +1074,7 @@ export interface ServantTraderReportFact {
   section?: string;
   metric_key?: string;
   label: string;
+  statement?: string;
   value: unknown;
   unit: string;
   owner: string;
@@ -1025,8 +1085,10 @@ export interface ServantTraderReportFact {
 }
 
 export interface ServantTraderReportSuggestion {
+  suggestion_id?: string;
   proposal_type?: string;
   title: string;
+  label?: string;
   reason?: string;
   owner?: string;
   source?: string;
@@ -1035,6 +1097,14 @@ export interface ServantTraderReportSuggestion {
 
 export interface ServantTraderReport {
   report_id: string;
+  report_kind?: string;
+  title?: string;
+  generated_at?: string;
+  period_start?: string;
+  period_end?: string;
+  agora_user_id?: string;
+  persona_id?: string;
+  execution_authority?: string;
   spec_version?: string;
   tenant_id?: string;
   user_id?: string;
@@ -1070,10 +1140,16 @@ export interface ServantTraderReportsListResponse {
   on_demand_daily_used: number;
   on_demand_daily_cap: number;
   weekly_history_cap: number;
+  quota?: {
+    daily_limit: number;
+    used_today: number;
+    remaining_today: number;
+  };
 }
 
 export interface CreateServantTraderReportRequest {
   strategy_id?: string | null;
+  report_kind?: "on_demand" | string;
   trigger?: "on_demand" | string;
   window_days?: number;
 }
@@ -1084,12 +1160,15 @@ function normalizeTraderReportFact(raw: unknown): ServantTraderReportFact {
     (typeof r.source === "string" && r.source.trim()) ||
     (typeof r.source_id === "string" && r.source_id.trim()) ||
     "agora";
+  const label = String(r.statement ?? r.label ?? r.metric_key ?? r.id ?? r.fact_id ?? "");
+  const id = String(r.id ?? r.fact_id ?? "");
   return {
-    id: String(r.id ?? r.fact_id ?? ""),
-    fact_id: typeof r.fact_id === "string" ? r.fact_id : undefined,
+    id,
+    fact_id: typeof r.fact_id === "string" ? r.fact_id : id,
     section: typeof r.section === "string" ? r.section : undefined,
     metric_key: typeof r.metric_key === "string" ? r.metric_key : undefined,
-    label: String(r.label ?? r.metric_key ?? r.id ?? ""),
+    label,
+    statement: label,
     value: r.value,
     unit: typeof r.unit === "string" ? r.unit : "",
     owner: typeof r.owner === "string" ? r.owner : "agora",
@@ -1114,36 +1193,67 @@ function normalizeServantTraderReport(raw: unknown): ServantTraderReport {
     ? r.citations.map((item) => normalizeTraderReportFact(item))
     : facts;
   const nextStepsSection = asRecord(sections.suggested_next_steps);
-  const rawItems = Array.isArray(nextStepsSection.items) ? nextStepsSection.items : [];
-  const suggestedNextSteps: ServantTraderReportSuggestion[] = rawItems.map((item) => {
+  const rawItems = Array.isArray(r.suggested_next_steps)
+    ? r.suggested_next_steps
+    : Array.isArray(nextStepsSection.items)
+      ? nextStepsSection.items
+      : [];
+  const suggestedNextSteps: ServantTraderReportSuggestion[] = rawItems.map((item, idx) => {
     const s = asRecord(item);
+    const title = String(s.label ?? s.title ?? "");
     return {
+      suggestion_id: typeof s.suggestion_id === "string" ? s.suggestion_id : `sug-${idx + 1}`,
       proposal_type: typeof s.proposal_type === "string" ? s.proposal_type : undefined,
-      title: String(s.title ?? ""),
+      title,
+      label: title,
       reason: typeof s.reason === "string" ? s.reason : undefined,
       owner: typeof s.owner === "string" ? s.owner : undefined,
       source: typeof s.source === "string" ? s.source : undefined,
       as_of: typeof s.as_of === "string" ? s.as_of : undefined,
     };
   });
+  const cadence = String(
+    r.cadence ??
+      (r.trigger === "weekly_post_attribution" || r.report_kind === "scheduled_weekly"
+        ? "weekly"
+        : "on_demand"),
+  );
+  const reportKind =
+    typeof r.report_kind === "string"
+      ? r.report_kind
+      : cadence === "weekly"
+        ? "scheduled_weekly"
+        : "on_demand";
+  const createdAt = String(r.created_at ?? r.generated_at ?? "");
+  const windowStart = String(r.window_start ?? r.period_start ?? "");
+  const windowEnd = String(r.window_end ?? r.period_end ?? "");
+  const isoWeek = String(r.iso_week ?? r.calendar_iso_week ?? "");
 
   return {
     report_id: String(r.report_id ?? ""),
+    report_kind: reportKind,
+    title:
+      typeof r.title === "string" && r.title.trim()
+        ? r.title
+        : `${isoWeek} ${cadence === "weekly" ? "每週交易員報告" : "即時交易員報告"}`.trim(),
+    generated_at: createdAt,
+    period_start: windowStart,
+    period_end: windowEnd,
     spec_version: typeof r.spec_version === "string" ? r.spec_version : undefined,
     tenant_id: typeof r.tenant_id === "string" ? r.tenant_id : undefined,
     user_id: typeof r.user_id === "string" ? r.user_id : undefined,
     trader_id: typeof r.trader_id === "string" ? r.trader_id : undefined,
-    servant_persona_id: String(r.servant_persona_id ?? ""),
+    servant_persona_id: String(r.servant_persona_id ?? r.persona_id ?? ""),
     strategy_id: String(r.strategy_id ?? "__all__"),
     strategy_version: String(r.strategy_version ?? "v1"),
     trigger: String(r.trigger ?? "on_demand"),
-    cadence: String(r.cadence ?? (r.trigger === "weekly_post_attribution" ? "weekly" : "on_demand")),
+    cadence,
     day: typeof r.day === "string" ? r.day : undefined,
     report_day: typeof r.report_day === "string" ? r.report_day : undefined,
-    iso_week: String(r.iso_week ?? r.calendar_iso_week ?? ""),
+    iso_week: isoWeek,
     calendar_iso_week: typeof r.calendar_iso_week === "string" ? r.calendar_iso_week : undefined,
-    window_start: String(r.window_start ?? ""),
-    window_end: String(r.window_end ?? ""),
+    window_start: windowStart,
+    window_end: windowEnd,
     window_days: typeof r.window_days === "number" ? r.window_days : 7,
     status: String(r.status ?? "completed"),
     attribution_run_id:
@@ -1154,7 +1264,7 @@ function normalizeServantTraderReport(raw: unknown): ServantTraderReport {
     citations,
     sections,
     suggested_next_steps: suggestedNextSteps,
-    created_at: String(r.created_at ?? ""),
+    created_at: createdAt,
     updated_at: typeof r.updated_at === "string" ? r.updated_at : undefined,
   };
 }
@@ -1178,16 +1288,35 @@ export async function listServantTraderReports(params?: {
   const items = Array.isArray(r.items)
     ? r.items.map((item) => normalizeServantTraderReport(item))
     : [];
+  const quotaRaw = r.quota && typeof r.quota === "object" ? asRecord(r.quota) : null;
+  const usedToday =
+    typeof r.on_demand_daily_used === "number"
+      ? r.on_demand_daily_used
+      : typeof quotaRaw?.used_today === "number"
+        ? quotaRaw.used_today
+        : 0;
+  const dailyCap =
+    typeof r.on_demand_daily_cap === "number"
+      ? r.on_demand_daily_cap
+      : typeof quotaRaw?.daily_limit === "number"
+        ? quotaRaw.daily_limit
+        : 3;
   return {
     items,
     total: typeof r.total === "number" ? r.total : items.length,
     servant_persona_id: String(r.servant_persona_id ?? ""),
-    on_demand_daily_used:
-      typeof r.on_demand_daily_used === "number" ? r.on_demand_daily_used : 0,
-    on_demand_daily_cap:
-      typeof r.on_demand_daily_cap === "number" ? r.on_demand_daily_cap : 3,
+    on_demand_daily_used: usedToday,
+    on_demand_daily_cap: dailyCap,
     weekly_history_cap:
       typeof r.weekly_history_cap === "number" ? r.weekly_history_cap : 26,
+    quota: {
+      daily_limit: dailyCap,
+      used_today: usedToday,
+      remaining_today:
+        typeof quotaRaw?.remaining_today === "number"
+          ? quotaRaw.remaining_today
+          : Math.max(0, dailyCap - usedToday),
+    },
   };
 }
 

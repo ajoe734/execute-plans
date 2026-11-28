@@ -43,6 +43,7 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   acceptTradingRoomWorkspaceProposalWithMeta: vi.fn(),
   createTradingRoomWorkspaceProposal: vi.fn(),
   decideOnEvent: vi.fn(),
+  getTradingRoomPaperBook: vi.fn(),
   getTradingRoomWorkspaceByStrategyWithMeta: vi.fn(),
   listTradingRoomWorkspaceVersions: vi.fn(),
   patchTradingRoomWorkspaceLayout: vi.fn(),
@@ -496,5 +497,59 @@ describe("TradingRoomWorkspace component suite", () => {
     const progress = screen.getByTestId("trading-room-generation-progress");
     expect(progress).toBeInTheDocument();
     expect(screen.getByText("交易僕人正在建立「Taiwan Momentum Alpha」交易操盤室")).toBeInTheDocument();
+  });
+
+  it("renders read-only paper book fills and positions with pantheon_paper_proxy and no order action (AC4)", () => {
+    render(
+      <PositionActionQueue
+        paperBook={{
+          agora_user_id: "admintest",
+          as_of: "2026-11-27T08:00:00Z",
+          settlement_source: "pantheon_paper_proxy",
+          execution_authority: "none",
+          no_order_route_proof: "agora_paper_book_readback_only",
+          summary: {
+            open_position_count: 1,
+            fill_count: 1,
+            realized_pnl: 0,
+            unrealized_pnl: 15000,
+          },
+          positions: [
+            {
+              position_id: "pos-2330",
+              symbol: "2330.TW",
+              side: "long",
+              quantity: 1000,
+              avg_entry_price: 940,
+              mark_price: 955,
+              unrealized_pnl: 15000,
+              settlement_source: "pantheon_paper_proxy",
+            },
+          ],
+          fills: [
+            {
+              fill_id: "fill-2330-01",
+              symbol: "2330.TW",
+              side: "buy",
+              quantity: 1000,
+              price: 940,
+              filled_at: "2026-11-27T01:30:00Z",
+              settlement_source: "pantheon_paper_proxy",
+            },
+          ],
+        }}
+        positionSummaries={[]}
+      />,
+    );
+
+    expect(screen.getByTestId("paper-book-proxy-badge").textContent).toContain("pantheon_paper_proxy");
+    expect(screen.getByTestId("paper-book-no-order-action").textContent).toContain(
+      "僅供唯讀檢視 · 無任何下單按鈕",
+    );
+    expect(screen.getByTestId("paper-book-positions-list").textContent).toContain("2330.TW");
+    expect(screen.getByTestId("paper-book-fills-list").textContent).toContain("fill-2330-01");
+    expect(
+      screen.getByTestId("position-action-queue").querySelectorAll("button").length,
+    ).toBe(0);
   });
 });

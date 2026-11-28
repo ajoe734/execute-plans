@@ -2205,70 +2205,87 @@ export async function getTradingRoomDecisionLock(
 
 export interface TradingRoomPaperBookFill {
   fill_id: string;
-  broker_order_id: string | null;
-  client_order_id: string | null;
-  handoff_id: string | null;
-  intent_id: string | null;
-  decision_event_id: string | null;
-  strategy_id: string | null;
+  broker_order_id?: string | null;
+  client_order_id?: string | null;
+  handoff_id?: string | null;
+  intent_id?: string | null;
+  decision_event_id?: string | null;
+  strategy_id?: string | null;
   symbol: string;
-  action: string;
+  action?: string;
   side: string;
-  direction: string | null;
-  order_type: string;
-  requested_quantity: number | null;
+  direction?: string | null;
+  order_type?: string;
+  requested_quantity?: number | null;
   quantity: number | null;
-  fill_qty: number | null;
-  fill_price: number | null;
+  fill_qty?: number | null;
+  fill_price?: number | null;
+  price?: number | null;
   filled_at: string | null;
-  fill_status: string;
-  environment: "paper";
-  execution_observation_kind: "pantheon_paper_proxy";
-  execution_display_label: string;
-  execution_verified: false;
-  actual_fill_claimed: false;
-  is_real_fill: false;
-  no_order_route_proof: string;
+  fill_status?: string;
+  settlement_source?: string;
+  environment?: "paper";
+  execution_observation_kind?: "pantheon_paper_proxy";
+  execution_display_label?: string;
+  execution_verified?: false;
+  actual_fill_claimed?: false;
+  is_real_fill?: false;
+  no_order_route_proof?: string;
 }
 
 export interface TradingRoomPaperBookPosition {
+  position_id?: string;
   symbol: string;
   side: string;
-  direction: string;
+  direction?: string;
   quantity: number;
-  net_qty: number;
-  avg_price: number | null;
-  average_price: number | null;
+  net_qty?: number;
+  avg_price?: number | null;
+  average_price?: number | null;
+  avg_entry_price?: number | null;
   mark_price: number | null;
-  market_value: number | null;
+  market_value?: number | null;
   unrealized_pnl: number | null;
-  realized_pnl: number | null;
-  fill_count: number;
-  last_filled_at: string | null;
-  source: string;
-  environment: "paper";
-  execution_observation_kind: "pantheon_paper_proxy";
-  execution_display_label: string;
-  actual_fill_claimed: false;
-  is_real_position: false;
+  realized_pnl?: number | null;
+  fill_count?: number;
+  last_filled_at?: string | null;
+  updated_at?: string | null;
+  strategy_id?: string | null;
+  settlement_source?: string;
+  source?: string;
+  environment?: "paper";
+  execution_observation_kind?: "pantheon_paper_proxy";
+  execution_display_label?: string;
+  actual_fill_claimed?: false;
+  is_real_position?: false;
 }
 
 export interface TradingRoomPaperBookReadback {
-  status: string;
-  environment: "paper";
-  execution_observation_kind: "pantheon_paper_proxy";
-  execution_display_label: string;
-  actual_fill_claimed: false;
-  execution_verified: false;
-  is_real_fill: false;
-  paper_book: {
+  status?: string;
+  agora_user_id?: string;
+  as_of?: string;
+  settlement_source?: string;
+  execution_authority?: string;
+  environment?: "paper";
+  execution_observation_kind?: "pantheon_paper_proxy";
+  execution_display_label?: string;
+  actual_fill_claimed?: false;
+  execution_verified?: false;
+  is_real_fill?: false;
+  summary?: {
+    open_position_count: number;
+    fill_count: number;
+    realized_pnl: number | null;
+    unrealized_pnl: number | null;
+  };
+  paper_book?: {
     capital_pool_id: string | null;
     runtime_binding_id: string | null;
     runtime_id: string | null;
     starting_capital: number | null;
     currency: string;
   };
-  binding_telemetry: {
+  binding_telemetry?: {
     available: boolean;
     status: string;
     equity: number | null;
@@ -2279,8 +2296,8 @@ export interface TradingRoomPaperBookReadback {
   };
   fills: TradingRoomPaperBookFill[];
   positions: TradingRoomPaperBookPosition[];
-  total_fills: number;
-  total_positions: number;
+  total_fills?: number;
+  total_positions?: number;
   no_order_route_proof: string;
 }
 
@@ -2291,6 +2308,7 @@ function finiteNumberOrNull(raw: unknown): number | null {
 function normalizePaperBookFill(raw: unknown): TradingRoomPaperBookFill {
   const r = recordFrom(raw);
   const qty = finiteNumberOrNull(r.fill_qty) ?? finiteNumberOrNull(r.quantity);
+  const price = finiteNumberOrNull(r.fill_price) ?? finiteNumberOrNull(r.price);
   return {
     fill_id: stringFrom(r.fill_id) || "pfill-unknown",
     broker_order_id: stringFrom(r.broker_order_id) || null,
@@ -2307,9 +2325,11 @@ function normalizePaperBookFill(raw: unknown): TradingRoomPaperBookFill {
     requested_quantity: finiteNumberOrNull(r.requested_quantity) ?? qty,
     quantity: finiteNumberOrNull(r.quantity) ?? qty,
     fill_qty: qty,
-    fill_price: finiteNumberOrNull(r.fill_price),
+    fill_price: price,
+    price,
     filled_at: stringFrom(r.filled_at) || null,
     fill_status: stringFrom(r.fill_status) || "filled",
+    settlement_source: stringFrom(r.settlement_source) || "pantheon_paper_proxy",
     environment: "paper",
     execution_observation_kind: "pantheon_paper_proxy",
     execution_display_label:
@@ -2325,21 +2345,30 @@ function normalizePaperBookFill(raw: unknown): TradingRoomPaperBookFill {
 function normalizePaperBookPosition(raw: unknown): TradingRoomPaperBookPosition {
   const r = recordFrom(raw);
   const netQty = finiteNumberOrNull(r.net_qty) ?? finiteNumberOrNull(r.quantity) ?? 0;
-  const avgPrice = finiteNumberOrNull(r.avg_price) ?? finiteNumberOrNull(r.average_price);
+  const avgPrice =
+    finiteNumberOrNull(r.avg_price) ??
+    finiteNumberOrNull(r.average_price) ??
+    finiteNumberOrNull(r.avg_entry_price);
+  const symbol = stringFrom(r.symbol) || "—";
   return {
-    symbol: stringFrom(r.symbol) || "—",
+    position_id: stringFrom(r.position_id) || `pos-${symbol}`,
+    symbol,
     side: stringFrom(r.side) || (netQty < 0 ? "Sell" : "Buy"),
     direction: stringFrom(r.direction) || (netQty < 0 ? "short" : "long"),
     quantity: Math.abs(netQty),
     net_qty: netQty,
     avg_price: avgPrice,
     average_price: avgPrice,
+    avg_entry_price: avgPrice,
     mark_price: finiteNumberOrNull(r.mark_price),
     market_value: finiteNumberOrNull(r.market_value),
     unrealized_pnl: finiteNumberOrNull(r.unrealized_pnl),
     realized_pnl: finiteNumberOrNull(r.realized_pnl),
     fill_count: typeof r.fill_count === "number" ? r.fill_count : 0,
     last_filled_at: stringFrom(r.last_filled_at) || null,
+    updated_at: stringFrom(r.updated_at) || stringFrom(r.last_filled_at) || null,
+    strategy_id: stringFrom(r.strategy_id) || null,
+    settlement_source: stringFrom(r.settlement_source) || "pantheon_paper_proxy",
     source: stringFrom(r.source) || "paper_book_fills",
     environment: "paper",
     execution_observation_kind: "pantheon_paper_proxy",
@@ -2356,6 +2385,7 @@ function normalizePaperBookPosition(raw: unknown): TradingRoomPaperBookPosition 
  */
 export async function getTradingRoomPaperBook(
   params?: {
+    strategyId?: string | null;
     intentId?: string;
     decisionEventId?: string;
     handoffId?: string;
@@ -2364,6 +2394,7 @@ export async function getTradingRoomPaperBook(
 ): Promise<TradingRoomPaperBookReadback | null> {
   const base = resolvedBase(baseUrl);
   const qs = new URLSearchParams();
+  if (params?.strategyId) qs.set("strategy_id", params.strategyId);
   if (params?.intentId) qs.set("intent_id", params.intentId);
   if (params?.decisionEventId) qs.set("decision_event_id", params.decisionEventId);
   if (params?.handoffId) qs.set("handoff_id", params.handoffId);
@@ -2429,101 +2460,150 @@ export interface TraderImitationBootstrapInterval {
   sample_size: number;
   resamples: number;
   confidence_level: number;
-  mean: number | null;
+  mean?: number | null;
+  point_estimate?: number | null;
   ci_lower: number | null;
   ci_upper: number | null;
   contains_zero: boolean;
-  is_luck: boolean;
-  label: string;
-  label_zh: string;
+  is_luck?: boolean;
+  label?: string;
+  label_zh?: string;
+  luck_label_zh_tw?: string | null;
+  status?: string;
 }
 
 export interface TraderImitationDecisionRow {
-  decision_event_id: string | null;
-  lock_id: string | null;
+  decision_event_id?: string | null;
+  decision_id?: string | null;
+  lock_id?: string | null;
   symbol: string | null;
-  strategy_id: string | null;
-  cutoff_at: string | null;
-  human_action: string;
-  trader_imitation_action: string;
-  trader_imitation_confidence: number | null;
-  candidate_id: string | null;
-  agreed: boolean;
-  human_return_pct: number | null;
-  trader_imitation_return_pct: number | null;
-  outcome_gap_pct: number | null;
+  strategy_id?: string | null;
+  cutoff_at?: string | null;
+  settled_at?: string | null;
+  human_action?: string;
+  trader_choice?: string;
+  trader_imitation_action?: string;
+  servant_choice?: string;
+  rule_choice?: string;
+  trader_imitation_confidence?: number | null;
+  candidate_id?: string | null;
+  agreed?: boolean;
+  human_return_pct?: number | null;
+  trader_return?: number | null;
+  trader_imitation_return_pct?: number | null;
+  servant_return?: number | null;
+  rule_return?: number | null;
+  outcome_gap_pct?: number | null;
+  outcome_gap?: number | null;
 }
 
 export interface TraderImitationComparison {
-  status: "ok" | "empty" | "degraded" | string;
-  comparison_state: string;
-  status_label_zh: string;
+  status?: "ok" | "empty" | "degraded" | string;
+  agora_user_id?: string;
+  title_zh_tw?: string;
+  as_of?: string | null;
+  settlement_source?: string;
+  execution_authority?: string;
+  sample_size?: number;
+  comparison_state?: string;
+  status_label_zh?: string;
   strategy_id: string | null;
-  decision_count: number;
-  minimum_decisions_required: number;
-  remaining_decisions_needed: number;
-  training_approved: boolean;
-  compared_decision_count: number;
-  settled_comparison_count: number;
-  agreement_rate: number | null;
-  agreement_count: number;
-  disagreement_count: number;
-  agreement_interval: TraderImitationBootstrapInterval;
-  agreement_label: string;
-  agreement_label_zh: string;
-  outcome_gap: number | null;
-  outcome_gap_interval: TraderImitationBootstrapInterval;
-  outcome_gap_label: string;
-  outcome_gap_label_zh: string;
-  finding_stated: boolean;
+  decision_count?: number;
+  minimum_decisions_required?: number;
+  remaining_decisions_needed?: number;
+  training_approved?: boolean;
+  compared_decision_count?: number;
+  settled_comparison_count?: number;
+  agreement_rate: number | TraderImitationBootstrapInterval | null;
+  agreement_count?: number;
+  disagreement_count?: number;
+  agreement_interval?: TraderImitationBootstrapInterval;
+  agreement_label?: string;
+  agreement_label_zh?: string;
+  outcome_gap?: number | null;
+  outcome_gap_interval?: TraderImitationBootstrapInterval;
+  outcome_gap_vs_trader?: TraderImitationBootstrapInterval;
+  outcome_gap_label?: string;
+  outcome_gap_label_zh?: string;
+  finding_stated?: boolean;
   differences: TraderImitationDecisionRow[];
-  decisions: TraderImitationDecisionRow[];
-  candidate: {
+  decisions?: TraderImitationDecisionRow[];
+  candidate?: {
     candidate_id: string;
     version_id: string | null;
     strategy_id: string | null;
     status: string | null;
     decision_count: number;
   } | null;
-  candidate_count: number;
-  max_candidates_kept: number;
-  snapshot_at: string | null;
+  candidate_count?: number;
+  max_candidates_kept?: number;
+  snapshot_at?: string | null;
 }
 
 function normalizeBootstrapInterval(raw: unknown): TraderImitationBootstrapInterval {
   const r = recordFrom(raw);
   const containsZero = r.contains_zero !== false;
   const isLuck = r.is_luck === true || containsZero || stringFrom(r.label) === "luck";
+  const meanVal = finiteNumberOrNull(r.mean) ?? finiteNumberOrNull(r.point_estimate);
+  const labelZh =
+    stringFrom(r.luck_label_zh_tw) ||
+    stringFrom(r.label_zh) ||
+    (isLuck ? "可能是運氣" : "統計顯著");
   return {
     sample_size: typeof r.sample_size === "number" ? r.sample_size : 0,
     resamples: typeof r.resamples === "number" ? r.resamples : 1000,
     confidence_level: typeof r.confidence_level === "number" ? r.confidence_level : 0.9,
-    mean: finiteNumberOrNull(r.mean),
+    mean: meanVal,
+    point_estimate: meanVal,
     ci_lower: finiteNumberOrNull(r.ci_lower),
     ci_upper: finiteNumberOrNull(r.ci_upper),
     contains_zero: containsZero,
     is_luck: isLuck,
     label: stringFrom(r.label) || (isLuck ? "luck" : "significant"),
-    label_zh: stringFrom(r.label_zh) || (isLuck ? "可能是運氣" : "統計顯著"),
+    label_zh: labelZh,
+    luck_label_zh_tw: isLuck ? "可能是運氣" : null,
+    status: stringFrom(r.status) || "ready",
   };
 }
 
 function normalizeImitationDecisionRow(raw: unknown): TraderImitationDecisionRow {
   const r = recordFrom(raw);
+  const decId = stringFrom(r.decision_id) || stringFrom(r.decision_event_id) || null;
+  const humanAct = stringFrom(r.trader_choice) || stringFrom(r.human_action) || "no_trade";
+  const servantAct =
+    stringFrom(r.servant_choice) || stringFrom(r.trader_imitation_action) || "no_trade";
+  const ruleAct = stringFrom(r.rule_choice) || stringFrom(r.base_strategy_action) || humanAct;
+  const gapVal = finiteNumberOrNull(r.outcome_gap) ?? finiteNumberOrNull(r.outcome_gap_pct);
+  const cutoffAt = stringFrom(r.cutoff_at) || stringFrom(r.settled_at) || null;
   return {
-    decision_event_id: stringFrom(r.decision_event_id) || null,
+    decision_event_id: decId,
+    decision_id: decId,
     lock_id: stringFrom(r.lock_id) || null,
     symbol: stringFrom(r.symbol) || null,
     strategy_id: stringFrom(r.strategy_id) || null,
-    cutoff_at: stringFrom(r.cutoff_at) || null,
-    human_action: stringFrom(r.human_action) || "no_trade",
-    trader_imitation_action: stringFrom(r.trader_imitation_action) || "no_trade",
+    cutoff_at: cutoffAt,
+    settled_at: cutoffAt,
+    human_action: humanAct,
+    trader_choice: humanAct,
+    trader_imitation_action: servantAct,
+    servant_choice: servantAct,
+    rule_choice: ruleAct,
     trader_imitation_confidence: finiteNumberOrNull(r.trader_imitation_confidence),
     candidate_id: stringFrom(r.candidate_id) || null,
     agreed: r.agreed === true,
-    human_return_pct: finiteNumberOrNull(r.human_return_pct),
-    trader_imitation_return_pct: finiteNumberOrNull(r.trader_imitation_return_pct),
-    outcome_gap_pct: finiteNumberOrNull(r.outcome_gap_pct),
+    human_return_pct:
+      finiteNumberOrNull(r.human_return_pct) ?? finiteNumberOrNull(r.trader_return),
+    trader_return:
+      finiteNumberOrNull(r.trader_return) ?? finiteNumberOrNull(r.human_return_pct),
+    trader_imitation_return_pct:
+      finiteNumberOrNull(r.trader_imitation_return_pct) ??
+      finiteNumberOrNull(r.servant_return),
+    servant_return:
+      finiteNumberOrNull(r.servant_return) ??
+      finiteNumberOrNull(r.trader_imitation_return_pct),
+    rule_return: finiteNumberOrNull(r.rule_return),
+    outcome_gap_pct: gapVal,
+    outcome_gap: gapVal,
   };
 }
 
@@ -2551,8 +2631,20 @@ export async function getTraderImitationComparison(
   const body = await parseJson(res);
   const root = recordFrom(body);
   const d = Object.keys(recordFrom(root.data)).length > 0 ? recordFrom(root.data) : root;
-  const agreementInterval = normalizeBootstrapInterval(d.agreement_interval);
-  const gapInterval = normalizeBootstrapInterval(d.outcome_gap_interval);
+  const agreementInterval = normalizeBootstrapInterval(
+    d.agreement_interval && typeof d.agreement_interval === "object"
+      ? d.agreement_interval
+      : d.agreement_rate && typeof d.agreement_rate === "object"
+        ? d.agreement_rate
+        : {},
+  );
+  const gapInterval = normalizeBootstrapInterval(
+    d.outcome_gap_interval && typeof d.outcome_gap_interval === "object"
+      ? d.outcome_gap_interval
+      : d.outcome_gap_vs_trader && typeof d.outcome_gap_vs_trader === "object"
+        ? d.outcome_gap_vs_trader
+        : {},
+  );
   const candRaw = d.candidate && typeof d.candidate === "object" ? recordFrom(d.candidate) : null;
 
   return {
@@ -2574,17 +2666,21 @@ export async function getTraderImitationComparison(
       typeof d.compared_decision_count === "number" ? d.compared_decision_count : 0,
     settled_comparison_count:
       typeof d.settled_comparison_count === "number" ? d.settled_comparison_count : 0,
-    agreement_rate: finiteNumberOrNull(d.agreement_rate),
+    agreement_rate:
+      finiteNumberOrNull(d.agreement_rate) ?? agreementInterval.point_estimate ?? null,
     agreement_count: typeof d.agreement_count === "number" ? d.agreement_count : 0,
     disagreement_count:
       typeof d.disagreement_count === "number" ? d.disagreement_count : 0,
     agreement_interval: agreementInterval,
-    agreement_label: stringFrom(d.agreement_label) || agreementInterval.label,
-    agreement_label_zh: stringFrom(d.agreement_label_zh) || agreementInterval.label_zh,
-    outcome_gap: finiteNumberOrNull(d.outcome_gap),
+    agreement_label: stringFrom(d.agreement_label) || agreementInterval.label || "luck",
+    agreement_label_zh:
+      stringFrom(d.agreement_label_zh) || agreementInterval.label_zh || "可能是運氣",
+    outcome_gap: finiteNumberOrNull(d.outcome_gap) ?? gapInterval.point_estimate ?? null,
     outcome_gap_interval: gapInterval,
-    outcome_gap_label: stringFrom(d.outcome_gap_label) || gapInterval.label,
-    outcome_gap_label_zh: stringFrom(d.outcome_gap_label_zh) || gapInterval.label_zh,
+    outcome_gap_vs_trader: gapInterval,
+    outcome_gap_label: stringFrom(d.outcome_gap_label) || gapInterval.label || "luck",
+    outcome_gap_label_zh:
+      stringFrom(d.outcome_gap_label_zh) || gapInterval.label_zh || "可能是運氣",
     finding_stated: d.finding_stated === true,
     differences: Array.isArray(d.differences)
       ? d.differences.map(normalizeImitationDecisionRow)
