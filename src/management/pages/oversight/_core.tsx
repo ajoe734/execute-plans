@@ -1431,17 +1431,25 @@ export const PersonaFleetPage = () => {
 
 export function extractAttributionHiddenTestCounts(input: {
   hiddenTestPersonaCount?: number;
+  hiddenNonTradingPersonaCount?: number;
+  hidden_non_trading_persona_count?: number;
   hiddenTestStrategyCount?: number;
   includeTestPersonas?: boolean;
   summary?: unknown;
   meta?: unknown;
 } | null | undefined): {
   hiddenPersonaCount: number;
+  hiddenNonTradingPersonaCount: number;
   hiddenStrategyCount: number;
   includeTestPersonas: boolean;
 } {
   if (!input || typeof input !== "object") {
-    return { hiddenPersonaCount: 0, hiddenStrategyCount: 0, includeTestPersonas: false };
+    return {
+      hiddenPersonaCount: 0,
+      hiddenNonTradingPersonaCount: 0,
+      hiddenStrategyCount: 0,
+      includeTestPersonas: false,
+    };
   }
   const summary =
     input.summary && typeof input.summary === "object"
@@ -1470,11 +1478,22 @@ export function extractAttributionHiddenTestCounts(input: {
     meta.hidden_test_persona_count ??
     meta.hiddenTestPersonaCount ??
     rawStrategyCount;
+  const rawNonTradingPersonaCount =
+    input.hiddenNonTradingPersonaCount ??
+    input.hidden_non_trading_persona_count ??
+    meta.hidden_non_trading_persona_count ??
+    meta.hiddenNonTradingPersonaCount ??
+    summary.hidden_non_trading_persona_count ??
+    summary.hiddenNonTradingPersonaCount ??
+    0;
   const hiddenStrategyCount = Number.isFinite(Number(rawStrategyCount))
     ? Math.max(0, Number(rawStrategyCount))
     : 0;
   const hiddenPersonaCount = Number.isFinite(Number(rawPersonaCount))
     ? Math.max(0, Number(rawPersonaCount))
+    : 0;
+  const hiddenNonTradingPersonaCount = Number.isFinite(Number(rawNonTradingPersonaCount))
+    ? Math.max(0, Number(rawNonTradingPersonaCount))
     : 0;
   const includeTestPersonas = Boolean(
     input.includeTestPersonas ??
@@ -1483,7 +1502,12 @@ export function extractAttributionHiddenTestCounts(input: {
     meta.include_test_personas ??
     meta.includeTestPersonas,
   );
-  return { hiddenPersonaCount, hiddenStrategyCount, includeTestPersonas };
+  return {
+    hiddenPersonaCount,
+    hiddenNonTradingPersonaCount,
+    hiddenStrategyCount,
+    includeTestPersonas,
+  };
 }
 
 export function PerformanceAttributionTestPersonaBanner({
@@ -1493,6 +1517,8 @@ export function PerformanceAttributionTestPersonaBanner({
 }: {
   attribution?: {
     hiddenTestPersonaCount?: number;
+    hiddenNonTradingPersonaCount?: number;
+    hidden_non_trading_persona_count?: number;
     hiddenTestStrategyCount?: number;
     includeTestPersonas?: boolean;
     summary?: unknown;
@@ -1505,7 +1531,8 @@ export function PerformanceAttributionTestPersonaBanner({
   const counts = extractAttributionHiddenTestCounts(attribution);
   const showing = includeOverride ?? counts.includeTestPersonas;
   const hiddenStrategies = counts.hiddenStrategyCount || counts.hiddenPersonaCount;
-  if (!showing && hiddenStrategies <= 0) return null;
+  const hiddenNonTradingPersonas = counts.hiddenNonTradingPersonaCount;
+  if (!showing && hiddenStrategies <= 0 && hiddenNonTradingPersonas <= 0) return null;
 
   return (
     <Card
@@ -1514,17 +1541,39 @@ export function PerformanceAttributionTestPersonaBanner({
     >
       <span className="text-muted-foreground" data-testid="attribution-test-personas-count">
         {showing
-          ? t("mgmt.attribution.showingTestPersonasNotice")
-          : counts.hiddenPersonaCount > 0 && counts.hiddenStrategyCount > 0
-            ? t("mgmt.attribution.hiddenTestPersonaStrategiesFmt", {
-                count: counts.hiddenStrategyCount,
-                strategyCount: counts.hiddenStrategyCount,
-                personaCount: counts.hiddenPersonaCount,
+          ? hiddenNonTradingPersonas > 0
+            ? t("mgmt.attribution.showingTestPersonasWithHiddenNonTradingFmt", {
+                nonTradingPersonaCount: hiddenNonTradingPersonas,
               })
-            : t("mgmt.attribution.hiddenTestPersonaStrategiesOnlyFmt", {
-                count: hiddenStrategies,
-                strategyCount: hiddenStrategies,
-              })}
+            : t("mgmt.attribution.showingTestPersonasNotice")
+          : hiddenNonTradingPersonas > 0
+            ? counts.hiddenPersonaCount > 0 && counts.hiddenStrategyCount > 0
+              ? t("mgmt.attribution.hiddenTestAndNonTradingPersonaStrategiesFmt", {
+                  count: counts.hiddenStrategyCount,
+                  strategyCount: counts.hiddenStrategyCount,
+                  personaCount: counts.hiddenPersonaCount,
+                  nonTradingPersonaCount: hiddenNonTradingPersonas,
+                })
+              : hiddenStrategies > 0
+                ? t("mgmt.attribution.hiddenTestStrategiesAndNonTradingPersonasFmt", {
+                    count: hiddenStrategies,
+                    strategyCount: hiddenStrategies,
+                    nonTradingPersonaCount: hiddenNonTradingPersonas,
+                  })
+                : t("mgmt.attribution.hiddenNonTradingPersonasOnlyFmt", {
+                    count: hiddenNonTradingPersonas,
+                    nonTradingPersonaCount: hiddenNonTradingPersonas,
+                  })
+            : counts.hiddenPersonaCount > 0 && counts.hiddenStrategyCount > 0
+              ? t("mgmt.attribution.hiddenTestPersonaStrategiesFmt", {
+                  count: counts.hiddenStrategyCount,
+                  strategyCount: counts.hiddenStrategyCount,
+                  personaCount: counts.hiddenPersonaCount,
+                })
+              : t("mgmt.attribution.hiddenTestPersonaStrategiesOnlyFmt", {
+                  count: hiddenStrategies,
+                  strategyCount: hiddenStrategies,
+                })}
       </span>
       {onToggleIncludeTestPersonas ? (
         <Button

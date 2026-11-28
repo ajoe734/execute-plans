@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ObjectListPage, type ObjectListEmptyStateConfig } from "./ObjectListPage";
 import { collectorCheckStatus, demandMeasureText, demandPersonaName, demandReasonText, isNonRealRun, isTemplateSearchTask, researchTitle } from "./researchPresentation";
@@ -221,9 +221,20 @@ export function extractHiddenRetiredPersonaCount(meta: unknown): number | undefi
     : undefined;
 }
 
+function firstNonNegativeCount(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function extractHiddenTestPersonaStrategyCount(meta: unknown): number | undefined {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
   const record = meta as {
+    hidden_persona_strategy_count?: unknown;
+    hiddenPersonaStrategyCount?: unknown;
     hidden_test_persona_strategy_count?: unknown;
     hiddenTestPersonaStrategyCount?: unknown;
     hidden_test_strategy_count?: unknown;
@@ -232,16 +243,17 @@ export function extractHiddenTestPersonaStrategyCount(meta: unknown): number | u
     hiddenTestPersonaCount?: unknown;
     hidden_unbound_stub_strategy_count?: unknown;
   };
-  const stub = record.hidden_unbound_stub_strategy_count;
-  const stubCount = typeof stub === "number" && Number.isFinite(stub) && stub >= 0 ? stub : undefined;
-  const count =
-    record.hidden_test_persona_strategy_count ??
-    record.hiddenTestPersonaStrategyCount ??
-    record.hidden_test_strategy_count ??
-    record.hiddenTestStrategyCount ??
-    record.hidden_test_persona_count ??
-    record.hiddenTestPersonaCount;
-  const testCount = typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
+  const stubCount = firstNonNegativeCount(record.hidden_unbound_stub_strategy_count);
+  const testCount = firstNonNegativeCount(
+    record.hidden_persona_strategy_count,
+    record.hiddenPersonaStrategyCount,
+    record.hidden_test_persona_strategy_count,
+    record.hiddenTestPersonaStrategyCount,
+    record.hidden_test_strategy_count,
+    record.hiddenTestStrategyCount,
+    record.hidden_test_persona_count,
+    record.hiddenTestPersonaCount,
+  );
   if (testCount === undefined && stubCount === undefined) return undefined;
   return (testCount ?? 0) + (stubCount ?? 0);
 }
@@ -252,14 +264,39 @@ export function extractHiddenTestBreakdown(
 ): { testCount: number; stubCount: number } | undefined {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
   const record = meta as {
+    hidden_persona_strategy_count?: unknown;
+    hiddenPersonaStrategyCount?: unknown;
     hidden_test_persona_strategy_count?: unknown;
+    hiddenTestPersonaStrategyCount?: unknown;
     hidden_unbound_stub_strategy_count?: unknown;
   };
-  const test = record.hidden_test_persona_strategy_count;
-  const stub = record.hidden_unbound_stub_strategy_count;
-  const ok = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
-  if (!ok(test) || !ok(stub)) return undefined;
+  const test = firstNonNegativeCount(
+    record.hidden_persona_strategy_count,
+    record.hiddenPersonaStrategyCount,
+    record.hidden_test_persona_strategy_count,
+    record.hiddenTestPersonaStrategyCount,
+  );
+  const stub = firstNonNegativeCount(record.hidden_unbound_stub_strategy_count);
+  if (test === undefined || stub === undefined) return undefined;
   return { testCount: test, stubCount: stub };
+}
+
+export function extractPersonaExclusionScope(meta: unknown): string[] {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return [];
+  const record = meta as {
+    persona_exclusion_scope?: unknown;
+    personaExclusionScope?: unknown;
+  };
+  const raw = record.persona_exclusion_scope ?? record.personaExclusionScope;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function hasNonTradingPersonaExclusionScope(meta: unknown): boolean {
+  return extractPersonaExclusionScope(meta).includes("non_trading");
 }
 
 export function extractIncludeTestPersonas(meta: unknown): boolean | undefined {
@@ -662,6 +699,7 @@ export const StrategiesList = () => {
   const cursorScope = includeTestPersonas ? `${activeFilter}:include_test` : activeFilter;
 
   const [effectivePageCursor, setPageCursorState] = useServerPageCursor(cursorScope);
+  const nonTradingScopeLatchedRef = useRef(false);
 
   const loadStrategiesPage = useCallback(() => {
     const query = resolveStrategyListQuery(
@@ -714,6 +752,17 @@ export const StrategiesList = () => {
         const hiddenRetiredCount = extractHiddenRetiredPersonaCount(ctx.meta);
         const hiddenTestPersonaStrategyCount = extractHiddenTestPersonaStrategyCount(ctx.meta);
         const hiddenTestBreakdown = extractHiddenTestBreakdown(ctx.meta);
+        const rawScopeArray =
+          ctx.meta &&
+          typeof ctx.meta === "object" &&
+          !Array.isArray(ctx.meta) &&
+          (Array.isArray((ctx.meta as { persona_exclusion_scope?: unknown }).persona_exclusion_scope) ||
+            Array.isArray((ctx.meta as { personaExclusionScope?: unknown }).personaExclusionScope));
+        if (rawScopeArray) {
+          nonTradingScopeLatchedRef.current = hasNonTradingPersonaExclusionScope(ctx.meta);
+        }
+        const includesNonTradingScope =
+          hasNonTradingPersonaExclusionScope(ctx.meta) || nonTradingScopeLatchedRef.current;
         const hasHiddenTestPersonaStrategyCount =
           typeof hiddenTestPersonaStrategyCount === "number" &&
           Number.isFinite(hiddenTestPersonaStrategyCount);
@@ -831,15 +880,33 @@ export const StrategiesList = () => {
                 >
                   <span className="text-foreground" data-testid="strategy-hidden-test-personas-text">
                     {includeTestPersonas
-                      ? t("strategy.list.showingTestPersonaStrategies")
+                      ? t(
+                          includesNonTradingScope
+                            ? "strategy.list.showingTestAndNonTradingPersonaStrategies"
+                            : "strategy.list.showingTestPersonaStrategies",
+                        )
                       : hasHiddenTestPersonaStrategyCount
-                        ? t("strategy.list.hiddenTestPersonaStrategiesWithCount", {
-                            count: hiddenTestPersonaStrategyCount,
-                          })
-                        : t("strategy.list.hiddenTestPersonaStrategiesNoCount")}
+                        ? t(
+                            includesNonTradingScope
+                              ? "strategy.list.hiddenTestAndNonTradingPersonaStrategiesWithCount"
+                              : "strategy.list.hiddenTestPersonaStrategiesWithCount",
+                            {
+                              count: hiddenTestPersonaStrategyCount,
+                            },
+                          )
+                        : t(
+                            includesNonTradingScope
+                              ? "strategy.list.hiddenTestAndNonTradingPersonaStrategiesNoCount"
+                              : "strategy.list.hiddenTestPersonaStrategiesNoCount",
+                          )}
                     {!includeTestPersonas && hiddenTestBreakdown && (
                       <span className="ml-1 text-muted-foreground" data-testid="strategy-hidden-test-breakdown">
-                        {t("strategy.list.hiddenTestBreakdown", hiddenTestBreakdown)}
+                        {t(
+                          includesNonTradingScope
+                            ? "strategy.list.hiddenTestAndNonTradingBreakdown"
+                            : "strategy.list.hiddenTestBreakdown",
+                          hiddenTestBreakdown,
+                        )}
                       </span>
                     )}
                   </span>
@@ -852,12 +919,25 @@ export const StrategiesList = () => {
                     onClick={toggleIncludeTestPersonas}
                   >
                     {includeTestPersonas
-                      ? t("strategy.list.hideTestPersonaStrategies")
+                      ? t(
+                          includesNonTradingScope
+                            ? "strategy.list.hideTestAndNonTradingPersonaStrategies"
+                            : "strategy.list.hideTestPersonaStrategies",
+                        )
                       : hasHiddenTestPersonaStrategyCount
-                        ? t("strategy.list.showTestPersonaStrategiesWithCount", {
-                            count: hiddenTestPersonaStrategyCount,
-                          })
-                        : t("strategy.list.showTestPersonaStrategiesNoCount")}
+                        ? t(
+                            includesNonTradingScope
+                              ? "strategy.list.showTestAndNonTradingPersonaStrategiesWithCount"
+                              : "strategy.list.showTestPersonaStrategiesWithCount",
+                            {
+                              count: hiddenTestPersonaStrategyCount,
+                            },
+                          )
+                        : t(
+                            includesNonTradingScope
+                              ? "strategy.list.showTestAndNonTradingPersonaStrategiesNoCount"
+                              : "strategy.list.showTestPersonaStrategiesNoCount",
+                          )}
                   </Button>
                 </Card>
               )}

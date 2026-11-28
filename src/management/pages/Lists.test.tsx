@@ -11,10 +11,13 @@ import {
   StrategiesList,
   extractHiddenNonRealCount,
   extractHiddenRetiredPersonaCount,
+  extractHiddenTestBreakdown,
   extractHiddenTestPersonaStrategyCount,
   extractIncludeTestPersonas,
+  extractPersonaExclusionScope,
   extractStrategyPageInfoTotal,
   extractStrategyStateCounts,
+  hasNonTradingPersonaExclusionScope,
   normalizeStrategyFilterParam,
   normalizeStrategyOperationalStatus,
   resolveStrategyListQuery,
@@ -1472,6 +1475,206 @@ describe("FE-PERSONA-LIST-PLAIN-WORDS-20261125 trading-first order, plain-word t
       for (const item of Array.from(secondRowItems)) {
         expect(item).toHaveClass("whitespace-nowrap");
       }
+    });
+  });
+});
+
+describe("FE-STRATEGY-HIDDEN-COHORT-BANNER-20261128 hidden persona cohort count and non_trading exclusion banner", () => {
+  it("AC1: extractHiddenTestPersonaStrategyCount and extractHiddenTestBreakdown read meta.hidden_persona_strategy_count first and fall back to meta.hidden_test_persona_strategy_count across new-key only, old-key only, both, and null old key", () => {
+    // New-key only
+    expect(extractHiddenTestPersonaStrategyCount({ hidden_persona_strategy_count: 156 })).toBe(156);
+    expect(
+      extractHiddenTestPersonaStrategyCount({
+        hidden_persona_strategy_count: 156,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toBe(158);
+    expect(
+      extractHiddenTestBreakdown({
+        hidden_persona_strategy_count: 156,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toEqual({ testCount: 156, stubCount: 2 });
+
+    // Old-key only
+    expect(extractHiddenTestPersonaStrategyCount({ hidden_test_persona_strategy_count: 153 })).toBe(153);
+    expect(
+      extractHiddenTestPersonaStrategyCount({
+        hidden_test_persona_strategy_count: 153,
+        hidden_unbound_stub_strategy_count: 4,
+      }),
+    ).toBe(157);
+    expect(
+      extractHiddenTestBreakdown({
+        hidden_test_persona_strategy_count: 153,
+        hidden_unbound_stub_strategy_count: 4,
+      }),
+    ).toEqual({ testCount: 153, stubCount: 4 });
+
+    // Both keys present (new key wins)
+    expect(
+      extractHiddenTestPersonaStrategyCount({
+        hidden_persona_strategy_count: 156,
+        hidden_test_persona_strategy_count: 153,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toBe(158);
+    expect(
+      extractHiddenTestBreakdown({
+        hidden_persona_strategy_count: 156,
+        hidden_test_persona_strategy_count: 153,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toEqual({ testCount: 156, stubCount: 2 });
+
+    // Null old key with new key (hosted BFF 2c72f5e28 shape)
+    expect(
+      extractHiddenTestPersonaStrategyCount({
+        hidden_persona_strategy_count: 156,
+        hidden_test_persona_strategy_count: null,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toBe(158);
+    expect(
+      extractHiddenTestBreakdown({
+        hidden_persona_strategy_count: 156,
+        hidden_test_persona_strategy_count: null,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toEqual({ testCount: 156, stubCount: 2 });
+
+    // Null old key without new key
+    expect(
+      extractHiddenTestPersonaStrategyCount({
+        hidden_test_persona_strategy_count: null,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toBe(2);
+    expect(
+      extractHiddenTestBreakdown({
+        hidden_test_persona_strategy_count: null,
+        hidden_unbound_stub_strategy_count: 2,
+      }),
+    ).toBeUndefined();
+    expect(
+      extractHiddenTestPersonaStrategyCount({
+        hidden_test_persona_strategy_count: null,
+      }),
+    ).toBeUndefined();
+
+    // Null new key falls back to old key
+    expect(
+      extractHiddenTestPersonaStrategyCount({
+        hidden_persona_strategy_count: null,
+        hidden_test_persona_strategy_count: 14,
+        hidden_unbound_stub_strategy_count: 3,
+      }),
+    ).toBe(17);
+    expect(
+      extractHiddenTestBreakdown({
+        hidden_persona_strategy_count: null,
+        hidden_test_persona_strategy_count: 14,
+        hidden_unbound_stub_strategy_count: 3,
+      }),
+    ).toEqual({ testCount: 14, stubCount: 3 });
+  });
+
+  it("AC3/AC4/AC5: renders test and non-trading persona wording in zh-TW and en-US when meta.persona_exclusion_scope includes non_trading, keeps current wording otherwise, and issues no extra BFF call", async () => {
+    expect(extractPersonaExclusionScope({ persona_exclusion_scope: ["test", "non_trading"] })).toEqual([
+      "test",
+      "non_trading",
+    ]);
+    expect(hasNonTradingPersonaExclusionScope({ persona_exclusion_scope: ["test", "non_trading"] })).toBe(true);
+    expect(hasNonTradingPersonaExclusionScope({ persona_exclusion_scope: ["test"] })).toBe(false);
+    expect(hasNonTradingPersonaExclusionScope({})).toBe(false);
+
+    const strategySpy = vi.spyOn(lists, "strategies").mockImplementation(async (query) => {
+      const q = (query ?? {}) as { include_test_personas?: boolean };
+      const including = Boolean(q.include_test_personas);
+      return {
+        items: LIVE_STRATEGIES,
+        cursor: {},
+        pageSize: 3,
+        estimatedTotal: 3,
+        totalCountExact: true,
+        meta: {
+          state_counts: { draft: 7421, review: 1, approved: 170, retired: 1556 },
+          visible_state_counts: { draft: 4205, review: 0, approved: 14, retired: 2 },
+          hidden_retired_persona_count: 11,
+          hidden_persona_strategy_count: including ? 0 : 156,
+          hidden_test_persona_strategy_count: including ? 0 : null,
+          ...(including ? {} : { persona_exclusion_scope: ["test", "non_trading"] }),
+          hidden_unbound_stub_strategy_count: including ? 0 : 2,
+          include_test_personas: including,
+          page_info: { page_size: 20, total: 3, next_page_token: null },
+        },
+      };
+    });
+
+    await withLanguage("zh-TW", async () => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/strategies"]}>
+          <StrategiesList />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("strategy-hidden-test-personas-text")).toHaveTextContent(
+          "預設已隱藏 158 筆測試與非交易 Persona 策略。",
+        );
+      });
+      expect(screen.getByTestId("strategy-hidden-test-breakdown")).toHaveTextContent(
+        "其中 156 筆屬於測試與非交易 Persona，2 筆是未綁定的佔位策略。",
+      );
+      const toggleBtn = screen.getByTestId("strategy-toggle-test-personas-button");
+      expect(toggleBtn).toHaveTextContent("顯示測試與非交易 Persona 策略（158）");
+      expect(strategySpy).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(toggleBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId("strategy-hidden-test-personas-text")).toHaveTextContent(
+          "目前包含測試與非交易 Persona 策略。",
+        );
+      });
+      expect(screen.getByTestId("strategy-toggle-test-personas-button")).toHaveTextContent(
+        "隱藏測試與非交易 Persona 策略",
+      );
+      expect(strategySpy).toHaveBeenCalledTimes(2);
+      unmount();
+    });
+
+    strategySpy.mockClear();
+
+    await withLanguage("en-US", async () => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/strategies"]}>
+          <StrategiesList />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("strategy-hidden-test-personas-text")).toHaveTextContent(
+          "158 test and non-trading persona strategies are hidden by default.",
+        );
+      });
+      expect(screen.getByTestId("strategy-hidden-test-breakdown")).toHaveTextContent(
+        "156 from test and non-trading personas and 2 unbound placeholders.",
+      );
+      const toggleBtn = screen.getByTestId("strategy-toggle-test-personas-button");
+      expect(toggleBtn).toHaveTextContent("Show test and non-trading persona strategies (158)");
+      expect(strategySpy).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(toggleBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId("strategy-hidden-test-personas-text")).toHaveTextContent(
+          "Currently showing test and non-trading persona strategies.",
+        );
+      });
+      expect(screen.getByTestId("strategy-toggle-test-personas-button")).toHaveTextContent(
+        "Hide test and non-trading persona strategies",
+      );
+      expect(strategySpy).toHaveBeenCalledTimes(2);
+      unmount();
     });
   });
 });
