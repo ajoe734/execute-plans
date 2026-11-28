@@ -3223,6 +3223,7 @@ export default {
         completeness: "Completeness",
         completenessEmpty: "Strategy completeness has not been assessed",
         overallCompleteness: "Overall completeness",
+        progressCounts: "Confirmed {{confirmed}}・Partial {{partial}}・Missing {{missing}}",
         researchReady: "Research ready",
         assessedBy: "Assessed by",
         assessedAt: "Assessed at",

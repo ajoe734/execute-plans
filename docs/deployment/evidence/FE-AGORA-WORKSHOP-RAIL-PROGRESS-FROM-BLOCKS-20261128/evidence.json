@@ -5,7 +5,7 @@
   "task_id": "FE-AGORA-WORKSHOP-RAIL-PROGRESS-FROM-BLOCKS-20261128",
   "owner": "Codex2",
   "reviewer": "Antigravity2",
-  "status": "blocked_pending_locale_artifact_contract",
+  "status": "ready_for_independent_review",
   "change": {
     "progress": "Math.round(100 * (confirmed + 0.5 * partial) / itemCount), or 0 for zero items",
     "source": "displayCompleteness.twelve_blocks when nonempty; otherwise displayCompleteness.dimensions",
@@ -27,7 +27,9 @@
     ],
     "supporting_files": {
       "src/agora/components/workshopCompletenessDisplay.ts": "Do not synthesize twelve blocks from dimension-only assessments: retain their actual dimension denominator; explicit blocks and state-map projections are retained.",
-      "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx": "Update the legacy grade-derived 100% expectation to the actual seven confirmed of twelve (58%), preserving the complete gate label."
+      "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx": "Update the legacy grade-derived 100% expectation to the actual seven confirmed of twelve (58%), preserving the complete gate label.",
+      "src/i18n/locales/zh-TW.ts": "Register the progressCounts caption with all three interpolation variables.",
+      "src/i18n/locales/en-US.ts": "Register the translated progressCounts caption with matching interpolation variables."
     }
   },
   "validation": [
@@ -73,6 +75,29 @@
     {
       "command": "git diff --check",
       "exit_code": 0
+    },
+    {
+      "command": "timeout 180 npm test -- src/agora/i18n.guard.test.ts src/agora/components/StrategyCompletenessRail.test.tsx src/agora/components/WorkshopCardRenderer.test.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "exit_code": 0,
+      "passed": 100,
+      "log": "/tmp/rail-progress-admitted-tests.log",
+      "note": "Fresh validation of admitted locale repair; existing React act warnings remain."
+    },
+    {
+      "command": "timeout 120 npm run typecheck:agora",
+      "exit_code": 0,
+      "log": "/tmp/rail-progress-admitted-typecheck.log"
+    },
+    {
+      "command": "timeout 120 npx eslint src/i18n/locales/zh-TW.ts src/i18n/locales/en-US.ts",
+      "exit_code": 0,
+      "log": "/tmp/rail-progress-admitted-lint.log"
+    },
+    {
+      "command": "timeout 180 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "log": "/tmp/rail-progress-admitted-build.log",
+      "note": "Fresh build including admitted locale repair; existing large chunk warning."
     }
   ],
   "regression_cases": [
@@ -202,7 +227,7 @@
     "governance": "The canonical artifact contract omits both locale files. artifact-contract revisions require Human/Ops and a todo/blocked task. Do not stage outside declared task scope or evade the locale guard.",
     "proposed_patch": "diff --git a/src/i18n/locales/en-US.ts b/src/i18n/locales/en-US.ts\nindex f8b31d148..7c7d94ef5 100644\n--- a/src/i18n/locales/en-US.ts\n+++ b/src/i18n/locales/en-US.ts\n@@ -3223,6 +3223,7 @@ export default {\n         completeness: \"Completeness\",\n         completenessEmpty: \"Strategy completeness has not been assessed\",\n         overallCompleteness: \"Overall completeness\",\n+        progressCounts: \"Confirmed {{confirmed}}・Partial {{partial}}・Missing {{missing}}\",\n         researchReady: \"Research ready\",\n         assessedBy: \"Assessed by\",\n         assessedAt: \"Assessed at\",\ndiff --git a/src/i18n/locales/zh-TW.ts b/src/i18n/locales/zh-TW.ts\nindex 05aa486ba..77db59753 100644\n--- a/src/i18n/locales/zh-TW.ts\n+++ b/src/i18n/locales/zh-TW.ts\n@@ -3205,6 +3205,7 @@ export default {\n         completeness: \"完整度\",\n         completenessEmpty: \"策略完整度尚未評估\",\n         overallCompleteness: \"整體完整度\",\n+        progressCounts: \"已確認 {{confirmed}}・部分 {{partial}}・尚缺 {{missing}}\",\n         researchReady: \"研究就緒\",\n         assessedBy: \"評估者\",\n         assessedAt: \"評估時間\",\n",
     "proposed_patch_sha256": "00921ed227a45b9c3194705014ab170ef99bacdf6cfdaf1bfc092ee87ec0585b",
-    "patch_disposition": "Applied locally for validation, then removed from the worktree without staging; the exact patch is preserved here for application after governed scope revision.",
+    "patch_disposition": "Applied to the declared locale files and included in this delivery.",
     "validation": [
       {
         "command": "timeout 120 npm test -- src/agora/i18n.guard.test.ts",
@@ -234,6 +259,8 @@
         "exit_code": 0
       }
     ],
-    "resume": "Human/Ops adds both exact locale artifacts while blocked, then returns task to owner. Apply preserved patch, commit via worker_commit.py, push PR #1129, wait for CI and hand off the new exact head to Antigravity2. Prior approval is invalid for a changed head. Hosted post-deploy proof remains pending."
+    "resume": "Push the new head to PR #1129 and hand off its committed manifest to Antigravity2; hosted proof remains required after merge and deployment.",
+    "status": "resolved",
+    "resolution": "Human/Ops admitted zh-TW.ts, en-US.ts and agora/i18n.ts at 2026-11-28T04:13:34Z. Applied the preserved two-line patch to both locale catalogs; agora/i18n.ts requires no change. Fresh validation passes; new exact-head review required."
   }
 }

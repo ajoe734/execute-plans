@@ -3205,6 +3205,7 @@ export default {
         completeness: "完整度",
         completenessEmpty: "策略完整度尚未評估",
         overallCompleteness: "整體完整度",
+        progressCounts: "已確認 {{confirmed}}・部分 {{partial}}・尚缺 {{missing}}",
         researchReady: "研究就緒",
         assessedBy: "評估者",
         assessedAt: "評估時間",
