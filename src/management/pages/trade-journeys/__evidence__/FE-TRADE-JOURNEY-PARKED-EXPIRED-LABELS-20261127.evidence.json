@@ -1,0 +1,103 @@
+{
+  "task_id": "FE-TRADE-JOURNEY-PARKED-EXPIRED-LABELS-20261127",
+  "register_class": "RC6",
+  "coordinator_id": "fb22ff9f",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "recorded_source": "/home/chloe_ong_dev_cctech_support_com/claude-evidence/trade-journey-readable-20261120/parked-expired-20261127/hosted_trade_journey_bodies_20261127T2350Z.json (captured from https://api.dev.mvl-cap.tw serving Pantheon 2c72f5e28)",
+  "scoped_artifacts": [
+    "src/management/pages/trade-journeys/journeyReadable.ts",
+    "src/management/pages/trade-journeys/TradeJourneysPage.tsx",
+    "src/management/pages/trade-journeys/TradeJourneysPage.parkedExpired.test.tsx",
+    "src/management/pages/trade-journeys/__fixtures__/recorded/list_parked_expired.json",
+    "src/management/pages/trade-journeys/__fixtures__/recorded/detail_tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2.json",
+    "src/management/pages/trade-journeys/__fixtures__/recorded/detail_tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a.json",
+    "src/management/pages/trade-journeys/__fixtures__/recorded/detail_tj_9eeb8979-9010-5624-bccc-e16631ebacbe.json",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "src/management/pages/trade-journeys/__evidence__/FE-TRADE-JOURNEY-PARKED-EXPIRED-LABELS-20261127.evidence.json",
+    "docs/deployment/evidence/FE-TRADE-JOURNEY-PARKED-EXPIRED-LABELS-20261127/evidence.json"
+  ],
+  "acceptance_evidence": {
+    "1_open_pending_settlement": {
+      "journey_id": "tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2",
+      "zh_tw_row_title": "澄川 買 2317 46 股",
+      "zh_tw_instrument_figures": "買 46",
+      "zh_tw_status_and_summary": "等待隔日開盤價成交：決策等待 2026-11-27 開盤價，若於台北時間 2026-11-30 08:55:00 前開盤價未進來則失效",
+      "zh_tw_stage_and_timeline": "交易決策: 等待隔日開盤價成交 / 交易決策 · 等待隔日開盤價成交",
+      "en_us_status_and_summary": "Waiting for the next-session open price to settle: decision waits for the 2026-11-27 open and is voided if that open has not arrived by 2026-11-30 08:55:00 Taipei time",
+      "raw_code_suppressed": "pending_settlement and pending settlement are never rendered in list, detail status, summary, stage cards, or timeline"
+    },
+    "2_expired_target_session_not_reconciled_by_expiry": {
+      "journey_id": "tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a",
+      "zh_tw_status_badge": "已過期",
+      "zh_tw_reason": "隔日開盤價在期限前沒有進來（決策日 2026-11-25、目標開盤日 2026-11-26、過期時間 台北時間 2026-11-27 08:55:21）",
+      "zh_tw_stage_and_timeline": "交易決策: 已過期 / 交易決策 · 已過期",
+      "en_us_status_badge": "Expired",
+      "en_us_reason": "The next-session open price did not arrive before expiry (decision day 2026-11-25, target session 2026-11-26, expired at 2026-11-27 08:55:21 Taipei time)",
+      "raw_codes_suppressed": "expired, expired_no_price, and target_session_not_reconciled_by_expiry are never rendered"
+    },
+    "3_next_step_review_market_data_refresh": {
+      "action_needed": "review_market_data_refresh",
+      "zh_tw_label": "檢查行情資料更新",
+      "en_us_label": "Check market data refresh",
+      "href": "/management/data-sources"
+    },
+    "4_hold_decision_formatting_and_expired_hold": {
+      "pending_hold_journey_id": "tj_9eeb8979-9010-5624-bccc-e16631ebacbe",
+      "expired_hold_journey_id": "tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a",
+      "zh_tw_row_title": "衡岳 0050 (no 買/賣 and no share count for both side='hold' and side=null)",
+      "zh_tw_side_column": "觀望 (no 買/賣, no raw 'hold', and no share count for both side='hold' and side=null)",
+      "zh_tw_expired_hold_sentence": "觀望決策已過期（沒有錯過交易） · 隔日開盤價在期限前沒有進來（決策日 2026-11-25、目標開盤日 2026-11-26、過期時間 台北時間 2026-11-27 08:55:21）",
+      "en_us_expired_hold_sentence": "Hold decision expired (no trade was missed) · The next-session open price did not arrive before expiry (decision day 2026-11-25, target session 2026-11-26, expired at 2026-11-27 08:55:21 Taipei time)",
+      "compatible_shapes": [
+        "Recorded hosted 2c72f5e28 shape: side='hold', quantity=1, next_step={action_needed:'review_market_data_refresh',href:'/data-sources'}",
+        "Post-TRADE-JOURNEY-PARKED-ROWS-NOT-STALLED-OR-PARTIAL-20261127 BFF shape: side=null, next_step=null, reason_detail.decision_action='hold', flags.stalled=false, read_state='formal'"
+      ]
+    },
+    "5_i18n_parity": "src/lib/v5/management/__tests__/i18nParity.test.ts verifies 1:1 global symmetry between zh-TW and en-US for all new tradeJourneys keys",
+    "6_recorded_fixtures_and_tests": {
+      "fixtures": [
+        "src/management/pages/trade-journeys/__fixtures__/recorded/list_parked_expired.json",
+        "src/management/pages/trade-journeys/__fixtures__/recorded/detail_tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2.json",
+        "src/management/pages/trade-journeys/__fixtures__/recorded/detail_tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a.json",
+        "src/management/pages/trade-journeys/__fixtures__/recorded/detail_tj_9eeb8979-9010-5624-bccc-e16631ebacbe.json"
+      ],
+      "test_suites_passed": [
+        "src/management/pages/trade-journeys/TradeJourneysPage.parkedExpired.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysPage.readable.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysPage.recorded.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysPage.i18n.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysPage.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts",
+        "src/management/pages/trade-journeys/TradeJourneysPage.failureCause.browser.test.ts",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts"
+      ]
+    },
+    "7_hosted_readonly_browser_verification_plan": {
+      "target_host": "https://app.dev.mvl-cap.tw",
+      "bff_host": "https://api.dev.mvl-cap.tw",
+      "routes_to_verify_after_deploy": [
+        "/management/trade-journeys?tenant_id=tenant-dev&environment=paper",
+        "/management/trade-journeys/tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2?tenant_id=tenant-dev&environment=paper",
+        "/management/trade-journeys/tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a?tenant_id=tenant-dev&environment=paper"
+      ],
+      "forbidden_raw_tokens": [
+        "pending_settlement",
+        "pending settlement",
+        "target_session_not_reconciled_by_expiry",
+        "review_market_data_refresh",
+        "expired",
+        "hold 1"
+      ]
+    },
+    "8_runtime_budget": {
+      "mode": "display_only",
+      "new_writers": 0,
+      "new_requests": 0,
+      "new_persisted_state": 0
+    }
+  }
+}
