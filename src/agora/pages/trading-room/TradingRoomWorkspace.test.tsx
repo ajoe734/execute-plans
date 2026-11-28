@@ -16,7 +16,9 @@ import type {
   TradingRoomStrategyEntry,
   TradingDecisionEvent,
 } from "@/lib/bff-v1/agora/tradingRoom";
-import "@/i18n";
+import i18n from "@/i18n";
+import zh from "@/i18n/locales/zh-TW";
+import en from "@/i18n/locales/en-US";
 import { BffError } from "@/lib/bff-v1/errors";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import { ensurePaperBook } from "@/lib/bff-v1/agora/paperBook";
@@ -503,7 +505,7 @@ describe("TradingRoomWorkspace component suite", () => {
     expect(screen.getByText("交易僕人正在建立「Taiwan Momentum Alpha」交易操盤室")).toBeInTheDocument();
   });
 
-  it("renders read-only paper book fills and positions with pantheon_paper_proxy and no order action (AC4)", () => {
+  it("renders read-only paper book fills and positions with plain simulation labels and no order action (AC4)", () => {
     render(
       <PositionActionQueue
         paperBook={{
@@ -546,12 +548,17 @@ describe("TradingRoomWorkspace component suite", () => {
       />,
     );
 
-    expect(screen.getByTestId("paper-book-proxy-badge").textContent).toContain("pantheon_paper_proxy");
+    expect(screen.getByTestId("paper-book-proxy-badge")).toHaveTextContent("Pantheon 紙上交易模擬成交（非實際成交）");
     expect(screen.getByTestId("paper-book-no-order-action").textContent).toContain(
       "僅供唯讀檢視 · 無任何下單按鈕",
     );
     expect(screen.getByTestId("paper-book-positions-list").textContent).toContain("2330.TW");
-    expect(screen.getByTestId("paper-book-fills-list").textContent).toContain("fill-2330-01");
+    expect(screen.getByTestId("paper-book-fill-fill-2330-01")).toHaveTextContent("買入 · 數量 1,000 股 · 成交價 940");
+    expect(screen.getByTestId("paper-book-fill-fill-2330-01")).toHaveTextContent("2026/11/27 01:30:00 [UTC]");
+    expect(screen.getByTestId("paper-book-position-2330.TW")).toHaveTextContent("多單 · 數量 1,000 股 · 均價 940");
+    expect(screen.getByTestId("paper-book-position-2330.TW")).toHaveTextContent("未實現損益 15,000 （幣別未提供）");
+    expect(screen.getByTestId("paper-book-position-2330.TW")).toHaveTextContent("更新時間 2026/11/27 08:00:00 [UTC]");
+    expect(screen.getByTestId("position-action-queue").textContent).not.toMatch(/pantheon_paper_proxy|agora_paper_book_readback_only|fill-2330-01|pos-2330|[{}]/);
     expect(
       screen.getByTestId("position-action-queue").querySelectorAll("button").length,
     ).toBe(0);
@@ -603,7 +610,7 @@ describe("Paper book first use", () => {
     ensure.mockRejectedValueOnce(error).mockImplementation(() => new Promise(() => {}));
     render(<PaperBookPanel />);
     fireEvent.click(await screen.findByTestId("paper-book-ensure"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(kind === "timeout" ? "paper_book_ensure_timeout" : "409 · STATE_CONFLICT · paper_only");
+    expect(await screen.findByRole("alert")).toHaveTextContent(kind === "timeout" ? "等待開通逾時" : "409 · STATE_CONFLICT · paper_only");
     fireEvent.click(screen.getByRole("button", { name: "重試開通我的 paper 帳本" }));
     expect(ensure).toHaveBeenCalledTimes(2);
     expect(ensure.mock.calls[1][0]).not.toBe(ensure.mock.calls[0][0]);
@@ -626,5 +633,39 @@ describe("Paper book first use", () => {
     fireEvent.click(screen.getByRole("button", { name: "重新讀取帳本" }));
     expect(await screen.findByTestId("paper-book-ensure")).toBeEnabled();
     expect(ensure).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("Paper presentation locale contract", () => {
+  afterEach(() => cleanup());
+  function leaves(value: unknown, prefix = ""): Record<string, string> {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, item]) =>
+      typeof item === "string" ? [[prefix + key, item]] : Object.entries(leaves(item, prefix + key + "."))));
+  }
+  it("keeps all paper-book and shadow copy in parity without internal codes", () => {
+    const catalogs = (locale: typeof zh | typeof en) => ({
+      paper: locale.agora.tradingRoom.page.paperBook,
+      performance: locale.agora.performance.paperBook,
+      shadow: locale.agora.tradingRoom.shadowComparison,
+    });
+    const left = leaves(catalogs(zh));
+    const right = leaves(catalogs(en));
+    expect(Object.keys(left).sort()).toEqual(Object.keys(right).sort());
+    for (const [key, value] of Object.entries({ ...Object.fromEntries(Object.entries(left).map(([k,v]) => ["zh."+k,v])), ...Object.fromEntries(Object.entries(right).map(([k,v]) => ["en."+k,v])) })) {
+      expect(value, key).not.toMatch(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/i);
+    }
+  });
+  it.each(["zh-TW", "en-US"])("renders labelled fallback and hides unknown payloads in %s", async (locale) => {
+    await i18n.changeLanguage(locale);
+    render(<PositionActionQueue positionSummaries={[
+      { symbol: "2330.TW", side: "short", quantity: 0, avg_price: 940, mark_price: 930, unrealized_pnl: -12.5, value: 0, updated_at: "2026-11-27T01:30:00Z", settlement_source: "secret_source", position_id: "private-id", unknown: { payload: "raw-secret" } },
+      null, "raw-secret", { symbol: { raw: "raw-secret" }, side: "unknown_side", quantity: Infinity },
+    ]} />);
+    const node = screen.getByTestId("position-action-queue");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "空單 · 數量 0 股" : "Short · Quantity 0 shares");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "未實現損益 -12.5 （幣別未提供）" : "Unrealized P&L -12.5 (currency not provided)");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "市值 0" : "Market value 0");
+    expect(node.textContent).not.toMatch(/secret|private-id|unknown_side|Infinity|[{}]/);
   });
 });

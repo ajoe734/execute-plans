@@ -891,5 +891,12 @@ describe("StrategyPerformancePage", () => {
     const paperBookSection = await screen.findByTestId("performance-paper-book-section");
     expect(paperBookSection.textContent).toContain("模擬帳本成交與部位（唯讀 · 無下單動作）");
     expect(paperBookSection.textContent).toContain("2330.TW");
+    expect(paperBookSection).toHaveTextContent("Pantheon 紙上交易模擬成交（非實際成交）");
+    expect(paperBookSection).toHaveTextContent("無任何下單按鈕");
+    expect(paperBookSection).toHaveTextContent("多單 · 數量 1,000 股");
+    expect(paperBookSection).toHaveTextContent("買入 · 數量 1,000 股");
+    expect(paperBookSection).toHaveTextContent("未實現損益 15,000 （幣別未提供）");
+    expect(paperBookSection.textContent).not.toMatch(/pantheon_paper_proxy|agora_paper_book_readback_only|fill-2330-01|pos-2330|[{}]/);
+
   });
 });
