@@ -266,7 +266,7 @@ export function PaperBookPanel({ strategyId, positionSummaries = [] }: {
   const describeError = (err: unknown): string => {
     if (isTimeoutError(err)) return t("agora.tradingRoom.page.paperBook.timeout");
     if (err instanceof BffError) {
-      const reason = err.details?.reason ?? err.envelope.error.cause ?? err.message;
+      const reason = err.details?.reason ?? err.details?.error ?? err.details?.precondition_failed ?? err.envelope.error.cause ?? err.message;
       return `${err.status} · ${err.code} · ${String(reason)}`;
     }
     return err instanceof Error ? err.message : t("agora.tradingRoom.page.paperBook.failed");

@@ -50,6 +50,12 @@ describe("paper-book read distinguishes first use from route errors", () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: { reason: "paper_book_not_found" } }), { status: 404 }));
     await expect(getTradingRoomPaperBook()).resolves.toBeNull();
   });
+  it("recognizes the normalized BFF missing-book envelope", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: {
+      code: "RESOURCE_NOT_FOUND", message: "Trader paper book not found", details: { reason: "paper_book_not_found" },
+    } }), { status: 404 }));
+    await expect(getTradingRoomPaperBook()).resolves.toBeNull();
+  });
   it("does not enable provisioning on an unrelated 404", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }));
     await expect(getTradingRoomPaperBook()).rejects.toMatchObject({ status: 404 });

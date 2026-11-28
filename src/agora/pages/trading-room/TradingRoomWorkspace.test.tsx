@@ -599,7 +599,7 @@ describe("Paper book first use", () => {
   it.each(["conflict", "timeout"])("shows %s reason and retries with a new attempt key", async (kind) => {
     const error = kind === "timeout"
       ? new DOMException("deadline", "TimeoutError")
-      : new BffError(409, { error: { code: "STATE_CONFLICT", message: "paper_only", i18nKey: "errors.STATE_CONFLICT", retryable: true, userActionable: true, correlationId: "test" } });
+      : new BffError(409, { error: { code: "STATE_CONFLICT", message: "Provisioning failed", details: { error: "paper_only" }, i18nKey: "errors.STATE_CONFLICT", retryable: true, userActionable: true, correlationId: "test" } });
     ensure.mockRejectedValueOnce(error).mockImplementation(() => new Promise(() => {}));
     render(<PaperBookPanel />);
     fireEvent.click(await screen.findByTestId("paper-book-ensure"));
