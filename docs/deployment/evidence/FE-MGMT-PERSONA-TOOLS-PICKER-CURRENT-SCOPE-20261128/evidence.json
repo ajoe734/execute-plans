@@ -1,0 +1,117 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-MGMT-PERSONA-TOOLS-PICKER-CURRENT-SCOPE-20261128",
+  "owner": "Codex",
+  "reviewer": "Antigravity2",
+  "review_status": "pending_independent_review",
+  "review_independence": "Assigned reviewer Antigravity2 must verify a different model family from owner Codex during review.",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-MGMT-PERSONA-TOOLS-PICKER-CURRENT-SCOPE-20261128",
+  "implementation_commit": "26182ea51",
+  "base_commit": "0a0ce540597647809dc0c0f2886cfc376d73c025",
+  "scope": {
+    "behavior": "The shared PersonaPicker filters bffV1.personas.list() through the existing classifyCurrentFirstScope with the Persona list's current/test/retired/research/all tab values, keeping only current. Lists.tsx remains byte-identical to the base. Missing and unknown listScope remain current.",
+    "adapter": "No adapter change required: normalizeBaseObjectFields spreads the owner row and preserves listScope unchanged. Added a listPersonas regression for current/test/retired/research/unknown/null/missing scope.",
+    "manual_id": "Manual id input and the unlisted selected option remain available for any id, including filtered test, retired, or research personas.",
+    "unchanged": [
+      "Persona records, retirement and deploy release probes",
+      "BFF endpoints, read/write payloads and authorization checks",
+      "useLearningWriteAccess and operator role policy",
+      "Servant visibility (owned by BFF-PERSONA-LIST-USER-PRIVATE-VISIBILITY-20261128)",
+      "Existing classifier implementation and existing test assertions"
+    ],
+    "new_bff_calls": 0,
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0
+  },
+  "verification": [
+    {
+      "command": "npm ci --no-audit --no-fund",
+      "exit_status": 0,
+      "result": "947 packages installed",
+      "log": "/tmp/persona-picker-npm-ci.log"
+    },
+    {
+      "command": "npm test -- src/management/pages/persona-tools/personaTools.pages.test.tsx src/lib/bff-v1/personas.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_status": 0,
+      "result": "3 files, 60 tests passed; existing tests retained; new tests exercise all three pickers and filtered manual ids",
+      "log": "/tmp/persona-picker-focused.log"
+    },
+    {
+      "command": "npm test -- src/management/pages/Lists.test.tsx src/agora/pages/learning src/lib/bff-v1/agoraLearning.test.ts",
+      "exit_status": 0,
+      "result": "3 files, 37 tests passed; current-first list behavior and learning client/receipt/write gating regressions",
+      "log": "/tmp/persona-picker-regression.log"
+    },
+    {
+      "command": "npm test -- src/routes/agora.test.tsx",
+      "exit_status": 0,
+      "result": "1 file, 21 tests passed, including operator redirects and non-operator role checks",
+      "log": "/tmp/persona-picker-routes.log"
+    },
+    {
+      "command": "npm run lint",
+      "exit_status": 0,
+      "result": "0 errors, 153 warnings",
+      "log": "/tmp/persona-picker-lint.log"
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_status": 0,
+      "result": "tsc -p tsconfig.app.json --noEmit passed",
+      "log": "/tmp/persona-picker-tsc.log"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_status": 0,
+      "result": "Passed; Vite reports large-chunk advisory warnings",
+      "log": "/tmp/persona-picker-build.log"
+    },
+    {
+      "command": "git diff --check origin/dev",
+      "exit_status": 0,
+      "result": "Passed"
+    }
+  ],
+  "candidate_browser_proof": {
+    "status": "passed",
+    "exit_status": 0,
+    "operator": "admintest",
+    "method": "Real Chromium session logged into dev. Only frontend navigation/assets were served from this task's dist via browser request interception; runtime-config.js, deployment.json and every BFF request used the live dev hosts. This is candidate proof, not a dev deployment claim.",
+    "fe": "https://app.dev.mvl-cap.tw",
+    "bff": "https://api.dev.mvl-cap.tw",
+    "command": "CANDIDATE_DIST=$PWD/dist PROOF_OUT=/tmp/persona-picker-current-scope-20261128/candidate timeout 240 node /tmp/persona-picker-browser-proof.mjs",
+    "proof": "/tmp/persona-picker-current-scope-20261128/candidate/proof.json",
+    "screenshots": ["memory.png", "lab.png", "feedback.png", "redirect-memory.png", "redirect-persona-lab.png", "redirect-feedback.png"],
+    "screenshots_directory": "/tmp/persona-picker-current-scope-20261128/candidate",
+    "source_list_counts": { "test": 159, "retired": 9, "current": 8, "research": 2 },
+    "visible_persona_count_each_page": 8,
+    "current_trading_personas": ["persona-2448c7053e33ea48da47", "persona-ee7112a829d38b9135ac", "persona-6507750312870d03a241"],
+    "assertions": [
+      "Each page's option ids exactly equal the current rows from the live persona registry",
+      "No Pantheon Dev Paper Release or 背景推進驗證 option",
+      "Three trading personas and the other current rows are present, with no FE servant ownership rule",
+      "Selecting a named persona writes personaId to the URL",
+      "All three Agora aliases redirect to matching Management pages, preserve personaId and discard unrelated query keys",
+      "0 JavaScript page errors; no BFF mutation request after authentication",
+      "Existing memory, harness, change-log, evaluation suites/runs and human-evidence GETs returned HTTP 200"
+    ],
+    "network_note": "proof.json retains navigation-cancelled GETs as net::ERR_ABORTED; successful page reads are recorded separately. No claim that every background GET completed is made.",
+    "credentials": "Read only in process by the existing admintest login helper; not saved in task artifacts, logs, source or browser storage."
+  },
+  "post_deploy_acceptance": {
+    "status": "pending_after_independent_review_merge_and_dev_deploy",
+    "required_before_done": true,
+    "served_commit_at_candidate_check": "0284c136d72bae5b491d63ae7b9f0afa24aaa224",
+    "reason": "Only the supervisor integration runner may merge the independently approved PR. Hosted AC6 is not claimed before that merge, the integration gate and dev deploy.",
+    "steps": [
+      "Verify approved task head merged into dev; wait for the integration gate and Pantheon Dev FE Deploy success for the target commit",
+      "Verify https://app.dev.mvl-cap.tw/deployment.json reports that dev commit",
+      "Run EXPECTED_DEPLOYED_SHA=<deployed-dev-commit> PROOF_OUT=/tmp/persona-picker-current-scope-20261128/hosted timeout 240 node /tmp/persona-picker-browser-proof.mjs without CANDIDATE_DIST, collecting terminal exit status and six screenshots",
+      "Run the direct execute-plans browser/BFF gate against https://api.dev.mvl-cap.tw",
+      "Record external hosted proof and deployment run links in governed closeout; retain this reviewed manifest unchanged"
+    ],
+    "also_closes": "Hosted AC5 of FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127 only after the hosted probe passes"
+  }
+}
