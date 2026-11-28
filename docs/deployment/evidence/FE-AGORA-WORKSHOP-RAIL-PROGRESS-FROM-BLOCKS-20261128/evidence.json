@@ -1,0 +1,81 @@
+{
+  "schema_version": "pantheon.fe-agora-workshop-rail-progress.evidence.v1",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "task_id": "FE-AGORA-WORKSHOP-RAIL-PROGRESS-FROM-BLOCKS-20261128",
+  "owner": "Codex2",
+  "reviewer": "Antigravity2",
+  "status": "ready_for_independent_review",
+  "change": {
+    "progress": "Math.round(100 * (confirmed + 0.5 * partial) / itemCount), or 0 for zero items",
+    "source": "displayCompleteness.twelve_blocks when nonempty; otherwise displayCompleteness.dimensions",
+    "confirmed": ["confirmed", "complete"],
+    "partial": ["inferred", "weak", "partial"],
+    "missing": "Every other state/grade, including missing, conflict and incomplete",
+    "caption": "workshopCopy agora.workshop.rail.progressCounts with zh-TW fallback 已確認 {{confirmed}}・部分 {{partial}}・尚缺 {{missing}}",
+    "unchanged": ["overall_grade gate label and tone", "策略完整度尚未評估 empty state", "BFF calls and contracts"],
+    "supporting_files": {
+      "src/agora/components/workshopCompletenessDisplay.ts": "Do not synthesize twelve blocks from dimension-only assessments: retain their actual dimension denominator; explicit blocks and state-map projections are retained.",
+      "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx": "Update the legacy grade-derived 100% expectation to the actual seven confirmed of twelve (58%), preserving the complete gate label."
+    }
+  },
+  "validation": [
+    { "command": "npm ci --no-audit --no-fund", "exit_code": 0 },
+    { "command": "npm test -- src/agora/components/StrategyCompletenessRail.test.tsx src/agora/components/WorkshopCardRenderer.test.tsx", "exit_code": 0, "passed": 25, "log": "/tmp/rail-progress-tests.log" },
+    { "command": "npm test -- src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx", "exit_code": 0, "passed": 67, "log": "/tmp/rail-progress-page-tests.log", "note": "Existing React act warnings remain." },
+    { "command": "npm test -- src/agora/components/StrategyCompletenessRail.test.tsx", "exit_code": 0, "passed": 16, "log": "/tmp/rail-progress-final-rail-test.log", "note": "Final rerun includes exact empty-state text and absent progress caption." },
+    { "command": "npm run typecheck:agora", "exit_code": 0 },
+    { "command": "npx eslint src/agora/components/StrategyCompletenessRail.tsx src/agora/components/StrategyCompletenessRail.test.tsx src/agora/components/workshopCompletenessDisplay.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx", "exit_code": 0, "log": "/tmp/rail-progress-lint.log" },
+    { "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build", "exit_code": 0, "log": "/tmp/rail-progress-build.log", "note": "Existing large chunk warning; build succeeds." },
+    { "command": "git diff --check", "exit_code": 0 }
+  ],
+  "regression_cases": [
+    { "blocks": "1 confirmed, 10 inferred, 1 missing; overall_grade incomplete", "percent": 50, "counts": [1, 10, 1] },
+    { "blocks": "12 confirmed; overall_grade incomplete", "percent": 100, "counts": [12, 0, 0] },
+    { "blocks": "12 missing", "percent": 0, "counts": [0, 0, 12] },
+    { "blocks": "1 confirmed, 1 inferred, 1 weak, 1 conflict, 8 missing", "percent": 17, "counts": [1, 2, 9] },
+    { "dimensions_without_blocks": "2 complete, 7 partial, 3 incomplete", "percent": 46, "counts": [2, 7, 3] },
+    { "blocks_and_dimensions": "empty", "percent": 0, "counts": [0, 0, 0] }
+  ],
+  "bff_boundary": {
+    "new_bff_calls": 0,
+    "bff_changes": 0,
+    "evidence": "Only rail presentation, completeness display materialization, their tests and this manifest change. No client, route, fetch or backend implementation changes."
+  },
+  "candidate_browser_proof": {
+    "status": "passed",
+    "command": "timeout 180 node --import tsx /tmp/rail-progress-browser-proof.mts --candidate",
+    "deployment_claim": false,
+    "method": "Playwright loads locally built candidate assets at app.dev.mvl-cap.tw origin; all BFF reads go directly to api.dev.mvl-cap.tw. GUI login as admintest. This is candidate proof, not post-deploy proof.",
+    "workshop_id": "2de155f9-30bd-43e9-abff-d1587193165c",
+    "expected_from_live_completeness": { "confirmed": 1, "partial": 10, "missing": 1, "percent": 50, "overall_grade": "partial" },
+    "observed_bar_width": "50%",
+    "observed_caption": "已確認 1・部分 10・尚缺 1",
+    "dom_states_match_materialized_live_completeness": true,
+    "page_errors": [],
+    "business_writes": 0,
+    "allowed_post_requests": ["/bff/auth/dev-login", "/bff/agora/interactions/participants:eligible (existing read-only eligibility query)"],
+    "report": "/tmp/rail-progress-browser-candidate/report.json",
+    "report_sha256": "4e0a3b8507293f6db7d2ba2c1d906e30ceff360c5816292cba1995845fa91fd1",
+    "screenshot": "/tmp/rail-progress-browser-candidate/rail.png",
+    "screenshot_sha256": "bdee64b4f369c384e03735057f04baed85de248c5ef60024091e15bf53670600",
+    "probe_script": "/tmp/rail-progress-browser-proof.mts",
+    "probe_script_sha256": "c631c9a075ceab725aaad9d30d550c88fe25c1e5259c2e75a5069ed443144def",
+    "hosted_fe_before_review": "0284c136d72bae5b491d63ae7b9f0afa24aaa224",
+    "hosted_bff_before_review": "2c72f5e2845b57d8a3ad8f1a3b1818eb2c7edea3",
+    "note": "Live overall_grade is now partial, rather than the historical incomplete snapshot in the task brief. The gate remains unchanged; independent incomplete-gate fixtures verify nonzero block progress."
+  },
+  "hosted_post_deploy_proof": {
+    "status": "pending_review_merge_and_dev_deployment",
+    "required_before_done": true,
+    "command": "timeout 180 node --import tsx /tmp/rail-progress-browser-proof.mts --verify",
+    "output": "/tmp/rail-progress-browser-hosted/report.json",
+    "checks": ["Exact reviewed head merged into dev", "Integration and dev deployment successful for the deployed commit", "deployment.json identifies that commit", "No candidate asset interception in --verify mode", "admintest read-only workshop bar and caption match live completeness and twelve DOM blocks", "Direct execute-plans browser/BFF gate passes"],
+    "recording": "Owner records post-merge deployment URLs, SHA and hosted proof in governed closeout checkpoint without changing the frozen approved PR head."
+  },
+  "independent_review": {
+    "status": "pending",
+    "reviewer": "Antigravity2",
+    "different_model_family": "Assigned Antigravity2 reviewer; owner Codex2 does not approve its own work."
+  }
+}

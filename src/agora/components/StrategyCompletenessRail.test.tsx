@@ -94,6 +94,8 @@ describe("StrategyCompletenessRail", () => {
       />
     );
     expect(screen.getByTestId("completeness-empty")).toBeDefined();
+    expect(screen.getByText("策略完整度尚未評估")).toBeInTheDocument();
+    expect(screen.queryByTestId("completeness-progress-counts")).toBeNull();
     expect(screen.getByTestId("readiness-gates-empty")).toBeDefined();
   });
 
@@ -182,7 +184,7 @@ describe("StrategyCompletenessRail", () => {
 
     expect(screen.getByText(`${percent}%`)).toBeInTheDocument();
     expect(screen.getByTestId("completeness-progress-counts")).toHaveTextContent(counts);
-    expect(screen.getByTestId("completeness-overall-grade")).toHaveTextContent("未完整");
+    expect(screen.getByTestId("completeness-overall-grade")).toHaveTextContent("不完整");
     expect(screen.getByTestId("completeness-overall-grade")).toHaveClass("text-rose-400");
     const bar = screen.getByText("整體完整度").parentElement?.nextElementSibling?.firstElementChild;
     expect(bar).toHaveStyle({ width: `${percent}%` });
