@@ -5,6 +5,7 @@ import {
   createPersona,
   getPersona,
   isCompletePaperPersonaBundle,
+  listPersonas,
   normalizePersonaRiskPolicyChange,
   PaperPersonaBundleIncompleteError,
 } from "./personas";
@@ -32,6 +33,23 @@ const HOSTED_PAPER_OWNER_PERSONA_6507750312870D03A241 = {
   routedStrategies: 1,
   successRate: 0,
 };
+
+describe("listPersonas scope contract", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("preserves owner listScope values and missing scope through normalization", async () => {
+    const rows = ["current", "test", "retired", "research", "unknown", null].map((listScope, i) => ({
+      id: `p-${i}`, name: `Persona ${i}`, listScope,
+    }));
+    const missing = { id: "p-missing", name: "Legacy persona" };
+    vi.mocked(bffFetch).mockResolvedValue({ data: { items: [...rows, missing] } });
+    const result = await listPersonas();
+    expect(result.map((row) => row.listScope)).toEqual([...rows.map((row) => row.listScope), undefined]);
+    expect(result[result.length - 1]).not.toHaveProperty("listScope");
+    expect(bffFetch).toHaveBeenCalledTimes(1);
+    expect(bffFetch).toHaveBeenCalledWith(expect.objectContaining({ path: "/bff/personas" }));
+  });
+});
 
 describe("createPersona paper bundle contract", () => {
   beforeEach(() => vi.clearAllMocks());
