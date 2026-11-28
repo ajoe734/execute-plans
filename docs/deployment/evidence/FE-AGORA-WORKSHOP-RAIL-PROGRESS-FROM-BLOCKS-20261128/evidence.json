@@ -32,7 +32,31 @@
       "src/i18n/locales/en-US.ts": "Register the translated progressCounts caption with matching interpolation variables."
     }
   },
+  "fixture_typecheck_repair": {
+    "failing_head": "c915205e65971fcefccb3a1c1b2038f431c37e72",
+    "diagnosis": "The full application typecheck includes the rail test, unlike typecheck:agora. The 12-dimension fixture used arbitrary dimension names in the canonical StrategyCompleteness DTO, whose dimension field allows only seven names.",
+    "resolution": "Supply the 12 dimension updates through the existing flexible completeness_update card payload using the twelve block identifiers. Preserve the 2 complete, 7 partial, 3 incomplete regression, its 46% expectation, and its 2/7/3 counts without type assertions or production changes.",
+    "scope": "Rail test fixture and this evidence manifest only; no product, BFF, DTO, typecheck configuration or workflow change."
+  },
   "validation": [
+    {
+      "command": "timeout 180 npm run typecheck:app",
+      "exit_code": 0,
+      "log": "/tmp/rail-progress-fixture-typecheck-app.log",
+      "note": "Full application typecheck after fixture repair, including StrategyCompletenessRail.test.tsx."
+    },
+    {
+      "command": "timeout 180 npm test -- src/agora/i18n.guard.test.ts src/agora/components/StrategyCompletenessRail.test.tsx src/agora/components/WorkshopCardRenderer.test.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "exit_code": 0,
+      "passed": 100,
+      "log": "/tmp/rail-progress-fixture-tests.log",
+      "note": "After fixture repair; existing React act warnings remain."
+    },
+    {
+      "command": "timeout 120 npx eslint src/agora/components/StrategyCompletenessRail.test.tsx && git diff --check",
+      "exit_code": 0,
+      "note": "After fixture repair."
+    },
     {
       "command": "npm ci --no-audit --no-fund",
       "exit_code": 0

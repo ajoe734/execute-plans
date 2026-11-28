@@ -191,13 +191,25 @@ describe("StrategyCompletenessRail", () => {
   });
 
   it("falls back to dimensions and rounds 2 complete, 7 partial, 3 incomplete to 46%", () => {
-    render(<StrategyCompletenessRail completeness={{
-      ...mockCompleteness,
-      overall_grade: "incomplete",
-      twelve_blocks: [],
-      dimensions: ["complete", "complete", ...Array(7).fill("partial"), ...Array(3).fill("incomplete")]
-        .map((grade, index) => ({ dimension: `dimension-${index}`, grade, gaps: [], required_actions: [] })),
-    }} />);
+    // Twelve dimension updates belong to the flexible card payload; the
+    // canonical StrategyCompleteness DTO has only seven dimension names.
+    const grades = ["complete", "complete", ...Array(7).fill("partial"), ...Array(3).fill("incomplete")];
+    render(<StrategyCompletenessRail
+      completeness={{ ...mockCompleteness, overall_grade: "incomplete", dimensions: [] }}
+      completenessCard={{
+        ...mockNextQuestionCard,
+        card_type: "completeness_update",
+        payload: {
+          overall_grade: "incomplete",
+          dimension_updates: V10_TWELVE_BLOCK_DEFS.map((definition, index) => ({
+            dimension: definition.v10_block_id,
+            current_grade: grades[index],
+            gaps: [],
+            required_actions: [],
+          })),
+        },
+      }}
+    />);
 
     expect(screen.getByText("46%")).toBeInTheDocument();
     expect(screen.getByTestId("completeness-progress-counts")).toHaveTextContent("已確認 2・部分 7・尚缺 3");
