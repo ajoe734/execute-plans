@@ -629,7 +629,9 @@ export function materializeWorkshopCompleteness(
   const stateMap = recordFrom(record.state_map_json);
   const twelveBlocks = explicitBlocks.length > 0
     ? explicitBlocks
-    : projectFallbackTwelveBlocks(stateMap, dimensions, isBranch);
+    : Object.keys(stateMap).length > 0
+      ? projectFallbackTwelveBlocks(stateMap, dimensions, isBranch)
+      : [];
 
   const nextDecision =
     normalizeNextDecision(cardPayload.next_decision)
