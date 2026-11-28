@@ -2,11 +2,14 @@ import React from "react";
 import { act } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ensurePaperBook } from "@/lib/bff-v1/agora/paperBook";
 import type { Layout } from "react-grid-layout";
 
 const gridCallbacks = vi.hoisted(() => ({
   onLayoutChange: undefined as ((layout: Layout[]) => void) | undefined,
 }));
+
+vi.mock("@/lib/bff-v1/agora/paperBook", () => ({ ensurePaperBook: vi.fn() }));
 
 const operationalReadinessMocks = vi.hoisted(() => ({
   getAgoraOperationalReadiness: vi.fn(),
@@ -18,6 +21,7 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   createTradingRoomWorkspaceProposal: vi.fn(),
   createWidgetRevisionProposal: vi.fn(),
   getTradingRoom: vi.fn(),
+  getTradingRoomPaperBook: vi.fn(),
   getTradingRoomWorkspaceByStrategyWithMeta: vi.fn(),
   listDecisionEvents: vi.fn(),
   listTradingRoomWorkspaceVersions: vi.fn(),
@@ -839,6 +843,7 @@ describe("TradingRoomPage", () => {
   });
 
   it("renders workshop intake as the default entry when the BFF returns no strategies", async () => {
+    vi.mocked(tradingRoomModule.getTradingRoomPaperBook).mockResolvedValue(null);
     vi.mocked(tradingRoomModule.getTradingRoom).mockResolvedValue({
       ...MOCK_AGGREGATE,
       strategies: [],
@@ -846,6 +851,8 @@ describe("TradingRoomPage", () => {
     });
     render(<TradingRoomPage />);
     const entry = await screen.findByTestId("trading-room-default-entry");
+    expect(await screen.findByRole("button", { name: "開通我的 paper 帳本" })).toBeEnabled();
+    expect(ensurePaperBook).not.toHaveBeenCalled();
     expect(entry.getAttribute("data-entry-state")).toBe("empty");
     const emptySection = screen.getByTestId("trading-room-workshop-empty-entry");
     expect(emptySection).toBeDefined();
