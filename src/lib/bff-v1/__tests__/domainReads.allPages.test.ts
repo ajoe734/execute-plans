@@ -462,6 +462,69 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
 
     const counts = await bffV1.strategies.nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false });
     expect(counts).toEqual({ retiredPersona: 4, testOrSynthetic: 8 });
+
+    // FE-STRATEGY-HIDDEN-COHORT-BANNER-20261128 AC1: reads meta.hidden_persona_strategy_count first and falls back to meta.hidden_test_persona_strategy_count across new-key only, old-key only, both, and null old key.
+    const metaQueue: Array<Record<string, unknown>> = [
+      // new-key only
+      {
+        hidden_retired_persona_count: 4,
+        hidden_persona_strategy_count: 156,
+        hidden_unbound_stub_strategy_count: 2,
+      },
+      // old-key only
+      {
+        hidden_retired_persona_count: 4,
+        hidden_test_persona_strategy_count: 153,
+        hidden_unbound_stub_strategy_count: 4,
+      },
+      // both keys present (new key wins)
+      {
+        hidden_retired_persona_count: 4,
+        hidden_persona_strategy_count: 156,
+        hidden_test_persona_strategy_count: 150,
+        hidden_unbound_stub_strategy_count: 2,
+      },
+      // null old key with new key (hosted BFF 2c72f5e28 shape)
+      {
+        hidden_retired_persona_count: 4,
+        hidden_persona_strategy_count: 156,
+        hidden_test_persona_strategy_count: null,
+        hidden_unbound_stub_strategy_count: 2,
+      },
+      // null old key without new key
+      {
+        hidden_retired_persona_count: 4,
+        hidden_test_persona_strategy_count: null,
+        hidden_unbound_stub_strategy_count: 2,
+      },
+    ];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const nextMeta = metaQueue.shift() ?? {};
+      return new Response(
+        JSON.stringify({
+          data: [],
+          meta: nextMeta,
+          page_info: { page_size: 1, total: 0, next_page_token: null },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    await expect(
+      bffV1.strategies.nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false }),
+    ).resolves.toEqual({ retiredPersona: 4, testOrSynthetic: 158 });
+    await expect(
+      bffV1.strategies.nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false }),
+    ).resolves.toEqual({ retiredPersona: 4, testOrSynthetic: 157 });
+    await expect(
+      bffV1.strategies.nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false }),
+    ).resolves.toEqual({ retiredPersona: 4, testOrSynthetic: 158 });
+    await expect(
+      bffV1.strategies.nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false }),
+    ).resolves.toEqual({ retiredPersona: 4, testOrSynthetic: 158 });
+    await expect(
+      bffV1.strategies.nonDraftHiddenCounts({ hideRetiredPersonas: true, includeTestPersonas: false }),
+    ).resolves.toEqual({ retiredPersona: 4, testOrSynthetic: 2 });
   });
 
   it("returns BFF strategy DTOs without persona_ids/persona_id/personaId/capital_pool_id alias synthesis and without replacing null with empty strings", async () => {

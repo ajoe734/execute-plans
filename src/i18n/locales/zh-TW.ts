@@ -1607,6 +1607,8 @@ export default {
       draftNotice:
         "草稿是尚未篩選的文字草稿，不是策略：在篩選並核准之前，不會執行也不會交易。",
       hiddenTestBreakdown: "其中 {{testCount}} 筆屬於測試 Persona，{{stubCount}} 筆是未綁定的佔位策略。",
+      hiddenTestAndNonTradingBreakdown:
+        "其中 {{testCount}} 筆屬於測試與非交易 Persona，{{stubCount}} 筆是未綁定的佔位策略。",
       hiddenDraftsAndRetiredPersonasWithCounts:
         "預設已隱藏 {{draftCount}} 筆草稿策略與 {{retiredPersonaCount}} 筆 Persona 已退役的策略。",
       hiddenRetiredPersonasWithCount:
@@ -1621,6 +1623,15 @@ export default {
       showTestPersonaStrategiesWithCount: "顯示測試策略（{{count}}）",
       showTestPersonaStrategiesNoCount: "顯示測試策略",
       hideTestPersonaStrategies: "隱藏測試策略",
+      hiddenTestAndNonTradingPersonaStrategiesWithCount:
+        "預設已隱藏 {{count}} 筆測試與非交易 Persona 策略。",
+      hiddenTestAndNonTradingPersonaStrategiesNoCount:
+        "預設已隱藏測試與非交易 Persona 策略。",
+      showingTestAndNonTradingPersonaStrategies: "目前包含測試與非交易 Persona 策略。",
+      showTestAndNonTradingPersonaStrategiesWithCount:
+        "顯示測試與非交易 Persona 策略（{{count}}）",
+      showTestAndNonTradingPersonaStrategiesNoCount: "顯示測試與非交易 Persona 策略",
+      hideTestAndNonTradingPersonaStrategies: "隱藏測試與非交易 Persona 策略",
       pagination: {
         label: "策略列表分頁",
         showingRange: "顯示第 {{start}}–{{end}} 筆，共 {{total}} 筆",
@@ -7255,7 +7266,15 @@ export default {
         "預設已隱藏 {{strategyCount}} 筆測試策略（{{personaCount}} 個測試 Persona）。",
       hiddenTestPersonaStrategiesOnlyFmt:
         "預設已隱藏 {{count}} 筆測試 Persona 策略。",
+      hiddenTestAndNonTradingPersonaStrategiesFmt:
+        "預設已隱藏 {{strategyCount}} 筆測試策略（{{personaCount}} 個測試 Persona）與 {{nonTradingPersonaCount}} 個非交易 Persona。",
+      hiddenTestStrategiesAndNonTradingPersonasFmt:
+        "預設已隱藏 {{strategyCount}} 筆測試 Persona 策略與 {{nonTradingPersonaCount}} 個非交易 Persona。",
+      hiddenNonTradingPersonasOnlyFmt:
+        "預設已隱藏 {{nonTradingPersonaCount}} 個非交易 Persona。",
       showingTestPersonasNotice: "目前包含測試 Persona 與測試策略歸因。",
+      showingTestPersonasWithHiddenNonTradingFmt:
+        "目前包含測試 Persona 與測試策略歸因（仍隱藏 {{nonTradingPersonaCount}} 個非交易 Persona）。",
       showTestPersonasFmt: "顯示測試策略（{{count}}）",
       showTestPersonas: "顯示測試策略",
       hideTestPersonas: "隱藏測試策略",

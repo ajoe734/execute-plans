@@ -1,0 +1,171 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-STRATEGY-HIDDEN-COHORT-BANNER-20261128",
+  "title": "Strategy list hidden banner reads the hidden persona cohort count",
+  "register_class": "WP2.3",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "review_status": "pending_independent_review",
+  "target_repo": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "base_commit": "d8225d58f6df788d031d258ac9dd6e0499efb705",
+  "scoped_artifacts": [
+    "src/management/pages/Lists.tsx",
+    "src/management/pages/Lists.test.tsx",
+    "src/lib/bff-v1/strategies.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/v5/management/performanceAttribution.ts",
+    "src/lib/bff-v1/__tests__/domainReads.allPages.test.ts",
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/PerformanceAttribution.tsx",
+    "src/management/pages/oversight/PerformanceAttribution.test.tsx",
+    "src/management/pages/oversight/HumanInboxPage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-STRATEGY-HIDDEN-COHORT-BANNER-20261128/evidence.json"
+  ],
+  "acceptance_evidence": {
+    "1_strategy_list_and_risk_center_hidden_count_fallback": {
+      "functions_updated": [
+        "extractHiddenTestPersonaStrategyCount (src/management/pages/Lists.tsx)",
+        "extractHiddenTestBreakdown (src/management/pages/Lists.tsx)",
+        "getNonDraftStrategiesHiddenCounts (src/lib/bff-v1/strategies.ts)"
+      ],
+      "resolution_order": [
+        "meta.hidden_persona_strategy_count",
+        "meta.hidden_test_persona_strategy_count"
+      ],
+      "cases_verified": {
+        "new_key_only": "meta={hidden_persona_strategy_count: 156, hidden_unbound_stub_strategy_count: 2} -> count=158, breakdown={testCount: 156, stubCount: 2}, nonDraftHiddenCounts.testOrSynthetic=158",
+        "old_key_only": "meta={hidden_test_persona_strategy_count: 153, hidden_unbound_stub_strategy_count: 4} -> count=157, breakdown={testCount: 153, stubCount: 4}, nonDraftHiddenCounts.testOrSynthetic=157",
+        "both_keys": "meta={hidden_persona_strategy_count: 156, hidden_test_persona_strategy_count: 153, hidden_unbound_stub_strategy_count: 2} -> reads hidden_persona_strategy_count first -> count=158, breakdown={testCount: 156, stubCount: 2}, nonDraftHiddenCounts.testOrSynthetic=158",
+        "null_old_key": "meta={hidden_persona_strategy_count: 156, hidden_test_persona_strategy_count: null, hidden_unbound_stub_strategy_count: 2} -> count=158, breakdown={testCount: 156, stubCount: 2}, nonDraftHiddenCounts.testOrSynthetic=158"
+      },
+      "risk_center_consumer": "RiskCenter.tsx line 132 reads bffV1.strategies.nonDraftHiddenCounts (getNonDraftStrategiesHiddenCounts), receiving the combined hidden persona cohort count plus unbound stub count in testOrSynthetic."
+    },
+    "2_attribution_hidden_non_trading_persona_count": {
+      "function_updated": "adaptPerformanceAttributionResult (src/lib/bff-v1/management.ts), PerformanceAttributionResult/AttributionSummary (src/lib/v5/management/performanceAttribution.ts), extractAttributionHiddenTestCounts and PerformanceAttributionTestPersonaBanner (src/management/pages/oversight/_core.tsx), and PerformanceAttributionPage (src/management/pages/oversight/PerformanceAttribution.tsx)",
+      "field_read": "meta.hidden_non_trading_persona_count (with fallback to summary.hidden_non_trading_persona_count / hiddenNonTradingPersonaCount) preserved through adaptPerformanceAttributionResult without post-adapter meta injection and rendered on PerformanceAttributionPage with include_test_personas toggle wired to searchParams and mgmt.performanceAttribution.getLiveOnly",
+      "separate_display": {
+        "en_US_both": "8 test-persona strategies (5 test personas) and 1 non-trading personas are hidden by default.",
+        "zh_TW_both": "預設已隱藏 8 筆測試策略（5 個測試 Persona）與 1 個非交易 Persona。",
+        "en_US_non_trading_only": "1 non-trading personas are hidden by default.",
+        "zh_TW_non_trading_only": "預設已隱藏 1 個非交易 Persona。"
+      },
+      "unit_tests": [
+        "src/management/pages/oversight/HumanInboxPage.test.tsx",
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx"
+      ]
+    },
+    "3_persona_exclusion_scope_non_trading_wording_and_i18n_parity": {
+      "condition": "meta.persona_exclusion_scope includes 'non_trading' (e.g. ['test', 'non_trading'])",
+      "zh_TW": {
+        "banner": "預設已隱藏 {{count}} 筆測試與非交易 Persona 策略。",
+        "breakdown": "其中 {{testCount}} 筆屬於測試與非交易 Persona，{{stubCount}} 筆是未綁定的佔位策略。",
+        "toggle_show": "顯示測試與非交易 Persona 策略（{{count}}）",
+        "showing": "目前包含測試與非交易 Persona 策略。",
+        "toggle_hide": "隱藏測試與非交易 Persona 策略"
+      },
+      "en_US": {
+        "banner": "{{count}} test and non-trading persona strategies are hidden by default.",
+        "breakdown": "{{testCount}} from test and non-trading personas and {{stubCount}} unbound placeholders.",
+        "toggle_show": "Show test and non-trading persona strategies ({{count}})",
+        "showing": "Currently showing test and non-trading persona strategies.",
+        "toggle_hide": "Hide test and non-trading persona strategies"
+      },
+      "unchanged_fallback": "When meta.persona_exclusion_scope does not include 'non_trading', existing test-persona wording is unchanged.",
+      "unit_and_i18n_parity_tests": [
+        "src/management/pages/Lists.test.tsx",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts"
+      ]
+    },
+    "4_include_test_personas_toggle_and_stub_breakdown_preserved": {
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/Lists.test.tsx",
+        "src/management/pages/RiskCenter.test.tsx",
+        "src/lib/bff-v1/__tests__/domainReads.allPages.test.ts"
+      ]
+    },
+    "5_no_new_bff_call": {
+      "new_bff_requests": 0,
+      "proof": "StrategiesList reads meta.hidden_persona_strategy_count, meta.hidden_test_persona_strategy_count, meta.hidden_unbound_stub_strategy_count, and meta.persona_exclusion_scope from the existing single GET /bff/strategies response; PerformanceAttributionTestPersonaBanner reads meta.hidden_non_trading_persona_count from the existing GET /bff/management/performance-attribution response. Verified in Lists.test.tsx and candidate_browser_proof network log."
+    },
+    "7_review_independence": {
+      "owner": "Antigravity (Gemini family)",
+      "reviewer": "Codex (OpenAI Codex family)"
+    }
+  },
+  "candidate_browser_proof": {
+    "status": "passed",
+    "exit_status": 0,
+    "operator": "admintest",
+    "method": "Real Chromium session logged into dev as admintest (read-only). Before candidate override, observed currently deployed FE 0a0ce540597647809dc0c0f2886cfc376d73c025 showing '預設已隱藏 2 筆測試 Persona 策略。' with 0 breakdown elements. With candidate dist override, only frontend navigation/assets were served from this task's dist via browser request interception while runtime-config.js, deployment.json, and every BFF request used the live dev hosts. This is pre-merge candidate browser proof against live dev BFF, not a dev deployment claim.",
+    "fe": "https://app.dev.mvl-cap.tw",
+    "bff": "https://api.dev.mvl-cap.tw",
+    "served_deployment_at_check": {
+      "fe_commit": "0a0ce540597647809dc0c0f2886cfc376d73c025",
+      "bff_commit": "94ee2f78bed6929a9314498ec678303b92b4b481",
+      "pair_id": "2bb7af604624662001d2f42ee6925afb72a3e1da6fe7d4a8d75e76e37ba12a57",
+      "deployment_state": "accepted",
+      "accepted_at": "2026-11-28T05:32:14Z"
+    },
+    "candidate_build_command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+    "candidate_index_sha256": "6c5b42e6ebce5f002b306a3076c473349217ed184348586024ccaf5af59fcabe",
+    "command": "CANDIDATE_DIST=$PWD/dist PROOF_OUT=/tmp/strategy-hidden-cohort-banner-20261128/candidate timeout 240 node /tmp/strategy-hidden-cohort-banner-browser-proof.mjs",
+    "proof": "/tmp/strategy-hidden-cohort-banner-20261128/candidate/proof.json",
+    "screenshots": [
+      "strategies-default.png",
+      "strategies-showing-test-personas.png",
+      "performance-attribution-default.png"
+    ],
+    "screenshots_directory": "/tmp/strategy-hidden-cohort-banner-20261128/candidate",
+    "observed_live_strategies_default_view": {
+      "bff_request": "/bff/strategies?exclude_state=draft&hide_retired_personas=true&page_size=20",
+      "live_meta_counts": {
+        "hidden_test_persona_strategy_count": null,
+        "hidden_persona_strategy_count": 156,
+        "hidden_unbound_stub_strategy_count": 2,
+        "persona_exclusion_scope": ["test", "non_trading"]
+      },
+      "banner_count": 158,
+      "banner_text": "預設已隱藏 158 筆測試與非交易 Persona 策略。其中 156 筆屬於測試與非交易 Persona，2 筆是未綁定的佔位策略。",
+      "breakdown_text": "其中 156 筆屬於測試與非交易 Persona，2 筆是未綁定的佔位策略。",
+      "toggle_button_text": "顯示測試與非交易 Persona 策略（158）"
+    },
+    "observed_live_strategies_include_test_personas_view": {
+      "bff_request": "/bff/strategies?exclude_state=draft&hide_retired_personas=true&include_test_personas=true&page_size=20",
+      "banner_text": "目前包含測試與非交易 Persona 策略。",
+      "toggle_button_text": "隱藏測試與非交易 Persona 策略",
+      "breakdown_shown": false
+    },
+    "observed_live_performance_attribution_default_view": {
+      "bff_request": "/bff/management/performance-attribution?period=latest",
+      "live_meta_counts": {
+        "hidden_test_persona_count": 1,
+        "hidden_test_strategy_count": 1,
+        "hidden_non_trading_persona_count": 1
+      },
+      "banner_text": "預設已隱藏 1 筆測試策略（1 個測試 Persona）與 1 個非交易 Persona。"
+    },
+    "page_errors": 0,
+    "non_get_requests_after_auth": 0
+  },
+  "post_deploy_acceptance": {
+    "status": "pending_after_independent_review_merge_and_dev_deploy",
+    "required_before_done": true,
+    "served_commit_at_candidate_check": "0a0ce540597647809dc0c0f2886cfc376d73c025",
+    "reason": "Per .orchestrator/skills/task-closeout-finalization.md § Per-Task PR Flow and AGENTS.md § Branch And Dev Deployment Policy, only the supervisor canonical_auto_integrator merges an independently approved PR into dev, and Pantheon dev FE deployment only deploys commits on dev. Hosted AC6 against the deployed dev commit is verified during owner closeout (review_approved -> done) before running ai-status.sh done.",
+    "steps": [
+      "Verify approved task head merged into dev; wait for the integration gate and Pantheon Dev FE Deploy success for the target commit",
+      "Verify https://app.dev.mvl-cap.tw/deployment.json reports that dev commit",
+      "Run EXPECTED_DEPLOYED_SHA=<deployed-dev-commit> PROOF_OUT=/tmp/strategy-hidden-cohort-banner-20261128/hosted timeout 240 node /tmp/strategy-hidden-cohort-banner-browser-proof.mjs without CANDIDATE_DIST, collecting terminal exit status and screenshots",
+      "Record external hosted proof and deployment run links in governed closeout; retain this reviewed manifest unchanged"
+    ]
+  },
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "new_bff_calls": 0
+  }
+}

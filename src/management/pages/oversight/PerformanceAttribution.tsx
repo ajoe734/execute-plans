@@ -29,6 +29,7 @@ import {
   type RawAttributionSourceRefs,
   type SupportedAttributionDimension,
 } from "@/lib/v5/management/performanceAttribution";
+import { PerformanceAttributionTestPersonaBanner } from "./_core";
 
 const MISSING = "—";
 const fmtUsd = (n: number) =>
@@ -476,6 +477,7 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   );
   const periodParam = searchParams.get("period");
   const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "latest";
+  const includeTestPersonas = searchParams.get("include_test_personas") === "true";
 
   const {
     data,
@@ -488,13 +490,15 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
       : mgmt.performanceAttribution.getLiveOnly(
           dimension === "all" ? undefined : dimension,
           period,
-          { signal },
+          includeTestPersonas ? { signal, includeTestPersonas: true } : { signal },
         ),
-    [dimension, period, unsupportedDimension],
+    [dimension, period, unsupportedDimension, includeTestPersonas],
     {
       cacheKey: unsupportedDimension
         ? `oversight.performanceAttribution.unsupported.${unsupportedDimension}.${period}`
-        : `oversight.performanceAttribution.${dimension}.${period}`,
+        : includeTestPersonas
+          ? `oversight.performanceAttribution.${dimension}.${period}.includeTestPersonas`
+          : `oversight.performanceAttribution.${dimension}.${period}`,
     },
   );
   const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
@@ -605,6 +609,13 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
     setSearchParams(next, { replace: true });
   };
 
+  const toggleIncludeTestPersonas = (nextInclude: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextInclude) next.set("include_test_personas", "true");
+    else next.delete("include_test_personas");
+    setSearchParams(next, { replace: true });
+  };
+
   return (
     <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.attribution.title")}>
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -670,6 +681,12 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
         ) : null}
         </div>
       </header>
+
+      <PerformanceAttributionTestPersonaBanner
+        attribution={data}
+        includeTestPersonas={includeTestPersonas}
+        onToggleIncludeTestPersonas={toggleIncludeTestPersonas}
+      />
 
       {personaFocus && (
         <Card className="p-3 text-sm">

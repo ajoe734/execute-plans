@@ -170,6 +170,7 @@ export async function getNonDraftStrategiesHiddenCounts(
     testOrSynthetic: sumDefined(
       metaCount(
         meta,
+        "hidden_persona_strategy_count",
         "hidden_test_persona_strategy_count",
         "hidden_test_strategy_count",
         "hidden_synthetic_or_stub_count",
