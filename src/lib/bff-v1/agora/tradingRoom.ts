@@ -2201,6 +2201,414 @@ export async function getTradingRoomDecisionLock(
   return recordFrom(root.data ?? root);
 }
 
+// ── Paper Book Readback (AGORA-PAPER-BOOK-READBACK-20261127, SD §8.3 step 4) ──
+
+export interface TradingRoomPaperBookFill {
+  fill_id: string;
+  broker_order_id: string | null;
+  client_order_id: string | null;
+  handoff_id: string | null;
+  intent_id: string | null;
+  decision_event_id: string | null;
+  strategy_id: string | null;
+  symbol: string;
+  action: string;
+  side: string;
+  direction: string | null;
+  order_type: string;
+  requested_quantity: number | null;
+  quantity: number | null;
+  fill_qty: number | null;
+  fill_price: number | null;
+  filled_at: string | null;
+  fill_status: string;
+  environment: "paper";
+  execution_observation_kind: "pantheon_paper_proxy";
+  execution_display_label: string;
+  execution_verified: false;
+  actual_fill_claimed: false;
+  is_real_fill: false;
+  no_order_route_proof: string;
+}
+
+export interface TradingRoomPaperBookPosition {
+  symbol: string;
+  side: string;
+  direction: string;
+  quantity: number;
+  net_qty: number;
+  avg_price: number | null;
+  average_price: number | null;
+  mark_price: number | null;
+  market_value: number | null;
+  unrealized_pnl: number | null;
+  realized_pnl: number | null;
+  fill_count: number;
+  last_filled_at: string | null;
+  source: string;
+  environment: "paper";
+  execution_observation_kind: "pantheon_paper_proxy";
+  execution_display_label: string;
+  actual_fill_claimed: false;
+  is_real_position: false;
+}
+
+export interface TradingRoomPaperBookReadback {
+  status: string;
+  environment: "paper";
+  execution_observation_kind: "pantheon_paper_proxy";
+  execution_display_label: string;
+  actual_fill_claimed: false;
+  execution_verified: false;
+  is_real_fill: false;
+  paper_book: {
+    capital_pool_id: string | null;
+    runtime_binding_id: string | null;
+    runtime_id: string | null;
+    starting_capital: number | null;
+    currency: string;
+  };
+  binding_telemetry: {
+    available: boolean;
+    status: string;
+    equity: number | null;
+    cash: number | null;
+    realized_pnl: number | null;
+    unrealized_pnl: number | null;
+    last_event_at: string | null;
+  };
+  fills: TradingRoomPaperBookFill[];
+  positions: TradingRoomPaperBookPosition[];
+  total_fills: number;
+  total_positions: number;
+  no_order_route_proof: string;
+}
+
+function finiteNumberOrNull(raw: unknown): number | null {
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
+function normalizePaperBookFill(raw: unknown): TradingRoomPaperBookFill {
+  const r = recordFrom(raw);
+  const qty = finiteNumberOrNull(r.fill_qty) ?? finiteNumberOrNull(r.quantity);
+  return {
+    fill_id: stringFrom(r.fill_id) || "pfill-unknown",
+    broker_order_id: stringFrom(r.broker_order_id) || null,
+    client_order_id: stringFrom(r.client_order_id) || null,
+    handoff_id: stringFrom(r.handoff_id) || null,
+    intent_id: stringFrom(r.intent_id) || null,
+    decision_event_id: stringFrom(r.decision_event_id) || null,
+    strategy_id: stringFrom(r.strategy_id) || null,
+    symbol: stringFrom(r.symbol) || "—",
+    action: stringFrom(r.action) || "enter",
+    side: stringFrom(r.side) || "Buy",
+    direction: stringFrom(r.direction) || null,
+    order_type: stringFrom(r.order_type) || "market",
+    requested_quantity: finiteNumberOrNull(r.requested_quantity) ?? qty,
+    quantity: finiteNumberOrNull(r.quantity) ?? qty,
+    fill_qty: qty,
+    fill_price: finiteNumberOrNull(r.fill_price),
+    filled_at: stringFrom(r.filled_at) || null,
+    fill_status: stringFrom(r.fill_status) || "filled",
+    environment: "paper",
+    execution_observation_kind: "pantheon_paper_proxy",
+    execution_display_label:
+      stringFrom(r.execution_display_label) || "交易員決策（紙上代理）",
+    execution_verified: false,
+    actual_fill_claimed: false,
+    is_real_fill: false,
+    no_order_route_proof:
+      stringFrom(r.no_order_route_proof) || "agora_paper_book_readback_only",
+  };
+}
+
+function normalizePaperBookPosition(raw: unknown): TradingRoomPaperBookPosition {
+  const r = recordFrom(raw);
+  const netQty = finiteNumberOrNull(r.net_qty) ?? finiteNumberOrNull(r.quantity) ?? 0;
+  const avgPrice = finiteNumberOrNull(r.avg_price) ?? finiteNumberOrNull(r.average_price);
+  return {
+    symbol: stringFrom(r.symbol) || "—",
+    side: stringFrom(r.side) || (netQty < 0 ? "Sell" : "Buy"),
+    direction: stringFrom(r.direction) || (netQty < 0 ? "short" : "long"),
+    quantity: Math.abs(netQty),
+    net_qty: netQty,
+    avg_price: avgPrice,
+    average_price: avgPrice,
+    mark_price: finiteNumberOrNull(r.mark_price),
+    market_value: finiteNumberOrNull(r.market_value),
+    unrealized_pnl: finiteNumberOrNull(r.unrealized_pnl),
+    realized_pnl: finiteNumberOrNull(r.realized_pnl),
+    fill_count: typeof r.fill_count === "number" ? r.fill_count : 0,
+    last_filled_at: stringFrom(r.last_filled_at) || null,
+    source: stringFrom(r.source) || "paper_book_fills",
+    environment: "paper",
+    execution_observation_kind: "pantheon_paper_proxy",
+    execution_display_label:
+      stringFrom(r.execution_display_label) || "交易員決策（紙上代理）",
+    actual_fill_claimed: false,
+    is_real_position: false,
+  };
+}
+
+/**
+ * GET /bff/agora/trading-room/paper-book — owner-scoped readback of the caller's paper fills and positions.
+ * Every fill and position is labelled pantheon_paper_proxy (never a real broker fill) and carries no order route.
+ */
+export async function getTradingRoomPaperBook(
+  params?: {
+    intentId?: string;
+    decisionEventId?: string;
+    handoffId?: string;
+  },
+  baseUrl?: string,
+): Promise<TradingRoomPaperBookReadback | null> {
+  const base = resolvedBase(baseUrl);
+  const qs = new URLSearchParams();
+  if (params?.intentId) qs.set("intent_id", params.intentId);
+  if (params?.decisionEventId) qs.set("decision_event_id", params.decisionEventId);
+  if (params?.handoffId) qs.set("handoff_id", params.handoffId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const url = `${base}/bff/agora/trading-room/paper-book${suffix}`;
+  const res = await bffSessionFetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json", ...authHeaders() },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const body = await parseJson(res);
+  const root = recordFrom(body);
+  const d = Object.keys(recordFrom(root.data)).length > 0 ? recordFrom(root.data) : root;
+  const pb = recordFrom(d.paper_book);
+  const bt = recordFrom(d.binding_telemetry);
+  const fills = Array.isArray(d.fills) ? d.fills.map(normalizePaperBookFill) : [];
+  const positions = Array.isArray(d.positions)
+    ? d.positions.map(normalizePaperBookPosition)
+    : [];
+
+  return {
+    status: stringFrom(root.status) || stringFrom(d.status) || "ok",
+    environment: "paper",
+    execution_observation_kind: "pantheon_paper_proxy",
+    execution_display_label:
+      stringFrom(d.execution_display_label) || "交易員決策（紙上代理）",
+    actual_fill_claimed: false,
+    execution_verified: false,
+    is_real_fill: false,
+    paper_book: {
+      capital_pool_id: stringFrom(pb.capital_pool_id) || null,
+      runtime_binding_id: stringFrom(pb.runtime_binding_id) || null,
+      runtime_id: stringFrom(pb.runtime_id) || null,
+      starting_capital: finiteNumberOrNull(pb.starting_capital),
+      currency: stringFrom(pb.currency) || "TWD",
+    },
+    binding_telemetry: {
+      available: bt.available === true,
+      status: stringFrom(bt.status) || "paper_book_bound",
+      equity: finiteNumberOrNull(bt.equity),
+      cash: finiteNumberOrNull(bt.cash),
+      realized_pnl: finiteNumberOrNull(bt.realized_pnl),
+      unrealized_pnl: finiteNumberOrNull(bt.unrealized_pnl),
+      last_event_at: stringFrom(bt.last_event_at) || null,
+    },
+    fills,
+    positions,
+    total_fills: typeof d.total_fills === "number" ? d.total_fills : fills.length,
+    total_positions:
+      typeof d.total_positions === "number" ? d.total_positions : positions.length,
+    no_order_route_proof:
+      stringFrom(d.no_order_route_proof) || "agora_paper_book_readback_only",
+  };
+}
+
+// ── Trader Imitation Shadow Comparison (IMITATION-TRADER-SHADOW-COMPARISON-20261127, SD §7.3) ──
+
+export interface TraderImitationBootstrapInterval {
+  sample_size: number;
+  resamples: number;
+  confidence_level: number;
+  mean: number | null;
+  ci_lower: number | null;
+  ci_upper: number | null;
+  contains_zero: boolean;
+  is_luck: boolean;
+  label: string;
+  label_zh: string;
+}
+
+export interface TraderImitationDecisionRow {
+  decision_event_id: string | null;
+  lock_id: string | null;
+  symbol: string | null;
+  strategy_id: string | null;
+  cutoff_at: string | null;
+  human_action: string;
+  trader_imitation_action: string;
+  trader_imitation_confidence: number | null;
+  candidate_id: string | null;
+  agreed: boolean;
+  human_return_pct: number | null;
+  trader_imitation_return_pct: number | null;
+  outcome_gap_pct: number | null;
+}
+
+export interface TraderImitationComparison {
+  status: "ok" | "empty" | "degraded" | string;
+  comparison_state: string;
+  status_label_zh: string;
+  strategy_id: string | null;
+  decision_count: number;
+  minimum_decisions_required: number;
+  remaining_decisions_needed: number;
+  training_approved: boolean;
+  compared_decision_count: number;
+  settled_comparison_count: number;
+  agreement_rate: number | null;
+  agreement_count: number;
+  disagreement_count: number;
+  agreement_interval: TraderImitationBootstrapInterval;
+  agreement_label: string;
+  agreement_label_zh: string;
+  outcome_gap: number | null;
+  outcome_gap_interval: TraderImitationBootstrapInterval;
+  outcome_gap_label: string;
+  outcome_gap_label_zh: string;
+  finding_stated: boolean;
+  differences: TraderImitationDecisionRow[];
+  decisions: TraderImitationDecisionRow[];
+  candidate: {
+    candidate_id: string;
+    version_id: string | null;
+    strategy_id: string | null;
+    status: string | null;
+    decision_count: number;
+  } | null;
+  candidate_count: number;
+  max_candidates_kept: number;
+  snapshot_at: string | null;
+}
+
+function normalizeBootstrapInterval(raw: unknown): TraderImitationBootstrapInterval {
+  const r = recordFrom(raw);
+  const containsZero = r.contains_zero !== false;
+  const isLuck = r.is_luck === true || containsZero || stringFrom(r.label) === "luck";
+  return {
+    sample_size: typeof r.sample_size === "number" ? r.sample_size : 0,
+    resamples: typeof r.resamples === "number" ? r.resamples : 1000,
+    confidence_level: typeof r.confidence_level === "number" ? r.confidence_level : 0.9,
+    mean: finiteNumberOrNull(r.mean),
+    ci_lower: finiteNumberOrNull(r.ci_lower),
+    ci_upper: finiteNumberOrNull(r.ci_upper),
+    contains_zero: containsZero,
+    is_luck: isLuck,
+    label: stringFrom(r.label) || (isLuck ? "luck" : "significant"),
+    label_zh: stringFrom(r.label_zh) || (isLuck ? "可能是運氣" : "統計顯著"),
+  };
+}
+
+function normalizeImitationDecisionRow(raw: unknown): TraderImitationDecisionRow {
+  const r = recordFrom(raw);
+  return {
+    decision_event_id: stringFrom(r.decision_event_id) || null,
+    lock_id: stringFrom(r.lock_id) || null,
+    symbol: stringFrom(r.symbol) || null,
+    strategy_id: stringFrom(r.strategy_id) || null,
+    cutoff_at: stringFrom(r.cutoff_at) || null,
+    human_action: stringFrom(r.human_action) || "no_trade",
+    trader_imitation_action: stringFrom(r.trader_imitation_action) || "no_trade",
+    trader_imitation_confidence: finiteNumberOrNull(r.trader_imitation_confidence),
+    candidate_id: stringFrom(r.candidate_id) || null,
+    agreed: r.agreed === true,
+    human_return_pct: finiteNumberOrNull(r.human_return_pct),
+    trader_imitation_return_pct: finiteNumberOrNull(r.trader_imitation_return_pct),
+    outcome_gap_pct: finiteNumberOrNull(r.outcome_gap_pct),
+  };
+}
+
+/**
+ * GET /bff/agora/trading-room/imitation-comparison — owner-scoped comparison of the trader's
+ * behaviour candidate (trader_imitation) vs human_actual with 1,000-resample bootstrap intervals.
+ */
+export async function getTraderImitationComparison(
+  params?: { strategyId?: string | null },
+  baseUrl?: string,
+): Promise<TraderImitationComparison> {
+  const base = resolvedBase(baseUrl);
+  const qs = new URLSearchParams();
+  if (params?.strategyId) qs.set("strategy_id", params.strategyId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const url = `${base}/bff/agora/trading-room/imitation-comparison${suffix}`;
+  const res = await bffSessionFetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json", ...authHeaders() },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const body = await parseJson(res);
+  const root = recordFrom(body);
+  const d = Object.keys(recordFrom(root.data)).length > 0 ? recordFrom(root.data) : root;
+  const agreementInterval = normalizeBootstrapInterval(d.agreement_interval);
+  const gapInterval = normalizeBootstrapInterval(d.outcome_gap_interval);
+  const candRaw = d.candidate && typeof d.candidate === "object" ? recordFrom(d.candidate) : null;
+
+  return {
+    status: stringFrom(root.status) || "ok",
+    comparison_state:
+      stringFrom(d.comparison_state) ||
+      stringFrom(root.comparison_state) ||
+      "not_enough_decisions",
+    status_label_zh:
+      stringFrom(d.status_label_zh) || "決策數不足（至少需 30 筆決策才啟動僕人模仿訓練）",
+    strategy_id: stringFrom(d.strategy_id) || null,
+    decision_count: typeof d.decision_count === "number" ? d.decision_count : 0,
+    minimum_decisions_required:
+      typeof d.minimum_decisions_required === "number" ? d.minimum_decisions_required : 30,
+    remaining_decisions_needed:
+      typeof d.remaining_decisions_needed === "number" ? d.remaining_decisions_needed : 30,
+    training_approved: d.training_approved === true,
+    compared_decision_count:
+      typeof d.compared_decision_count === "number" ? d.compared_decision_count : 0,
+    settled_comparison_count:
+      typeof d.settled_comparison_count === "number" ? d.settled_comparison_count : 0,
+    agreement_rate: finiteNumberOrNull(d.agreement_rate),
+    agreement_count: typeof d.agreement_count === "number" ? d.agreement_count : 0,
+    disagreement_count:
+      typeof d.disagreement_count === "number" ? d.disagreement_count : 0,
+    agreement_interval: agreementInterval,
+    agreement_label: stringFrom(d.agreement_label) || agreementInterval.label,
+    agreement_label_zh: stringFrom(d.agreement_label_zh) || agreementInterval.label_zh,
+    outcome_gap: finiteNumberOrNull(d.outcome_gap),
+    outcome_gap_interval: gapInterval,
+    outcome_gap_label: stringFrom(d.outcome_gap_label) || gapInterval.label,
+    outcome_gap_label_zh: stringFrom(d.outcome_gap_label_zh) || gapInterval.label_zh,
+    finding_stated: d.finding_stated === true,
+    differences: Array.isArray(d.differences)
+      ? d.differences.map(normalizeImitationDecisionRow)
+      : [],
+    decisions: Array.isArray(d.decisions)
+      ? d.decisions.map(normalizeImitationDecisionRow)
+      : [],
+    candidate: candRaw
+      ? {
+          candidate_id: stringFrom(candRaw.candidate_id) || "cand-unknown",
+          version_id: stringFrom(candRaw.version_id) || null,
+          strategy_id: stringFrom(candRaw.strategy_id) || null,
+          status: stringFrom(candRaw.status) || null,
+          decision_count:
+            typeof candRaw.decision_count === "number" ? candRaw.decision_count : 0,
+        }
+      : null,
+    candidate_count: typeof d.candidate_count === "number" ? d.candidate_count : 0,
+    max_candidates_kept:
+      typeof d.max_candidates_kept === "number" ? d.max_candidates_kept : 3,
+    snapshot_at: stringFrom(d.snapshot_at) || null,
+  };
+}
+
 // ── Trading Room live stream (SA AD-AG-06) ────────────────────────────────────
 
 export type TradingRoomStreamMode = "connecting" | "live" | "polling" | "closed";
