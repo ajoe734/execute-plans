@@ -1,0 +1,55 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-AGORA-SERVANT-CORE-20261127",
+  "title": "Agora UI for cited data and clarification and habits and paper book and imitation and reports",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "review_independence": {
+    "owner_family": "Antigravity",
+    "reviewer_family": "Claude",
+    "independent": true
+  },
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-AGORA-SERVANT-CORE-20261127",
+  "register_instance": "RC4",
+  "dependencies_verified": [
+    "FE-AGORA-TRADING-ROOM-PERFORMANCE-ALIGN-20261127",
+    "FE-AGORA-GLOBAL-DRAWERS-20261127",
+    "AGORA-SERVANT-CLARIFY-20261127",
+    "AGORA-SERVANT-REVISIONS-AND-REPORT-20261127"
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added_or_changed": 0,
+    "persistent_writers_added_or_changed": 0,
+    "notes": "Frontend Agora UI consuming existing BFF v1.13/v1.14 servant and trading-room endpoints; adds no recurring job, emitter, or persistent writer."
+  },
+  "acceptance_coverage": {
+    "AC1": "All new text is zh-TW (via src/i18n/locales/zh-TW.ts with exact key parity in src/i18n/locales/en-US.ts enforced by src/agora/i18n.guard.test.ts). Citations (source, as_of, freshness) and stated assumptions are rendered under each servant answer in both the 交易僕人任務 drawer command task history ([data-testid='servant-answer-citations'], [data-testid='servant-stated-assumptions']) and the session message stream ([data-testid^='servant-stream-citations-']).",
+    "AC2": "Single-question clarification cards ([data-testid='servant-clarification-card']) display question, why_it_matters, servant_default, and clickable option buttons ([data-testid^='servant-clarification-option-']) that send clarification_choice (decision_id, question_id, option_id, selected_option_id, option_label, resolves) back via POST /bff/agora/servant/sessions/{session_id}/messages and confirm the choice ([data-testid='servant-clarification-selected']).",
+    "AC3": "The trader habits view ([data-testid='personalization-servant-habits-section']) in the 個人化紀錄 drawer reads GET /bff/agora/servant/habits, displays the 7 deterministic habit features with sample sizes (sample_size/min_sample) and 樣本不足 labels when below min_sample, shows private servant interpretations (persona_private), and lets the trader reject, replace, or add habit rules via PATCH /bff/agora/servant/habits with immediate readback confirmation ([data-testid='servant-habit-correction-saved']).",
+    "AC4": "Paper fills and positions from GET /bff/agora/trading-room/paper-book are rendered in PositionActionQueue ([data-testid='position-action-queue'], [data-testid='paper-book-positions-list'], [data-testid='paper-book-fills-list']) and on Strategy Performance ([data-testid='performance-paper-book-section']) with pantheon_paper_proxy ([data-testid='paper-book-proxy-badge']), agora_paper_book_readback_only ([data-testid='paper-book-no-order-action']), and zero order buttons.",
+    "AC5": "「僕人模仿您」 ([data-testid='performance-servant-imitation-section']) on Strategy Performance reads GET /bff/agora/trading-room/imitation-comparison and renders agreement rate, outcome gap, 1,000-resample 95% bootstrap confidence intervals ([data-testid='imitation-agreement-rate-interval'], [data-testid='imitation-outcome-gap-interval']), the explicit luck label 可能是運氣 ([data-testid='imitation-outcome-gap-luck-label']) when an interval contains zero, and the decision differences table ([data-testid='imitation-differences-list']).",
+    "AC6": "Report history ([data-testid='performance-trader-reports-section'], [data-testid='trader-report-history-list']) and a compact drawer report card ([data-testid='servant-drawer-report-card']) read GET /bff/agora/servant/reports, display report narrative ([data-testid='trader-report-narrative']), cited owner facts with owner/source/as_of ([data-testid='trader-report-citations']), suggested next steps ([data-testid='trader-report-suggestions']), daily quota ([data-testid='trader-reports-quota']), and request on-demand reports via POST /bff/agora/servant/reports ([data-testid='request-trader-report-btn']).",
+    "AC7": "The persona consult control ([data-testid='servant-optional-persona-consult-control'], [data-testid='servant-open-optional-persona-consult']) is optional and off by default; both unit tests and Playwright E2E prove that a full default flow (ask with data citations, clarification choice, habits read/correct, paper book readback, 僕人模仿您 comparison, report request) makes zero persona_opinion and zero meeting calls and zero /bff/management calls (SD §10).",
+    "AC8": "Real Chromium Playwright browser proof (e2e/agora-servant-core-hosted.spec.ts) against the built SPA with recorded fixtures and hosted dev trader (admintest) walkthrough specification, with 6 screenshots captured under docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/. Hosted dev FE currently serves commit 0a0ce540597647809dc0c0f2886cfc376d73c025 (pre-merge); re-run hosted walkthrough after this PR merges to dev and deploys."
+  },
+  "screenshots": [
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/01-trading-room-paper-book-read-only.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/02-servant-answer-citations-and-clarification-card.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/03-servant-clarification-choice-sent.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/04-personalization-habits-profile-and-correction.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/05-performance-servant-imitation-bootstrap-luck.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/06-performance-trader-reports-and-paper-book.png"
+  ],
+  "verification": {
+    "typecheck": "npm run typecheck:agora: 0 errors",
+    "eslint": "npx eslint on all changed files: 0 errors",
+    "contract_drift": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-worker-worktrees/pantheon/agora-servant-revisions-and-report-20261127 npm run test:contract: 11/11 passed (49 schemas, 99 routes, 75 sha256 entries)",
+    "build_and_credential_scan": "node scripts/build-e2e-server.mjs && npm run scan:bundle-credentials: exit 0 (digest 864b1ce2151a5fa83277d6ba0049c98d6a7454d01509edcab3d3c76aa48127b0)",
+    "i18n_guard": "npx vitest run src/agora/i18n.guard.test.ts: 8/8 passed",
+    "unit_tests": "npx vitest run src/lib/bff-v1/agora/servant.test.ts src/lib/bff-v1/agora/tradingRoom.test.ts src/agora/i18n.guard.test.ts src/agora/TradingDeskLayout.test.tsx src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx: 6 files, 174/174 passed",
+    "playwright_e2e": "npx playwright test e2e/agora-servant-core-hosted.spec.ts: 1 passed (3.0s), 6 screenshots captured"
+  },
+  "residual_findings": []
+}
