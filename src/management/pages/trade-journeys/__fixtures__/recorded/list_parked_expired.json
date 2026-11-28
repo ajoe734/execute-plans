@@ -1,0 +1,1630 @@
+{
+  "captured_from": "https://api.dev.mvl-cap.tw (hosted dev serving 2c72f5e28)",
+  "filters": {
+    "attention_attention_hold_expired_ids": [
+      "tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a",
+      "tj_3d7c6a24-397a-5274-8580-1fb84e3e689a",
+      "tj_eb209568-4570-5018-8acd-991c04e2d08a",
+      "tj_c07b57f3-41e7-58bb-95ba-46d124ca6d79",
+      "tj_51b3f970-4a78-54c5-a2fa-df6bfcda30da",
+      "tj_3387d98f-bd6a-5b4d-bc7b-5976e0bc9ff1"
+    ],
+    "stalled_true_journey_ids": [
+      "tj_75530a71-08b0-5cd4-bbb1-9acd500db7c0",
+      "tj_9eeb8979-9010-5624-bccc-e16631ebacbe",
+      "tj_57d5c248-e83e-5cb5-924c-f1969a52c60c",
+      "tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2",
+      "tj_b54f6694-f03f-5214-8b2a-6c5de83ac9e6",
+      "tj_2079f9fc-12a7-503a-839b-97218cf379c1"
+    ]
+  },
+  "list_rows": {
+    "tj_2079f9fc-12a7-503a-839b-97218cf379c1": {
+      "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-27T07:06:52.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-4a7da0db4dd8dc40050573ce",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": true,
+        "waiting_human": false
+      },
+      "journey_id": "tj_2079f9fc-12a7-503a-839b-97218cf379c1",
+      "next_step": null,
+      "order_id": null,
+      "outcome": {
+        "kind": "open",
+        "reason_code": "pending_settlement",
+        "reason_detail": {
+          "decision_day": "2026-11-27",
+          "expires_at": "2026-12-01T08:55:00+08:00",
+          "target_day": "2026-11-30"
+        }
+      },
+      "persona_id": "persona-6507750312870d03a241",
+      "persona_is_probe": false,
+      "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 45,
+      "read_state": "partial",
+      "revision": 2811955,
+      "runtime_id": "rt-3252fa75",
+      "severity": "info",
+      "side": "buy",
+      "stage_elapsed_seconds": 59523.0,
+      "status": "open",
+      "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+      "strategy_version": null,
+      "symbol": "2317.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": null,
+      "total_elapsed_seconds": 59523.0,
+      "updated_at": "2026-11-27T07:06:52.000000Z"
+    },
+    "tj_3387d98f-bd6a-5b4d-bc7b-5976e0bc9ff1": {
+      "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-25T07:00:55.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-f069490e18d51d1eabacfd95",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": false,
+        "waiting_human": false
+      },
+      "journey_id": "tj_3387d98f-bd6a-5b4d-bc7b-5976e0bc9ff1",
+      "next_step": {
+        "action_needed": "review_market_data_refresh",
+        "href": "/data-sources"
+      },
+      "order_id": null,
+      "outcome": {
+        "kind": "expired",
+        "reason_code": "target_session_not_reconciled_by_expiry",
+        "reason_detail": {
+          "decision_day": "2026-11-25",
+          "expired_at": "2026-11-27T08:55:21+08:00",
+          "expires_at": "2026-11-27T08:55:00+08:00",
+          "target_day": "2026-11-26"
+        }
+      },
+      "persona_id": "persona-2448c7053e33ea48da47",
+      "persona_is_probe": false,
+      "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811957,
+      "runtime_id": "rt-ad81501b",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 81814.0,
+      "status": "expired",
+      "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+      "strategy_version": null,
+      "symbol": "2330.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": "2026-11-27T00:55:21.000000Z",
+      "total_elapsed_seconds": 232680.0,
+      "updated_at": "2026-11-27T00:55:21.000000Z"
+    },
+    "tj_3d7c6a24-397a-5274-8580-1fb84e3e689a": {
+      "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-24T06:58:00.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-4b59138e5736f30c4a2384b7",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": false,
+        "waiting_human": false
+      },
+      "journey_id": "tj_3d7c6a24-397a-5274-8580-1fb84e3e689a",
+      "next_step": {
+        "action_needed": "review_market_data_refresh",
+        "href": "/data-sources"
+      },
+      "order_id": null,
+      "outcome": {
+        "kind": "expired",
+        "reason_code": "target_session_not_reconciled_by_expiry",
+        "reason_detail": {
+          "decision_day": "2026-11-24",
+          "expired_at": "2026-11-26T09:30:36+08:00",
+          "expires_at": "2026-11-26T08:55:00+08:00",
+          "target_day": "2026-11-25"
+        }
+      },
+      "persona_id": "persona-ee7112a829d38b9135ac",
+      "persona_is_probe": false,
+      "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811958,
+      "runtime_id": "rt-3b65a843",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 166099.0,
+      "status": "expired",
+      "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+      "strategy_version": null,
+      "symbol": "0050.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": "2026-11-26T01:30:36.000000Z",
+      "total_elapsed_seconds": 319255.0,
+      "updated_at": "2026-11-26T01:30:36.000000Z"
+    },
+    "tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a": {
+      "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-25T07:00:55.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-0474db5c8d22d121c7d6ed0f",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": false,
+        "waiting_human": false
+      },
+      "journey_id": "tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a",
+      "next_step": {
+        "action_needed": "review_market_data_refresh",
+        "href": "/data-sources"
+      },
+      "order_id": null,
+      "outcome": {
+        "kind": "expired",
+        "reason_code": "target_session_not_reconciled_by_expiry",
+        "reason_detail": {
+          "decision_day": "2026-11-25",
+          "expired_at": "2026-11-27T08:55:21+08:00",
+          "expires_at": "2026-11-27T08:55:00+08:00",
+          "target_day": "2026-11-26"
+        }
+      },
+      "persona_id": "persona-ee7112a829d38b9135ac",
+      "persona_is_probe": false,
+      "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811958,
+      "runtime_id": "rt-3b65a843",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 81814.0,
+      "status": "expired",
+      "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+      "strategy_version": null,
+      "symbol": "0050.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": "2026-11-27T00:55:21.000000Z",
+      "total_elapsed_seconds": 232680.0,
+      "updated_at": "2026-11-27T00:55:21.000000Z"
+    },
+    "tj_51b3f970-4a78-54c5-a2fa-df6bfcda30da": {
+      "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-24T06:58:00.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-6946a480add3dc4b63df4353",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": false,
+        "waiting_human": false
+      },
+      "journey_id": "tj_51b3f970-4a78-54c5-a2fa-df6bfcda30da",
+      "next_step": {
+        "action_needed": "review_market_data_refresh",
+        "href": "/data-sources"
+      },
+      "order_id": null,
+      "outcome": {
+        "kind": "expired",
+        "reason_code": "target_session_not_reconciled_by_expiry",
+        "reason_detail": {
+          "decision_day": "2026-11-24",
+          "expired_at": "2026-11-26T09:30:36+08:00",
+          "expires_at": "2026-11-26T08:55:00+08:00",
+          "target_day": "2026-11-25"
+        }
+      },
+      "persona_id": "persona-2448c7053e33ea48da47",
+      "persona_is_probe": false,
+      "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811957,
+      "runtime_id": "rt-ad81501b",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 166099.0,
+      "status": "expired",
+      "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+      "strategy_version": null,
+      "symbol": "2330.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": "2026-11-26T01:30:36.000000Z",
+      "total_elapsed_seconds": 319255.0,
+      "updated_at": "2026-11-26T01:30:36.000000Z"
+    },
+    "tj_57d5c248-e83e-5cb5-924c-f1969a52c60c": {
+      "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-27T07:06:52.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-81dde1272972327a5f9ad0ba",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": true,
+        "waiting_human": false
+      },
+      "journey_id": "tj_57d5c248-e83e-5cb5-924c-f1969a52c60c",
+      "next_step": null,
+      "order_id": null,
+      "outcome": {
+        "kind": "open",
+        "reason_code": "pending_settlement",
+        "reason_detail": {
+          "decision_day": "2026-11-27",
+          "expires_at": "2026-12-01T08:55:00+08:00",
+          "target_day": "2026-11-30"
+        }
+      },
+      "persona_id": "persona-2448c7053e33ea48da47",
+      "persona_is_probe": false,
+      "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+      "price": null,
+      "quantity": 6,
+      "read_state": "partial",
+      "revision": 2811957,
+      "runtime_id": "rt-ad81501b",
+      "severity": "info",
+      "side": "buy",
+      "stage_elapsed_seconds": 59523.0,
+      "status": "open",
+      "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+      "strategy_version": null,
+      "symbol": "2330.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": null,
+      "total_elapsed_seconds": 59523.0,
+      "updated_at": "2026-11-27T07:06:52.000000Z"
+    },
+    "tj_75530a71-08b0-5cd4-bbb1-9acd500db7c0": {
+      "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-26T06:44:38.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-9d17dba79fd300fa0a35ac89",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": true,
+        "waiting_human": false
+      },
+      "journey_id": "tj_75530a71-08b0-5cd4-bbb1-9acd500db7c0",
+      "next_step": null,
+      "order_id": null,
+      "outcome": {
+        "kind": "open",
+        "reason_code": "pending_settlement",
+        "reason_detail": {
+          "decision_day": "2026-11-26",
+          "expires_at": "2026-11-30T08:55:00+08:00",
+          "target_day": "2026-11-27"
+        }
+      },
+      "persona_id": "persona-ee7112a829d38b9135ac",
+      "persona_is_probe": false,
+      "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 215,
+      "read_state": "partial",
+      "revision": 2811958,
+      "runtime_id": "rt-3b65a843",
+      "severity": "info",
+      "side": "buy",
+      "stage_elapsed_seconds": 147257.0,
+      "status": "open",
+      "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+      "strategy_version": null,
+      "symbol": "0050.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": null,
+      "total_elapsed_seconds": 147257.0,
+      "updated_at": "2026-11-26T06:44:38.000000Z"
+    },
+    "tj_9eeb8979-9010-5624-bccc-e16631ebacbe": {
+      "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-27T07:06:52.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-2fd7c96255607a86eaf806ea",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": true,
+        "waiting_human": false
+      },
+      "journey_id": "tj_9eeb8979-9010-5624-bccc-e16631ebacbe",
+      "next_step": null,
+      "order_id": null,
+      "outcome": {
+        "kind": "open",
+        "reason_code": "pending_settlement",
+        "reason_detail": {
+          "decision_day": "2026-11-27",
+          "expires_at": "2026-12-01T08:55:00+08:00",
+          "target_day": "2026-11-30"
+        }
+      },
+      "persona_id": "persona-ee7112a829d38b9135ac",
+      "persona_is_probe": false,
+      "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811957,
+      "runtime_id": "rt-3b65a843",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 59523.0,
+      "status": "open",
+      "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+      "strategy_version": null,
+      "symbol": "0050.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": null,
+      "total_elapsed_seconds": 59523.0,
+      "updated_at": "2026-11-27T07:06:52.000000Z"
+    },
+    "tj_b54f6694-f03f-5214-8b2a-6c5de83ac9e6": {
+      "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-26T06:44:38.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-e63debefe6a7e49f33da5646",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": true,
+        "waiting_human": false
+      },
+      "journey_id": "tj_b54f6694-f03f-5214-8b2a-6c5de83ac9e6",
+      "next_step": null,
+      "order_id": null,
+      "outcome": {
+        "kind": "open",
+        "reason_code": "pending_settlement",
+        "reason_detail": {
+          "decision_day": "2026-11-26",
+          "expires_at": "2026-11-30T08:55:00+08:00",
+          "target_day": "2026-11-27"
+        }
+      },
+      "persona_id": "persona-2448c7053e33ea48da47",
+      "persona_is_probe": false,
+      "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811956,
+      "runtime_id": "rt-ad81501b",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 147257.0,
+      "status": "open",
+      "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+      "strategy_version": null,
+      "symbol": "2330.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": null,
+      "total_elapsed_seconds": 147257.0,
+      "updated_at": "2026-11-26T06:44:38.000000Z"
+    },
+    "tj_c07b57f3-41e7-58bb-95ba-46d124ca6d79": {
+      "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-25T07:00:55.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-139880882cce0178ee1de1cd",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": false,
+        "waiting_human": false
+      },
+      "journey_id": "tj_c07b57f3-41e7-58bb-95ba-46d124ca6d79",
+      "next_step": {
+        "action_needed": "review_market_data_refresh",
+        "href": "/data-sources"
+      },
+      "order_id": null,
+      "outcome": {
+        "kind": "expired",
+        "reason_code": "target_session_not_reconciled_by_expiry",
+        "reason_detail": {
+          "decision_day": "2026-11-25",
+          "expired_at": "2026-11-27T08:55:21+08:00",
+          "expires_at": "2026-11-27T08:55:00+08:00",
+          "target_day": "2026-11-26"
+        }
+      },
+      "persona_id": "persona-6507750312870d03a241",
+      "persona_is_probe": false,
+      "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811957,
+      "runtime_id": "rt-3252fa75",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 81814.0,
+      "status": "expired",
+      "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+      "strategy_version": null,
+      "symbol": "2317.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": "2026-11-27T00:55:21.000000Z",
+      "total_elapsed_seconds": 232680.0,
+      "updated_at": "2026-11-27T00:55:21.000000Z"
+    },
+    "tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2": {
+      "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-26T06:44:38.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-0279d62d7b1d7abc9ec9dc15",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": true,
+        "waiting_human": false
+      },
+      "journey_id": "tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2",
+      "next_step": null,
+      "order_id": null,
+      "outcome": {
+        "kind": "open",
+        "reason_code": "pending_settlement",
+        "reason_detail": {
+          "decision_day": "2026-11-26",
+          "expires_at": "2026-11-30T08:55:00+08:00",
+          "target_day": "2026-11-27"
+        }
+      },
+      "persona_id": "persona-6507750312870d03a241",
+      "persona_is_probe": false,
+      "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 46,
+      "read_state": "partial",
+      "revision": 2811956,
+      "runtime_id": "rt-3252fa75",
+      "severity": "info",
+      "side": "buy",
+      "stage_elapsed_seconds": 147257.0,
+      "status": "open",
+      "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+      "strategy_version": null,
+      "symbol": "2317.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": null,
+      "total_elapsed_seconds": 147257.0,
+      "updated_at": "2026-11-26T06:44:38.000000Z"
+    },
+    "tj_eb209568-4570-5018-8acd-991c04e2d08a": {
+      "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+      "broker_order_id": null,
+      "candidate_id": null,
+      "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+      "client_order_id": null,
+      "completeness": {
+        "complete": false,
+        "missing_stages": [
+          "research_rationale",
+          "strategy_candidate",
+          "candidate_evaluation",
+          "promotion_decision",
+          "capital_binding",
+          "deployment_runtime",
+          "signal_generation"
+        ]
+      },
+      "created_at": "2026-11-24T06:58:00.000000Z",
+      "current_stage": "trade_decision",
+      "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-02cb12e6048e1c3980c6073c",
+      "environment": "paper",
+      "filled_quantity": null,
+      "flags": {
+        "blocked": false,
+        "mismatch": false,
+        "orphan": false,
+        "rejected": false,
+        "stalled": false,
+        "waiting_human": false
+      },
+      "journey_id": "tj_eb209568-4570-5018-8acd-991c04e2d08a",
+      "next_step": {
+        "action_needed": "review_market_data_refresh",
+        "href": "/data-sources"
+      },
+      "order_id": null,
+      "outcome": {
+        "kind": "expired",
+        "reason_code": "target_session_not_reconciled_by_expiry",
+        "reason_detail": {
+          "decision_day": "2026-11-24",
+          "expired_at": "2026-11-26T09:30:36+08:00",
+          "expires_at": "2026-11-26T08:55:00+08:00",
+          "target_day": "2026-11-25"
+        }
+      },
+      "persona_id": "persona-6507750312870d03a241",
+      "persona_is_probe": false,
+      "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+      "price": null,
+      "quantity": 1,
+      "read_state": "partial",
+      "revision": 2811957,
+      "runtime_id": "rt-3252fa75",
+      "severity": "info",
+      "side": "hold",
+      "stage_elapsed_seconds": 166099.0,
+      "status": "expired",
+      "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+      "strategy_version": null,
+      "symbol": "2317.TWSE",
+      "tenant_id": "tenant-dev",
+      "terminal_at": "2026-11-26T01:30:36.000000Z",
+      "total_elapsed_seconds": 319255.0,
+      "updated_at": "2026-11-26T01:30:36.000000Z"
+    }
+  },
+  "data": {
+    "id": "trade-journeys",
+    "tenant_id": "tenant-dev",
+    "environment": "paper",
+    "items": [
+      {
+        "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-27T07:06:52.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-4a7da0db4dd8dc40050573ce",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": true,
+          "waiting_human": false
+        },
+        "journey_id": "tj_2079f9fc-12a7-503a-839b-97218cf379c1",
+        "next_step": null,
+        "order_id": null,
+        "outcome": {
+          "kind": "open",
+          "reason_code": "pending_settlement",
+          "reason_detail": {
+            "decision_day": "2026-11-27",
+            "expires_at": "2026-12-01T08:55:00+08:00",
+            "target_day": "2026-11-30"
+          }
+        },
+        "persona_id": "persona-6507750312870d03a241",
+        "persona_is_probe": false,
+        "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 45,
+        "read_state": "partial",
+        "revision": 2811955,
+        "runtime_id": "rt-3252fa75",
+        "severity": "info",
+        "side": "buy",
+        "stage_elapsed_seconds": 59523.0,
+        "status": "open",
+        "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+        "strategy_version": null,
+        "symbol": "2317.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": null,
+        "total_elapsed_seconds": 59523.0,
+        "updated_at": "2026-11-27T07:06:52.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-25T07:00:55.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-f069490e18d51d1eabacfd95",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": false,
+          "waiting_human": false
+        },
+        "journey_id": "tj_3387d98f-bd6a-5b4d-bc7b-5976e0bc9ff1",
+        "next_step": {
+          "action_needed": "review_market_data_refresh",
+          "href": "/data-sources"
+        },
+        "order_id": null,
+        "outcome": {
+          "kind": "expired",
+          "reason_code": "target_session_not_reconciled_by_expiry",
+          "reason_detail": {
+            "decision_day": "2026-11-25",
+            "expired_at": "2026-11-27T08:55:21+08:00",
+            "expires_at": "2026-11-27T08:55:00+08:00",
+            "target_day": "2026-11-26"
+          }
+        },
+        "persona_id": "persona-2448c7053e33ea48da47",
+        "persona_is_probe": false,
+        "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811957,
+        "runtime_id": "rt-ad81501b",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 81814.0,
+        "status": "expired",
+        "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+        "strategy_version": null,
+        "symbol": "2330.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": "2026-11-27T00:55:21.000000Z",
+        "total_elapsed_seconds": 232680.0,
+        "updated_at": "2026-11-27T00:55:21.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-24T06:58:00.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-4b59138e5736f30c4a2384b7",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": false,
+          "waiting_human": false
+        },
+        "journey_id": "tj_3d7c6a24-397a-5274-8580-1fb84e3e689a",
+        "next_step": {
+          "action_needed": "review_market_data_refresh",
+          "href": "/data-sources"
+        },
+        "order_id": null,
+        "outcome": {
+          "kind": "expired",
+          "reason_code": "target_session_not_reconciled_by_expiry",
+          "reason_detail": {
+            "decision_day": "2026-11-24",
+            "expired_at": "2026-11-26T09:30:36+08:00",
+            "expires_at": "2026-11-26T08:55:00+08:00",
+            "target_day": "2026-11-25"
+          }
+        },
+        "persona_id": "persona-ee7112a829d38b9135ac",
+        "persona_is_probe": false,
+        "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811958,
+        "runtime_id": "rt-3b65a843",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 166099.0,
+        "status": "expired",
+        "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+        "strategy_version": null,
+        "symbol": "0050.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": "2026-11-26T01:30:36.000000Z",
+        "total_elapsed_seconds": 319255.0,
+        "updated_at": "2026-11-26T01:30:36.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-25T07:00:55.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-0474db5c8d22d121c7d6ed0f",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": false,
+          "waiting_human": false
+        },
+        "journey_id": "tj_45cb6e82-3496-552e-af74-3ccafe0e4e3a",
+        "next_step": {
+          "action_needed": "review_market_data_refresh",
+          "href": "/data-sources"
+        },
+        "order_id": null,
+        "outcome": {
+          "kind": "expired",
+          "reason_code": "target_session_not_reconciled_by_expiry",
+          "reason_detail": {
+            "decision_day": "2026-11-25",
+            "expired_at": "2026-11-27T08:55:21+08:00",
+            "expires_at": "2026-11-27T08:55:00+08:00",
+            "target_day": "2026-11-26"
+          }
+        },
+        "persona_id": "persona-ee7112a829d38b9135ac",
+        "persona_is_probe": false,
+        "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811958,
+        "runtime_id": "rt-3b65a843",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 81814.0,
+        "status": "expired",
+        "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+        "strategy_version": null,
+        "symbol": "0050.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": "2026-11-27T00:55:21.000000Z",
+        "total_elapsed_seconds": 232680.0,
+        "updated_at": "2026-11-27T00:55:21.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-24T06:58:00.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-6946a480add3dc4b63df4353",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": false,
+          "waiting_human": false
+        },
+        "journey_id": "tj_51b3f970-4a78-54c5-a2fa-df6bfcda30da",
+        "next_step": {
+          "action_needed": "review_market_data_refresh",
+          "href": "/data-sources"
+        },
+        "order_id": null,
+        "outcome": {
+          "kind": "expired",
+          "reason_code": "target_session_not_reconciled_by_expiry",
+          "reason_detail": {
+            "decision_day": "2026-11-24",
+            "expired_at": "2026-11-26T09:30:36+08:00",
+            "expires_at": "2026-11-26T08:55:00+08:00",
+            "target_day": "2026-11-25"
+          }
+        },
+        "persona_id": "persona-2448c7053e33ea48da47",
+        "persona_is_probe": false,
+        "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811957,
+        "runtime_id": "rt-ad81501b",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 166099.0,
+        "status": "expired",
+        "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+        "strategy_version": null,
+        "symbol": "2330.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": "2026-11-26T01:30:36.000000Z",
+        "total_elapsed_seconds": 319255.0,
+        "updated_at": "2026-11-26T01:30:36.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-27T07:06:52.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-81dde1272972327a5f9ad0ba",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": true,
+          "waiting_human": false
+        },
+        "journey_id": "tj_57d5c248-e83e-5cb5-924c-f1969a52c60c",
+        "next_step": null,
+        "order_id": null,
+        "outcome": {
+          "kind": "open",
+          "reason_code": "pending_settlement",
+          "reason_detail": {
+            "decision_day": "2026-11-27",
+            "expires_at": "2026-12-01T08:55:00+08:00",
+            "target_day": "2026-11-30"
+          }
+        },
+        "persona_id": "persona-2448c7053e33ea48da47",
+        "persona_is_probe": false,
+        "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+        "price": null,
+        "quantity": 6,
+        "read_state": "partial",
+        "revision": 2811957,
+        "runtime_id": "rt-ad81501b",
+        "severity": "info",
+        "side": "buy",
+        "stage_elapsed_seconds": 59523.0,
+        "status": "open",
+        "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+        "strategy_version": null,
+        "symbol": "2330.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": null,
+        "total_elapsed_seconds": 59523.0,
+        "updated_at": "2026-11-27T07:06:52.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-26T06:44:38.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-9d17dba79fd300fa0a35ac89",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": true,
+          "waiting_human": false
+        },
+        "journey_id": "tj_75530a71-08b0-5cd4-bbb1-9acd500db7c0",
+        "next_step": null,
+        "order_id": null,
+        "outcome": {
+          "kind": "open",
+          "reason_code": "pending_settlement",
+          "reason_detail": {
+            "decision_day": "2026-11-26",
+            "expires_at": "2026-11-30T08:55:00+08:00",
+            "target_day": "2026-11-27"
+          }
+        },
+        "persona_id": "persona-ee7112a829d38b9135ac",
+        "persona_is_probe": false,
+        "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 215,
+        "read_state": "partial",
+        "revision": 2811958,
+        "runtime_id": "rt-3b65a843",
+        "severity": "info",
+        "side": "buy",
+        "stage_elapsed_seconds": 147257.0,
+        "status": "open",
+        "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+        "strategy_version": null,
+        "symbol": "0050.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": null,
+        "total_elapsed_seconds": 147257.0,
+        "updated_at": "2026-11-26T06:44:38.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-a81b4fd15944698341aa-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-a81b4fd15944698341aa",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-27T07:06:52.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-2b0df30559154a93902c209b0318d95c-2fd7c96255607a86eaf806ea",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": true,
+          "waiting_human": false
+        },
+        "journey_id": "tj_9eeb8979-9010-5624-bccc-e16631ebacbe",
+        "next_step": null,
+        "order_id": null,
+        "outcome": {
+          "kind": "open",
+          "reason_code": "pending_settlement",
+          "reason_detail": {
+            "decision_day": "2026-11-27",
+            "expires_at": "2026-12-01T08:55:00+08:00",
+            "target_day": "2026-11-30"
+          }
+        },
+        "persona_id": "persona-ee7112a829d38b9135ac",
+        "persona_is_probe": false,
+        "persona_name": "衡岳｜0050 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811957,
+        "runtime_id": "rt-3b65a843",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 59523.0,
+        "status": "open",
+        "strategy_id": "strategy-persona-a81b4fd15944698341aa",
+        "strategy_version": null,
+        "symbol": "0050.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": null,
+        "total_elapsed_seconds": 59523.0,
+        "updated_at": "2026-11-27T07:06:52.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-06d4775a9b6a8f63b311-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-06d4775a9b6a8f63b311",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-26T06:44:38.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-eb74118dd3ca4b169496b1c239087512-e63debefe6a7e49f33da5646",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": true,
+          "waiting_human": false
+        },
+        "journey_id": "tj_b54f6694-f03f-5214-8b2a-6c5de83ac9e6",
+        "next_step": null,
+        "order_id": null,
+        "outcome": {
+          "kind": "open",
+          "reason_code": "pending_settlement",
+          "reason_detail": {
+            "decision_day": "2026-11-26",
+            "expires_at": "2026-11-30T08:55:00+08:00",
+            "target_day": "2026-11-27"
+          }
+        },
+        "persona_id": "persona-2448c7053e33ea48da47",
+        "persona_is_probe": false,
+        "persona_name": "青禾｜2330 台股 Paper 學習 R3",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811956,
+        "runtime_id": "rt-ad81501b",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 147257.0,
+        "status": "open",
+        "strategy_id": "strategy-persona-06d4775a9b6a8f63b311",
+        "strategy_version": null,
+        "symbol": "2330.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": null,
+        "total_elapsed_seconds": 147257.0,
+        "updated_at": "2026-11-26T06:44:38.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-25T07:00:55.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-139880882cce0178ee1de1cd",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": false,
+          "waiting_human": false
+        },
+        "journey_id": "tj_c07b57f3-41e7-58bb-95ba-46d124ca6d79",
+        "next_step": {
+          "action_needed": "review_market_data_refresh",
+          "href": "/data-sources"
+        },
+        "order_id": null,
+        "outcome": {
+          "kind": "expired",
+          "reason_code": "target_session_not_reconciled_by_expiry",
+          "reason_detail": {
+            "decision_day": "2026-11-25",
+            "expired_at": "2026-11-27T08:55:21+08:00",
+            "expires_at": "2026-11-27T08:55:00+08:00",
+            "target_day": "2026-11-26"
+          }
+        },
+        "persona_id": "persona-6507750312870d03a241",
+        "persona_is_probe": false,
+        "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811957,
+        "runtime_id": "rt-3252fa75",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 81814.0,
+        "status": "expired",
+        "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+        "strategy_version": null,
+        "symbol": "2317.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": "2026-11-27T00:55:21.000000Z",
+        "total_elapsed_seconds": 232680.0,
+        "updated_at": "2026-11-27T00:55:21.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-26T06:44:38.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-0279d62d7b1d7abc9ec9dc15",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": true,
+          "waiting_human": false
+        },
+        "journey_id": "tj_e6eb7d82-395e-5d0d-95af-6c3b11db53b2",
+        "next_step": null,
+        "order_id": null,
+        "outcome": {
+          "kind": "open",
+          "reason_code": "pending_settlement",
+          "reason_detail": {
+            "decision_day": "2026-11-26",
+            "expires_at": "2026-11-30T08:55:00+08:00",
+            "target_day": "2026-11-27"
+          }
+        },
+        "persona_id": "persona-6507750312870d03a241",
+        "persona_is_probe": false,
+        "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 46,
+        "read_state": "partial",
+        "revision": 2811956,
+        "runtime_id": "rt-3252fa75",
+        "severity": "info",
+        "side": "buy",
+        "stage_elapsed_seconds": 147257.0,
+        "status": "open",
+        "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+        "strategy_version": null,
+        "symbol": "2317.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": null,
+        "total_elapsed_seconds": 147257.0,
+        "updated_at": "2026-11-26T06:44:38.000000Z"
+      },
+      {
+        "artifact_id": "artifact-persona-pool-039ad01f8bcd2b4aa466-v2",
+        "broker_order_id": null,
+        "candidate_id": null,
+        "capital_pool_id": "pool-persona-paper-039ad01f8bcd2b4aa466",
+        "client_order_id": null,
+        "completeness": {
+          "complete": false,
+          "missing_stages": [
+            "research_rationale",
+            "strategy_candidate",
+            "candidate_evaluation",
+            "promotion_decision",
+            "capital_binding",
+            "deployment_runtime",
+            "signal_generation"
+          ]
+        },
+        "created_at": "2026-11-24T06:58:00.000000Z",
+        "current_stage": "trade_decision",
+        "decision_id": "dec-rb-a2cb762c5aeb42ebbcf8f2e6894a1bc4-02cb12e6048e1c3980c6073c",
+        "environment": "paper",
+        "filled_quantity": null,
+        "flags": {
+          "blocked": false,
+          "mismatch": false,
+          "orphan": false,
+          "rejected": false,
+          "stalled": false,
+          "waiting_human": false
+        },
+        "journey_id": "tj_eb209568-4570-5018-8acd-991c04e2d08a",
+        "next_step": {
+          "action_needed": "review_market_data_refresh",
+          "href": "/data-sources"
+        },
+        "order_id": null,
+        "outcome": {
+          "kind": "expired",
+          "reason_code": "target_session_not_reconciled_by_expiry",
+          "reason_detail": {
+            "decision_day": "2026-11-24",
+            "expired_at": "2026-11-26T09:30:36+08:00",
+            "expires_at": "2026-11-26T08:55:00+08:00",
+            "target_day": "2026-11-25"
+          }
+        },
+        "persona_id": "persona-6507750312870d03a241",
+        "persona_is_probe": false,
+        "persona_name": "澄川｜2317 台股 Paper 學習 R2",
+        "price": null,
+        "quantity": 1,
+        "read_state": "partial",
+        "revision": 2811957,
+        "runtime_id": "rt-3252fa75",
+        "severity": "info",
+        "side": "hold",
+        "stage_elapsed_seconds": 166099.0,
+        "status": "expired",
+        "strategy_id": "strategy-persona-039ad01f8bcd2b4aa466",
+        "strategy_version": null,
+        "symbol": "2317.TWSE",
+        "tenant_id": "tenant-dev",
+        "terminal_at": "2026-11-26T01:30:36.000000Z",
+        "total_elapsed_seconds": 319255.0,
+        "updated_at": "2026-11-26T01:30:36.000000Z"
+      }
+    ]
+  },
+  "page_info": {
+    "total": 12,
+    "page_size": 25,
+    "returned": 12,
+    "has_more": false,
+    "next_page_token": null
+  },
+  "meta": {
+    "freshness": {
+      "accepted_live": true,
+      "controller": {
+        "accepted_live": true,
+        "backlog": 0,
+        "checkpoint": 14122082,
+        "controller_id": "canonical-lifecycle-projector",
+        "deployment_sha": "2c72f5e2845b57d8a3ad8f1a3b1818eb2c7edea3",
+        "generation": 2811958,
+        "last_error": null,
+        "last_live_success_at": "2026-11-27T23:38:56.782136Z",
+        "last_poll_at": "2026-11-27T23:38:56.782136Z",
+        "last_successful_publish_at": "2026-11-27T23:38:56.782136Z",
+        "mode": "live",
+        "quarantine_count": 0,
+        "source_high_watermark": 14122082,
+        "status": "ready"
+      },
+      "generation": 2811958,
+      "materializer_revision": 2811958,
+      "projection_mode": "live",
+      "projection_schema_version": "pantheon.trade-journey-projection.v1",
+      "projector_owned": true,
+      "rebuild_status": "postgres_projection_reader",
+      "source_watermarks": {
+        "postgres": "14122082"
+      },
+      "truth_level": "canonical_live"
+    },
+    "read_state": "partial",
+    "snapshot_at": "2026-11-27T23:38:57Z"
+  }
+}

@@ -31,6 +31,8 @@ export const KNOWN_REASON_CODES = [
   "kill_switch",
   "hold_signal",
   "partially_filled",
+  "pending_settlement",
+  "target_session_not_reconciled_by_expiry",
   "runtime_unhealthy_at_reconciliation",
   "reconciliation_deferred_runtime_unhealthy",
   "reconciliation_identity_unverified",
@@ -95,13 +97,36 @@ export function personaLabel(row: JourneyRow, t: T): string {
   return row.persona_id || t("tradeJourneys.table.unknownPersona");
 }
 
-/** `澄川 買 2317 452 股`. A hold (no side) reads `persona symbol`. */
+/** Formats an ISO timestamp in Asia/Taipei (UTC+8) as `YYYY-MM-DD HH:mm:ss` (or preserves plain date / fallback strings). */
+export function formatTaipeiDateTime(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return raw;
+  return new Date(ms + 8 * 3600_000).toISOString().slice(0, 19).replace("T", " ");
+}
+
+/** True when a decision journey represents a HOLD (side is "hold" or null/empty, or reason_detail.decision_action is "hold"). */
+export function isHoldDecision(row: JourneyRow | JourneyDetail | null | undefined): boolean {
+  if (!row) return false;
+  const side = String(row.side ?? "").trim().toLowerCase();
+  if (side === "buy" || side === "sell") return false;
+  if (side === "hold" || side === "") return true;
+  const detail =
+    row.outcome?.reason_detail && typeof row.outcome.reason_detail === "object" && !Array.isArray(row.outcome.reason_detail)
+      ? (row.outcome.reason_detail as Record<string, unknown>)
+      : undefined;
+  return String(detail?.decision_action ?? "").trim().toLowerCase() === "hold";
+}
+
+/** `澄川 買 2317 452 股`. A hold (no side or side="hold") reads `persona symbol`. */
 export function journeyTitle(row: JourneyRow, t: T): string {
   const parts = [personaLabel(row, t)];
-  const side = String(row.side || "").toLowerCase();
+  const side = String(row.side || "").trim().toLowerCase();
   if (side === "buy" || side === "sell") parts.push(t(`tradeJourneys.sides.${side}`));
   if (row.symbol) parts.push(shortSymbol(row.symbol));
-  if (side && row.quantity != null && row.quantity > 0) {
+  if ((side === "buy" || side === "sell") && row.quantity != null && row.quantity > 0) {
     parts.push(t("tradeJourneys.quantityShares", { quantity: formatAmount(row.quantity) }));
   }
   return parts.join(" ");
@@ -111,10 +136,13 @@ export function journeyTitle(row: JourneyRow, t: T): string {
 export function instrumentFiguresText(row: JourneyRow, t: T): string {
   const rawSide = String(row.side || "").trim();
   const sideLower = rawSide.toLowerCase();
+  if (sideLower === "hold" || sideLower === "") {
+    return t("tradeJourneys.sides.hold");
+  }
   const sideText =
     sideLower === "buy" || sideLower === "sell"
       ? t(`tradeJourneys.sides.${sideLower}`)
-      : rawSide || "—";
+      : rawSide;
   const qtyText = row.quantity != null && !isNanLike(row.quantity) ? formatAmount(row.quantity) : "—";
   const parts = [`${sideText} ${qtyText}`];
   if (row.price != null && !isNanLike(row.price) && Number(row.price) > 0) {
@@ -180,6 +208,40 @@ export function reasonText(
 
   const record = asRecord(detail);
   const sep = t("tradeJourneys.listSep");
+  if (effectiveCode === "pending_settlement") {
+    const targetDay = String(record?.target_day ?? "").trim();
+    const expiresAt = formatTaipeiDateTime(record?.expires_at);
+    let sentence: string;
+    if (targetDay && expiresAt) {
+      sentence = t("tradeJourneys.reasons.pending_settlementDetail", { targetDay, expiresAt });
+    } else if (targetDay) {
+      sentence = t("tradeJourneys.reasons.pending_settlementTargetOnly", { targetDay });
+    } else if (expiresAt) {
+      sentence = t("tradeJourneys.reasons.pending_settlementExpiresOnly", { expiresAt });
+    } else {
+      sentence = base;
+    }
+    const missingPhrase = missingEvidenceText(missingEvidence, t);
+    return missingPhrase ? `${sentence} · ${missingPhrase}` : sentence;
+  }
+  if (effectiveCode === "target_session_not_reconciled_by_expiry") {
+    const decisionDay = String(record?.decision_day ?? "").trim();
+    const targetDay = String(record?.target_day ?? "").trim();
+    const expiredAt = formatTaipeiDateTime(record?.expired_at ?? record?.expires_at);
+    let sentence: string;
+    if (decisionDay && targetDay && expiredAt) {
+      sentence = t("tradeJourneys.reasons.target_session_not_reconciled_by_expiryDetail", {
+        decisionDay,
+        targetDay,
+        expiredAt,
+      });
+    } else {
+      const details = [decisionDay, targetDay, expiredAt].filter(Boolean);
+      sentence = details.length > 0 ? `${base}（${details.join(sep)}）` : base;
+    }
+    const missingPhrase = missingEvidenceText(missingEvidence, t);
+    return missingPhrase ? `${sentence} · ${missingPhrase}` : sentence;
+  }
   const figures: string[] = [];
   if (record) {
     if (hasValue(record.required)) {
@@ -662,7 +724,7 @@ export function reconciliationAnalysisView(
 
 export type OutcomeTone = "gray" | "red" | "amber" | "neutral";
 export interface OutcomeView {
-  kind: JourneyOutcome["kind"];
+  kind: JourneyOutcome["kind"] | "expired";
   tone: OutcomeTone;
   badge?: string;
   sentence: string;
@@ -676,10 +738,26 @@ export interface OutcomeView {
 export function outcomeView(row: JourneyRow, t: T): OutcomeView | undefined {
   const outcome = row.outcome;
   if (!outcome || outcome.kind === "normal") return undefined;
-  switch (outcome.kind) {
+  switch (outcome.kind as string) {
     case "no_trade": {
       const reason = reasonText(outcome.reason_code, outcome.reason_detail, t, outcome.missing_evidence);
       return { kind: outcome.kind, tone: "gray", badge: t("tradeJourneys.outcome.noTrade"), sentence: reason };
+    }
+    case "expired": {
+      const reason = reasonText(outcome.reason_code, outcome.reason_detail, t, outcome.missing_evidence);
+      if (isHoldDecision(row)) {
+        const holdExpired = t("tradeJourneys.outcome.expiredHold");
+        return {
+          kind: "expired",
+          tone: "gray",
+          sentence: reason ? `${holdExpired} · ${reason}` : holdExpired,
+        };
+      }
+      return {
+        kind: "expired",
+        tone: "amber",
+        sentence: reason || t("tradeJourneys.statuses.expired"),
+      };
     }
     case "rejected": {
       const preBroker = isPreBrokerRefusal(row);
@@ -749,6 +827,7 @@ export const KNOWN_ACTION_CODES = [
   "review_open_incident",
   "review_cash_and_risk_limits",
   "review_reconciliation_variance",
+  "review_market_data_refresh",
 ] as const;
 
 /** The BFF sends next_step.action_needed as a code; show words grounded in the identified cause, and name the code when it is unknown. */
@@ -804,6 +883,12 @@ export function stageStatusView(
   }
   if (normStatus === "not_submitted") {
     return { label: t("tradeJourneys.stageStatuses.notSubmitted"), tone: "paused" };
+  }
+  if (normStatus === "pending_settlement") {
+    return { label: t("tradeJourneys.stageStatuses.pendingSettlement"), tone: "pending" };
+  }
+  if (normStatus === "expired" || normStatus === "expired_no_price") {
+    return { label: t("tradeJourneys.statuses.expired"), tone: "warning" };
   }
   return { label: statusLabel(status, t), tone: statusTone(status) };
 }
@@ -1280,8 +1365,8 @@ export function resolveDetailStagesAndTimeline(
         (!hasReconFailureEvidenceFields(stInfo) && stInfo?.reason_code === undefined) &&
         (hasMatchingEventIdentity(tlEv, stInfo ?? stEv ?? row?.outcome) ||
           (extractEventIds(stInfo).length === 0 && extractEventIds(stEv).length === 0));
-      const code = stInfo?.reason_code ?? stEv?.reason_code ?? (canUseTlEv ? tlEv?.reason_code : undefined);
-      const detail =
+      let code = stInfo?.reason_code ?? stEv?.reason_code ?? (canUseTlEv ? tlEv?.reason_code : undefined);
+      let detail =
         stInfo?.reason_detail !== undefined
           ? stInfo.reason_detail
           : stEv?.reason_detail !== undefined
@@ -1289,6 +1374,27 @@ export function resolveDetailStagesAndTimeline(
             : canUseTlEv
               ? tlEv?.reason_detail
               : undefined;
+      if (!code && stage === "trade_decision") {
+        const normSt = String(
+          status ?? stEv?.stage_status ?? stEv?.status ?? stEv?.decision_status ?? "",
+        )
+          .trim()
+          .toLowerCase();
+        if (normSt === "pending_settlement") {
+          code = "pending_settlement";
+          if (detail === undefined && row?.outcome?.reason_code === "pending_settlement") {
+            detail = row.outcome.reason_detail;
+          }
+        } else if (normSt === "expired" || normSt === "expired_no_price") {
+          code =
+            (row?.outcome?.kind as string) === "expired" && row?.outcome?.reason_code
+              ? row.outcome.reason_code
+              : "target_session_not_reconciled_by_expiry";
+          if (detail === undefined && (row?.outcome?.kind as string) === "expired") {
+            detail = row?.outcome?.reason_detail;
+          }
+        }
+      }
       const missing =
         stInfo?.missing_evidence !== undefined
           ? stInfo.missing_evidence
@@ -1437,12 +1543,36 @@ export function resolveDetailStagesAndTimeline(
       };
     }
 
-    const baseStatus = ev.stage_status
-      ? stageStatusView(ev.stage_status, t, stage).label
+    const rawEvStatus =
+      ev.stage_status ||
+      ev.status ||
+      (typeof ev.decision_status === "string" ? ev.decision_status : undefined);
+    const baseStatus = rawEvStatus
+      ? stageStatusView(rawEvStatus, t, stage).label
       : t("tradeJourneys.detail.unknownStageStatus");
+    let evCode = ev.reason_code;
+    let evDetail = ev.reason_detail;
+    if (!evCode && stage === "trade_decision") {
+      const normEvSt = String(rawEvStatus ?? "").trim().toLowerCase();
+      const stEv = row?.stage_events?.trade_decision;
+      if (normEvSt === "pending_settlement") {
+        evCode = "pending_settlement";
+        if (evDetail === undefined && hasMatchingEventIdentity(ev, stEv)) {
+          evDetail = stEv?.reason_detail;
+        }
+      } else if (normEvSt === "expired" || normEvSt === "expired_no_price") {
+        evCode =
+          (row?.outcome?.kind as string) === "expired" && row?.outcome?.reason_code
+            ? row.outcome.reason_code
+            : "target_session_not_reconciled_by_expiry";
+        if (evDetail === undefined && hasMatchingEventIdentity(ev, stEv)) {
+          evDetail = stEv?.reason_detail ?? row?.outcome?.reason_detail;
+        }
+      }
+    }
     const displayReason =
-      ev.reason_code || (Array.isArray(ev.missing_evidence) && ev.missing_evidence.length > 0)
-        ? reasonText(ev.reason_code, ev.reason_detail, t, ev.missing_evidence)
+      evCode || (Array.isArray(ev.missing_evidence) && ev.missing_evidence.length > 0)
+        ? reasonText(evCode, evDetail, t, ev.missing_evidence)
         : undefined;
     return {
       ...ev,

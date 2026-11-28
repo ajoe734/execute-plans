@@ -9,6 +9,7 @@ import {
   actionText,
   effectiveCurrentStage,
   instrumentFiguresText,
+  isHoldDecision,
   isPreBrokerRefusal,
   journeyTitle,
   nextStepHref,
@@ -93,12 +94,17 @@ function ReadState({ meta, lackingRows }: { meta?: JourneyMeta; lackingRows?: nu
 
 function Status({ row }: { row: JourneyRow }) {
   const t = useT();
+  const statusKey = (row.outcome?.kind as string) === "expired" ? "expired" : row.status;
   const activeFlags = Object.entries(row.flags || {})
     .filter(([, active]) => active)
     .map(([name]) => name);
-  const bad = row.status === "failed" || /reject|mismatch|fail|block/i.test(`${row.status} ${activeFlags.join(" ")}`);
-  const warn = !bad && (row.status === "completed_with_variance" || row.status === "unreconciled");
-  const ok = !bad && !warn && row.status === "completed";
+  const bad = statusKey === "failed" || /reject|mismatch|fail|block/i.test(`${statusKey} ${activeFlags.join(" ")}`);
+  const warn =
+    !bad &&
+    (statusKey === "completed_with_variance" ||
+      statusKey === "unreconciled" ||
+      (statusKey === "expired" && !isHoldDecision(row)));
+  const ok = !bad && !warn && statusKey === "completed";
   const tone = bad
     ? "bg-red-500/10 text-red-700 dark:text-red-300"
     : warn
@@ -106,7 +112,7 @@ function Status({ row }: { row: JourneyRow }) {
       : ok
         ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
         : "bg-muted text-muted-foreground";
-  const label = row.status ? t(`tradeJourneys.statuses.${row.status}`, { defaultValue: row.status }) : "";
+  const label = statusKey ? t(`tradeJourneys.statuses.${statusKey}`, { defaultValue: statusKey }) : "";
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${tone}`}>
       {bad || warn ? <AlertTriangle size={13} /> : ok ? <CheckCircle2 size={13} /> : <CircleDashed size={13} />}
@@ -515,9 +521,11 @@ function SummaryPanel({ row }: { row: JourneyRow }) {
     view?.sentence ||
     (kind === "open"
       ? t("tradeJourneys.summary.openWhat")
-      : kind === "normal"
-        ? t("tradeJourneys.summary.normalWhat")
-        : t("tradeJourneys.summary.unknownWhat"));
+      : (kind as string) === "expired" && isHoldDecision(row)
+        ? t("tradeJourneys.summary.expiredHoldWhat")
+        : kind === "normal"
+          ? t("tradeJourneys.summary.normalWhat")
+          : t("tradeJourneys.summary.unknownWhat"));
   const title = view?.badge ? `${view.badge}：` : "";
   const who = isDeferred
     ? t("tradeJourneys.summary.whoSystem")
