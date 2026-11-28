@@ -1622,6 +1622,8 @@ export default {
       draftNotice:
         "Drafts are unscreened text drafts, not strategies: nothing runs or trades from them until one is screened and approved.",
       hiddenTestBreakdown: "{{testCount}} from test personas and {{stubCount}} unbound placeholders.",
+      hiddenTestAndNonTradingBreakdown:
+        "{{testCount}} from test and non-trading personas and {{stubCount}} unbound placeholders.",
       hiddenDraftsAndRetiredPersonasWithCounts:
         "{{draftCount}} draft strategies and {{retiredPersonaCount}} strategies with retired personas are hidden by default.",
       hiddenRetiredPersonasWithCount:
@@ -1636,6 +1638,18 @@ export default {
       showTestPersonaStrategiesWithCount: "Show test strategies ({{count}})",
       showTestPersonaStrategiesNoCount: "Show test strategies",
       hideTestPersonaStrategies: "Hide test strategies",
+      hiddenTestAndNonTradingPersonaStrategiesWithCount:
+        "{{count}} test and non-trading persona strategies are hidden by default.",
+      hiddenTestAndNonTradingPersonaStrategiesNoCount:
+        "Test and non-trading persona strategies are hidden by default.",
+      showingTestAndNonTradingPersonaStrategies:
+        "Currently showing test and non-trading persona strategies.",
+      showTestAndNonTradingPersonaStrategiesWithCount:
+        "Show test and non-trading persona strategies ({{count}})",
+      showTestAndNonTradingPersonaStrategiesNoCount:
+        "Show test and non-trading persona strategies",
+      hideTestAndNonTradingPersonaStrategies:
+        "Hide test and non-trading persona strategies",
       pagination: {
         label: "Strategy list pagination",
         showingRange: "Showing {{start}}–{{end}} of {{total}}",
@@ -7274,7 +7288,15 @@ export default {
         "{{strategyCount}} test-persona strategies ({{personaCount}} test personas) are hidden by default.",
       hiddenTestPersonaStrategiesOnlyFmt:
         "{{count}} test-persona strategies are hidden by default.",
+      hiddenTestAndNonTradingPersonaStrategiesFmt:
+        "{{strategyCount}} test-persona strategies ({{personaCount}} test personas) and {{nonTradingPersonaCount}} non-trading personas are hidden by default.",
+      hiddenTestStrategiesAndNonTradingPersonasFmt:
+        "{{strategyCount}} test-persona strategies and {{nonTradingPersonaCount}} non-trading personas are hidden by default.",
+      hiddenNonTradingPersonasOnlyFmt:
+        "{{nonTradingPersonaCount}} non-trading personas are hidden by default.",
       showingTestPersonasNotice: "Showing test-persona and test-strategy attribution.",
+      showingTestPersonasWithHiddenNonTradingFmt:
+        "Showing test-persona and test-strategy attribution ({{nonTradingPersonaCount}} non-trading personas remain hidden).",
       showTestPersonasFmt: "Show test strategies ({{count}})",
       showTestPersonas: "Show test strategies",
       hideTestPersonas: "Hide test strategies",
