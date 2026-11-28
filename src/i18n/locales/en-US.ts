@@ -4203,6 +4203,7 @@ export default {
         declaredNoTrade: "Declared no trade",
         actualFill: "Actual fill (verified)",
         sourceUnknown: "Settlement source unknown / unsettled",
+        otherArm: "Other comparison",
         outcome: "Outcome",
         settledAt: "Settled at",
         decisionDetail: "Decision detail",

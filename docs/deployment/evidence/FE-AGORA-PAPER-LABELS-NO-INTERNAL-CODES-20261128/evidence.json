@@ -1,0 +1,174 @@
+{
+  "schema_version": "pantheon.task-evidence.v1",
+  "task_id": "FE-AGORA-PAPER-LABELS-NO-INTERNAL-CODES-20261128",
+  "owner": "Codex2",
+  "reviewer": "Claude2",
+  "delivery_repository": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "base_sha": "281b6355f1153a6dfe617c0719ca5046495b9f70",
+  "status": "ready_for_independent_review_hosted_acceptance_pending",
+  "acceptance_numbering": {
+    "coordinator_clarification": "The 11 stored acceptance items form seven criteria.",
+    "stored_item_groups": [
+      [
+        1,
+        2
+      ],
+      [
+        3,
+        4
+      ],
+      [
+        5,
+        6
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        9
+      ],
+      [
+        10
+      ],
+      [
+        11
+      ]
+    ]
+  },
+  "scope": {
+    "owned": "Agora paper/shadow presentation, parity copy, focused tests, and task evidence. A shared paperBookDisplay.tsx keeps the two paper surfaces consistent.",
+    "unchanged": "BFF fields, requests, adapter types, first-use ensure action/testid, and all existing data attributes."
+  },
+  "criteria": {
+    "1_copy": "PASS: the three existing copy keys now explain Pantheon simulated paper fills, not actual fills, and no order buttons. Both locales have identical paper/shadow leaf keys and no snake-case code values. The timeout copy is also plain language.",
+    "2_paper_rows": "PASS LOCALLY: shared labels cover symbol, localized side, share quantity, prices, currency, UTC time, and unrealized P&L. Missing values use a dash; absent currency is explicit rather than inferred. The fallback allowlists fields instead of serializing unknown input. Position/fill IDs and sources remain in data only. Existing selectors and ensure behavior are tested.",
+    "3_shadow": "PASS LOCALLY: source kind is localized without its raw source. Known outcome fields have labels and units. Return/cost/drawdown/weight/exposure/confidence ratios are multiplied by 100; realized/unrealized amounts are not. Legacy pnl follows the existing comparison surface return-ratio convention. Unknown, identifier, provenance or unsupported fields are omitted and counted. Detail keys/actions and unavailable/degraded messages also avoid raw codes/JSON.",
+    "4_contract_proof": "PASS: no BFF or adapter files changed. Read-only/no-order and simulated/not-actual-fill proof remains visible in plain words; machine data attributes remain intact.",
+    "5_verification": "PASS: all existing tests retained; raw-code/JSON assertions replaced with plain-word plus absence checks. 153 cases passed, TypeScript passed, lint 0 errors, build passed.",
+    "6_hosted": "PENDING POST-DEPLOY. Candidate Chromium screenshots show both paper sections free of the specified codes/JSON. The real BFF returns 404 for admintest, so populated-row browser proof is unavailable and the overall browser command exits 1. Decision-event reads return zero items; no real shadow comparison exists for this principal. Do not treat candidate assets or missing rows as deployed acceptance.",
+    "7_review": "PENDING: assigned reviewer Claude2 is a different model family from owner Codex2. No independent approval is claimed."
+  },
+  "local_validation": [
+    {
+      "command": "timeout 180 npm run test -- src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx src/agora/i18n.guard.test.ts src/agora/pages/trading-room/TradingRoomPage.test.tsx src/agora/pages/trading-room/SystemSuggestionsPanel.test.tsx",
+      "exit_status": 0,
+      "log": "/tmp/fe-paper-tests-final.log",
+      "sha256": "63a4445cbf93118ff8b97d36b5bbfd526ddb68542194b199a2d1995106739065",
+      "passed": 153,
+      "suites": 6
+    },
+    {
+      "command": "timeout 180 npm run typecheck",
+      "exit_status": 0,
+      "log": "/tmp/fe-paper-typecheck-final.log",
+      "sha256": "e38c26b5e7b0982ac7fdacb4832749746b5c3c678e6de661d1a003afe6ce9d6d"
+    },
+    {
+      "command": "timeout 180 npm run lint",
+      "exit_status": 0,
+      "log": "/tmp/fe-paper-lint-final.log",
+      "sha256": "6cc78ea6196091f07a7f18ed689f58fdc8e1e72b672f4fa8cfe157df3174b743",
+      "errors": 0,
+      "warnings": 157
+    },
+    {
+      "command": "timeout 180 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_status": 0,
+      "log": "/tmp/fe-paper-build-final.log",
+      "sha256": "42b636a828554a7857ca40ead55b06de438d995e88aa2955aae19cd1b7f29771",
+      "warnings": "Existing chunk-size advisory"
+    }
+  ],
+  "selector_validation": {
+    "exit_status": 0,
+    "method": "Compared every existing data-* JSX attribute in the three touched components against origin/dev; none removed or changed. Confirmed no src/lib/bff files changed."
+  },
+  "source_sha256": {
+    "src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx": "947f538f3ea4bae1e9ebd381fa57192a15524f400e58b1cf98f5c0e66d52a6fc",
+    "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx": "8d6d9b392689befc4e5d7cc71d2f02a20af8a5ce9e555b2e4b65e91fb5bcdb5b",
+    "src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx": "be8ba00d17eab50ebbcd35bb9b2de16ab2e503a605ed4e71c11fce465c417663",
+    "src/agora/pages/trading-room/ShadowComparisonPanel.tsx": "c5cd8991de3d87c1fc32b775e63bbe516555d6b6701f27d94e0fe092ef330123",
+    "src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx": "5c79dd2a93991d50c3aac5eaa5f121741d9d3066036ba5ae77dc978697fb849b",
+    "src/agora/pages/trading-room/TradingRoomWorkspace.tsx": "df56973ac881b3cf59aeeae043be515282b3d63daa317891f5766613519b9df4",
+    "src/agora/pages/trading-room/paperBookDisplay.tsx": "bf394c6ded1b6eca6abffa381e0204abf192e1ecd0c9ee0f665ea24874a0615c",
+    "src/i18n/locales/en-US.ts": "258c46d2641508755c717204e5d93a9c3c966375886abd7fafe430b3c55f9605",
+    "src/i18n/locales/zh-TW.ts": "01f5eaf47de5d1ff3a4c3f235b0865abb576d107e73c60155f0094f2f5ba6260"
+  },
+  "candidate_browser_proof": {
+    "command": "timeout 180 env PROOF_OUT=/tmp/fe-paper-labels-review-browser CANDIDATE_DIST=$PWD/dist node /tmp/fe-paper-labels-browser-proof.mjs",
+    "exit_status": 1,
+    "passed": false,
+    "method": "Authenticated Chromium as admintest at the maintained dev FE origin. Only candidate navigation/assets replaced; runtime config and all BFF responses remain hosted. Product mutations blocked; no fixture responses and no product writes.",
+    "proof_file": "/tmp/fe-paper-labels-review-browser/proof.json",
+    "proof_sha256": "835c809f4a953425d34c9283227df402c342ed0842b40678cbd7e929e52226ab",
+    "script": "/tmp/fe-paper-labels-browser-proof.mjs",
+    "script_sha256": "32f9e1cb73c6191aef4fb423b85f3682a02e9f9ac004a45a3a7960585ff39d05",
+    "candidate_index_sha256": "fe32f1e281299f5eaa9b34ab17b4a26fc842667e975da62f44aace54b24d5b5e",
+    "started_at": "2026-11-28T18:33:21.127Z",
+    "finished_at": "2026-11-28T18:33:50.729Z",
+    "observed_fe_sha": "281b6355f1153a6dfe617c0719ca5046495b9f70",
+    "observed_bff_sha": "25edbe5be61d893d63ca72e8ad4d3676630271d1",
+    "paper_readback": {
+      "status": 404,
+      "positions": null,
+      "fills": null
+    },
+    "performance_paper_readback": {
+      "status": 404
+    },
+    "decision_reads": [
+      {
+        "status": 200,
+        "items": 0
+      },
+      {
+        "status": 200,
+        "items": 0
+      }
+    ],
+    "shadow": {
+      "available": false,
+      "reason": "No shadow comparison panel for admintest on the observed page"
+    },
+    "surface_checks": [
+      {
+        "surface": "trading-room-paper-book",
+        "text": "我的 paper 帳本\n\n開通後將依營運者設定的起始資金建立帳本。這是名目模擬資金，不是真實金錢。\n\n開通我的 paper 帳本\n持倉動作\n模擬帳本部位與成交（唯讀）\nPantheon 紙上交易模擬成交（非實際成交）\n僅供唯讀檢視 · 無任何下單按鈕\n目前模擬部位（0）\n沒有未平倉部位。\n模擬成交紀錄（0）\n尚無模擬成交紀錄。",
+        "no_internal_codes_or_json": true
+      },
+      {
+        "surface": "strategy-performance-paper-book",
+        "text": "模擬帳本成交與部位（唯讀 · 無下單動作）\n\n顯示 Pantheon 紙上交易模擬的部位與成交明細；非實際成交，不提供下單按鈕。\n\nPantheon 紙上交易模擬成交（非實際成交）\n僅供唯讀檢視 · 無任何下單按鈕\n目前模擬部位（0）\n\n沒有未平倉部位。\n\n模擬成交紀錄（0）\n\n尚無模擬成交紀錄。",
+        "no_internal_codes_or_json": true
+      }
+    ],
+    "screenshots": [
+      {
+        "path": "/tmp/fe-paper-labels-review-browser/trading-room-paper-book.png",
+        "sha256": "5c61c24c5979385100045d849347d07f651cdeadd155505d2de8299d80d3f363"
+      },
+      {
+        "path": "/tmp/fe-paper-labels-review-browser/strategy-performance-paper-book.png",
+        "sha256": "ec732b3183f46786798e59cfdf8df42c1441b4a3ff26838b122ee4778988ca27"
+      }
+    ],
+    "page_errors": [],
+    "blocked_product_writes": [],
+    "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n404 !== 200\n\n    at file:///tmp/fe-paper-labels-browser-proof.mjs:42:134"
+  },
+  "post_deploy_gate": {
+    "status": "pending",
+    "required": [
+      "Independent exact-head review by Claude2",
+      "Supervisor MERGE of the frozen head into dev",
+      "Successful dev integration gate and VM deployment for the resulting dev commit",
+      "deployment.json identity matches that deployed commit",
+      "Real admintest browser proof on deployed assets; paper rows must be readable, and shadow checked if a real event exists"
+    ],
+    "command_template": "timeout 180 env PROOF_OUT=/tmp/fe-paper-labels-hosted EXPECTED_DEPLOYED_SHA=<verified-dev-commit> node /tmp/fe-paper-labels-browser-proof.mjs",
+    "external_evidence_path": "/tmp/fe-paper-labels-hosted/proof.json",
+    "note": "Keep the frozen review manifest unchanged after approval. Record post-deploy results through governed finalization and external runtime evidence. Never mark done while these gates or the BFF readback remain unresolved."
+  }
+}

@@ -315,15 +315,6 @@ export function ShadowComparisonPanel({
                 defaultValue: "Read-only · Does not place orders",
               })}
             </span>
-            <span
-              style={{
-                color: "#8c96a6",
-                fontFamily: "monospace",
-                fontSize: 11,
-              }}
-            >
-              {t("agora.tradingRoom.shadowComparison.adviceOnlyBadge")}
-            </span>
           </div>
           <div style={{ color: "#8c96a6", fontSize: 12, marginTop: 2 }}>
             {t("agora.tradingRoom.shadowComparison.subtitle", {
@@ -468,16 +459,6 @@ export function ShadowComparisonPanel({
               defaultValue: `Shadow comparison for decision ${activeDecisionId} was not found.`,
             })}
           </div>
-          <div
-            style={{
-              color: "#8c96a6",
-              fontFamily: "monospace",
-              fontSize: 12,
-              marginTop: 4,
-            }}
-          >
-            {t("agora.tradingRoom.shadowComparison.unavailable")}
-          </div>
         </div>
       ) : read.state === "unavailable" ? (
         <div
@@ -496,16 +477,6 @@ export function ShadowComparisonPanel({
             {t("agora.tradingRoom.shadowComparison.unavailable", {
               defaultValue: "Shadow comparison is currently unavailable.",
             })}
-          </div>
-          <div
-            style={{
-              color: "#fca5a5",
-              fontFamily: "monospace",
-              fontSize: 12,
-              marginTop: 4,
-            }}
-          >
-            {t("agora.tradingRoom.shadowComparison.unavailable")}
           </div>
         </div>
       ) : (
@@ -605,17 +576,9 @@ export function ShadowComparisonPanel({
                   >
                     <strong style={{ fontSize: 13 }}>
                       {t(`agora.tradingRoom.shadowComparison.arms.${arm.arm}`, {
-                        defaultValue: DEFAULT_ARM_LABELS[arm.arm] ?? arm.arm,
+                        defaultValue: DEFAULT_ARM_LABELS[arm.arm] ?? t("agora.tradingRoom.shadowComparison.otherArm"),
                       })}
                     </strong>
-                    <span
-                      style={{
-                        color: "#8c96a6",
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                      }}
-                    >
-                    </span>
                   </div>
 
                   <div>

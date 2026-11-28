@@ -4182,6 +4182,7 @@ export default {
         declaredNoTrade: "宣告不交易",
         actualFill: "實際成交（已驗證）",
         sourceUnknown: "結算來源未定／尚未結算",
+        otherArm: "其他比較方案",
         outcome: "結果",
         settledAt: "結算時間",
         decisionDetail: "決策明細",
