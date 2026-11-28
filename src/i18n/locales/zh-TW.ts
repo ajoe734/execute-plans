@@ -3125,7 +3125,7 @@ export default {
       },
       paperBook: {
         title: "模擬帳本成交與部位（唯讀 · 無下單動作）",
-        subtitle: "顯示 Pantheon 模擬執行帳本（pantheon_paper_proxy）之部位與成交明細，不提供任何下單按鈕。",
+        subtitle: "顯示 Pantheon 紙上交易模擬的部位與成交明細；非實際成交，不提供下單按鈕。",
       },
     },
     workshop: {
@@ -4008,8 +4008,8 @@ export default {
         },
         paperBook: {
           title: "模擬帳本部位與成交（唯讀）",
-          proxyBadge: "模擬成交代理（pantheon_paper_proxy）",
-          noOrderNotice: "僅供唯讀檢視 · 無任何下單按鈕（agora_paper_book_readback_only）",
+          proxyBadge: "Pantheon 紙上交易模擬成交（非實際成交）",
+          noOrderNotice: "僅供唯讀檢視 · 無任何下單按鈕",
           positionsHeading: "目前模擬部位（{{count}}）",
           fillsHeading: "模擬成交紀錄（{{count}}）",
           noFills: "尚無模擬成交紀錄。",
@@ -4019,11 +4019,15 @@ export default {
           opening: "正在開通 paper 帳本，可能需要約兩分鐘，請稍候。",
           loading: "正在讀取 paper 帳本…",
           failed: "無法完成 paper 帳本操作：",
-          timeout: "paper_book_ensure_timeout：等待開通逾時；帳本可能仍在建立，請重試以確認。",
+          timeout: "等待開通逾時；帳本可能仍在建立，請重試以確認。",
           retry: "重試開通我的 paper 帳本",
           reload: "重新讀取帳本",
-          positionLine: "{{symbol}} · {{side}} {{qty}} 股 · 均價 {{avgPrice}} · 現價 {{markPrice}}",
-          fillLine: "{{symbol}} · {{side}} {{qty}} @ {{price}} · {{filledAt}}",
+          positionLine: "標的 {{symbol}} · {{side}} · 數量 {{qty}} 股 · 均價 {{avgPrice}} · 現價 {{markPrice}}",
+          fillLine: "標的 {{symbol}} · {{side}} · 數量 {{qty}} 股 · 成交價 {{price}} · 成交時間 {{filledAt}}",
+          positionDetail: "未實現損益 {{pnl}} · 更新時間 {{time}}",
+          marketValue: "市值 {{value}}",
+          currencyUnknown: "（幣別未提供）",
+          sides: { buy: "買入", sell: "賣出", long: "多單", short: "空單", flat: "無部位", unknown: "方向未提供" },
         },
       },
       drawer: {

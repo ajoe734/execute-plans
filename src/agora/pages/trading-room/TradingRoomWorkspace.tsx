@@ -21,6 +21,7 @@ import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
 import { TradeDecisionCard } from "@/agora/components/TradeDecisionCard";
 import { SystemSuggestionsPanel } from "./SystemSuggestionsPanel";
 import { ShadowComparisonPanel } from "./ShadowComparisonPanel";
+import { PaperBookRow } from "./paperBookDisplay";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -384,16 +385,7 @@ export function PositionActionQueue({ positionSummaries, paperBook }: PositionAc
                 }}
               >
                 <div style={{ color: "#f0ece4", fontWeight: 600 }}>
-                  {t("agora.tradingRoom.page.paperBook.positionLine", {
-                    symbol: pos.symbol,
-                    side: pos.side,
-                    qty: pos.quantity,
-                    avgPrice: pos.avg_entry_price ?? "—",
-                    markPrice: pos.mark_price ?? "—",
-                  })}
-                </div>
-                <div style={{ color: "#8c96a6", fontFamily: "monospace", fontSize: 10, marginTop: 2 }}>
-                  {pos.settlement_source} · PnL: {pos.unrealized_pnl ?? 0}
+                  <PaperBookRow value={pos} currency={paperBook?.paper_book?.currency} asOf={paperBook?.as_of} />
                 </div>
               </li>
             ))}
@@ -406,7 +398,7 @@ export function PositionActionQueue({ positionSummaries, paperBook }: PositionAc
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {positionSummaries.map((p, i) => (
               <li key={i} style={{ borderBottom: "1px solid #2a2e38", fontSize: 13, padding: "4px 0" }}>
-                {JSON.stringify(p)}
+                <PaperBookRow value={p} />
               </li>
             ))}
           </ul>
@@ -437,16 +429,7 @@ export function PositionActionQueue({ positionSummaries, paperBook }: PositionAc
                 }}
               >
                 <div style={{ color: "#f0ece4" }}>
-                  {t("agora.tradingRoom.page.paperBook.fillLine", {
-                    symbol: fill.symbol,
-                    side: fill.side,
-                    qty: fill.quantity,
-                    price: fill.price ?? "—",
-                    filledAt: fill.filled_at ?? "—",
-                  })}
-                </div>
-                <div style={{ color: "#8c96a6", fontFamily: "monospace", fontSize: 10, marginTop: 2 }}>
-                  {fill.fill_id} · {fill.settlement_source}
+                  <PaperBookRow value={fill} currency={paperBook?.paper_book?.currency} fill />
                 </div>
               </li>
             ))}

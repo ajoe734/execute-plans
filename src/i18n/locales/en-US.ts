@@ -3146,7 +3146,7 @@ export default {
       },
       paperBook: {
         title: "Paper Book Fills & Positions (Read-Only · No Order Action)",
-        subtitle: "Displays positions and fills from the Pantheon paper ledger (pantheon_paper_proxy) with no order buttons.",
+        subtitle: "Positions and fills simulated by Pantheon paper trading; not actual fills. No order buttons.",
       },
     },
     workshop: {
@@ -4029,8 +4029,8 @@ export default {
         },
         paperBook: {
           title: "Paper Book Positions & Fills (Read-Only)",
-          proxyBadge: "Paper Execution Proxy (pantheon_paper_proxy)",
-          noOrderNotice: "Read-only view · No order action (agora_paper_book_readback_only)",
+          proxyBadge: "Fills simulated by Pantheon paper trading (not actual fills)",
+          noOrderNotice: "Read-only view · No order buttons",
           positionsHeading: "Open Paper Positions ({{count}})",
           fillsHeading: "Paper Fills ({{count}})",
           noFills: "No paper fills recorded yet.",
@@ -4040,11 +4040,15 @@ export default {
           opening: "Opening your paper book. This may take about two minutes; please wait.",
           loading: "Loading your paper book…",
           failed: "Paper book operation failed:",
-          timeout: "paper_book_ensure_timeout: Opening timed out. Your book may still be provisioning; retry to check.",
+          timeout: "Opening timed out. Your book may still be provisioning; retry to check.",
           retry: "Retry opening my paper book",
           reload: "Reload paper book",
-          positionLine: "{{symbol}} · {{side}} {{qty}} sh · Avg {{avgPrice}} · Mark {{markPrice}}",
-          fillLine: "{{symbol}} · {{side}} {{qty}} @ {{price}} · {{filledAt}}",
+          positionLine: "Symbol {{symbol}} · {{side}} · Quantity {{qty}} shares · Average price {{avgPrice}} · Mark price {{markPrice}}",
+          fillLine: "Symbol {{symbol}} · {{side}} · Quantity {{qty}} shares · Fill price {{price}} · Filled at {{filledAt}}",
+          positionDetail: "Unrealized P&L {{pnl}} · Updated at {{time}}",
+          marketValue: "Market value {{value}}",
+          currencyUnknown: "(currency not provided)",
+          sides: { buy: "Buy", sell: "Sell", long: "Long", short: "Short", flat: "Flat", unknown: "Side not provided" },
         },
       },
       drawer: {
