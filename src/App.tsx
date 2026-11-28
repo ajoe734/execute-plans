@@ -151,6 +151,13 @@ const AgoraMemoryRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraMe
 const AgoraPersonaLabRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraPersonaLabRoute", "Agora persona lab");
 const AgoraFeedbackRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraFeedbackRoute", "Agora human feedback");
 const AgoraStrategyPerformanceRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraStrategyPerformanceRoute", "Agora strategy performance");
+const AgoraDailyLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraDailyLegacyRoute", "Agora daily redirect");
+const AgoraWatchlistLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraWatchlistLegacyRoute", "Agora watchlist redirect");
+const AgoraSignalsLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraSignalsLegacyRoute", "Agora signals redirect");
+const AgoraNotebookLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraNotebookLegacyRoute", "Agora notebook redirect");
+const AgoraAskLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraAskLegacyRoute", "Agora ask redirect");
+const AgoraJournalLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraJournalLegacyRoute", "Agora journal redirect");
+const AgoraTrainerLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraTrainerLegacyRoute", "Agora trainer redirect");
 
 function DeploymentAliasRedirect() {
   const { id } = useParams<{ id?: string }>();
@@ -349,6 +356,13 @@ const App = () => (
               <Route path="memory" element={<AgoraMemoryRoute />} />
               <Route path="persona-lab" element={<AgoraPersonaLabRoute />} />
               <Route path="feedback" element={<AgoraFeedbackRoute />} />
+              <Route path="daily" element={<AgoraDailyLegacyRoute />} />
+              <Route path="watchlist" element={<AgoraWatchlistLegacyRoute />} />
+              <Route path="signals" element={<AgoraSignalsLegacyRoute />} />
+              <Route path="notebook" element={<AgoraNotebookLegacyRoute />} />
+              <Route path="ask" element={<AgoraAskLegacyRoute />} />
+              <Route path="journal" element={<AgoraJournalLegacyRoute />} />
+              <Route path="trainer" element={<AgoraTrainerLegacyRoute />} />
               <Route path="*" element={<Navigate to="/agora/trading-room" replace />} />
             </Route>
 

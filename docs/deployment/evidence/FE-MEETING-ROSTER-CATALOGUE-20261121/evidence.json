@@ -1,0 +1,101 @@
+{
+  "schema_version": "task_evidence.v1",
+  "task_id": "FE-MEETING-ROSTER-CATALOGUE-20261121",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "branch": "task/FE-MEETING-ROSTER-CATALOGUE-20261121",
+  "register_class": "RC6",
+  "work_package": "WP6.3",
+  "related_tasks": [
+    "MEETING-HOSTED-ACCEPTANCE-20261115",
+    "MGMT-GATE-FULL-PASS-HOSTED-ACCEPTANCE-20261114",
+    "FE-RISK-STRATEGY-RESEARCH-UI-20261120"
+  ],
+  "title": "Render the governed meeting roster in both catalogue pages",
+  "delivery_state": "source_verified_pending_deploy",
+  "evidence_boundary": {
+    "source_evidence": "Verified in local execute-plans worktree against canonical MT-1 and MT-4 structured roster_rule objects from services/consultation/meeting_catalogue.json (BFF a92955b8b7d47a3ae811fcbcc0d0812ee5b36ff1), focused Vitest route and catalogue-reader tests, full ESLint check, and TypeScript app/agora typechecks.",
+    "hosted_evidence": "Pending post-merge deployment and authenticated read-only browse verification by the hosted acceptance coordinator on the exact accepted Dev FE/BFF pair."
+  },
+  "official_browse_failures_and_local_reproduction": {
+    "accepted_pair_crawl": {
+      "fe_gate_run_id": "44918407417",
+      "root_run_id": "44915049855",
+      "artifact_id": "14713444018",
+      "artifact_zip_sha256": "cca7476aecd0785c31d16e396089ddc641625693023adea1c3e1726bdb39d94b",
+      "report_path": "current-run/management-hosted-acceptance-2026-11-21.json",
+      "report_sha256": "dc4043e37d899fd88edbb74eaaeeb0528c2fec077652ffdddf648bd2cf64a6d5",
+      "fe_sha": "84ac2ac67fd2abc56ba22230fa7065f0c97342e8",
+      "bff_sha": "20ad89fe3cddc6c1426ea3b139a9de3c94a1fc7c",
+      "observed_failure": "/management/governance/consult crashed with React error #31 rendering the structured roster_rule object even though GET /bff/management/consult-rules, GET /bff/management/meetings/catalogue, and GET /bff/personas all returned 200."
+    },
+    "rejected_candidate_crawl": {
+      "fe_gate_run_id": "44926468729",
+      "artifact_id": "14717150070",
+      "artifact_zip_sha256": "66cd5637f8da1958d3cefa83e2e82a2b6e660a6d507ff320a387aac9ff366f00",
+      "report_path": "current-run/management-hosted-acceptance-2026-11-21.json",
+      "report_sha256": "2f6d0d475c1c9bef17bd9d4a83aae4f2f7d79d7fedc077635be608467e2f3913",
+      "fe_sha": "e92fb5176f3618dd095713acb94e63aa292afad6",
+      "bff_sha": "a92955b8b7d47a3ae811fcbcc0d0812ee5b36ff1",
+      "observed_failure": "/management/governance/consult rendered the browser error-boundary marker (labeled crash) despite GET /bff/management/consult-rules, GET /bff/management/meetings/catalogue, and GET /bff/personas returning 200 with zero failed BFF requests."
+    },
+    "local_two_route_reproduction": {
+      "reproduced_on_fe_sha": "e92fb5176f3618dd095713acb94e63aa292afad6",
+      "canonical_catalogue_source_bff_sha": "a92955b8b7d47a3ae811fcbcc0d0812ee5b36ff1",
+      "canonical_catalogue_path": "services/consultation/meeting_catalogue.json",
+      "legacy_string_fixture_log": {
+        "path": "/tmp/pantheon-44926468729-gate.oUcDfJ6Q/meeting-roster-shape-legacy-fixture.log",
+        "sha256": "bbf9607e136de128d4aefc5cc755e9cda2fa001b755f6418cc8a63a5109f618b",
+        "outcome": "2 passed (MeetingsCenterPage and ConsultRulesPage route tests passed with legacy string roster_rule fixtures 'owner_plus_peer_plus_risk' and 'subject_plus_counterparty_plus_risk_plus_red_team')."
+      },
+      "governed_object_fixture_log": {
+        "path": "/tmp/pantheon-44926468729-gate.oUcDfJ6Q/meeting-roster-shape-governed-fixture.log",
+        "sha256": "4a4ec36382cb7a8897ca3418c0547ba6dc8a9cdba691c72985a0c77f1a751eaf",
+        "outcome": "2 failed (Replacing only MT-1 and MT-4 roster_rule with the canonical objects from services/consultation/meeting_catalogue.json caused both MeetingsCenterPage Rules & Budget and ConsultRulesPage to throw 'Objects are not valid as a React child (found: object with keys {chair, participants, min_trading_personas, requires_risk, requires_red_team, ...})' inside the <code> element)."
+      }
+    }
+  },
+  "owned_layer": "Frontend meeting catalogue roster_rule typing, shared display formatting, and rendering across src/lib/bff-v1/meetings.ts, src/management/pages/governance/ConsultRulesPage.tsx, and src/management/pages/meetings/MeetingsCenterPage.tsx",
+  "not_changing": [
+    "Backend consultation owner contract, BFF route (/bff/management/meetings/catalogue), and data owner (consultation)",
+    "Schedule, refusals, M9 budget caps, and read-only governance behavior on ConsultRulesPage and MeetingsCenterPage"
+  ],
+  "changes": {
+    "src/lib/bff-v1/meetings.ts": "Typed MeetingRosterRule on MeetingTypeRule.roster_rule for the consultation owner's structured roster_rule object and exported formatMeetingRosterRule to render the existing description or governed participant/requirement fields (or '—' when absent).",
+    "src/management/pages/governance/ConsultRulesPage.tsx": "Updated the Deliberative Meetings catalogue section to render structured roster_rule via formatMeetingRosterRule(mt.roster_rule), preserving schedule, refusals, budget, and read-only governance behavior.",
+    "src/management/pages/meetings/MeetingsCenterPage.tsx": "Updated the Rules & Budget catalogue tab to render structured roster_rule via formatMeetingRosterRule(mt.roster_rule), preserving schedule, refusals, and M9 budget display.",
+    "src/management/pages/meetings/meetings.test.tsx": "Replaced MT-1 and MT-4 string roster_rule fixtures in recordedCatalogueResponse with the exact canonical structured objects from services/consultation/meeting_catalogue.json, verified both ConsultRulesPage and MeetingsCenterPage Rules & Budget render readable text without React child errors, and added regression coverage for absent description fallback, navigation to /management/meetings?tab=rules, and unavailable states.",
+    "src/lib/bff-v1/meetings.test.ts": "Replaced the catalogue test fixture with canonical MT-1 and MT-4 structured roster_rule objects and added unit tests for formatMeetingRosterRule with present and absent descriptions."
+  },
+  "acceptance_mapping": {
+    "1": "Both ConsultRulesPage (/management/governance/consult) and MeetingsCenterPage Rules & Budget (/management/meetings?tab=rules) render the structured roster_rule from GET /bff/management/meetings/catalogue as readable text (showing description or governed chair/participants/requirements, with honest handling of an absent description) while preserving schedule, refusals, budget, and read-only governance controls.",
+    "2": "Typed MeetingRosterRule on MeetingTypeRule.roster_rule in src/lib/bff-v1/meetings.ts and shared formatMeetingRosterRule across both consumers without changing backend contract, route, or data owner.",
+    "3": "Replaced string fixtures with canonical MT-1 and MT-4 roster_rule objects in src/management/pages/meetings/meetings.test.tsx and src/lib/bff-v1/meetings.test.ts; ran focused Vitest suites, full ESLint check, and TypeScript app/agora typechecks.",
+    "4": "Recorded official browse failures 44918407417 and 44926468729 and local two-route reproduction logs above; documented post-merge hosted browse verification steps for the hosted acceptance coordinator while keeping source and hosted evidence distinct.",
+    "5": "Delivered on task/FE-MEETING-ROSTER-CATALOGUE-20261121 from execute-plans dev for independent review by Codex and integration via required CI."
+  },
+  "hosted_browser_acceptance_steps_for_coordinator": [
+    "1. Verify exact accepted Dev FE/BFF pair before and after the browse session via https://app.dev.mvl-cap.tw/deployment.json and https://api.dev.mvl-cap.tw/bff/version, confirming frontendSha includes the merged FE-MEETING-ROSTER-CATALOGUE-20261121 commit.",
+    "2. Using the authenticated read-only Dev browse flow, navigate to https://app.dev.mvl-cap.tw/management/governance/consult and confirm GET /bff/management/consult-rules, GET /bff/management/meetings/catalogue, and GET /bff/personas return 200, zero React error #31 / error-boundary markers appear, and data-testid='consult-deliberative-types' renders readable roster rules for MT-1..MT-6.",
+    "3. Follow data-testid='consult-link-meetings-rules' (or navigate to https://app.dev.mvl-cap.tw/management/meetings?tab=rules) and confirm data-testid='meetings-catalogue-view' renders the structured roster rules, schedule, refusals, and M9 budget caps with zero React child errors."
+  ],
+  "validation": {
+    "commands": [
+      {
+        "command": "./node_modules/.bin/vitest run src/lib/bff-v1/meetings.test.ts src/management/pages/meetings/meetings.test.tsx",
+        "status": "passed",
+        "summary": "2 test files passed, 28 tests passed (0 unhandled errors)"
+      },
+      {
+        "command": "npm run lint",
+        "status": "passed",
+        "summary": "0 errors, 105 pre-existing warnings"
+      },
+      {
+        "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+        "status": "passed",
+        "summary": "exit 0, 0 errors"
+      }
+    ]
+  }
+}

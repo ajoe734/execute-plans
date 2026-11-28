@@ -46,6 +46,7 @@ export interface PostmortemListQuery {
   status?: string;
   q?: string;
   time_range?: string;
+  include_infrastructure?: boolean;
 }
 
 export interface PostmortemSurfaceState {
@@ -57,6 +58,7 @@ export interface PostmortemSurfaceState {
 
 export interface PostmortemResponseMeta {
   total?: number;
+  hidden_infrastructure_count?: number | null;
   snapshot_at?: string;
   staleness?: {
     served_from?: string;
@@ -107,8 +109,18 @@ function normalizeMeta(value: unknown): PostmortemResponseMeta {
     };
   }
   const staleness = asRecord(meta.staleness);
+  const rawHidden = meta.hidden_infrastructure_count;
+  const hiddenInfrastructureCount =
+    typeof rawHidden === "number" && Number.isFinite(rawHidden) && rawHidden >= 0
+      ? Math.trunc(rawHidden)
+      : rawHidden === null
+        ? null
+        : undefined;
   return {
     total: typeof meta.total === "number" ? meta.total : undefined,
+    ...(hiddenInfrastructureCount !== undefined
+      ? { hidden_infrastructure_count: hiddenInfrastructureCount }
+      : {}),
     snapshot_at: asString(meta.snapshot_at) || undefined,
     staleness: Object.keys(staleness).length > 0 ? {
       served_from: asString(staleness.served_from) || undefined,
@@ -220,6 +232,9 @@ function buildListQuery(
   const timeRange = asString(query.time_range);
   if (timeRange) {
     out.time_range = timeRange;
+  }
+  if (query.include_infrastructure === true) {
+    out.include_infrastructure = "true";
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }

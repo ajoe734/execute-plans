@@ -91,6 +91,16 @@ describe("StrategyDetail spec & artifacts truth (FE-STRATEGY-DETAIL-TRUTH-202611
       serverError.unmount();
 
       get.mockRejectedValue(new TypeError("Failed to fetch"));
+      const networkError = renderPage();
+      expect(await screen.findByText("Strategy could not be loaded.")).toBeInTheDocument();
+      expect(screen.queryByText(/找不到/)).not.toBeInTheDocument();
+      networkError.unmount();
+
+      get.mockResolvedValue({
+        id: STRATEGY_ID,
+        status: "unavailable",
+        meta: { status: "unavailable", surfaces: { strategies_detail: { status: "unavailable" } } },
+      } as unknown as Strategy);
       renderPage();
       expect(await screen.findByText("Strategy could not be loaded.")).toBeInTheDocument();
       expect(screen.queryByText(/找不到/)).not.toBeInTheDocument();
@@ -450,5 +460,69 @@ describe("StrategyDetail spec & artifacts truth (FE-STRATEGY-DETAIL-TRUTH-202611
     expect(screen.getByTestId("strategy-params-empty")).toHaveTextContent(
       "No trading rule is recorded for this strategy.",
     );
+  });
+
+  it("shows section-specific unavailable state (and never 'no data' or 'no matching records') for every secondary section when its read fails", async () => {
+    await i18n.changeLanguage("en-US");
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValue(strategy("alpha.momo"));
+    vi.spyOn(bffV1.watchers, "forSubject").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.decisionJournal, "forSubject").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.objectVersions, "forSubject").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.research, "list").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.alerts, "list").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.incidents, "list").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.artifacts, "list").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.evolution, "list").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.approvals, "list").mockRejectedValue(new Error("down"));
+    vi.spyOn(managementConsoleReads, "lineage").mockRejectedValue(new Error("down"));
+    vi.spyOn(bffV1.audit, "list").mockRejectedValue(new Error("down"));
+
+    renderPage();
+
+    expect(await screen.findByText("Watchers unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Decision journal unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-watchers-section")).not.toHaveTextContent(/No matching records/i);
+    expect(screen.getByTestId("strategy-journal-section")).not.toHaveTextContent(/No matching records/i);
+
+    click(await screen.findByRole("tab", { name: /^Spec/i }));
+    expect(await screen.findByTestId("strategy-versions-unavailable")).toHaveTextContent(
+      "Version history unavailable",
+    );
+
+    click(await screen.findByRole("tab", { name: /Experiments/i }));
+    expect(await screen.findByText("Experiments unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-experiments-section")).not.toHaveTextContent(/No matching records/i);
+
+    click(await screen.findByRole("tab", { name: /Risk & Alerts/i }));
+    expect(await screen.findByText("Alerts unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-alerts-section")).not.toHaveTextContent(/No matching records/i);
+
+    click(await screen.findByRole("tab", { name: /Incidents/i }));
+    expect(await screen.findByText("Incidents unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-incidents-section")).not.toHaveTextContent(/No incidents linked/i);
+
+    click(await screen.findByRole("tab", { name: /^Artifacts/i }));
+    expect(await screen.findByText("Artifacts unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-artifacts-section")).not.toHaveTextContent(/No matching records/i);
+
+    click(await screen.findByRole("tab", { name: /Evolution/i }));
+    expect(await screen.findByTestId("strategy-evolution-unavailable")).toHaveTextContent(
+      "Evolution programs unavailable",
+    );
+    expect(screen.getByTestId("strategy-evolution-section")).not.toHaveTextContent(/No evolution programs derived/i);
+
+    click(await screen.findByRole("tab", { name: /Governance/i }));
+    expect(await screen.findByText("Governance requests unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-governance-section")).not.toHaveTextContent(/No governance requests/i);
+
+    click(await screen.findByRole("tab", { name: /^Lineage$/i }));
+    expect(await screen.findByTestId("strategy-lineage-unavailable")).toHaveTextContent(
+      "Lineage unavailable",
+    );
+    expect(screen.getByTestId("strategy-lineage-section")).not.toHaveTextContent(/No lineage available/i);
+
+    click(await screen.findByRole("tab", { name: /Audit/i }));
+    expect(await screen.findByText("Audit events unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-audit-section")).not.toHaveTextContent(/No audit events/i);
   });
 });

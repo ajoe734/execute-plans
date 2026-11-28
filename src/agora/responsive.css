@@ -50,10 +50,8 @@
     padding-right: 0.875rem;
   }
 
-  [data-testid="trading-desk-bottom-strip"] {
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: max(0.25rem, env(safe-area-inset-left));
-    padding-right: max(0.25rem, env(safe-area-inset-right));
+  [data-testid="trading-desk-quick-tasks"] {
+    scrollbar-width: thin;
   }
 
   /* Trading Room: task and risk first; desktop rails become explicit panes. */

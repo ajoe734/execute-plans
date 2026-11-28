@@ -1,0 +1,92 @@
+{
+  "schema_version": "pantheon.management-hosted-acceptance.failed-read-detail-evidence.v1",
+  "task_id": "FE-CRAWL-FAILED-READ-DETAIL-20261126",
+  "owner": "Claude",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-CRAWL-FAILED-READ-DETAIL-20261126",
+  "base_commit": "b53aaa794",
+  "timestamp": "2026-11-26T05:40:00Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC1",
+    "work_package": "WP1.2",
+    "source_run": "Dev release Root 45740904149 (BFF 8e67d240e + FE 38e5337d1), check:management-crawl as viewer: 14/110 routes failed; artifact dev-acceptance-verdict-45740904149-1/acceptance-crawl.json lists route + reason flags only."
+  },
+  "modified_surfaces": [
+    "scripts/accept-management-hosted-production.mjs",
+    "src/test/accept-management-honest-not-found.test.ts",
+    "docs/deployment/evidence/FE-CRAWL-FAILED-READ-DETAIL-20261126/evidence.json"
+  ],
+  "unchanged_scoped_surfaces": {
+    "scripts/lib/management-routes.mjs": "No change needed: the four fixture routes are already kind detail-or-alias with the right entity endpoint; classification was not the cause (asserted in a unit test).",
+    "src/test/accept-management-route-attribution.test.ts": "No change; all 60 existing tests still pass against the new crawl."
+  },
+  "acceptance_coverage": {
+    "AC1_failed_read_detail": {
+      "passed": true,
+      "shape": "routes[].failedReads[] = {method, path, status, error, elapsedMs, pending, reason, honestNotFound, streamRule, counted}; routes[].failedReadsOmitted; manifest.failedReadDetail = {capPerRoute, capPerRun, recorded, omitted}.",
+      "content_rules": "path is the pathname plus query keys with values removed (sanitizeReadPath); error is the browser network errorText only (<=120 chars); no headers, tokens, cookies or response bodies are read into the detail. reason is one of http_status, network_error, pending_response, pending_body, unexpected_status, invalid_body. counted=true exactly when the read produced api_data_failure or data_reads_incomplete; excused reads (honest 404, stream 409) are kept with counted=false so the reader sees why they did not count.",
+      "bounds": "FAILED_READ_CAP_PER_ROUTE=12 (counted failures first), FAILED_READ_CAP_PER_RUN=300 across the run, with omitted counts recorded. ok routes record failedReads=[].",
+      "markdown": "The 'Route and detail data failures' section now appends the counted failed reads (method path status elapsed) to each failing route.",
+      "tests": [
+        "failed-read detail per non-ok route > a 503 read fails and is named with method, path, status and elapsed ms",
+        "failed-read detail per non-ok route > records the network error of a failed data read and strips query values",
+        "failed-read detail per non-ok route > names a 2xx data read whose body is an error as invalid_body, without the body",
+        "failed-read detail size bounds > (3 tests)"
+      ]
+    },
+    "AC2_fixture_failure_explanation": {
+      "passed": true,
+      "classification": "Not the cause. stg_001, rb_q2_2026, ev_001, dp_001 are baseline detail-or-alias routes with an entity endpoint, so honestNotFound applied and their entity 404 was excused.",
+      "cause_viewer_only_read": "RebalanceDetail, DeploymentDetail and EvolutionDetail call bffV1.approvals.list() whether or not the entity exists. As viewer, GET /bff/approvals returns 403 (operator-bff log: 403 GET /bff/approvals x10 during the crawl window). admintest has the approvals role, which is why the same pages showed no response >= 400 when opened as admintest. This is a real 403, not a misclassified honest not-found, so rb_q2_2026, rebalances/rb_q2_2026, ev_001 and dp_001 still fail (now naming GET /bff/approvals 403) until MGMT-VIEWER-APPROVALS-READ-20261126 lands or the pages stop issuing the read.",
+      "cause_stream_409": "Every management page opens GET /bff/events/stream via PlatformShell. The BFF answers 409 replay_unavailable when the Last-Event-ID is outside its replay window, and the FE handles it (liveSse fetchSse drops the id and reconnects). The crawl counted every attributed BFF response >= 400, including this stream 409, as api_data_failure. StrategyDetail issues only GET /bff/strategies/stg_001 (404) before a strategy loads (its approvals section is gated on a loaded strategy), so for stg_001 the 409 stream response (x35 in the window) was the only remaining >= 400 response. This was the misclassification; it is fixed by the explicit stream rule.",
+      "fix_scope": "Only the stream 409 is excused, by an explicit rule. Honest-not-found classification, the 404 rule and all other data checks are unchanged.",
+      "caveat": "Inferred from FE source and the operator-bff log, not from a per-read hosted artifact; no hosted crawl ran in this task (no viewer token here). The next release crawl records failedReads and will confirm or refute it per route.",
+      "tests": [
+        "why the four fixture-id details failed while rendering an honest not-found > classification is not the cause",
+        "... > rebalance, deployment and evolution detail pages read /bff/approvals regardless of the entity; strategy gates it on a loaded strategy",
+        "... > <each of the 4 routes>: 404 + stream 409 is an honest not-found and passes",
+        "... > <rb_q2_2026, ev_001, dp_001>: the viewer-only GET /bff/approvals 403 still fails and is named",
+        "failed-read detail per non-ok route > a fixture id whose page shows an error still fails, even with an honest 404",
+        "failed-read detail per non-ok route > a fixture id whose page is blank still fails"
+      ]
+    },
+    "AC3_tests": {
+      "passed": true,
+      "honest_not_found_fixture_passes": "4 route tests (404 + stream 409 -> ok, failedReads=[])",
+      "live_id_404_still_fails": "failed-read detail per non-ok route > live-id detail returning 404 still fails and names the 404 as not an honest not-found",
+      "403_503_named": "GET /bff/approvals 403 (3 tests), GET /bff/management/persona-fleet 503, stream 403/503",
+      "stream_rule": "STREAM_RESPONSE_RULES = {'/bff/events/stream': GET, excused [409], rule stream_replay_resync}. Tests: only GET /bff/events/stream 409 is excused; 401/403/500/503 and POST are not; a 409 on /bff/approvals still fails; prototype keys are not matched.",
+      "mutation_check": "Removing streamResponseRule from apiFailure makes the 4 'honest not-found passes' tests fail (verified, then restored)."
+    },
+    "AC4_runtime_budget": {
+      "passed": true,
+      "before": "Pantheon release artifact acceptance-crawl.json = 18,826 bytes (Root 45740904149), a summary written by the Pantheon stage and not changed by this FE-only task. The full FE crawl JSON (management-hosted-acceptance-*.json) is not uploaded by the release workflow, so it has no retained absolute baseline.",
+      "after_delta_measured": "Measured with the shipped failedReadDetail on the observed failure set (13 failing routes after the fix, 27 entries): +7,517 bytes, plus 48 bytes per ok route (~4.6 KB for 97 ok routes), so about +12 KB per release crawl.",
+      "upper_bound": "Worst-case entry 526 bytes (path capped at 200, error at 120): <=6.6 KB per route, <=166 KB per run (300 entries).",
+      "recurring_jobs": 0,
+      "persistent_writers_on_hosted": 0,
+      "note": "Read-only crawl unchanged: no new requests, no writes, no schedules. The detail is computed in memory from requests the crawl already observes."
+    },
+    "AC5_evidence_and_residuals": {
+      "passed": true,
+      "evidence_path": "docs/deployment/evidence/FE-CRAWL-FAILED-READ-DETAIL-20261126/evidence.json",
+      "reviewer_family": "Owner Claude (Anthropic); reviewer Antigravity (different model family)."
+    }
+  },
+  "residual_findings": [
+    "Viewer 403 on GET /bff/approvals: RebalanceDetail, DeploymentDetail, EvolutionDetail and CapitalPoolDetail (and the approvals/governance/runtimes pages) issue the approvals read as viewer. Tracked by MGMT-VIEWER-APPROVALS-READ-20261126; these routes keep failing until that lands. Alternatively, detail pages could skip reads the role cannot perform.",
+    "GET /bff/events/stream 409 x35 in a 17-minute crawl: frequent replay_unavailable suggests reconnects carry a Last-Event-ID that the serving replica's in-memory replay buffer does not hold (multi-replica or restarted buffer), or a client-generated realtime id (useLiveList passes realtime.getLastEventId(), which can be a locally generated bus id). The client recovers, but it is a reconnect storm worth a product follow-up.",
+    "503 GET /bff/management/persona-fleet and 503 GET /bff/management/human-inbox/readiness_blocker%3A... under crawl load: real BFF availability defects, not crawl misclassification; still fail and are now named per route.",
+    "/management/risk loading_unresolved + data_reads_incomplete: failedReads will now name the pending read (pending_response/pending_body) on the next run.",
+    "Pantheon acceptance stage summary (acceptance-crawl.json) copies only route + reason flags; it should copy routes[].failedReads from the FE crawl JSON to surface the detail in the release artifact (Pantheon-side follow-up, out of this repo)."
+  ],
+  "verification": {
+    "commands": [
+      "npx vitest run src/test/accept-management-honest-not-found.test.ts src/test/accept-management-route-attribution.test.ts -> 2 files, 89 passed, exit 0",
+      "npx eslint scripts/accept-management-hosted-production.mjs src/test/accept-management-honest-not-found.test.ts -> exit 0"
+    ],
+    "hosted_run": "not run in this task (no viewer token available to the worker); the first release after merge exercises the detail."
+  }
+}

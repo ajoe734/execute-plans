@@ -200,4 +200,57 @@ describe("postmortemClient", () => {
     expect(detail.item.id).toBe("pm-canonical-001");
     expect(detail.item.postmortem_id).toBe("pm-canonical-001");
   });
+
+  it("passes include_infrastructure=true when requested and normalizes meta.hidden_infrastructure_count (including null/absent)", async () => {
+    vi.mocked(bffFetch).mockResolvedValueOnce({
+      data: [canonicalRecord],
+      page_info: { total: 103, page_size: 50, next_page_token: "50" },
+      meta: {
+        total: 103,
+        hidden_infrastructure_count: 5355,
+        surfaces: { postmortems: { status: "ok", source: "service_client" } },
+      },
+    });
+
+    const defaultRes = await listPostmortems({ page_size: 50 });
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "GET",
+      path: "/api/v1/postmortems",
+      query: { page_size: 50 },
+    });
+    expect(defaultRes.meta.hidden_infrastructure_count).toBe(5355);
+
+    vi.mocked(bffFetch).mockResolvedValueOnce({
+      data: [canonicalRecord],
+      page_info: { total: 5458, page_size: 50, next_page_token: "50" },
+      meta: {
+        total: 5458,
+        hidden_infrastructure_count: 0,
+        surfaces: { postmortems: { status: "ok", source: "service_client" } },
+      },
+    });
+
+    const includeInfraRes = await listPostmortems({
+      page_size: 50,
+      include_infrastructure: true,
+    });
+    expect(bffFetch).toHaveBeenLastCalledWith({
+      method: "GET",
+      path: "/api/v1/postmortems",
+      query: { page_size: 50, include_infrastructure: "true" },
+    });
+    expect(includeInfraRes.meta.hidden_infrastructure_count).toBe(0);
+
+    vi.mocked(bffFetch).mockResolvedValueOnce({
+      data: [],
+      page_info: { total: 0, page_size: 50, next_page_token: null },
+      meta: {
+        total: 0,
+        hidden_infrastructure_count: null,
+        surfaces: { postmortems: { status: "unavailable", source: "unavailable" } },
+      },
+    });
+    const nullHiddenRes = await listPostmortems({ page_size: 50 });
+    expect(nullHiddenRes.meta.hidden_infrastructure_count).toBeNull();
+  });
 });

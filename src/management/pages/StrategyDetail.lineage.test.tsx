@@ -103,10 +103,15 @@ describe("StrategyDetail Lineage tab — registry truth (FE-LINEAGE-REGISTRY-GRA
     const specNode = await screen.findByTestId(`lineage-node-${spec}`);
     expect(specNode).toHaveAttribute("data-node-state", "draft");
     expect(specNode).toHaveAttribute("data-node-risk", "");
+    expect(specNode).toHaveAttribute("data-node-highlight", "true");
+
+    const baseSpecNode = screen.getByTestId(`lineage-node-${baseSpec}`);
+    expect(baseSpecNode).toHaveAttribute("data-node-highlight", "false");
 
     const artNode = screen.getByTestId(`lineage-node-${art}`);
     expect(artNode).toHaveAttribute("data-node-state", "approved");
     expect(artNode).toHaveAttribute("data-node-risk", "");
+    expect(artNode).toHaveAttribute("data-node-highlight", "false");
 
     const personaNode = screen.getByTestId(`lineage-node-${persona}`);
     expect(personaNode).toHaveAttribute("data-node-state", "");
@@ -147,8 +152,50 @@ describe("StrategyDetail Lineage tab — registry truth (FE-LINEAGE-REGISTRY-GRA
     openLineageTab(lineageTab);
 
     expect(lineageSpy).toHaveBeenCalledWith(STRATEGY_ID);
-    expect(await screen.findByTestId("lineage-empty")).toHaveTextContent("No lineage available.");
+    expect(await screen.findByTestId("lineage-empty")).toHaveTextContent(/No lineage available\.|尚無血緣資料。/);
     expect(screen.queryByTestId("lineage-node-alpha_src")).not.toBeInTheDocument();
     expect(screen.queryByTestId(`lineage-node-dp_${STRATEGY_ID}`)).not.toBeInTheDocument();
+  });
+
+  it("shows unavailable (and never 'No lineage available.') when the lineage read is unavailable or rejects", async () => {
+    vi.spyOn(managementConsoleReads, "lineage").mockResolvedValueOnce({
+      nodes: [],
+      edges: [],
+      meta: {
+        status: "unavailable",
+        source: "service_client",
+        surfaces: { lineage: { status: "unavailable", source: "service_client" } },
+      },
+      page_info: { total: 0, page_size: 0, has_more: false },
+      has_more: false,
+    });
+
+    const first = render(
+      <MemoryRouter initialEntries={[`/management/strategies/${STRATEGY_ID}`]}>
+        <Routes>
+          <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    openLineageTab(await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i }));
+    expect(await screen.findByTestId("strategy-lineage-unavailable")).toHaveTextContent(/Lineage unavailable|血緣資料暫時無法取得/);
+    expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No lineage available/i)).not.toBeInTheDocument();
+    first.unmount();
+
+    vi.spyOn(managementConsoleReads, "lineage").mockRejectedValueOnce(new Error("lineage transport timeout"));
+    render(
+      <MemoryRouter initialEntries={[`/management/strategies/${STRATEGY_ID}`]}>
+        <Routes>
+          <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    openLineageTab(await screen.findByRole("tab", { name: /^(Lineage|血緣)$/i }));
+    expect(await screen.findByTestId("strategy-lineage-unavailable")).toHaveTextContent(/Lineage unavailable|血緣資料暫時無法取得/);
+    expect(screen.queryByTestId("lineage-empty")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No lineage available/i)).not.toBeInTheDocument();
   });
 });

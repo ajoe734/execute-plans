@@ -38,17 +38,17 @@ export function DataTable<T extends { id: string }>({
   const minScrollWidth = Math.max(720, columns.reduce((sum, c) => sum + (c.minWidth ?? 160), 0));
   return (
     <Card
-      className={cn("flex min-h-0 overflow-hidden", fillViewport && "flex-1")}
+      className={cn("flex overflow-hidden", fillViewport ? "min-h-[384px] flex-1" : "min-h-0")}
       data-data-table-layout={fillViewport ? "fill" : "document"}
     >
       <PinnedHorizontalScroll
         minScrollWidth={minScrollWidth}
         showPinnedScrollbar={false}
         className={cn("min-h-0 flex-1", fillViewport && "h-full")}
-        contentClassName="pb-4"
+        contentClassName="pb-4 [&>div]:overflow-visible"
         viewportClassName={cn(
           "overflow-auto pb-4",
-          fillViewport ? "h-full min-h-0" : "max-h-[calc(100dvh-10rem)]",
+          fillViewport ? "h-full min-h-[320px]" : "max-h-[calc(100dvh-10rem)]",
         )}
       >
         <Table className="w-full" style={{ minWidth: minScrollWidth }}>
@@ -79,7 +79,16 @@ export function DataTable<T extends { id: string }>({
                 style={{ height: rowH }}
               >
                 {columns.map((c) => (
-                  <TableCell key={c.key} className={cellPad + " " + (c.className ?? "")}>{c.cell(row)}</TableCell>
+                  <TableCell
+                    key={c.key}
+                    className={
+                      cellPad +
+                      " [&_[data-testid=artifact-id]]:max-w-[160px] [&_[data-testid=artifact-id]]:truncate [&_[data-testid=artifact-strategy-id]]:max-w-[160px] [&_[data-testid=artifact-strategy-id]]:truncate [&_[data-testid=artifact-persona-id]]:max-w-[160px] [&_[data-testid=artifact-persona-id]]:truncate " +
+                      (c.className ?? "")
+                    }
+                  >
+                    {c.cell(row)}
+                  </TableCell>
                 ))}
               </TableRow>
             ))}

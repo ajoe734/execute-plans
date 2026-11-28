@@ -171,6 +171,7 @@ export const HighRiskConfirm = ({
     : risk === "medium" ? "medium" : "low";
   const memoPolicy = MEMO_POLICY_BY_RISK[riskClass];
   const memoCheck = validateMemo(memo, riskClass);
+  const memoCount = memo.trim().length;
 
   const tokenRequired = useTokenFlow || !!confirmToken || env === "live" || risk === "critical";
   const token = useTokenFlow
@@ -185,6 +186,13 @@ export const HighRiskConfirm = ({
   const cooldownEndsAt = cooldown?.endsAt ? Date.parse(cooldown.endsAt) : null;
   const cooldownSec = cooldownEndsAt ? Math.max(0, Math.ceil((cooldownEndsAt - now) / 1000)) : null;
   const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && !cooldownBlocked && (!useTokenFlow || (!!issuedToken && !issueError));
+  const unmet: string[] = [];
+  if (!memoOk) unmet.push(t("confirm.unmet.memo", { n: memoPolicy.minChars, count: memoCount }));
+  if (!memoMaxOk) unmet.push(t("confirm.unmet.tooLong"));
+  if (useTokenFlow && issuing) unmet.push(t("confirm.unmet.tokenIssuing"));
+  else if (useTokenFlow && tokenExpired) unmet.push(t("confirm.unmet.tokenExpired"));
+  else if (tokenRequired && !tokenOk) unmet.push(t("confirm.unmet.token", { token }));
+  if (cooldownBlocked) unmet.push(t("confirm.unmet.cooldown", { s: cooldownSec ?? 0 }));
   const ttlSec = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
 
   const reset = () => {
@@ -308,19 +316,24 @@ export const HighRiskConfirm = ({
                 {t("confirm.memo")}
                 {memoPolicy.required && <span className="text-destructive"> *</span>}
               </Label>
+              {memoPolicy.required && (
+                <div className="text-xs text-muted-foreground" data-testid="memo-requirement">
+                  {t("confirm.memoRequirement", { n: memoPolicy.minChars })}
+                </div>
+              )}
               <Textarea
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
-                placeholder={t("confirm.memoPlaceholder")}
+                placeholder={memoPolicy.required ? t("confirm.memoPlaceholder", { n: memoPolicy.minChars }) : t("confirm.memoPlaceholderOptional")}
                 rows={3}
                 maxLength={2000}
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
                   {!memoOk && memoCheck.ok === false && (
-                    memoCheck.reason === "REQUIRED" ? t("confirm.memoHint") :
-                    memoCheck.reason === "TOO_SHORT" ? t("confirm.memoTooShort", { defaultValue: "Memo must be at least {{n}} characters for {{risk}} actions", n: memoPolicy.minChars, risk: riskClass }) :
-                    memoCheck.reason === "TOO_LONG" ? t("confirm.memoTooLong", { defaultValue: "Memo exceeds 2000 characters" }) : ""
+                    memoCheck.reason === "REQUIRED" ? t("confirm.memoHint", { n: memoPolicy.minChars, count: memoCount }) :
+                    memoCheck.reason === "TOO_SHORT" ? t("confirm.memoTooShort", { n: memoPolicy.minChars, count: memoCount }) :
+                    memoCheck.reason === "TOO_LONG" ? t("confirm.memoTooLong") : ""
                   )}
                   {memoPolicy.recommendsIncidentRef && memoOk && (
                     <span className="text-muted-foreground/80">{t("confirm.memoIncidentRef", { defaultValue: "Tip: reference an incident id (#INC-...)" })}</span>
@@ -363,6 +376,15 @@ export const HighRiskConfirm = ({
             )}
           </div>
         </ScrollArea>
+
+        {!ok && !submitting && unmet.length > 0 && (
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs" data-testid="confirm-unmet">
+            <div className="font-medium">{t("confirm.unmet.title")}</div>
+            <ul className="list-disc pl-4">
+              {unmet.map((u) => <li key={u}>{u}</li>)}
+            </ul>
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="ghost" disabled={submitting} onClick={() => onOpenChange(false)}>{t("actions.cancel")}</Button>

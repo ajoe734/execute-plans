@@ -1,0 +1,54 @@
+{
+  "task_id": "FE-E2E-NO-TRACKED-EVIDENCE-WRITES-20261126",
+  "title": "End-to-end specs never write into committed evidence files",
+  "owner": "Claude2",
+  "reviewer": "Antigravity",
+  "register_class": "RC1",
+  "delivery_repository": "ajoe734/execute-plans",
+  "base_branch": "dev",
+  "base_sha": "750f87641",
+  "delivery_state": "implemented_ready_for_review",
+  "trigger": "Pantheon FE-BFF Integration Gate run 45728630811 on execute-plans dev 750f87641 failed Gate 0 (trackedDirty) because e2e/06-entity-registry.spec.ts rewrote the committed docs/deployment/evidence/FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125/strategy-detail-overview-1274x627.png on every run.",
+  "hosted_verification_note": "No VM or SSH access; no operator keys read. Functional evidence only (local loopback Playwright with the specs' own recorded fixture rows). Hosted verification belongs to the operator acceptance task.",
+  "change": {
+    "summary": "Each of the three specs gets a local captureEvidence(page, subdir, file, options) helper that returns immediately when E2E_EVIDENCE_DIR is unset and otherwise mkdirs ${E2E_EVIDENCE_DIR}/<subdir> and screenshots there (same opt-in pattern as e2e/management-list-short-window.spec.ts:871). Every page.screenshot that targeted docs/deployment/evidence/... now calls the helper; the unconditional mkdirSync calls into docs/ (06 inline, evidence-short-window beforeAll, 21 lineage + knowledge-postmortem tests) are removed.",
+    "screenshot_calls_redirected": {
+      "e2e/06-entity-registry.spec.ts": 1,
+      "e2e/evidence-short-window.spec.ts": 7,
+      "e2e/21-management-canonical-reads.spec.ts": 9
+    },
+    "measurement_files": "None of the three specs wrote measurement files; MEASUREMENT lines go to stdout via console.log only and are unchanged.",
+    "subdir_names": "Opt-in output keeps the original task folder names (FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125, FE-EVIDENCE-CITED-20261125/screenshots, FE-LINEAGE-LOOKUP-20261125, FE-KNOWLEDGE-POSTMORTEM-TRUTH-20261125) under E2E_EVIDENCE_DIR so provenance is preserved."
+  },
+  "acceptance_coverage": {
+    "1": {
+      "status": "met",
+      "what": "Screenshots are written only when E2E_EVIDENCE_DIR is set; nothing is written otherwise. No expect() call, fixture, route mock or test was added, removed or edited.",
+      "proof": [
+        "git diff 750f87641 HEAD -- e2e/ shows only screenshot/mkdir lines replaced by captureEvidence and the helper definition",
+        "playwright-06-opt-in.log: with E2E_EVIDENCE_DIR set, the StrategyDetail test passes and writes <scratch>/evdir/FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125/strategy-detail-overview-1274x627.png; git status --porcelain stays empty"
+      ]
+    },
+    "2": {
+      "status": "met",
+      "command": "env -u E2E_EVIDENCE_DIR npx playwright test e2e/06-entity-registry.spec.ts --reporter=line; git status --porcelain",
+      "result": "HEAD b092c5d9b (clean before), 5 passed / 1 skipped (live BFF probe, gated on FE_INT_GATE_LIVE_BFF), playwright exit 0, git status --porcelain printed nothing (0 lines)",
+      "proof": [
+        "playwright-06-clean-checkout.log"
+      ],
+      "extra": "evidence-short-window.spec.ts + 21-management-canonical-reads.spec.ts with E2E_EVIDENCE_DIR unset: 13 passed, exit 0, git status --porcelain empty (playwright-evidence-short-window-and-21.log)",
+      "earlier_evidence_untouched": "git diff --quiet 750f87641 HEAD -- docs/ returned 0 before this evidence folder was added; the task commit adds files only under docs/deployment/evidence/FE-E2E-NO-TRACKED-EVIDENCE-WRITES-20261126/"
+    },
+    "3": {
+      "status": "met",
+      "lint": "npm run lint: 0 errors, 134 warnings (pre-existing), exit 0; npx eslint on the three specs: exit 0, no output",
+      "typecheck": "npm run typecheck (tsc -p tsconfig.app.json --noEmit): exit 0. tsconfig.app.json does not include e2e/, so the specs are additionally type-checked by Playwright's transpile at run time (all runs above loaded them). An ad-hoc tsc --strict over the three specs reported errors only in e2e/helpers/auth.ts (untyped .mjs import) and src/.../poolRules.ts ('@/' path alias not configured ad hoc), none in the three specs.",
+      "scope": "Files changed vs 750f87641: the three specs plus this evidence folder only.",
+      "assertions": "No assertion changed, weakened or deleted."
+    }
+  },
+  "residual_findings": [
+    "Out of scope, not changed: e2e/30-management-data-source-control.spec.ts:36, e2e/management-ai-product-journey.spec.ts:48 and e2e/management-product-journey.spec.ts:49 fall back to a committed docs/deployment/evidence/... folder when PANTHEON_AUDIT_OUT_DIR is unset. The integration gate sets PANTHEON_AUDIT_OUT_DIR, so they do not trip Gate 0 there, but a plain local run can still dirty tracked files. Suggest the same E2E_EVIDENCE_DIR opt-in in a follow-up task.",
+    "A CI step asserting git status --porcelain is empty right after the e2e job would catch this class earlier than Gate 0."
+  ]
+}

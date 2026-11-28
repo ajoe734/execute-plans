@@ -1,0 +1,313 @@
+{
+  "task_id": "FE-MGMT-LIST-SHORT-WINDOW-20261125",
+  "title": "Management list tables stay readable in a short window",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "register_class": "RC6",
+  "delivery_repository": "ajoe734/execute-plans",
+  "base_branch": "dev",
+  "root_cause": {
+    "page_body_overflow_hidden": "src/platform/components/PageHeader.tsx line 79 gave PageBody in fill mode overflow-hidden, preventing vertical page scrolling when top controls, banners, the table, and the pager exceeded a short viewport height (1274x627).",
+    "data_table_min_h_0": "src/platform/components/DataTable.tsx line 41 gave Card in fillViewport mode min-h-0, so flexbox compressed the table viewport to the remaining height (measured at 1274x627: strategies scrollerClientHeight 84px of 239px; personas 341px; artifacts 293px).",
+    "table_sticky_header_intercepted": "src/components/ui/table.tsx wraps <table> in <div class='relative w-full overflow-auto'>, which intercepted position:sticky on <TableHeader className='sticky top-0 z-10 bg-card'> inside DataTable so the header scrolled off-screen instead of sticking to PinnedHorizontalScroll's scroll viewport.",
+    "wheel_overscroll_contained": "src/platform/components/PinnedHorizontalScroll.tsx line 83 set overscroll-contain on [data-management-table-scrollbar='native'], blocking mouse wheel events at the table's scroll boundary from chaining to scroll PageBody."
+  },
+  "changes": {
+    "src/platform/components/PageHeader.tsx": "In PageBody fill mode, replaced overflow-hidden with overflow-y-auto overflow-x-hidden while preserving the FE-AI-BUTTON-PAGER-CLEARANCE-20261107 bottom clearance padding pb-[calc(1rem+var(--page-body-bottom-clearance,0px))] sm:pb-[calc(1.5rem+var(--page-body-bottom-clearance,0px))].",
+    "src/platform/components/DataTable.tsx": "In fillViewport mode, replaced min-h-0 with min-h-[384px] on Card and min-h-[320px] on the scroll viewport so both Card (384px) and inner scroll viewport clientHeight (367px with 2px border and 15px horizontal scrollbar) are never shorter than 320px and fit >=4 full 77px deployment rows below the 48px sticky header (4*77+48+15+2=373px <= 384px) without altering 1920x1000 layout (where smallest Card height is 474px). Added [&>div]:overflow-visible to PinnedHorizontalScroll contentClassName so sticky TableHeader sticks to the scroll viewport (theadStickyDelta=0), and single-line truncation on secondary artifact ID elements (artifact-id, artifact-strategy-id, artifact-persona-id).",
+    "src/platform/components/PinnedHorizontalScroll.tsx": "Removed overscroll-contain from the native scroll viewport so mouse wheel events over a table at its scroll end continue to scroll PageBody.",
+    "src/platform/components/PageHeader.test.tsx": "Updated fill-mode test assertion from overflow-hidden to overflow-y-auto and overflow-x-hidden while verifying bottom clearance padding.",
+    "src/platform/components/DataTable.test.tsx": "Added unit test verifying fillViewport min-h-[384px] on Card, min-h-[320px] and absence of overscroll-contain on the scroll viewport, and document-mode min-h-0 preservation.",
+    "src/management/pages/ObjectListPage.test.tsx": "Updated fill-mode class assertions on pageBody and dataTable and added a 13-page suite verifying all 13 ObjectListPage consumers keep their scrollable fill PageBody, >=320px table area, filters, pager, empty, and unavailable states.",
+    "e2e/management-list-short-window.spec.ts": "Added Playwright spec with real scrollbars (ignoreDefaultArgs: ['--hide-scrollbars']) across 1274x627, 1280x720, and 1920x1000 for strategies, personas, artifacts, and deployments using real captured BFF row shapes, plus mouse wheel scroll-chaining verification."
+  },
+  "acceptance_coverage": {
+    "1": "In fill mode PageBody scrolls vertically when content does not fit (pageBodyScrollHeight 769 > 486 on strategies@1274x627, 560 > 486 on artifacts@1274x627, 512 > 486 on personas/deployments@1274x627) and the table area is never shorter than 320px (cardHeight >= 384px, scrollerHeight >= 382px, scrollerClientHeight >= 367px across all routes and viewports). At 1920x1000 the measured layout is identical to before (pageBodyClientHeight=859, pageBodyScrollHeight=859, strategies cardHeight=474/scrollerClientHeight=457, personas cardHeight=731/scrollerClientHeight=729, artifacts cardHeight=683/scrollerClientHeight=681, deployments cardHeight=731/scrollerClientHeight=729, pagerBottom=896, aiButtonTop=936).",
+    "2": "e2e/management-list-short-window.spec.ts runs with hide-scrollbars off at 1274x627, 1280x720, and 1920x1000 for strategies, personas, artifacts, and deployments with a fixture BFF serving real row shapes: after at most one page scroll, visible full rows at 1274x627 are strategies=6, personas=6, artifacts=4, deployments=4 (all >=4); at 1280x720 are strategies=6, personas=7, artifacts=4, deployments=5; at 1920x1000 are strategies=7, personas=8, artifacts=11, deployments=8. Sticky header stays fixed (theadStickyDelta=0 on all 12 route-viewport combinations). Pager and assistant button never overlap (overlaps=false; strategies pagerBottom/aiButtonTop: 523<=563 at 1274x627, 616<=656 at 1280x720, 896<=936 at 1920x1000).",
+    "3": "Removing overscroll-contain in PinnedHorizontalScroll allows mouse wheel events over a table at its vertical end to scroll PageBody (verified in e2e/management-list-short-window.spec.ts: wheel down at table bottom advances pageBody.scrollTop from 0 to >0; wheel up at table top returns pageBody.scrollTop to 0). FE-AI-BUTTON-PAGER-CLEARANCE-20261107 clearance (--page-body-bottom-clearance: 5rem) is preserved.",
+    "4": "All 13 pages using ObjectListPage (StrategiesList, PersonasList, CapitalPoolsList, RankingFormulasList, RebalancesList, DeploymentsList, EvolutionList, ResearchList, ArtifactsList, ToolsList, McpServersList, SkillsList, ChannelsList) keep their filters, pager, empty, and unavailable states (verified in ObjectListPage.test.tsx, 30/30 tests passing). No existing test was weakened or deleted."
+  },
+  "changed_assertions_justification": [
+    {
+      "file": "src/platform/components/PageHeader.test.tsx",
+      "line": 24,
+      "before": "expect(el.className).toContain(\"overflow-hidden\")",
+      "after": "expect(el.className).toContain(\"overflow-y-auto\"); expect(el.className).toContain(\"overflow-x-hidden\"); expect(el.className).not.toContain(\"overflow-hidden\")",
+      "reason": "PageHeader.tsx line 79 overflow-hidden was the explicit root cause identified in the task brief preventing PageBody in fill mode from scrolling vertically when content exceeds a short window."
+    },
+    {
+      "file": "src/management/pages/ObjectListPage.test.tsx",
+      "line": 144,
+      "before": "expect(pageBody).toHaveClass(\"flex\", \"min-h-0\", \"flex-1\", \"overflow-hidden\") and expect(dataTable).toHaveClass(\"flex-1\", \"min-h-0\", \"overflow-hidden\")",
+      "after": "expect(pageBody).toHaveClass(\"flex\", \"min-h-0\", \"flex-1\", \"overflow-y-auto\", \"overflow-x-hidden\") and expect(dataTable).toHaveClass(\"flex-1\", \"min-h-[384px]\", \"overflow-hidden\") plus expect(native).toHaveClass(\"h-full\", \"min-h-[320px]\", \"overflow-auto\")",
+      "reason": "PageHeader.tsx line 79 overflow-hidden and DataTable.tsx line 41 min-h-0 were the two explicit root causes identified in the task brief that crushed table height in short viewports."
+    }
+  ],
+  "measurements": {
+    "1274x627": {
+      "strategies": {
+        "before_scrollerClientHeight": 84,
+        "after": {
+          "totalRows": 8,
+          "cardHeight": 384,
+          "scrollerHeight": 382,
+          "scrollerClientHeight": 367,
+          "scrollerScrollHeight": 504,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 486,
+          "pageBodyScrollHeight": 769,
+          "initialFullRows": 4,
+          "afterOneScrollFullRows": 6,
+          "theadStickyDelta": 0,
+          "pagerBottom": 523,
+          "aiButtonTop": 563,
+          "overlaps": false
+        }
+      },
+      "personas": {
+        "before_scrollerClientHeight": 341,
+        "after": {
+          "totalRows": 8,
+          "cardHeight": 384,
+          "scrollerHeight": 382,
+          "scrollerClientHeight": 367,
+          "scrollerScrollHeight": 504,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 486,
+          "pageBodyScrollHeight": 512,
+          "initialFullRows": 6,
+          "afterOneScrollFullRows": 6,
+          "theadStickyDelta": 0,
+          "pagerBottom": null,
+          "aiButtonTop": 563,
+          "overlaps": false
+        }
+      },
+      "artifacts": {
+        "before_scrollerClientHeight": 293,
+        "after": {
+          "totalRows": 273,
+          "cardHeight": 384,
+          "scrollerHeight": 382,
+          "scrollerClientHeight": 367,
+          "scrollerScrollHeight": 20537,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 486,
+          "pageBodyScrollHeight": 560,
+          "initialFullRows": 4,
+          "afterOneScrollFullRows": 4,
+          "theadStickyDelta": 0,
+          "pagerBottom": null,
+          "aiButtonTop": 563,
+          "overlaps": false
+        }
+      },
+      "deployments": {
+        "before_scrollerClientHeight": 341,
+        "after": {
+          "totalRows": 8,
+          "cardHeight": 384,
+          "scrollerHeight": 382,
+          "scrollerClientHeight": 367,
+          "scrollerScrollHeight": 696,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 486,
+          "pageBodyScrollHeight": 512,
+          "initialFullRows": 4,
+          "afterOneScrollFullRows": 4,
+          "theadStickyDelta": 0,
+          "pagerBottom": null,
+          "aiButtonTop": 563,
+          "overlaps": false
+        }
+      }
+    },
+    "1280x720": {
+      "strategies": {
+        "totalRows": 8,
+        "cardHeight": 384,
+        "scrollerHeight": 382,
+        "scrollerClientHeight": 367,
+        "scrollerScrollHeight": 504,
+        "theadHeight": 48,
+        "pageBodyClientHeight": 579,
+        "pageBodyScrollHeight": 769,
+        "initialFullRows": 5,
+        "afterOneScrollFullRows": 6,
+        "theadStickyDelta": 0,
+        "pagerBottom": 616,
+        "aiButtonTop": 656,
+        "overlaps": false
+      },
+      "personas": {
+        "totalRows": 8,
+        "cardHeight": 451,
+        "scrollerHeight": 449,
+        "scrollerClientHeight": 434,
+        "scrollerScrollHeight": 504,
+        "theadHeight": 48,
+        "pageBodyClientHeight": 579,
+        "pageBodyScrollHeight": 579,
+        "initialFullRows": 7,
+        "afterOneScrollFullRows": 7,
+        "theadStickyDelta": 0,
+        "pagerBottom": null,
+        "aiButtonTop": 656,
+        "overlaps": false
+      },
+      "artifacts": {
+        "totalRows": 273,
+        "cardHeight": 403,
+        "scrollerHeight": 401,
+        "scrollerClientHeight": 386,
+        "scrollerScrollHeight": 20537,
+        "theadHeight": 48,
+        "pageBodyClientHeight": 579,
+        "pageBodyScrollHeight": 579,
+        "initialFullRows": 4,
+        "afterOneScrollFullRows": 4,
+        "theadStickyDelta": 0,
+        "pagerBottom": null,
+        "aiButtonTop": 656,
+        "overlaps": false
+      },
+      "deployments": {
+        "totalRows": 8,
+        "cardHeight": 451,
+        "scrollerHeight": 449,
+        "scrollerClientHeight": 434,
+        "scrollerScrollHeight": 696,
+        "theadHeight": 48,
+        "pageBodyClientHeight": 579,
+        "pageBodyScrollHeight": 579,
+        "initialFullRows": 5,
+        "afterOneScrollFullRows": 5,
+        "theadStickyDelta": 0,
+        "pagerBottom": null,
+        "aiButtonTop": 656,
+        "overlaps": false
+      }
+    },
+    "1920x1000": {
+      "strategies": {
+        "before": {
+          "cardHeight": 474,
+          "scrollerHeight": 472,
+          "scrollerClientHeight": 457,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859,
+          "pagerBottom": 896,
+          "aiButtonTop": 936
+        },
+        "after": {
+          "totalRows": 8,
+          "cardHeight": 474,
+          "scrollerHeight": 472,
+          "scrollerClientHeight": 457,
+          "scrollerScrollHeight": 504,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859,
+          "initialFullRows": 7,
+          "afterOneScrollFullRows": 7,
+          "theadStickyDelta": 0,
+          "pagerBottom": 896,
+          "aiButtonTop": 936,
+          "overlaps": false
+        }
+      },
+      "personas": {
+        "before": {
+          "cardHeight": 731,
+          "scrollerHeight": 729,
+          "scrollerClientHeight": 729,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859
+        },
+        "after": {
+          "totalRows": 8,
+          "cardHeight": 731,
+          "scrollerHeight": 729,
+          "scrollerClientHeight": 729,
+          "scrollerScrollHeight": 729,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859,
+          "initialFullRows": 8,
+          "afterOneScrollFullRows": 8,
+          "theadStickyDelta": 0,
+          "pagerBottom": null,
+          "aiButtonTop": 936,
+          "overlaps": false
+        }
+      },
+      "artifacts": {
+        "before": {
+          "cardHeight": 683,
+          "scrollerHeight": 681,
+          "scrollerClientHeight": 681,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859
+        },
+        "after": {
+          "totalRows": 273,
+          "cardHeight": 683,
+          "scrollerHeight": 681,
+          "scrollerClientHeight": 681,
+          "scrollerScrollHeight": 15175,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859,
+          "initialFullRows": 11,
+          "afterOneScrollFullRows": 11,
+          "theadStickyDelta": 0,
+          "pagerBottom": null,
+          "aiButtonTop": 936,
+          "overlaps": false
+        }
+      },
+      "deployments": {
+        "before": {
+          "cardHeight": 731,
+          "scrollerHeight": 729,
+          "scrollerClientHeight": 729,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859
+        },
+        "after": {
+          "totalRows": 8,
+          "cardHeight": 731,
+          "scrollerHeight": 729,
+          "scrollerClientHeight": 729,
+          "scrollerScrollHeight": 729,
+          "theadHeight": 48,
+          "pageBodyClientHeight": 859,
+          "pageBodyScrollHeight": 859,
+          "initialFullRows": 8,
+          "afterOneScrollFullRows": 8,
+          "theadStickyDelta": 0,
+          "pagerBottom": null,
+          "aiButtonTop": 936,
+          "overlaps": false
+        }
+      }
+    }
+  },
+  "verification": {
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.agora.json --noEmit (0 errors)",
+    "unit_tests": "vitest run src/platform/components/PageHeader.test.tsx src/platform/components/DataTable.test.tsx src/management/pages/ObjectListPage.test.tsx (3 files, 34 tests passed)",
+    "playwright_e2e": "playwright test e2e/management-list-short-window.spec.ts (13 passed)"
+  },
+  "residual_findings": [
+    {
+      "surface": "src/management/pages/oversight/_core.tsx",
+      "finding": "EvidenceExplorerList and PersonaFleet copy the custom h-full min-h-0 overflow-hidden section layout outside ObjectListPage (evidence table viewport is 23px at 1274x627).",
+      "owning_task": "FE-EVIDENCE-CITED-20261125"
+    },
+    {
+      "surface": "src/management/pages/Lists.tsx",
+      "finding": "StrategiesList (11 columns) and ArtifactsList (10 columns) exceed 1274px width and require horizontal scrolling until column consolidation lands.",
+      "owning_task": "FE-REGISTRY-LISTS-CURRENT-FIRST-20261125"
+    }
+  ]
+}

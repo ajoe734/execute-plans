@@ -1,9 +1,12 @@
-import type { Persona } from "./dto";
+import type { PaperRiskTier, Persona, PersonaRiskPolicyChange, PersonaRiskPolicyChangeStatus } from "./dto";
 import { bffFetch } from "./client";
-import { BffError } from "./errors";
+import { BffError, makeBffError } from "./errors";
+import { liveWriteGated } from "./writeGate";
 import { paths } from "./paths";
 import { strictLivePaginatedListNormalized } from "./domainReads";
 import { runAction } from "./writes";
+
+export type { PaperRiskTier, PersonaRiskPolicyChange, PersonaRiskPolicyChangeStatus };
 
 type BffEnvelope<T> = { data?: T; meta?: unknown } | T;
 
@@ -24,14 +27,59 @@ export type PersonaCreatePayload = Partial<Persona> & {
   capitalSideEffectsAllowed?: boolean;
 };
 
+export const COMPLETE_PAPER_BUNDLE_STATES = [
+  "paper_running",
+  "paper_owner",
+  "consultable",
+  "live_owner",
+] as const;
+
+export type PaperPersonaBundleState = (typeof COMPLETE_PAPER_BUNDLE_STATES)[number];
+
+const COMPLETE_PAPER_BUNDLE_STATE_SET = new Set<string>(COMPLETE_PAPER_BUNDLE_STATES);
+
+const COMPATIBLE_BASE_LIFECYCLE_STATES = new Set<string>([
+  "approved",
+  "deployed",
+  "active",
+]);
+
+const FAILED_OR_PENDING_PROVISIONING_STATES = new Set<string>([
+  "failed",
+  "provisioning_failed",
+  "error",
+  "compensated",
+  "compensation_failed",
+  "compensation_pending",
+  "incomplete",
+  "setup_incomplete",
+  "pending",
+  "provisioning",
+  "in_progress",
+  "queued",
+  "waiting",
+  "reconciling",
+  "pending_approval",
+  "not_started",
+]);
+
 export interface PaperPersonaBundle extends Omit<Persona, "state"> {
-  /** Paper-runtime-specific lifecycle value not in the base `LifecycleState` union. */
-  state: "paper_running";
+  /** Paper-runtime or owner-enrolled lifecycle value not in the base `LifecycleState` union. */
+  state: PaperPersonaBundleState;
   paperLedgerId: string;
   runtimeBindingId: string;
+  paper_ledger_id?: string;
+  runtime_binding_id?: string;
   runtimeId?: string;
   deploymentPlanId?: string;
   failedStep?: string;
+  failed_step?: string;
+  provisioningStatus?: string | null;
+  provisioning_status?: string | null;
+  provisioningState?: string | null;
+  provisioning_state?: string | null;
+  provisioningLifecycleState?: string | null;
+  provisioning_lifecycle_state?: string | null;
 }
 
 export class PaperPersonaBundleIncompleteError extends Error {
@@ -42,6 +90,235 @@ export class PaperPersonaBundleIncompleteError extends Error {
     super(`Paper persona setup is incomplete at ${failedStep}`);
     this.name = "PaperPersonaBundleIncompleteError";
   }
+}
+
+function asObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function nonEmptyTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function resolvePersonaPaperLedgerId(persona: unknown): string | undefined {
+  const rec = asObjectRecord(persona);
+  if (!rec) return undefined;
+  const metadata = asObjectRecord(rec.metadata);
+  const candidate = [
+    rec.paperLedgerId,
+    rec.paper_ledger_id,
+    metadata?.paper_ledger_id,
+    metadata?.paperLedgerId,
+  ]
+    .map(nonEmptyTrimmedString)
+    .find((val): val is string => val !== undefined && val.toLowerCase() !== "pending");
+  return candidate;
+}
+
+export function resolvePersonaRuntimeBindingId(persona: unknown): string | undefined {
+  const rec = asObjectRecord(persona);
+  if (!rec) return undefined;
+  const metadata = asObjectRecord(rec.metadata);
+  const candidate = [
+    rec.runtimeBindingId,
+    rec.runtime_binding_id,
+    metadata?.runtime_binding_id,
+    metadata?.runtimeBindingId,
+  ]
+    .map(nonEmptyTrimmedString)
+    .find((val): val is string => val !== undefined && val.toLowerCase() !== "pending");
+  return candidate;
+}
+
+export function resolvePersonaReportedFailedStep(
+  persona: unknown,
+  meta?: unknown,
+): string | undefined {
+  const rec = asObjectRecord(persona);
+  const metadata = asObjectRecord(rec?.metadata);
+  const provisioning = asObjectRecord(rec?.provisioning);
+  const provisioningError =
+    asObjectRecord(rec?.provisioningError) ??
+    asObjectRecord(rec?.provisioning_error) ??
+    asObjectRecord(metadata?.provisioning_error) ??
+    asObjectRecord(metadata?.provisioningError);
+  const metaRec = asObjectRecord(meta);
+  const terminalError =
+    asObjectRecord(metaRec?.terminal_error) ?? asObjectRecord(metaRec?.terminalError);
+  const authoritativeReadback =
+    asObjectRecord(metaRec?.authoritative_readback) ??
+    asObjectRecord(metaRec?.authoritativeReadback);
+
+  return [
+    rec?.failedStep,
+    rec?.failed_step,
+    provisioning?.failedStep,
+    provisioning?.failed_step,
+    provisioningError?.failedStep,
+    provisioningError?.failed_step,
+    metadata?.failedStep,
+    metadata?.failed_step,
+    metaRec?.failedStep,
+    metaRec?.failed_step,
+    terminalError?.failedStep,
+    terminalError?.failed_step,
+    authoritativeReadback?.failedStep,
+    authoritativeReadback?.failed_step,
+  ]
+    .map(nonEmptyTrimmedString)
+    .find((val): val is string => val !== undefined);
+}
+
+function isFailedOrPendingProvisioningToken(raw: unknown): boolean {
+  const token = nonEmptyTrimmedString(raw)?.toLowerCase();
+  if (!token) return false;
+  return (
+    FAILED_OR_PENDING_PROVISIONING_STATES.has(token) ||
+    token.startsWith("failed") ||
+    token.startsWith("pending") ||
+    token.endsWith("_failed") ||
+    token.endsWith("_pending")
+  );
+}
+
+export function isPersonaProvisioningFailedOrPending(
+  persona: unknown,
+  meta?: unknown,
+): boolean {
+  const rec = asObjectRecord(persona);
+  if (!rec) return false;
+  if (resolvePersonaReportedFailedStep(persona, meta)) {
+    return true;
+  }
+  const metadata = asObjectRecord(rec.metadata);
+  const provisioning = asObjectRecord(rec.provisioning);
+  const metaRec = asObjectRecord(meta);
+
+  const failureReason = [
+    rec.provisioningFailureReason,
+    rec.provisioning_failure_reason,
+    metadata?.provisioning_failure_reason,
+    metadata?.provisioningFailureReason,
+  ]
+    .map(nonEmptyTrimmedString)
+    .find((val): val is string => val !== undefined);
+  if (failureReason) {
+    return true;
+  }
+
+  if (
+    rec.provisioning_error ||
+    rec.provisioningError ||
+    metadata?.provisioning_error ||
+    metadata?.provisioningError ||
+    metaRec?.terminal_error ||
+    metaRec?.terminalError
+  ) {
+    return true;
+  }
+
+  const statusTokens: unknown[] = [
+    rec.provisioningStatus,
+    rec.provisioning_status,
+    rec.provisioningState,
+    rec.provisioning_state,
+    rec.provisioningLifecycleState,
+    rec.provisioning_lifecycle_state,
+    rec.provisioningReconciliationState,
+    rec.provisioning_reconciliation_state,
+    rec.paperRuntimeState,
+    rec.paper_runtime_state,
+    typeof rec.provisioning === "string" ? rec.provisioning : undefined,
+    provisioning?.status,
+    provisioning?.state,
+    provisioning?.lifecycle_state,
+    provisioning?.lifecycleState,
+    metadata?.provisioning_status,
+    metadata?.provisioningStatus,
+    metadata?.provisioning_state,
+    metadata?.provisioningState,
+    metadata?.provisioning_lifecycle_state,
+    metadata?.provisioningLifecycleState,
+    metadata?.provisioning_reconciliation_state,
+    metadata?.provisioningReconciliationState,
+    metadata?.paper_runtime_state,
+    metadata?.paperRuntimeState,
+    metaRec?.provisioning_status,
+    metaRec?.provisioningStatus,
+    metaRec?.provisioning_state,
+    metaRec?.provisioningState,
+    metaRec?.lifecycle_state,
+    metaRec?.lifecycleState,
+    metaRec?.status,
+  ];
+
+  return statusTokens.some(isFailedOrPendingProvisioningToken);
+}
+
+function hasCompletePaperBundleLifecycle(persona: unknown): boolean {
+  const rec = asObjectRecord(persona);
+  if (!rec) return false;
+  const metadata = asObjectRecord(rec.metadata);
+  if (
+    rec.frozen === true ||
+    metadata?.frozen === true ||
+    nonEmptyTrimmedString(rec.containment_state)?.toLowerCase() === "frozen" ||
+    nonEmptyTrimmedString(rec.containmentState)?.toLowerCase() === "frozen"
+  ) {
+    return false;
+  }
+  const adminStatus = nonEmptyTrimmedString(rec.status)?.toLowerCase();
+  if (
+    adminStatus &&
+    (isFailedOrPendingProvisioningToken(adminStatus) ||
+      adminStatus === "suspended" ||
+      adminStatus === "archived" ||
+      adminStatus === "retired" ||
+      adminStatus === "frozen")
+  ) {
+    return false;
+  }
+
+  const lifecycleTokens = [
+    rec.state,
+    rec.lifecycleStatus,
+    rec.lifecycle_status,
+    rec.lifecycleState,
+    rec.lifecycle_state,
+    rec.ownerLifecycleState,
+    rec.owner_lifecycle_state,
+  ]
+    .map((val) => nonEmptyTrimmedString(val)?.toLowerCase())
+    .filter((val): val is string => val !== undefined);
+
+  if (lifecycleTokens.length === 0) return false;
+
+  const hasAcceptedOwnerOrRuntimeState = lifecycleTokens.some((token) =>
+    COMPLETE_PAPER_BUNDLE_STATE_SET.has(token),
+  );
+  if (!hasAcceptedOwnerOrRuntimeState) return false;
+
+  return lifecycleTokens.every(
+    (token) =>
+      COMPLETE_PAPER_BUNDLE_STATE_SET.has(token) ||
+      COMPATIBLE_BASE_LIFECYCLE_STATES.has(token),
+  );
+}
+
+export function isCompletePaperPersonaBundle(
+  persona: unknown,
+  meta?: unknown,
+): persona is PaperPersonaBundle {
+  if (!persona || typeof persona !== "object") return false;
+  if (!hasCompletePaperBundleLifecycle(persona)) return false;
+  if (isPersonaProvisioningFailedOrPending(persona, meta)) return false;
+  return Boolean(
+    resolvePersonaPaperLedgerId(persona) && resolvePersonaRuntimeBindingId(persona),
+  );
 }
 
 function unwrapData<T>(payload: BffEnvelope<T>): T {
@@ -62,14 +339,15 @@ export async function createPersona(
     idempotencyKey: opts.idempotencyKey,
     correlationId: opts.correlationId,
   });
-  const bundle = unwrapData<PaperPersonaBundle>(raw);
-  const failedStep = String(bundle.failedStep ?? "bundle_verification");
-  if (
-    bundle.state !== "paper_running" ||
-    !bundle.paperLedgerId ||
-    !bundle.runtimeBindingId
-  ) {
-    throw new PaperPersonaBundleIncompleteError(bundle.id, failedStep);
+  const rawEnvelope =
+    raw && typeof raw === "object" && "data" in raw
+      ? (raw as { data?: PaperPersonaBundle; meta?: unknown })
+      : undefined;
+  const bundle = normalizePersonaDetail(unwrapData<PaperPersonaBundle>(raw));
+  const failedStep =
+    resolvePersonaReportedFailedStep(bundle, rawEnvelope?.meta) ?? "bundle_verification";
+  if (!bundle || !isCompletePaperPersonaBundle(bundle, rawEnvelope?.meta)) {
+    throw new PaperPersonaBundleIncompleteError(bundle?.id, failedStep);
   }
   return bundle;
 }
@@ -307,17 +585,133 @@ export interface PersonaManagementEnvelope {
   };
 }
 
+export interface PersonaRiskPatchPayload {
+  risk: PaperRiskTier;
+}
+
+export function normalizePaperRiskTier(value: unknown): PaperRiskTier | null {
+  const clean = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (clean === "low" || clean === "medium" || clean === "high") {
+    return clean;
+  }
+  return null;
+}
+
+export function normalizePersonaRiskPolicyChange(raw: unknown): PersonaRiskPolicyChange | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  const requestedRisk = normalizePaperRiskTier(record.requestedRisk);
+  const effectiveRisk = normalizePaperRiskTier(record.effectiveRisk);
+  const rawStatus = typeof record.status === "string" ? record.status.trim() : "";
+  const lowerStatus = rawStatus.toLowerCase();
+  const status: PersonaRiskPolicyChangeStatus =
+    lowerStatus === "effective"
+      ? "effective"
+      : lowerStatus === "pending_approval" || lowerStatus === "pending"
+        ? "pending_approval"
+        : lowerStatus === "unavailable"
+          ? "unavailable"
+          : lowerStatus === "failed" || lowerStatus === "error"
+            ? "failed"
+            : rawStatus || "unavailable";
+  const rawPolicyVersion = record.policyVersion;
+  const policyVersion =
+    typeof rawPolicyVersion === "string" && rawPolicyVersion.trim()
+      ? rawPolicyVersion.trim()
+      : typeof rawPolicyVersion === "number" && Number.isFinite(rawPolicyVersion)
+        ? String(rawPolicyVersion)
+        : null;
+  const rawApprovalId = record.approvalId;
+  const approvalId =
+    typeof rawApprovalId === "string" && rawApprovalId.trim() ? rawApprovalId.trim() : null;
+  const rawReason = record.reason;
+  const reason = typeof rawReason === "string" && rawReason.trim() ? rawReason.trim() : null;
+
+  return {
+    requestedRisk,
+    effectiveRisk,
+    status,
+    policyVersion,
+    approvalId,
+    ...(reason ? { reason } : {}),
+  };
+}
+
+function normalizePersonaDetail<T extends Persona | PaperPersonaBundle>(
+  persona: T | undefined,
+): T | undefined {
+  if (!persona || typeof persona !== "object") return persona;
+  const rec = persona as unknown as Record<string, unknown>;
+  const rawChange = persona.riskPolicyChange;
+  const paperLedgerId = resolvePersonaPaperLedgerId(persona);
+  const runtimeBindingId = resolvePersonaRuntimeBindingId(persona);
+  const needsLedger =
+    nonEmptyTrimmedString(rec.paperLedgerId) === undefined &&
+    paperLedgerId !== undefined;
+  const needsBinding =
+    nonEmptyTrimmedString(rec.runtimeBindingId) === undefined &&
+    runtimeBindingId !== undefined;
+  if (rawChange === undefined && !needsLedger && !needsBinding) {
+    return persona;
+  }
+  return {
+    ...persona,
+    ...(needsLedger ? { paperLedgerId } : {}),
+    ...(needsBinding ? { runtimeBindingId } : {}),
+    ...(rawChange !== undefined
+      ? { riskPolicyChange: normalizePersonaRiskPolicyChange(rawChange) }
+      : {}),
+  };
+}
+
 export async function getPersona(id: string): Promise<Persona | undefined> {
   try {
     const raw = await bffFetch<BffEnvelope<Persona>>({
       method: "GET",
       path: paths.persona(id),
     });
-    return unwrapData<Persona>(raw);
+    return normalizePersonaDetail(unwrapData<Persona>(raw));
   } catch (err) {
     if (err instanceof BffError && err.status === 404) return undefined;
     throw err;
   }
+}
+
+export async function patchPersonaRisk(
+  id: string,
+  payload: PersonaRiskPatchPayload,
+  opts: PersonaWriteOptions = {},
+): Promise<Persona> {
+  const personaId = id.trim();
+  if (!personaId) {
+    throw new Error("Persona id is required.");
+  }
+  const tier = normalizePaperRiskTier(payload?.risk);
+  if (!tier) {
+    throw new Error(`Invalid paper risk tier: ${String(payload?.risk ?? "")}`);
+  }
+  if (!(await liveWriteGated())) {
+    throw makeBffError({
+      code: "FEATURE_DISABLED",
+      message: "Persona risk writes are disabled by deployment policy or session authority.",
+      correlationId: opts.correlationId,
+      details: { reason: "write_unavailable" },
+    });
+  }
+  const raw = await bffFetch<BffEnvelope<Persona>>({
+    method: "PATCH",
+    path: paths.persona(personaId),
+    body: { risk: tier },
+    idempotencyKey: opts.idempotencyKey,
+    correlationId: opts.correlationId,
+  });
+  const persona = normalizePersonaDetail(unwrapData<Persona>(raw));
+  if (!persona || typeof persona !== "object") {
+    throw new Error("Persona risk update returned no Persona payload.");
+  }
+  return persona;
 }
 
 export async function getPersonaManagement(
@@ -381,6 +775,7 @@ export const personas = {
   get: getPersona,
   getManagement: getPersonaManagement,
   create: createPersona,
+  patchRisk: patchPersonaRisk,
   runAction: runPersonaAction,
   testPrompt: testPersonaPrompt,
 };

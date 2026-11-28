@@ -1,0 +1,22 @@
+{
+  "locale": "en-US",
+  "width": 1440,
+  "routes": [
+    "/management/meetings/mtg-followthrough?action=tkt-followthrough",
+    "/management/human-inbox",
+    "/management/human-inbox/meeting_action%3Atkt-followthrough"
+  ],
+  "patches": 0,
+  "reads": {
+    "/bff/management/shell-summary": 4,
+    "/bff/agora/capabilities": 2,
+    "/bff/management/meetings/mtg-followthrough": 2,
+    "/bff/events/stream": 5,
+    "/bff/management/human-inbox": 1,
+    "/bff/management/human-inbox/meeting_action%3Atkt-followthrough": 2,
+    "/api/v1/research/tickets/tkt-followthrough": 1
+  },
+  "outcome": "passed",
+  "backend": "intercepted contract fixtures",
+  "real_writes": false
+}

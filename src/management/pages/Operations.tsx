@@ -39,7 +39,7 @@ import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
 import { BffError } from "@/lib/bff-v1/errors";
-import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
+import { normalizeApprovalFields, normalizeAuditFields } from "@/lib/bff-v1/operations";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ServerPager, useServerPageCursor } from "@/platform/components/ServerPager";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
@@ -1120,6 +1120,8 @@ export const ApprovalsPage = () => {
                     onOpenChange={setApproveOpen}
                     title={t("confirmDialog.approveTitle", { subject: active.subject })}
                     description={t("confirmDialog.approveDesc", { kind: active.kind })}
+                    risk="high"
+                    riskImpact={t("confirm.governanceRiskNote", { decision: t(`risk.${active.riskLevel ?? "unavailable"}`) })}
                     confirmToken="APPROVE"
                     onConfirm={(memo) => decide(active, "approve", memo)}
                   />
@@ -1128,6 +1130,8 @@ export const ApprovalsPage = () => {
                     onOpenChange={setRejectOpen}
                     title={t("confirmDialog.rejectTitle", { subject: active.subject })}
                     description={t("confirmDialog.rejectDesc")}
+                    risk="high"
+                    riskImpact={t("confirm.governanceRiskNote", { decision: t(`risk.${active.riskLevel ?? "unavailable"}`) })}
                     confirmToken="REJECT"
                     destructive
                     onConfirm={(memo) => decide(active, "reject", memo)}
@@ -1148,28 +1152,37 @@ export const AuditPage = () => {
   const target = params.get("target") ?? "";
   const [rows, setRows] = useCachedOperationList<AuditEvent>(
     "operations.audit",
-    asEntityListLoader<AuditEvent>(lists.audit),
+    (signal) =>
+      asEntityListLoader<AuditEvent>(lists.audit)(signal).then((r) => ({
+        ...r,
+        items: r.items.map((a) => normalizeAuditFields(a)),
+      })),
   );
   const [actor, setActor] = useState<string>("all");
   const [action, setAction] = useState<string>("all");
   const [outcome, setOutcome] = useState<string>("all");
   useEffect(() => {
+    let off: (() => void) | undefined;
+    let disposed = false;
     import("@/lib/bff-v1").then(({ realtime }) => {
-      const off = realtime.on("audit", (p) => {
-        setRows((rs) => [p as AuditEvent, ...rs].slice(0, 200));
-      });
-      return off;
+      if (disposed) return;
+      off = realtime.on("audit", (p) => {
+        const entry = normalizeAuditFields(p);
+        setRows((rs) => [entry, ...rs.map((r) => normalizeAuditFields(r))].slice(0, 200));
+      }) ?? undefined;
     });
+    return () => { disposed = true; off?.(); };
   }, [setRows]);
 
-  const actors = useMemo(() => Array.from(new Set(rows.map((r) => r.actor))).sort(), [rows]);
-  const actions = useMemo(() => Array.from(new Set(rows.map((r) => r.action))).sort(), [rows]);
-  const filtered = useMemo(() => rows.filter((r) =>
+  const normalizedRows = useMemo(() => rows.map((r) => normalizeAuditFields(r)), [rows]);
+  const actors = useMemo(() => Array.from(new Set(normalizedRows.map((r) => r.actor).filter((a): a is string => Boolean(a)))).sort(), [normalizedRows]);
+  const actions = useMemo(() => Array.from(new Set(normalizedRows.map((r) => r.action).filter((a): a is string => Boolean(a)))).sort(), [normalizedRows]);
+  const filtered = useMemo(() => normalizedRows.filter((r) =>
     (actor === "all" || r.actor === actor) &&
     (action === "all" || r.action === action) &&
     (outcome === "all" || (r.outcome ?? "ok") === outcome) &&
     (!target || r.target === target),
-  ), [rows, actor, action, outcome, target]);
+  ), [normalizedRows, actor, action, outcome, target]);
 
   const reset = () => { setActor("all"); setAction("all"); setOutcome("all"); };
   const clearTarget = () => { const p = new URLSearchParams(params); p.delete("target"); setParams(p, { replace: true }); };
@@ -1183,7 +1196,7 @@ export const AuditPage = () => {
           <Card className="p-3 flex flex-wrap items-center gap-2 border-accent/40 bg-accent/5">
             <span className="text-xs uppercase tracking-wider text-muted-foreground">{t("audit.targetFilter")}</span>
             <span className="text-mono text-sm text-accent">{target}</span>
-            <span className="text-mono text-xs text-muted-foreground ml-2">{filtered.length} / {rows.length}</span>
+            <span className="text-mono text-xs text-muted-foreground ml-2">{filtered.length} / {normalizedRows.length}</span>
             <Button size="sm" variant="ghost" className="ml-auto" onClick={clearTarget}>
               <X className="h-3 w-3 mr-1" />{t("audit.clearTargetFilter")}
             </Button>
@@ -1210,7 +1223,7 @@ export const AuditPage = () => {
             <option value="rejected">{t("audit.outcomeRejected")}</option>
           </select>
           <span className="text-mono text-xs text-muted-foreground ml-auto">
-            {filtered.length} / {rows.length}
+            {filtered.length} / {normalizedRows.length}
           </span>
           {hasFilter && (
             <Button size="sm" variant="ghost" onClick={reset}>{t("qa.reset")}</Button>
