@@ -38,7 +38,7 @@ export function demandReasonText(code: string | null | undefined, t: TranslateFn
   const text = t(`research.demand.reasons.${token}`, {
     count: count && /^\d+$/.test(count) ? Number(count) : t("research.detail.notReported"),
   });
-  return { text, raw: null };
+  return { text, raw: token === "template_search_unavailable" ? raw : null };
 }
 
 /** Match the BFF reason precedence; rejection.reason is only a generic wrapper. */
