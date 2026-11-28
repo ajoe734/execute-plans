@@ -244,3 +244,30 @@ describe("HighRiskConfirm — repeat submit prevention and confirmation flow", (
     });
   });
 });
+
+describe("HighRiskConfirm — memo minimum visibility", () => {
+  const cases: Array<[string, "high" | "critical", number]> = [
+    ["zh-TW", "high", 40], ["zh-TW", "critical", 80],
+    ["en-US", "high", 40], ["en-US", "critical", 80],
+  ];
+  for (const [lng, risk, n] of cases) {
+    it(`shows ${n} minimum before typing and count after, ${lng}/${risk}`, async () => {
+      const i18n = (await import("@/i18n")).default;
+      await i18n.changeLanguage(lng);
+      try {
+        render(<HighRiskConfirm open onOpenChange={vi.fn()} onConfirm={vi.fn()} risk={risk} confirmToken="GO" />);
+        const dialog = screen.getByRole("dialog");
+        expect(within(dialog).getByTestId("memo-requirement").textContent).toContain(String(n));
+        expect(dialog.querySelector("textarea")!.getAttribute("placeholder")).toContain(String(n));
+        expect(dialog.textContent).not.toMatch(/\b8 (char|字)|至少 8 字/);
+        fireEvent.change(dialog.querySelector("textarea")!, { target: { value: "  abc  " } });
+        expect(dialog.textContent).toContain(`${n}`);
+        const unmet = within(dialog).getByTestId("confirm-unmet");
+        expect(unmet.textContent).toContain("GO");
+        expect(unmet.textContent).toContain(String(n));
+      } finally {
+        await i18n.changeLanguage("zh-TW");
+      }
+    });
+  }
+});

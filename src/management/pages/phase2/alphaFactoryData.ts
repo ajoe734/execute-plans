@@ -1,9 +1,15 @@
 import {
+  ALPHA_FACTORY_COUNT_KEYS,
   MOCK_ALPHA_FACTORY_ENVELOPE,
   MOCK_DISCOVERED,
+  MOCK_DOCUMENT_CHECKED,
   MOCK_REPLICATED,
   MOCK_SCAFFOLDED,
   normalizeAlphaFactoryEnvelope,
+  type AlphaFactoryAdmissionCard,
+  type AlphaFactoryCount,
+  type AlphaFactoryCounts,
+  type AlphaFactoryPipelineItem,
   type AlphaFactoryCard,
   type AlphaFactoryData,
   type AlphaFactoryEnvelope,
@@ -14,8 +20,13 @@ import {
 export {
   MOCK_ALPHA_FACTORY_ENVELOPE,
   MOCK_DISCOVERED,
+  MOCK_DOCUMENT_CHECKED,
   MOCK_REPLICATED,
   MOCK_SCAFFOLDED,
+  type AlphaFactoryAdmissionCard,
+  type AlphaFactoryCount,
+  type AlphaFactoryCounts,
+  type AlphaFactoryPipelineItem,
   type AlphaFactoryCard,
   type AlphaFactoryData,
   type AlphaFactoryEnvelope,
@@ -26,10 +37,27 @@ export {
 export const ALPHA_FACTORY_COLUMNS = ["discovered", "scaffolded", "replicated"] as const;
 export type AlphaFactoryColumn = (typeof ALPHA_FACTORY_COLUMNS)[number];
 
-export interface AlphaFactoryBuckets extends Record<AlphaFactoryColumn, AlphaFactoryCard[]> {
-  discovered: AlphaFactoryCard[];
-  scaffolded: AlphaFactoryCard[];
-  replicated: AlphaFactoryCard[];
+/** A lane's owner read: `ok`, or `unavailable` with the owner's reason (never shown as an empty lane). */
+export type AlphaFactoryLaneRead = { status: "ok" } | { status: "unavailable"; reason: string };
+
+export interface AlphaFactoryBuckets {
+  /** Open research demands and hypothesis cards (who is looking for what). */
+  discovered: AlphaFactoryPipelineItem[];
+  /** Legacy admission cards a BFF placed in the discovered lane. */
+  discoveredCards: AlphaFactoryAdmissionCard[];
+  /** Template searches that ran. */
+  searches: AlphaFactoryPipelineItem[];
+  /** Admissions whose gate attempt has not completed (failed, queued, pending). */
+  scaffolded: AlphaFactoryAdmissionCard[];
+  /** Only candidates with an owner-recorded backtest gate pass. */
+  replicated: AlphaFactoryAdmissionCard[];
+  /** Test and document-check records: completed admissions without a recorded gate pass. */
+  documentChecked: AlphaFactoryAdmissionCard[];
+  counts: AlphaFactoryCounts;
+  reads: {
+    demands: AlphaFactoryLaneRead;
+    runs: AlphaFactoryLaneRead;
+  };
   discoveredReason: string | null;
 }
 
@@ -70,7 +98,7 @@ export function classifyAlphaFactorySource(
 }
 
 function toEnvelopeInput(
-  source: AlphaFactoryEnvelope | AlphaFactoryData | readonly unknown[] | null | undefined,
+  source: unknown,
   includeMockFixtures: boolean,
 ): unknown {
   if (source === null || source === undefined) {
@@ -82,8 +110,6 @@ function toEnvelopeInput(
         discovered: [],
         scaffolded: [],
         replicated: [],
-        reason: null,
-        discovered_reason: null,
       },
       items: [],
     };
@@ -93,7 +119,7 @@ function toEnvelopeInput(
     if (
       includeMockFixtures &&
       normalizedFromArray.items.length === 0 &&
-      normalizedFromArray.data.discovered_reason === null
+      normalizedFromArray.data.pipeline.discovered.length === 0
     ) {
       return MOCK_ALPHA_FACTORY_ENVELOPE;
     }
@@ -105,8 +131,22 @@ function toEnvelopeInput(
   return { data: source };
 }
 
+function laneRead(meta: unknown, key: string): AlphaFactoryLaneRead {
+  const surface = asRecord(asRecord(asRecord(meta)?.surfaces)?.[key]);
+  if (!surface) return { status: "ok" };
+  const status = String(surface.status ?? "ok").trim().toLowerCase();
+  if (["ok", "fresh", "live"].includes(status)) return { status: "ok" };
+  const reason = [surface.reason, surface.message, surface.status]
+    .find((value) => typeof value === "string" && value.trim().length > 0);
+  return { status: "unavailable", reason: String(reason ?? "unavailable").trim() };
+}
+
+const UNAVAILABLE_COUNTS = Object.fromEntries(
+  ALPHA_FACTORY_COUNT_KEYS.map((key) => [key, { status: "unavailable", value: null, reason: "not_reported" }]),
+) as AlphaFactoryCounts;
+
 export function buildAlphaFactoryBuckets(
-  source?: AlphaFactoryEnvelope | AlphaFactoryData | readonly unknown[] | null,
+  source?: unknown,
   opts: {
     includeMockFixtures?: boolean;
     includeReplicated?: boolean;
@@ -119,21 +159,35 @@ export function buildAlphaFactoryBuckets(
   if (!includeReplicated && !includeMockFixtures) {
     return {
       discovered: [],
+      discoveredCards: [],
+      searches: [],
       scaffolded: [],
       replicated: [],
+      documentChecked: [],
+      counts: UNAVAILABLE_COUNTS,
+      reads: { demands: { status: "ok" }, runs: { status: "ok" } },
       discoveredReason: null,
     };
   }
 
   const envelope = normalizeAlphaFactoryEnvelope(toEnvelopeInput(source, includeMockFixtures));
+  const data = envelope.data;
 
   return {
-    discovered: envelope.data.discovered.filter((card) => card.lane === "discovered"),
-    scaffolded: envelope.data.scaffolded.filter((card) => card.lane === "scaffolded"),
+    discovered: data.pipeline.discovered,
+    discoveredCards: data.discovered.filter((card) => card.lane === "discovered"),
+    searches: data.pipeline.scaffolded,
+    scaffolded: data.scaffolded.filter((card) => card.lane === "scaffolded"),
     replicated: includeReplicated
-      ? envelope.data.replicated.filter((card) => card.lane === "replicated")
+      ? data.replicated.filter((card) => card.lane === "replicated")
       : [],
-    discoveredReason: envelope.data.discovered_reason,
+    documentChecked: data.document_checked,
+    counts: data.counts,
+    reads: {
+      demands: laneRead(envelope.meta, "alpha_factory_demands"),
+      runs: laneRead(envelope.meta, "alpha_factory_runs"),
+    },
+    discoveredReason: data.discovered_reason,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   BFF_INCIDENT_STATUS_VALUES,
   BFF_JOB_STATUS_VALUES,
   BFF_LINEAGE_EDGE_TYPES,
+  BFF_LINEAGE_NODE_TYPES,
   BFF_MEETING_STATUS_VALUES,
   BFF_OUTCOME_VALUES,
   BFF_REASON_CODES,
@@ -21,6 +22,7 @@ import {
   isNanLike,
   isTranslationKeyLike,
   lineageEdgeLabel,
+  lineageNodeTypeLabel,
   normalizeStrategyOperationalStatus,
   notReportedLabel,
   outcomeLabel,
@@ -28,10 +30,27 @@ import {
   reasonCodeDisplay,
   rebalanceWorkflowLabel,
   resolveEnumLabel,
+  resolveLineageNodeLabel,
   riskLabel,
+  shortLineageNodeId,
   statusBadgeClass,
   statusLabel,
   strategyOperationalStatusClass,
+  STRATEGY_RUNTIME_STATUSES,
+  REGISTRY_LIST_SCOPES,
+  KNOWN_PERSONA_ARCHETYPES,
+  artifactKindText,
+  artifactSourceText,
+  normalizeRegistryListScope,
+  normalizeStrategyRuntimeStatus,
+  personaArchetypeText,
+  shortOwnerText,
+  strategyDeploymentLabel,
+  strategyLifecycleLabel,
+  strategyMetricsReasonText,
+  strategyReviewLabel,
+  strategyRuntimeReasonText,
+  strategyRuntimeStatusClass,
 } from "../enumLabels";
 
 const tZh = i18n.getFixedT("zh-TW");
@@ -134,6 +153,66 @@ describe("enumLabels shared BFF enum localization helper (FE-MGMT-LABELS-AND-RAW
       expect(isTranslationKeyLike(lineageEdgeLabel(edgeType, tZh))).toBe(false);
       expect(isTranslationKeyLike(lineageEdgeLabel(edgeType, tEn))).toBe(false);
     }
+
+    for (const nodeType of BFF_LINEAGE_NODE_TYPES) {
+      expect((zhTW.enumLabels.lineageNodeTypes as Record<string, string>)[nodeType], `zh-TW lineageNodeType ${nodeType}`).toBeTruthy();
+      expect((enUS.enumLabels.lineageNodeTypes as Record<string, string>)[nodeType], `en-US lineageNodeType ${nodeType}`).toBeTruthy();
+      expect(isTranslationKeyLike(lineageNodeTypeLabel(nodeType, tZh))).toBe(false);
+      expect(isTranslationKeyLike(lineageNodeTypeLabel(nodeType, tEn))).toBe(false);
+    }
+  });
+
+  it("resolves lineage node labels from display_name or falls back to localized plain kind plus short id when name_missing", () => {
+    expect(lineageNodeTypeLabel("Strategy", tZh)).toBe("策略");
+    expect(lineageNodeTypeLabel("CapitalPool", tZh)).toBe("資金池");
+    expect(lineageNodeTypeLabel("CapitalPool", tEn)).toBe("Capital Pool");
+    expect(lineageEdgeLabel("source_dataset", tZh)).toBe("來源資料集");
+    expect(lineageEdgeLabel("source_dataset", tEn)).toBe("Source Dataset");
+
+    expect(
+      resolveLineageNodeLabel(
+        {
+          id: "persona-ee7112a829d38b9135ac",
+          label: "persona-ee7112a829d38b9135ac",
+          type: "Persona",
+          display_name: "衡岳",
+          name_missing: false,
+        },
+        tZh,
+      ),
+    ).toBe("衡岳");
+
+    expect(
+      resolveLineageNodeLabel(
+        {
+          id: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          label: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          type: "Artifact",
+          display_name: null,
+          name_missing: true,
+        },
+        tZh,
+      ),
+    ).toBe("產出物 a81b4fd1-v2");
+
+    expect(
+      resolveLineageNodeLabel(
+        {
+          id: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          label: "artifact-persona-pool-a81b4fd15944698341aa-v2",
+          type: "Artifact",
+          display_name: null,
+          name_missing: true,
+        },
+        tEn,
+      ),
+    ).toBe("Artifact a81b4fd1-v2");
+
+    expect(shortLineageNodeId("reg-strategy-spec-persona-baseline-a81b4fd15944698341aa")).toBe("baseline-a81b4fd1");
+    expect(tZh("lineage.empty")).toBe("尚無血緣資料。");
+    expect(tEn("lineage.empty")).toBe("No lineage available.");
+    expect(tZh("lineageExplorer.unavailable")).toBe("血緣服務不可用。");
+    expect(tEn("lineageExplorer.unavailable")).toBe("Lineage surface unavailable.");
   });
 
   it("formats persona fleet, LLM provider auth, and meeting reason codes into plain-language text with secondary code", () => {
@@ -189,5 +268,278 @@ describe("enumLabels shared BFF enum localization helper (FE-MGMT-LABELS-AND-RAW
     expect(normalizeStrategyOperationalStatus("RUNNING")).toBe("running");
     expect(strategyOperationalStatusClass("running")).toContain("text-status-success");
     expect(statusBadgeClass("resolved")).toContain("text-accent");
+  });
+});
+
+describe("FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 runtime status, metric reason, list scope and artifact words", () => {
+  it("normalizes runtimeStatus and never invents one when the field is absent", () => {
+    expect(normalizeStrategyRuntimeStatus(undefined)).toBeUndefined();
+    expect(normalizeStrategyRuntimeStatus(null)).toBeUndefined();
+    expect(normalizeStrategyRuntimeStatus("")).toBeUndefined();
+    for (const status of STRATEGY_RUNTIME_STATUSES) {
+      expect(normalizeStrategyRuntimeStatus(status.toUpperCase())).toBe(status);
+      expect(tEn(`strategy.runtimeStatus.${status}`)).not.toContain("strategy.runtimeStatus");
+      expect(tZh(`strategy.runtimeStatus.${status}`)).not.toContain("strategy.runtimeStatus");
+    }
+    // An unrecognised value is "unknown", never running.
+    expect(normalizeStrategyRuntimeStatus("idle")).toBe("unknown");
+    expect(strategyRuntimeStatusClass("running")).toContain("text-status-success");
+    expect(strategyRuntimeStatusClass("paused_market_input")).toContain("text-status-warning");
+  });
+
+  it("turns recorded reasons into plain sentences in both locales and keeps the raw code", () => {
+    expect(strategyRuntimeReasonText(null, tEn)).toBeUndefined();
+    const market = strategyRuntimeReasonText("market_input_stale", tEn);
+    expect(market).toEqual({ text: "Market data input stopped", code: "market_input_stale" });
+    expect(strategyRuntimeReasonText("market_input_stale", tZh)?.text).toContain("行情輸入中斷");
+    expect(strategyRuntimeReasonText("binding_status_failed", tEn)?.text).toBe("Binding status: failed");
+    expect(strategyRuntimeReasonText("something_new", tEn)).toEqual({ text: "Recorded reason", code: "something_new" });
+
+    expect(strategyMetricsReasonText(null, tEn)).toBeUndefined();
+    expect(strategyMetricsReasonText("no_fills", tEn)).toEqual({ text: "No fills yet", code: "no_fills" });
+    expect(strategyMetricsReasonText("no_fills", tZh)?.text).toBe("尚無成交");
+    expect(strategyMetricsReasonText("marks_unavailable", tEn)?.text).toBe("Market prices unavailable");
+    expect(strategyMetricsReasonText("source_unavailable", tEn)).toEqual({
+      text: "Result could not be read now",
+      code: "source_unavailable",
+    });
+    expect(strategyMetricsReasonText("source_unavailable", tZh)).toEqual({
+      text: "目前無法讀取結果",
+      code: "source_unavailable",
+    });
+    // FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC1: unknown metricsReason shows its code instead of "Not recorded" / "未記錄".
+    expect(strategyMetricsReasonText("brand_new_reason", tEn)).toEqual({ text: "brand_new_reason", code: "brand_new_reason" });
+    expect(strategyMetricsReasonText("brand_new_reason", tZh)).toEqual({ text: "brand_new_reason", code: "brand_new_reason" });
+  });
+
+  it("reads listScope / list_scope and treats anything else as unknown", () => {
+    expect(normalizeRegistryListScope({ listScope: "test" })).toBe("test");
+    expect(normalizeRegistryListScope({ list_scope: "Retired" })).toBe("retired");
+    expect(normalizeRegistryListScope({ list_scope: "unbound" })).toBe("unbound");
+    expect(normalizeRegistryListScope({ list_scope: "unknown" })).toBe("unknown");
+    expect(normalizeRegistryListScope({ listScope: "zzz" })).toBe("unknown");
+    expect(normalizeRegistryListScope({})).toBe("unknown");
+    expect(normalizeRegistryListScope(null)).toBe("unknown");
+    expect(REGISTRY_LIST_SCOPES).toContain("research");
+  });
+
+  it("gives artifact kind and source as words with the code kept for the tooltip", () => {
+    expect(artifactKindText("execution_bundle", tEn)).toEqual({ text: "Execution bundle", code: "execution_bundle" });
+    expect(artifactKindText("execution_bundle", tZh)?.text).toBe("執行包");
+    expect(artifactKindText("factor_eval_report", tEn)?.text).toBe("Factor evaluation report");
+    expect(artifactKindText("some_new_kind", tEn)).toEqual({ text: "Some new kind", code: "some_new_kind" });
+    expect(artifactKindText("", tEn)).toBeUndefined();
+    expect(artifactKindText(null, tEn)).toBeUndefined();
+    expect(artifactSourceText("registry", tEn)).toEqual({ text: "Registry bundle", code: "registry" });
+    expect(artifactSourceText("research_run_output", tZh)).toEqual({ text: "研究產出", code: "research_run_output" });
+    expect(artifactSourceText("other_source", tEn)).toEqual({ text: "Other source", code: "other_source" });
+    expect(artifactSourceText(undefined, tEn)).toBeUndefined();
+  });
+
+  it("has zh-TW and en-US parity for every new registry-list text and no developer wording in create texts", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    const pick = (locale: any) => ({
+      registryLists: locale.registryLists,
+      runtimeStatus: locale.strategy.runtimeStatus,
+      runtimeReason: locale.strategy.runtimeReason,
+      metricsReason: locale.strategy.metricsReason,
+      kindLabel: locale.artifact.kindLabel,
+      listColumn: locale.strategy.list.column,
+      listExtras: {
+        asOf: locale.strategy.list.asOf,
+        personaIdsTooltip: locale.strategy.list.personaIdsTooltip,
+        noPersona: locale.strategy.list.noPersona,
+        draftNotice: locale.strategy.list.draftNotice,
+        hiddenTestBreakdown: locale.strategy.list.hiddenTestBreakdown,
+      },
+    });
+    expect(keysOf(pick(zhTW)).sort()).toEqual(keysOf(pick(enUS)).sort());
+    const developerWording = /typed durable|BFF owner|generic CRUD|OpenClaw|SOUL|archetype field|slug/i;
+    for (const locale of [enUS, zhTW] as any[]) {
+      const texts = [
+        locale.entityCreate.footerNote,
+        locale.entityCreate.hint.mandate,
+        locale.entityCreate.hint.archetype,
+        locale.entityCreate.hint.alpha,
+        locale.entityCreate.field.alpha,
+        locale.entityCreate.error.slugFormat,
+        locale.registryLists.create.paperPersona,
+        locale.registryLists.create.disabledNoOwner,
+      ];
+      for (const text of texts) expect(text).not.toMatch(developerWording);
+    }
+  });
+
+  it("FE-PERSONA-LIST-PLAIN-WORDS-20261125: maps recorded persona archetype codes to zh-TW and en-US words with code tooltip, keeps unknown codes as-is, flags sentences, and strips shared pantheon-dev- owner prefix", () => {
+    expect(KNOWN_PERSONA_ARCHETYPES).toEqual(["momentum", "generalist", "agora_servant"]);
+    expect(personaArchetypeText("momentum", tEn)).toEqual({
+      text: "Momentum",
+      tooltip: "momentum",
+      code: "momentum",
+      isSentence: false,
+      isKnown: true,
+    });
+    expect(personaArchetypeText("momentum", tZh)?.text).toBe("動能");
+    expect(personaArchetypeText("generalist", tEn)?.text).toBe("Generalist");
+    expect(personaArchetypeText("generalist", tZh)?.text).toBe("通用");
+    expect(personaArchetypeText("agora_servant", tEn)).toEqual({
+      text: "Agora servant",
+      tooltip: "agora_servant",
+      code: "agora_servant",
+      isSentence: false,
+      isKnown: true,
+    });
+    expect(personaArchetypeText("agora_servant", tZh)?.text).toBe("交易僕人");
+
+    // Unknown code is shown as it is (never humanized).
+    expect(personaArchetypeText("mean_reversion", tEn)).toEqual({
+      text: "mean_reversion",
+      tooltip: "mean_reversion",
+      code: "mean_reversion",
+      isSentence: false,
+      isKnown: false,
+    });
+    expect(personaArchetypeText("mean_reversion", tZh)?.text).toBe("mean_reversion");
+
+    // Recorded Risk Officer and Red Team sentences.
+    const riskSentence =
+      "Independent risk reviewer. Never trades. Reviews trial admission, envelope publication and every harness patch; may veto.";
+    expect(personaArchetypeText(riskSentence, tEn)).toEqual({
+      text: riskSentence,
+      tooltip: riskSentence,
+      isSentence: true,
+      isKnown: false,
+    });
+    expect(personaArchetypeText("", tEn)).toBeUndefined();
+    expect(personaArchetypeText(null, tEn)).toBeUndefined();
+
+    // Owner prefix stripping.
+    expect(shortOwnerText("pantheon-dev-admin-test")).toEqual({
+      text: "admin-test",
+      full: "pantheon-dev-admin-test",
+    });
+    expect(shortOwnerText("pantheon-dev-operator-a")).toEqual({
+      text: "operator-a",
+      full: "pantheon-dev-operator-a",
+    });
+    expect(shortOwnerText("pantheon-dev-operator-b")).toEqual({
+      text: "operator-b",
+      full: "pantheon-dev-operator-b",
+    });
+    expect(shortOwnerText("pantheon-dev-paper-provisioner")).toEqual({
+      text: "paper-provisioner",
+      full: "pantheon-dev-paper-provisioner",
+    });
+    expect(shortOwnerText("operator-bff")).toEqual({
+      text: "operator-bff",
+      full: "operator-bff",
+    });
+    expect(shortOwnerText("")).toBeUndefined();
+    expect(shortOwnerText(null)).toBeUndefined();
+  });
+});
+
+describe("FE-STRATEGY-DETAIL-PLAIN-WORDS-20261125 strategy triple state, transition action labels and locale parity", () => {
+  it("translates lifecycle, review and deployment values and says when a strategy runs through its persona pool instead of deployment none", () => {
+    expect(strategyLifecycleLabel("approved", tZh)).toBe("已核准");
+    expect(strategyLifecycleLabel("approved", tEn)).toBe("Approved");
+    expect(strategyLifecycleLabel("paper", tZh)).toBe("模擬交易");
+    expect(strategyLifecycleLabel("paper", tEn)).toBe("Paper trading");
+
+    expect(strategyReviewLabel("approved", tZh)).toBe("已核准");
+    expect(strategyReviewLabel("approved", tEn)).toBe("Approved");
+    expect(strategyReviewLabel("none", tZh)).toBe("尚未送審");
+    expect(strategyReviewLabel("none", tEn)).toBe("Not in review");
+
+    expect(strategyDeploymentLabel("none", tZh, { runsThroughPersonaPool: true })).toBe("透過 Persona 策略池執行");
+    expect(strategyDeploymentLabel("none", tEn, { runsThroughPersonaPool: true })).toBe("Runs through persona pool");
+    expect(strategyDeploymentLabel("none", tZh, { runsThroughPersonaPool: false })).toBe("尚未部署");
+    expect(strategyDeploymentLabel("none", tEn, { runsThroughPersonaPool: false })).toBe("Not deployed");
+    expect(strategyDeploymentLabel("paper_running", tZh)).toBe("模擬交易執行中");
+    expect(strategyDeploymentLabel("paper_running", tEn)).toBe("Paper trading active");
+  });
+
+  it("translates every strategy transition action into plain words without arrow text", () => {
+    const actions = [
+      "scaffold_spec",
+      "run_replication",
+      "submit_review",
+      "promote_paper",
+      "promote_live",
+      "mark_degraded",
+      "replace_strategy",
+      "retire_live",
+      "rollback_to_paper",
+      "archive",
+    ] as const;
+
+    for (const action of actions) {
+      const zh = actionLabel(action, tZh);
+      const en = actionLabel(action, tEn);
+      expect(zh).toBeTruthy();
+      expect(en).toBeTruthy();
+      expect(zh).not.toBe(action);
+      expect(en).not.toBe(action);
+      expect(zh).not.toContain("→");
+      expect(en).not.toContain("→");
+    }
+  });
+
+  it("maintains 1:1 zh-TW and en-US key parity across strategyDetail", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.strategyDetail).sort()).toEqual(keysOf(enUS.strategyDetail).sort());
+  });
+
+  it("FE-REGISTRY-ACCEPTANCE-WORDS-20261126: maintains 1:1 zh-TW and en-US key parity across strategy.metricsReason, mgmt.evidence.cited, and lineageExplorer", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.strategy.metricsReason).sort()).toEqual(keysOf(enUS.strategy.metricsReason).sort());
+    expect(keysOf(zhTW.mgmt.evidence.cited).sort()).toEqual(keysOf(enUS.mgmt.evidence.cited).sort());
+    expect(keysOf(zhTW.lineageExplorer).sort()).toEqual(keysOf(enUS.lineageExplorer).sort());
+  });
+
+  it("FE-AGORA-TRADER-PAGES-20261126: provides zh-TW and en-US labels for Agora statuses and reasons and maintains 1:1 locale parity across Agora pages", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.agora).sort()).toEqual(keysOf(enUS.agora).sort());
+    expect(statusLabel("empty_fresh", tZh)).toBe("最新（無訊號）");
+    expect(statusLabel("available", tZh)).toBe("可用");
+    expect(statusLabel("review_requested", tZh)).toBe("已請求審核");
+    expect(statusLabel("support", tZh)).toBe("支持");
+    expect(statusLabel("oppose", tZh)).toBe("反對");
+    expect(statusLabel("conditional", tZh)).toBe("條件式");
+    expect(statusLabel("approve_with_conditions", tZh)).toBe("附條件核准");
+    expect(statusLabel("hold", tZh)).toBe("暫緩");
+    expect(reasonCodeDisplay("no_workshop_strategies", tZh).text).toBe("你還沒有工坊策略");
+    expect(reasonCodeDisplay("no_trader_meetings", tZh).text).toBe("你還沒有召開過會議");
+  });
+
+  it("FE-MGMT-MEETINGS-GATE-PANELS-20261126: provides zh-TW and en-US labels for gate panel outcomes, recommendations, and reasons and maintains 1:1 locale parity across meetingsCenter", () => {
+    const keysOf = (obj: unknown, prefix = ""): string[] =>
+      obj && typeof obj === "object"
+        ? Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) => keysOf(v, prefix ? `${prefix}.${k}` : k))
+        : [prefix];
+    expect(keysOf(zhTW.meetingsCenter).sort()).toEqual(keysOf(enUS.meetingsCenter).sort());
+    expect(statusLabel("operator_decision", tZh)).toBe("需操作者決定");
+    expect(statusLabel("operator_decision", tEn)).toBe("Operator Decision Required");
+    expect(statusLabel("adopt_eligible", tZh)).toBe("可採納（審查通過）");
+    expect(statusLabel("request_more_research", tZh)).toBe("建議補充研究");
+    expect(statusLabel("escalate", tZh)).toBe("建議升級裁決");
+    expect(statusLabel("vetoed", tZh)).toBe("已否決");
+    expect(outcomeLabel("operator_decision", tZh)).toBe("需操作者決定");
+    expect(outcomeLabel("adopt_eligible", tZh)).toBe("可採納（審查通過）");
+    expect(reasonCodeDisplay("no_panel_transcript", tZh).text).toBe("尚未記錄審查面板對話紀錄");
+    expect(reasonCodeDisplay("no_case_file_recorded", tZh).text).toBe("未記錄決策卷宗");
+    expect(reasonCodeDisplay("claim_uncited", tZh).text).toBe("主張未附卷宗引用");
   });
 });

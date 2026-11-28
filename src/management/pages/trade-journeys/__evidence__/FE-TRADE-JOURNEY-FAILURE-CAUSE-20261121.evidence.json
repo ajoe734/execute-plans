@@ -1,0 +1,121 @@
+{
+  "task_id": "FE-TRADE-JOURNEY-FAILURE-CAUSE-20261121",
+  "register_class": "RC6",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "depends_on": [
+    "TRADE-JOURNEY-FAILURE-CAUSE-20261121"
+  ],
+  "target_repo": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "scoped_artifacts": [
+    "src/management/pages/trade-journeys/",
+    "src/lib/bff-v1/tradeJourneys.ts",
+    "src/i18n/locales/",
+    "src/lib/enumLabels.ts"
+  ],
+  "acceptance_evidence": {
+    "1_rc6_cause_stage_figures_and_grounded_actions": {
+      "pre_broker_refusal": {
+        "journey_id": "tj_79726064-4cc2-5510-8e11-7f5e59ff89bd",
+        "source_event_id": "91d55953-b575-4fe8-8d39-6e0cade58d59",
+        "zh_tw_banner_and_list": "風控駁回（風險評估 · 未送單）：現金不足：需要 100,034.3461、可用 100,000、限額 100,000、委託 452 股",
+        "zh_tw_stages": {
+          "risk_evaluation": "風險評估: 風控駁回 — 現金不足：需要 100,034.3461、可用 100,000、限額 100,000、委託 452 股",
+          "order_submission": "下單送出: 未送單"
+        },
+        "zh_tw_timeline": "風險評估 · 風控駁回 · 未送單 — 現金不足：需要 100,034.3461、可用 100,000、限額 100,000、委託 452 股",
+        "grounded_action": "檢查該 persona 的現金與風控額度 -> /management/personas/persona-6507750312870d03a241 (or 檢查該 persona 的風控紀錄與缺少的駁回證據 when reject_reason is missing)"
+      },
+      "runtime_or_broker_read_failure": {
+        "journey_id": "tj_57418ba7-ef37-5015-9b5e-b6423872da89",
+        "source_event_id": "48c946c8-39d1-52bd-b1a1-ce72dc7f6e14",
+        "runtime_health_zh_tw": "對帳待確認：對帳時執行環境不健康，等待下次排程重新對帳（檢查項目：執行環境健康度）",
+        "broker_read_failure_zh_tw": "對帳待確認：對帳時無法連到券商，等待下次排程重新對帳（檢查項目：券商訂單紀錄（HTTP 503））",
+        "zh_tw_stage_and_timeline": "對帳: 對帳待確認 / 對帳 · 對帳待確認",
+        "grounded_action": "系統會在下次排程自動重新對帳。 / 等待下次排程對帳，無需動作。"
+      },
+      "proven_variance": {
+        "zh_tw_banner_stages_timeline": "對帳差異（現金餘額與成交後應有的金額不符）：現金變動（預期 217.5331、實際 172.5331、差額 -45）",
+        "multi_check_zh_tw": "對帳差異：部位變動（預期 -1、實際 0、差額 1）、現金變動（預期 2,165、實際 0、差額 -2,165）",
+        "grounded_action": "核對對帳差異（部位與現金） -> /management/personas/{persona_id} (or 查看已開立的事件單 -> /management/incidents/{incident_id})"
+      },
+      "missing_evidence": {
+        "missing_reject_reason_zh_tw": "風控駁回（風險評估 · 未送單）：此筆記錄沒有保存原因 · 證據不足（缺少：駁回原因）",
+        "missing_available_cash_zh_tw": "風控駁回（風險評估 · 未送單）：現金不足：需要 100,034.3461 · 證據不足（缺少：可用金額）",
+        "missing_required_cash_zh_tw": "風控駁回（風險評估 · 未送單）：現金不足：可用 100,000 · 證據不足（缺少：所需金額）",
+        "missing_both_cash_figures_zh_tw": "風控駁回（風險評估 · 未送單）：現金不足 · 證據不足（缺少：所需金額、可用金額）",
+        "missing_position_figures_zh_tw": "風控駁回（風險評估 · 未送單）：持股不足 · 證據不足（缺少：持有股數、委託股數）",
+        "missing_booking_actual_zh_tw": "對帳待確認：對帳比對證據不完整 · 待查證原因：現金餘額與成交後應有的金額不符 · 現金變動（預期 217.5331、實際 缺少） · 證據不足（缺少：現金變動（實際值））",
+        "missing_reconciliation_reason_zh_tw": "對帳待確認：此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因、帳務比對明細）",
+        "missing_deferred_cause_only_zh_tw": "對帳待確認：此筆記錄沒有保存原因 · 證據不足（缺少：對帳原因）",
+        "positive_runtime_broker_defer_evidence_requirement": "reconciliationAnalysisView requires positive runtime (classification=runtime_health, runtime_unhealthy_at_reconciliation/reconciliation_deferred_runtime_unhealthy, or runtime health checks) or broker (classification=broker_unavailable, broker_unavailable_at_reconciliation/reconciliation_deferred_broker_unavailable, or broker_record unavailable check) evidence before naming runtime health or broker unavailability; unknown/omitted/reason_not_recorded deferred causes remain 對帳待確認 with isUnverified=true, explicit 證據不足（缺少：對帳原因...）, and grounded missing-evidence actions.",
+        "completed_reconciliation_with_passed_checks_zh_tw": "對帳: 成功 / 對帳 · 成功 — 券商成交數量（預期 1、實際 1、差額 0）、現金變動（預期 2,206、實際 2,206、差額 0）",
+        "historical_timeline_event_isolation": "Preserves event-local reconciliation cause/comparison and successful passed-check evidence across historical timeline items (including mixed historical success/failure refresh), and only hydrates when source_event_id/event_id matches and causes/statuses are compatible.",
+        "grounded_action": "補齊缺少的對帳證據並確認帳務紀錄 -> /management/personas/{persona_id}"
+      }
+    },
+    "2_recorded_bodies_controls_browser_test_and_hosted_verification": {
+      "recorded_journeys_tested": [
+        "tj_79726064-4cc2-5510-8e11-7f5e59ff89bd (event 91d55953-b575-4fe8-8d39-6e0cade58d59, pre-repair and post-repair)",
+        "tj_57418ba7-ef37-5015-9b5e-b6423872da89 (event 48c946c8-39d1-52bd-b1a1-ce72dc7f6e14, pre-repair unverified, post-repair fill 1 @ 218.5 with runtime health and unverified booking comparison, broker read failure 503, genuine cash variance, and upstream omission)",
+        "tj_29473e86-63ff-5384-bda1-23eef61cebb2 (recorded 12:40Z variance snapshot and multi-check proven variance)"
+      ],
+      "browser_test": "src/management/pages/trade-journeys/TradeJourneysPage.failureCause.browser.test.ts",
+      "unit_and_integration_tests": [
+        "src/management/pages/trade-journeys/TradeJourneysPage.readable.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysPage.recorded.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysPage.i18n.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysPage.test.tsx",
+        "src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts",
+        "src/lib/__tests__/enumLabels.test.ts",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts"
+      ],
+      "hosted_readonly_verification_steps": [
+        {
+          "step": 1,
+          "id": "verify_deployed_fe_bff_pair",
+          "method": "GET",
+          "endpoints": [
+            "https://app.dev.mvl-cap.tw/deployment.json",
+            "https://api.dev.mvl-cap.tw/bff/version"
+          ],
+          "readOnly": true,
+          "assertion": "Confirm deployment.json commit matches execute-plans dev SHA, buildMode has VITE_BFF_MODE=live, VITE_BFF_FALLBACK=strict, VITE_BFF_REAL_WRITES=false, and /bff/version source_commit_sha contains TRADE-JOURNEY-FAILURE-CAUSE-20261121."
+        },
+        {
+          "step": 2,
+          "id": "execute_readonly_release_probe",
+          "method": "GET",
+          "endpoints": [
+            "https://api.dev.mvl-cap.tw/bff/management/trade-journeys?tenant_id=tenant-dev&environment=paper&page_size=50",
+            "https://api.dev.mvl-cap.tw/bff/management/trade-journeys?tenant_id=tenant-dev&environment=paper&page_size=50&attention=recon_mismatch"
+          ],
+          "readOnly": true,
+          "assertion": "Run acceptance/probes/trade-journey-readable against ACCEPTANCE_BFF_URL=https://api.dev.mvl-cap.tw. Confirm 0 expression choice rejection codes (long_cash), 0 deferred reconciliation rows in attention=recon_mismatch, and 0 unproven accounting_variance claims without valid discrepancies."
+        },
+        {
+          "step": 3,
+          "id": "verify_zh_tw_list_and_repaired_pre_broker_refusal",
+          "method": "GET",
+          "endpoints": [
+            "https://app.dev.mvl-cap.tw/management/trade-journeys?tenant_id=tenant-dev&environment=paper",
+            "https://app.dev.mvl-cap.tw/management/trade-journeys/tj_79726064-4cc2-5510-8e11-7f5e59ff89bd?tenant_id=tenant-dev&environment=paper"
+          ],
+          "readOnly": true,
+          "assertion": "In zh-TW browser view, verify tj_79726064-4cc2-5510-8e11-7f5e59ff89bd (event 91d55953-b575-4fe8-8d39-6e0cade58d59) shows 風控駁回 and 未送單 across list, detail banner, 風險評估/下單送出 stage cards, and timeline, with cause 現金不足 and figures 需要 100,034.3461、可用 100,000、限額 100,000、委託 452 股, and grounded persona link /management/personas/persona-6507750312870d03a241."
+        },
+        {
+          "step": 4,
+          "id": "verify_zh_tw_repaired_reconciliation_and_variance_controls",
+          "method": "GET",
+          "endpoints": [
+            "https://app.dev.mvl-cap.tw/management/trade-journeys/tj_57418ba7-ef37-5015-9b5e-b6423872da89?tenant_id=tenant-dev&environment=paper"
+          ],
+          "readOnly": true,
+          "assertion": "In zh-TW browser view after history repair and refresh, verify tj_57418ba7-ef37-5015-9b5e-b6423872da89 (event 48c946c8-39d1-52bd-b1a1-ce72dc7f6e14) displays 賣 1 · @ 218.5 · 成交 1 股 and 對帳待確認 with runtime health / unverified accounting evidence across list, detail banner, 對帳 stage card, and timeline; verify proven accounting_variance rows show compared values (預期/實際/差額) and missing-evidence rows explicitly identify 證據不足（缺少：...）."
+        }
+      ]
+    }
+  }
+}

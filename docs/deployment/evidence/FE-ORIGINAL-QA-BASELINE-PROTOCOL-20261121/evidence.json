@@ -1,0 +1,95 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-ORIGINAL-QA-BASELINE-PROTOCOL-20261121",
+  "title": "Restore the original four-role QA input contract",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-ORIGINAL-QA-BASELINE-PROTOCOL-20261121",
+  "problem_register": {
+    "root_cause_class": "RC1",
+    "work_package": "WP1.2",
+    "attached_tasks": [
+      "COMPAT-RESIDUAL-HOSTED-ACCEPT-20261111",
+      "FE-ORIGINAL-PAIRED-READONLY-QA-20261112",
+      "DEV-ORIGINAL-PAIRED-READONLY-QA-CALLER-20261112"
+    ]
+  },
+  "official_failure_evidence": {
+    "root_run_id": "44952879415",
+    "artifact_url": "https://github.com/ajoe734/pantheon/actions/runs/44952879415/artifacts/14729050799",
+    "private_official_summary_path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/PAPER-RISK-JOURNEY-HOSTED-PROOF-20261121-root-44952879415.J9DOpsDD/exact-release-published.AAvBz29t/original-paired-readonly-qa.json",
+    "private_official_summary_sha256": "9a48f020325521ff01b8b7de4e58b2e8137b518e1f9702be34e3c0fac5cb9acd",
+    "accepted_pair": {
+      "fe": "19c58d24d8ecf176c9f3a9114f1f538da50c6f1d",
+      "bff": "7de795f24a6060428646a5fa558adb21bb03a692",
+      "pair": "fd7648bc9c835380131ca76e11c0306a0ff5685e1ad4bfddb321633dd7791cd4",
+      "auth_mode": "strict"
+    },
+    "chromium_readiness": {
+      "chromium_build": "v1255",
+      "cli_ready_exit_code": 0
+    },
+    "archived_baseline": {
+      "bytes": 504929,
+      "expected_sha256": "ee11d9c28f52d862955255cd9ac08b70a6915fcf003417559b4fcb45aff0618d",
+      "actual_sha256": "ee11d9c28f52d862955255cd9ac08b70a6915fcf003417559b4fcb45aff0618d",
+      "hash_matched": true
+    },
+    "cli_result": {
+      "previous_cli_sha256": "c8354cbebe09cd56b46132ea3d5f83146bd718e08a38b7fc28530d5d5ae4e329",
+      "exit_code": 2,
+      "stderr_tail": "invalid QA input: baseline lacks original default-page/hide_retired queries\n",
+      "outcome": "unproven",
+      "reason_code": "private_retention_failed",
+      "reason": "CLI produced no private result directory to retain"
+    }
+  },
+  "diagnosis": {
+    "summary": "Dev Root 44952879415 installed Chromium v1255 and passed CLI readiness (exit 0). The immutable 13-response archived baseline matches its approved SHA256 (ee11d9c28f52d862955255cd9ac08b70a6915fcf003417559b4fcb45aff0618d) and contains 12 frozen /bff/strategies captures (including page_size=5, page_size=50, page_size=20&page_token=20, per-persona, and hide_retired_personas=true&page_size=20) plus 1 /bff/management/data-sources capture. Its original keys never included standalone /bff/strategies?page_size=20, which belongs exclusively to the live 10-sample default_first_page timing loop. validateInput() in scripts/accept-persona-strategy-hosted-readonly.mjs falsely required paths.includes(DEFAULT_PAGE_PATH) in the frozen baseline dictionary and exited with code 2 before launching the browser. Neither the workflow nor the protected supplementary publisher was the source of the parser failure.",
+    "changed_invariant": "Removed only paths.includes(DEFAULT_PAGE_PATH) from validateInput() in scripts/accept-persona-strategy-hosted-readonly.mjs while retaining paths.includes(HIDE_RETIRED_PATH) because hide_retired_without_state timing is read from responses[HIDE_RETIRED_PATH].ms.",
+    "unchanged_owners": "Existing CLI invocation contract, protected supplementary publisher, private archived baseline file, product features, runtime/auth, credentials, workflows, and deployment scope remain untouched."
+  },
+  "artifacts": {
+    "cli": "scripts/accept-persona-strategy-hosted-readonly.mjs",
+    "cli_sha256": "0beaf4f2143ee9af341e820a3ba9dd7d0cad90c62d28bd47d24554c3573ad7e5",
+    "tests": "src/test/persona-strategy-hosted-readonly.test.ts",
+    "tests_sha256": "08d0ad5269298c61dd44486fadf6a4ce3608e9b3746fe7049ae585013cc1ccb5"
+  },
+  "preserved_original_checks": {
+    "baseline_admission": "13 total captures (12 /bff/strategies* + 1 /bff/management/data-sources), exact sha256 match against baseline_identity.sha256, non-empty response JSON j for each capture, HIDE_RETIRED_PATH present in baseline keys, expected.persona_id occurring in a baseline query; standalone DEFAULT_PAGE_PATH (/bff/strategies?page_size=20) not required in baseline keys.",
+    "default_first_page_live_timing": "10 live GET samples to /bff/strategies?page_size=20, p50 (mean of middle two) < 1200ms",
+    "per_persona_live_timing": "10 live GET samples to the baseline persona_id query URL, p50 (mean of middle two) < 1200ms",
+    "hide_retired_timing": "read from the captured /bff/strategies?hide_retired_personas=true&page_size=20 response, < 5000ms",
+    "persona_detail_timing": "browser navigation to /management/personas/{persona_id}, usable_ms < 6400ms",
+    "four_role_checks": "TEST_ADMIN, OPERATOR_A, OPERATOR_B, VIEWER sequential real GUI logins, cold fresh-entry API <= 2000ms and usable table <= 2500ms, distinct verified server subjects/tenant/roles, Fleet/holdings/data-sources routes, logout + post-logout /bff/me 401",
+    "warm_fleet_timing": "20 browser warm Fleet reads, nearest-rank p95 <= 1000ms",
+    "semantic_parity": "all 13 immutable raw-path semantic comparisons retained; exact_equal never forced; documented exact-pointer reconciliations reported separately",
+    "private_evidence_and_write_guard": "private output directory 0700 and files 0600, secret/token/JWT redaction, no screenshots/traces/video, only /bff/auth/dev-login, /bff/auth/refresh, /bff/logout writes allowed, all business writes blocked and reported",
+    "supplementary_protocol": "protected supplementary OPERATOR_A 9 canonical GETs + 4 retired GETs (404/405) + 4 Management views preserved"
+  },
+  "local_verification": {
+    "syntax_check": {
+      "command": "node --check scripts/accept-persona-strategy-hosted-readonly.mjs",
+      "exit_code": 0
+    },
+    "eslint": {
+      "command": "npx eslint scripts/accept-persona-strategy-hosted-readonly.mjs src/test/persona-strategy-hosted-readonly.test.ts",
+      "exit_code": 0
+    },
+    "typecheck_app": {
+      "command": "npm run typecheck:app",
+      "exit_code": 0
+    },
+    "vitest_suite": {
+      "command": "npx vitest run src/test/persona-strategy-hosted-readonly.test.ts",
+      "exit_code": 0,
+      "summary": "38/38 tests passed (including synthetic original 13-key baseline structure without standalone default page_size=20, hide_retired requirement check, 10-repeat live timing checks for default_first_page and per_persona, and full four-role/admin-batch/supplementary loopback protocol)"
+    }
+  },
+  "runtime_budget": {
+    "persistent_writers_added": false,
+    "recurring_jobs_or_emitters_added": false
+  }
+}

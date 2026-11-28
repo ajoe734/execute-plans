@@ -1,0 +1,91 @@
+{
+  "schema_version": "pantheon.fe-registry-acceptance-words.evidence.v1",
+  "task_id": "FE-REGISTRY-ACCEPTANCE-WORDS-20261126",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-REGISTRY-ACCEPTANCE-WORDS-20261126",
+  "base_commit": "9d54080422546a20336f976838d74a17e8554954",
+  "timestamp": "2026-11-26T15:48:30Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "summary": "Hosted b53aaa794 acceptance findings: strategy performance shows '未記錄' when metricsReason is source_unavailable; cited evidence shows '有些來源讀不到' and '至少 500 筆' when all 7 sources are ok and only the 500-reference cap applies to 1750 total references; cited kinds and approval decision types show raw codes/English; Lineage Explorer submits raw non-ID text as root if Enter is pressed before the candidate name list finishes loading."
+  },
+  "modified_surfaces": [
+    "src/lib/enumLabels.ts",
+    "src/lib/__tests__/enumLabels.test.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+    "src/management/pages/phase2/LineageExplorer.tsx",
+    "src/management/pages/phase2/LineageExplorer.test.tsx",
+    "src/management/pages/Lists.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-REGISTRY-ACCEPTANCE-WORDS-20261126/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_strategy_metrics_reason_text": {
+      "passed": true,
+      "implementation": "Added 'source_unavailable' to KNOWN_METRICS_REASONS in src/lib/enumLabels.ts with zh-TW ('目前無法讀取結果') and en-US ('Result could not be read now') translations under strategy.metricsReason.source_unavailable. Updated unknown reason fallback in strategyMetricsReasonText to return { text: code, code } instead of t('strategy.metricsReason.other') ('Not recorded' / '未記錄').",
+      "tests": [
+        "src/lib/__tests__/enumLabels.test.ts > translates known metricsReason codes and falls back with the raw code on title",
+        "src/management/pages/Lists.test.tsx > FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC1: strategy table renders source_unavailable as a plain phrase in zh-TW and en-US and renders an unknown metricsReason as its code instead of Not recorded / 未記錄"
+      ]
+    },
+    "AC2_cited_evidence_cap_vs_source_errors": {
+      "passed": true,
+      "implementation": "Exposed referenceTotal on ManagementCitedEvidenceList in src/lib/bff-v1/management.ts from summary.reference_total (preserving page_info.total on total, plus maxReferences and referencesTruncated). Updated CitedSourcesNotice and EvidenceCitedList in src/management/pages/oversight/_core.tsx so 'Some sources could not be read' (mgmt.evidence.cited.incompleteTitle) and 'At least N (incomplete)' appear only when a source status !== 'ok' (or source.truncated); when all sources are ok and only referencesTruncated applies, the notice states how many references exist (referenceTotal, e.g. 1750) and that the newest maxReferences (e.g. 500) are listed, and the total card prints referenceTotal (1750).",
+      "tests": [
+        "src/lib/bff-v1/__tests__/management.test.ts > exposes summary.reference_total alongside page_info.total, max_references, and references_truncated when the BFF reference cap applies (FE-REGISTRY-ACCEPTANCE-WORDS-20261126)",
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC2 & AC3: renders reference_total 1750 and newest 500 notice when all 7 sources are ok and only the reference cap applies, and translates every recorded cited kind and approval decision type in zh-TW and en-US with kind-in-words as primary name when name_missing"
+      ]
+    },
+    "AC3_cited_kinds_and_approval_decision_types_in_words": {
+      "passed": true,
+      "implementation": "Added zh-TW and en-US translations for cited kinds and source classes telemetry_summary, manual_review_ticket, meeting_action_ticket, registry_entry, risk-policy-paper-pool, and persona-lifecycle-paper-ladder, plus approval decision types capital_pool_activation, registry_entry, and persona_lifecycle_transition. Updated citedRowDisplayName in src/management/pages/oversight/_core.tsx so a row with nameMissing shows labelParts.target_display_name when present, otherwise its kind in words (citedKindLabel) as the primary name with refId always shown as secondary monospace text. Updated citationName so parts.target_display_name is shown when present.",
+      "tests": [
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC2 & AC3: renders reference_total 1750 and newest 500 notice when all 7 sources are ok and only the reference cap applies, and translates every recorded cited kind and approval decision type in zh-TW and en-US with kind-in-words as primary name when name_missing"
+      ]
+    },
+    "AC4_lineage_enter_before_candidates_loaded": {
+      "passed": true,
+      "implementation": "Added candidatesLoading and pendingNameLookup state to LineageExplorerPage in src/management/pages/phase2/LineageExplorer.tsx. While candidates are loading, a visible status line (data-testid='lineage-candidates-loading', lineageExplorer.loadingCandidates) is shown. Pressing Enter while candidates are loading queues non-ID text in pendingNameLookup and never sends it as activeRootId; once candidates resolve, pendingNameLookup resolves the matching candidate ID and commits it (and non-ID text that still does not match any candidate is never committed as root).",
+      "tests": [
+        "src/management/pages/phase2/LineageExplorer.test.tsx > Pressing Enter before the candidate name list has loaded shows a loading line, never sends non-ID text as root while loading, and resolves the name once loaded (FE-REGISTRY-ACCEPTANCE-WORDS-20261126 AC4)"
+      ]
+    },
+    "AC5_lint_tsc_locale_parity_and_test_integrity": {
+      "passed": true,
+      "changed_test_assertions_justification": [
+        {
+          "file": "src/lib/__tests__/enumLabels.test.ts",
+          "line": 311,
+          "before": "expect(strategyMetricsReasonText(\"brand_new_reason\", tEn)).toEqual({ text: \"Not recorded\", code: \"brand_new_reason\" });",
+          "after": "expect(strategyMetricsReasonText(\"brand_new_reason\", tEn)).toEqual({ text: \"brand_new_reason\", code: \"brand_new_reason\" });",
+          "justification": "AC1 explicitly specifies: 'an unknown reason shows its code instead of the word not recorded'. The existing test asserted the old fallback ('Not recorded') for unknown reason 'brand_new_reason' and was updated to assert the raw code ('brand_new_reason') in both en-US and zh-TW."
+        }
+      ],
+      "tests": [
+        "src/lib/__tests__/enumLabels.test.ts > FE-REGISTRY-ACCEPTANCE-WORDS-20261126: maintains 1:1 zh-TW and en-US key parity across strategy.metricsReason, mgmt.evidence.cited, and lineageExplorer",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts > Pack PM-i18n parity (17 passed)"
+      ]
+    }
+  },
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "note": "Pure frontend adapter, presentation, and localization change; adds no recurring jobs, emitters, or persistent writers."
+  },
+  "residual_findings": [],
+  "verification": {
+    "commands": [
+      "npm run lint -> 0 errors (135 pre-existing warnings), exit 0",
+      "npx tsc --noEmit -> 0 errors, exit 0",
+      "npx vitest run src/lib/__tests__/enumLabels.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/Lists.test.tsx src/management/pages/oversight/EvidenceExplorerPage.test.tsx src/management/pages/phase2/LineageExplorer.test.tsx -> 5 files, 157 passed, exit 0",
+      "npx vitest run src/lib/v5/management/__tests__/i18nParity.test.ts -> 1 file, 17 passed, exit 0"
+    ]
+  }
+}

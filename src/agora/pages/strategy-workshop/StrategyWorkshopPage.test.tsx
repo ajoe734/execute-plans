@@ -366,6 +366,23 @@ describe("StrategyWorkshopPage", () => {
     await screen.findByTestId("workshop-list-empty");
   });
 
+  it("renders Strategy Workshop list and session headers with dark theme tokens and zero bg-white or slate light classes", async () => {
+    vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
+    const listRender = render(<StrategyWorkshopPage />);
+    const listHeader = await screen.findByTestId("workshop-list-header");
+    expect(listHeader.className).toContain("bg-card");
+    expect(listHeader.className).toContain("text-foreground");
+    expect(listRender.container.innerHTML).not.toMatch(/\bbg-white\b|\bslate-\d+\b/);
+    listRender.unmount();
+
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    const sessionRender = render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    const sessionHeader = await screen.findByTestId("strategy-workshop-runtime-header");
+    expect(sessionHeader.className).toContain("bg-card");
+    expect(sessionHeader.className).toContain("text-foreground");
+    expect(sessionHeader.className).not.toMatch(/\bbg-white\b|\bslate-\d+\b/);
+  });
+
   it("creates a free-form workshop with the title as its durable initial message", async () => {
     const title = "Live trend-following strategy";
     vi.mocked(workshopsModule.createWorkshop).mockResolvedValue(MOCK_WORKSHOP);

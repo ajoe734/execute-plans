@@ -150,13 +150,13 @@ export function WorkshopListView({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="strategy-workshop-page-list">
+    <div className="flex h-full min-h-0 flex-col bg-[#111417] text-[#f0ece4]" data-testid="strategy-workshop-page-list">
       {/* List Header Bar with Create Action */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 shrink-0" data-testid="workshop-list-header">
-        <h2 className="text-sm font-semibold text-slate-800">Strategy Workshops</h2>
+      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2.5 text-foreground shrink-0" data-testid="workshop-list-header">
+        <h2 className="text-sm font-semibold text-foreground">Strategy Workshops</h2>
         <Button
           size="sm"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-8 text-xs"
+          className="bg-indigo-600 hover:bg-indigo-500 text-[#f0ece4] font-semibold h-8 text-xs"
           data-testid="create-workshop-btn"
           onClick={() => setShowCreateForm(true)}
           type="button"
@@ -166,15 +166,15 @@ export function WorkshopListView({
       </div>
 
       {showCreateForm && (
-        <div className="border-b border-indigo-100 bg-indigo-50/50 p-4 shrink-0" data-testid="create-workshop-form">
+        <div className="border-b border-border bg-muted/40 p-4 shrink-0" data-testid="create-workshop-form">
           <div className="max-w-md space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-900">Create New Strategy Workshop</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Create New Strategy Workshop</h3>
             <div>
               <label className="sr-only" htmlFor="create-workshop-title">Workshop Strategy Title</label>
               <input
                 id="create-workshop-title"
                 type="text"
-                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 data-testid="create-workshop-title-input"
                 placeholder="e.g. BTC Volatility Arbitrage Strategy"
                 value={createTitle}
@@ -187,11 +187,11 @@ export function WorkshopListView({
                 }}
               />
             </div>
-            {createError && <p className="text-xs text-red-600 font-semibold" data-testid="create-workshop-error">{createError}</p>}
+            {createError && <p className="text-xs text-rose-400 font-semibold" data-testid="create-workshop-error">{createError}</p>}
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white h-7 text-xs font-semibold"
+                className="bg-indigo-600 hover:bg-indigo-500 text-[#f0ece4] h-7 text-xs font-semibold"
                 data-testid="create-workshop-submit"
                 disabled={!createTitle.trim() || creating}
                 onClick={() => void handleCreateWorkshop()}
@@ -202,7 +202,7 @@ export function WorkshopListView({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs"
+                className="h-7 text-xs border-border bg-card text-foreground hover:bg-muted"
                 data-testid="create-workshop-cancel"
                 onClick={() => {
                   setShowCreateForm(false);
@@ -219,29 +219,29 @@ export function WorkshopListView({
       )}
 
       {state === "loading" && (
-        <div className="flex items-center justify-center gap-2 p-6 text-sm text-slate-500" data-testid="workshop-list-loading">
+        <div className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground" data-testid="workshop-list-loading">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
           Loading workshops...
         </div>
       )}
       {state === "empty" && !showCreateForm && (
-        <div className="flex flex-col items-center gap-2 p-6 text-sm text-slate-500" data-testid="workshop-list-empty">
-          <Bot className="h-10 w-10 text-slate-300" />
+        <div className="flex flex-col items-center gap-2 p-6 text-sm text-muted-foreground" data-testid="workshop-list-empty">
+          <Bot className="h-10 w-10 text-muted-foreground" />
           No workshops found. Click &quot;+ Create Workshop&quot; to begin.
         </div>
       )}
       {state === "error" && (
-        <div className="p-6 text-sm text-red-600" data-testid="workshop-list-error">Unable to load workshops.</div>
+        <div className="p-6 text-sm text-rose-400" data-testid="workshop-list-error">Unable to load workshops.</div>
       )}
       {state === "loaded" && selectedWorkshopId && (
         <div
           className="grid min-h-0 flex-1 grid-cols-[minmax(210px,260px)_minmax(0,1fr)]"
           data-testid="strategy-workshop-live-tab"
         >
-          <aside className="min-h-0 overflow-auto border-r border-slate-200 bg-slate-50 p-3" data-testid="workshop-selector">
-            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase text-slate-500">
+          <aside className="min-h-0 overflow-auto border-r border-border bg-card p-3" data-testid="workshop-selector">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase text-muted-foreground">
               <span>Live workshops</span>
-              <span className="normal-case text-slate-400">{workshops.length} 個工坊</span>
+              <span className="normal-case text-muted-foreground">{workshops.length} 個工坊</span>
             </div>
             <div className="grid gap-2" data-testid="workshop-list">
               {workshops.map((ws) => {
@@ -251,8 +251,8 @@ export function WorkshopListView({
                     aria-current={selected ? "page" : undefined}
                     className={
                       selected
-                        ? "rounded-md border border-blue-300 bg-blue-50 p-2 text-left"
-                        : "rounded-md border border-slate-200 bg-white p-2 text-left hover:border-slate-300"
+                        ? "rounded-md border border-indigo-500/50 bg-muted p-2 text-left"
+                        : "rounded-md border border-border bg-background p-2 text-left hover:bg-muted/60"
                     }
                     data-testid={`workshop-item-${ws.workshop_id}`}
                     data-workshop-id={ws.workshop_id}
@@ -260,8 +260,8 @@ export function WorkshopListView({
                     onClick={() => handleSelectWorkshop(ws.workshop_id)}
                     type="button"
                   >
-                    <span className="block text-xs font-semibold text-slate-800">{workshopTitle(ws)}</span>
-                    <span className="block text-[11px] text-slate-500">{ws.status} - {compactTime(ws)}</span>
+                    <span className="block text-xs font-semibold text-foreground">{workshopTitle(ws)}</span>
+                    <span className="block text-[11px] text-muted-foreground">{ws.status} - {compactTime(ws)}</span>
                   </button>
                 );
               })}

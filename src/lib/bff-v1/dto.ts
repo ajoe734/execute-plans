@@ -419,16 +419,62 @@ export interface Strategy extends BaseObject {
   sharpe: number | null;
   drawdown: number | null;
   totalTrades?: number | null;
+  total_trades?: number | null;
   metricsAsOf?: string | null;
+  metrics_as_of?: string | null;
   metricsResolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
+  metrics_resolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
   metricsPersonaId?: string | null;
+  /** BFF-STRATEGY-METRICS-RUNTIME-20261125: recorded reason a metric is null (e.g. `no_fills`). */
+  metricsReason?: string | null;
+  metrics_reason?: string | null;
+  /**
+   * BFF-STRATEGY-METRICS-RUNTIME-20261125: runtime state read from the
+   * RuntimeBinding owner. Absent on older BFFs; `unknown` when the read failed.
+   */
+  runtimeStatus?: "running" | "paused_market_input" | "paused_operator" | "none" | "unknown" | string | null;
+  runtime_status?: "running" | "paused_market_input" | "paused_operator" | "none" | "unknown" | string | null;
+  runtimeStatusReason?: string | null;
+  runtime_status_reason?: string | null;
+}
+
+export type PaperRiskTier = "low" | "medium" | "high";
+export const PAPER_RISK_TIERS: readonly PaperRiskTier[] = ["low", "medium", "high"] as const;
+
+export type PersonaRiskPolicyChangeStatus =
+  | "effective"
+  | "pending_approval"
+  | "unavailable"
+  | "failed"
+  | (string & {});
+
+export interface PersonaRiskPolicyChange {
+  requestedRisk: PaperRiskTier | null;
+  effectiveRisk: PaperRiskTier | null;
+  status: PersonaRiskPolicyChangeStatus;
+  policyVersion?: string | null;
+  approvalId?: string | null;
+  reason?: string | null;
 }
 
 export interface Persona extends BaseObject {
   archetype: string;
   routedStrategies: number;
-  successRate: number;
+  /**
+   * BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125: `null` when no win rate was
+   * recorded (the BFF no longer fills in 0.0). Render "no data", never 0%.
+   */
+  successRate: number | null;
+  /** BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125 list scope; absent on older BFFs. */
+  listScope?: "current" | "test" | "retired" | "research" | string | null;
   lifecycleStatus?: PersonaStatus | "research_only" | "consultable" | "paper_owner" | "live_owner" | "frozen" | string;
+  capitalMode?: "paper" | "canary" | "live" | string | null;
+  deploymentStage?: "research" | "paper" | "canary" | "live" | string | null;
+  paperLedgerId?: string | null;
+  runtimeBindingId?: string | null;
+  runtimeId?: string | null;
+  deploymentPlanId?: string | null;
+  riskPolicyChange?: PersonaRiskPolicyChange | null;
   mandate?: string;
   strategyFamily?: string;
   traits?: {
@@ -629,6 +675,27 @@ export interface EvolutionQualificationDecisionItem {
   criteria: EvolutionQualificationCriterionRow[];
 }
 
+export interface EvolutionMemberBaseline {
+  persona_id: string;
+  persona_name: string | null;
+  artifact_ref: string;
+  stage: string | null;
+  risk_weight: number | null;
+  pool_version: number | null;
+  /** `approved`, `no_approved_baseline`, `unavailable` (or an unknown owner status, passed through). */
+  status: string;
+  /** Owner reason code passed through verbatim; never hard coded by the FE. */
+  reason: string | null;
+}
+
+export interface EvolutionMemberBaselinesSurface {
+  status: string;
+  reason: string | null;
+  approved: number | null;
+  not_approved: number | null;
+  unavailable: number | null;
+}
+
 export interface EvolutionQualificationReport {
   tenant_id?: string | null;
   sweep_id?: string | null;
@@ -640,6 +707,9 @@ export interface EvolutionQualificationReport {
   counts_by_first_failing_criterion: Record<string, number>;
   failure_reason?: string | null;
   items: EvolutionQualificationDecisionItem[];
+  /** Absent when the BFF predates BFF-EVO-JOURNAL-POOL-VERSIONS (not the same as an empty list). */
+  member_baselines?: EvolutionMemberBaseline[] | null;
+  member_baselines_surface?: EvolutionMemberBaselinesSurface | null;
   total: number;
   limit: number;
   offset: number;
@@ -685,6 +755,13 @@ export interface EvolutionProgram extends BaseObject {
   revision?: number;
   status?: EvolutionProgramStatus | string;
   origin?: "manual" | "auto_qualified" | "automatic" | (string & {});
+  /** Recorded classification (optional; absent means the BFF gave none). */
+  subject_class?: string;
+  record_class?: string;
+  classification?: string;
+  data_scope?: string;
+  origin_class?: string;
+  is_test?: boolean;
   originKind?: "automatic" | "manual";
   source_decision_ids?: string[];
   sourceDecisionIds?: string[];
@@ -812,6 +889,7 @@ export interface ResearchTaskRun {
   createdAt?: string;
   created_at?: string | null;
   parameters?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   inputRefs?: Record<string, unknown>;
   input_refs?: Record<string, unknown>;
   artifactRefs?: string[];
@@ -887,7 +965,46 @@ export interface ResearchTaskDisplaySummary {
   [key: string]: unknown;
 }
 
+export interface CollectorQueryPlan {
+  week?: string;
+  changes: Record<string, { before: string[]; after: string[] }>;
+}
+
+/** BFF-RESEARCH-DEMAND-READ-20261125: one open persona demand from the Research owner. */
+export interface ResearchDemand {
+  demand_id: string;
+  persona_id: string | null;
+  persona_display_name: string | null;
+  short_measure: string | null;
+  tried_families: string[];
+  missing_datasets: string[];
+  mandate: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  status: string | null;
+  evidence_ref: string | null;
+  last_template_search_reason: string | null;
+  last_discovery_reason: string | null;
+}
+
+/** Template-search task join: the demand it searched for and what was recorded. */
+export interface ResearchTaskDemandRef {
+  demand_id: string;
+  persona_id: string | null;
+  attempt_count: number | null;
+  last_reason_code: string | null;
+  short_measure: string | null;
+  status: string | null;
+}
+
+export type ResearchDemandsSurface =
+  | { state: "ok"; demands: ResearchDemand[] }
+  | { state: "unavailable"; reason: string | null };
+
 export interface ResearchTask extends ResearchExperiment {
+  demand?: ResearchTaskDemandRef | null;
+  persona_ids?: string[];
+  non_real_reason?: string | null;
   taskId: string;
   task_id?: string;
   title?: string | null;
@@ -910,6 +1027,7 @@ export interface ResearchTask extends ResearchExperiment {
   is_non_real?: boolean | null;
   name_is_fallback_id?: boolean | null;
   display_summary?: ResearchTaskDisplaySummary | string | null;
+  query_plan?: CollectorQueryPlan;
   constraints?: Record<string, unknown>;
   idempotencyKey?: string | null;
   idempotency_key?: string | null;
@@ -990,6 +1108,12 @@ export interface Artifact extends BaseObject {
   hash: string;
   source_kind?: ArtifactSourceKind;
   sourceKind?: ArtifactSourceKind;
+  /**
+   * BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125: `current` / `test` / `retired` /
+   * `unbound` for Registry rows, `research` for research run outputs, and
+   * `unknown` when the persona directory could not be read. Absent on older BFFs.
+   */
+  list_scope?: "current" | "test" | "retired" | "unbound" | "research" | "unknown" | string | null;
   registry_id?: string | null;
   artifact_id?: string | null;
   artifact_type?: string | null;

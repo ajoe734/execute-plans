@@ -1,0 +1,69 @@
+{
+  "task_id": "FE-EVIDENCE-DEAD-LINKS-20261125",
+  "title": "Links into the evidence page that cannot open anything are removed",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "register_class": "RC6",
+  "delivery_repository": "ajoe734/execute-plans",
+  "base_branch": "dev",
+  "delivery_state": "implemented_ready_for_review",
+  "operator_approval": "2026-11-25 conversation 52a1dacf (照建議 全部處理好) names the seven registry pages so the feature freeze does not apply to this scope.",
+  "hosted_verification_note": "No VM or SSH access of any kind. No operator keys read. Functional evidence only using recorded BFF trade-journey detail/timeline shapes and canonical meeting action payloads. Hosted verification belongs to the operator acceptance task.",
+  "acceptance_coverage": {
+    "1": {
+      "status": "met",
+      "what": "TradeJourneysPage no longer links to /management/evidence?journey_id=<journeyId>. In its place, the Evidence aside renders tradeJourneys.detail.evidenceOnPage in both en-US ('Any evidence for this journey is shown on this page under Journey stages, Timeline, and Raw data above.') and zh-TW ('此旅程若有證據，皆顯示於本頁的「旅程階段」、「時間軸」與上方「原始資料」中。'), stating where the evidence of a journey is shown on that page when there is any.",
+      "proof": [
+        "src/management/pages/trade-journeys/TradeJourneysPage.tsx:843-845 replaces the /management/evidence?journey_id= Link with tradeJourneys.detail.evidenceOnPage",
+        "src/i18n/locales/en-US.ts:1228 and src/i18n/locales/zh-TW.ts:1219 replace the unused openEvidenceExplorer key with evidenceOnPage in 1:1 parity",
+        "src/management/pages/trade-journeys/TradeJourneysPage.test.tsx: 'does not link a journey to /management/evidence?journey_id= and states where journey evidence is shown on the page' tested against recorded BFF fixture detail_tj_29473e86-63ff-5384-bda1-23eef61cebb2.json and timeline_tj_29473e86-63ff-5384-bda1-23eef61cebb2.json in both en-US and zh-TW"
+      ]
+    },
+    "2": {
+      "status": "met",
+      "what": "resolveMeetingActionEvidenceHref returns null for research_note kind and note-* ids (research notes have no page) while preserving artifact (/management/artifacts/<id>), meeting (/management/meetings/<id>), evidence (/management/evidence?ref_id=<id>), and explicit /management/ or http(s) targets. MeetingActionCards renders the recorded note title (from evidence_notes) and the note id as plain text without a link.",
+      "proof": [
+        "src/lib/bff-v1/meetings.ts:1115-1142 resolveMeetingActionEvidenceHref returns null for normKind === 'research_note' or note-* ids, routes meeting / mtg-* ids to /management/meetings/<id>, artifact / artifact-* / rart-* ids to /management/artifacts/<id>, and evref-* / evi-* ids to /management/evidence?ref_id=<id>",
+        "src/management/pages/meetings/MeetingActionCards.test.tsx: 'returns no link for note- ids while keeping artifact, meeting, and evidence targets and rendering note title or id as text' tests note-action-1, note-fee-2026, artifact-persona-paper-a81b4fd15944698341aa, rart-20260615-001, mtg-6edaff7d0ff76275, evi-1217cd1c8ccc7274, and evref-rart-20260615-002 in both resolveMeetingActionEvidenceHref and rendered PriorActionsSection"
+      ]
+    },
+    "3": {
+      "status": "met",
+      "what": "The only changed assertions in MeetingActionCards.test.tsx and meetings.test.tsx are the three note-link assertions identified in the task brief (MeetingActionCards.test.tsx lines 136 and 232; meetings.test.tsx line 2104), justified below. npm run lint reports 0 errors; i18nParity.test.ts passes with 1:1 locale symmetry; no test was weakened or deleted.",
+      "proof": [
+        "changed_assertions_justification below documents all three changed assertions",
+        "npm run lint: 0 errors",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts: 17 passed"
+      ]
+    }
+  },
+  "changed_assertions_justification": [
+    {
+      "file": "src/management/pages/meetings/MeetingActionCards.test.tsx",
+      "line": 137,
+      "before": "href: \"/management/evidence?ref_id=note-action-1\"",
+      "after": "href: null",
+      "reason": "Acceptance 2: research notes (kind='research_note', id='note-action-1') have no item page in the BFF contract (route_href is null), so resolveMeetingActionEvidenceHref now returns null instead of a dead /management/evidence?ref_id=note-action-1 link."
+    },
+    {
+      "file": "src/management/pages/meetings/MeetingActionCards.test.tsx",
+      "line": 232,
+      "before": "expect(links[1]).toHaveAttribute(\"href\", \"/management/evidence?ref_id=note-action-fee-1\")",
+      "after": "expect(links).toHaveLength(1); expect(links[0]).toHaveAttribute(\"href\", \"/management/artifacts/artifact-fee-1\"); expect(screen.getByTestId(\"meeting-action-evidence\")).toHaveTextContent(\"note-action-fee-1\")",
+      "reason": "Acceptance 2 & 3: note-action-fee-1 is a research note with no page, so the card renders only the artifact link as an <a> and renders note-action-fee-1 as plain text inside meeting-action-evidence."
+    },
+    {
+      "file": "src/management/pages/meetings/meetings.test.tsx",
+      "line": 2102,
+      "before": "expect(within(humanActionRow).getByRole(\"link\", { name: \"note-fee-2026\" })).toHaveAttribute(\"href\", \"/management/evidence?ref_id=note-fee-2026\")",
+      "after": "expect(within(humanActionRow).getByTestId(\"meeting-action-evidence\")).toHaveTextContent(\"note-fee-2026\"); expect(within(humanActionRow).queryByRole(\"link\", { name: \"note-fee-2026\" })).toBeNull()",
+      "reason": "Acceptance 2 & 3: note-fee-2026 on tkt-adopt-human is a research_note reference; it now renders as text on the action card with no dead link to /management/evidence?ref_id=note-fee-2026."
+    }
+  ],
+  "verification": {
+    "lint": "npm run lint: exit 0 (0 errors, 134 pre-existing warnings)",
+    "typecheck": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit: exit 0",
+    "vitest": "12 test files, 180 tests passed (TradeJourneysPage.test.tsx, TradeJourneysPage.i18n.test.tsx, TradeJourneysPage.readable.test.tsx, TradeJourneysPage.recorded.test.tsx, TradeJourneysHostedProof.contract.test.ts, MeetingActionCards.test.tsx, meetings.test.tsx, meetings.test.ts, i18nParity.test.ts, EvidenceExplorerPage.test.tsx, HumanInboxPage.test.tsx, HumanGateDetail.test.tsx)"
+  },
+  "residual_findings": []
+}

@@ -6,6 +6,8 @@ import i18n from "@/i18n";
 import { clearAuthProvider, setAuthProvider } from "@/lib/bff-v1/headers";
 import { TradeJourneyDetailPage, TradeJourneysPage } from "./TradeJourneysPage";
 import * as api from "@/lib/bff-v1/tradeJourneys";
+import varianceDetail from "./__fixtures__/recorded/detail_tj_29473e86-63ff-5384-bda1-23eef61cebb2.json";
+import varianceTimeline from "./__fixtures__/recorded/timeline_tj_29473e86-63ff-5384-bda1-23eef61cebb2.json";
 
 const authState = vi.hoisted(() => ({
   bffSession: null as { identity?: { tenantId?: string } } | null,
@@ -469,5 +471,53 @@ describe("Trade Journeys workbench", () => {
         expect.anything(),
       ),
     );
+  });
+
+  it("does not link a journey to /management/evidence?journey_id= and states where journey evidence is shown on the page", async () => {
+    const recordedId = varianceDetail.data.journey_id;
+    vi.mocked(api.getTradeJourney).mockResolvedValue(varianceDetail as unknown as api.JourneyDetailEnvelope);
+    vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue(varianceTimeline as unknown as api.JourneyTimelineEnvelope);
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({
+      data: {
+        journey_id: recordedId,
+        reconciliation: varianceDetail.data.stages.reconciliation,
+      },
+      meta: varianceDetail.meta as unknown as api.JourneyMeta,
+    });
+
+    const view = render(
+      <MemoryRouter initialEntries={[`/management/trade-journeys/${recordedId}`]}>
+        <Routes>
+          <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(
+        "Any evidence for this journey is shown on this page under Journey stages, Timeline, and Raw data above.",
+      ),
+    ).toBeInTheDocument();
+    const hrefs = screen.getAllByRole("link").map(link => link.getAttribute("href") ?? "");
+    expect(hrefs.some(href => href.includes("/management/evidence"))).toBe(false);
+    expect(screen.queryByRole("link", { name: /Evidence Explorer/i })).toBeNull();
+    view.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const zhView = render(
+      <MemoryRouter initialEntries={[`/management/trade-journeys/${recordedId}`]}>
+        <Routes>
+          <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("此旅程若有證據，皆顯示於本頁的「旅程階段」、「時間軸」與上方「原始資料」中。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link").some(link => (link.getAttribute("href") ?? "").includes("/management/evidence")),
+    ).toBe(false);
+    zhView.unmount();
+    await i18n.changeLanguage("en-US");
   });
 });

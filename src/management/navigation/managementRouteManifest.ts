@@ -13,7 +13,7 @@ import {
   Boxes, Users, GitBranch,
   FlaskConical, Database, Rocket, Server, ListChecks, Bell, AlertOctagon,
   ScrollText, ClipboardCheck, Wrench, Network, Sparkles, Radio, Settings,
-  BookOpen, Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
+  Workflow, FileText, Factory, Clock, ShieldCheck, Brain, MessagesSquare,
   Compass, Target, Eye, ShieldAlert, Trophy, BarChart3,
   KeyRound, Route,
   type LucideIcon,
@@ -197,6 +197,10 @@ export const MANAGEMENT_SIDEBAR_GROUPS: readonly ManagementNavGroup[] = [
       { id: "evolution-journal", to: "/management/evolution-journal", labelKey: "nav.evolutionJournal", icon: GitBranch },
       { id: "evolution", to: "/management/evolution", labelKey: "nav.evolution", icon: GitBranch },
       { id: "alpha-factory", to: "/management/alpha-factory", labelKey: "nav.alphaFactory", icon: Factory },
+      // FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: persona operator tools moved from Agora.
+      { id: "persona-memory-review", to: "/management/persona-tools/memory", labelKey: "nav.personaMemoryReview", icon: Brain },
+      { id: "persona-lab", to: "/management/persona-tools/lab", labelKey: "nav.personaLab", icon: FlaskConical },
+      { id: "persona-feedback", to: "/management/persona-tools/feedback", labelKey: "nav.personaFeedback", icon: MessagesSquare },
     ],
   },
   {
@@ -208,7 +212,6 @@ export const MANAGEMENT_SIDEBAR_GROUPS: readonly ManagementNavGroup[] = [
       { id: "artifacts", to: "/management/artifacts", labelKey: "nav.artifacts", icon: Database },
       { id: "lineage", to: "/management/lineage", labelKey: "nav.lineage", icon: Workflow },
       { id: "evidence", to: "/management/evidence", labelKey: "nav.evidenceExplorer", icon: FileText },
-      { id: "knowledge", to: "/management/knowledge", labelKey: "nav.knowledge", icon: BookOpen },
       { id: "postmortems", to: "/management/postmortems", labelKey: "nav.postmortems", icon: FileText },
     ],
   },

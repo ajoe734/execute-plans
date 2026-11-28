@@ -439,7 +439,31 @@ async function installMockFixture(page: Page): Promise<void> {
       return;
     }
     if (path === "/bff/lineage") {
-      await fulfillJson(route, { data: { nodes: [], edges: [] } });
+      const rootId = (url.searchParams.get("root_id") ?? "").trim();
+      await fulfillJson(route, {
+        data: {
+          id: "lineage",
+          nodes: rootId
+            ? [
+                {
+                  id: rootId,
+                  label: rootId,
+                  type: "Persona",
+                  display_name: "Formal Persona",
+                  name_missing: false,
+                },
+              ]
+            : [],
+          edges: [],
+          status: "ok",
+          source: "mgmt-ops-010-fixture",
+        },
+        meta: {
+          status: "ok",
+          source: "mgmt-ops-010-fixture",
+          surfaces: { lineage: { status: "ok", source: "mgmt-ops-010-fixture" } },
+        },
+      });
       return;
     }
     if (path === "/bff/workflows") {

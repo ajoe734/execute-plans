@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ensureServant, getServant } from "./servant";
+import {
+  buildServantContextAttachmentRefs,
+  createServantSession,
+  ensureServant,
+  formatServantDisplayName,
+  getServant,
+  getServantSession,
+  sendServantSessionMessage,
+  terminateServantSession,
+} from "./servant";
 import { liveStatus } from "../liveStatus";
 
 const realFetch = globalThis.fetch;
@@ -72,5 +81,155 @@ describe("servant client (strict live)", () => {
     expect(headers["Idempotency-Key"]).toBeTruthy();
     expect(headers["X-Request-Id"]).toBeTruthy();
     expect(a.persona_id).toBe(b.persona_id);
+  });
+
+  it("normalizes raw English default display names (e.g. Agora Servant) to zh-TW fallback while keeping custom names", async () => {
+    mockFetch(() =>
+      Promise.resolve(
+        json({
+          data: {
+            ...liveServant,
+            display_name: "Agora Servant",
+          },
+        }),
+      ),
+    );
+    const defaultProfile = await getServant();
+    expect(defaultProfile?.display_name).toBe("專屬僕人");
+    expect(formatServantDisplayName("Agora Servant")).toBe("專屬僕人");
+    expect(formatServantDisplayName("Trading Servant")).toBe("專屬僕人");
+    expect(formatServantDisplayName("Your servant")).toBe("專屬僕人");
+    expect(formatServantDisplayName("我的交易僕人")).toBe("我的交易僕人");
+  });
+
+  it("creates a servant session and posts a contextual message through /bff/agora/servant/sessions", async () => {
+    const spy = mockFetch(() => Promise.resolve(json({})));
+    spy
+      .mockResolvedValueOnce(
+        json(
+          {
+            data: {
+              session_id: "sess-001",
+              servant_persona_id: "servant-live-001",
+              session_type: "interactive",
+              status: "active",
+              state: "active",
+              intent: "分析分點",
+              strategy_ref: "strat-winner-v4",
+              metadata: {
+                page: "trading-room",
+                route: "/agora/trading-room/strat-winner-v4",
+                strategy: "strat-winner-v4",
+                selected_widget: "widget-branch-heatmap",
+              },
+            },
+          },
+          201,
+        ),
+      )
+      .mockResolvedValueOnce(
+        json(
+          {
+            status: "accepted",
+            data: {
+              message_id: "servant-msg-001",
+              session_id: "sess-001",
+              session_type: "interactive",
+              servant_persona_id: "servant-live-001",
+              provider: {
+                status: "completed",
+                answer: "僕人已替您整理目前策略與選中元件的分點籌碼摘要。",
+                error: null,
+              },
+            },
+          },
+          202,
+        ),
+      )
+      .mockResolvedValueOnce(
+        json({
+          data: {
+            session_id: "sess-001",
+            servant_persona_id: "servant-live-001",
+            session_type: "interactive",
+            status: "active",
+            state: "active",
+            metadata: {},
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        json({
+          data: {
+            session_id: "sess-001",
+            servant_persona_id: "servant-live-001",
+            session_type: "interactive",
+            status: "canceled",
+            state: "canceled",
+            metadata: {},
+          },
+        }),
+      );
+
+    const session = await createServantSession({
+      intent: "分析分點",
+      strategy_ref: "strat-winner-v4",
+      session_type: "interactive",
+      metadata: {
+        page: "trading-room",
+        route: "/agora/trading-room/strat-winner-v4",
+        strategy: "strat-winner-v4",
+        selected_widget: "widget-branch-heatmap",
+      },
+    });
+    expect(session.session_id).toBe("sess-001");
+    expect(session.strategy_ref).toBe("strat-winner-v4");
+
+    const refs = buildServantContextAttachmentRefs({
+      page: "trading-room",
+      route: "/agora/trading-room/strat-winner-v4",
+      strategy: "strat-winner-v4",
+      selectedWidget: "widget-branch-heatmap",
+    });
+    expect(refs).toEqual([
+      "page:trading-room",
+      "route:/agora/trading-room/strat-winner-v4",
+      "strategy:strat-winner-v4",
+      "widget:widget-branch-heatmap",
+    ]);
+
+    const receipt = await sendServantSessionMessage(session.session_id, {
+      content: "分析分點",
+      attachment_refs: refs,
+    });
+    expect(receipt.message_id).toBe("servant-msg-001");
+    expect(receipt.provider.answer).toBe("僕人已替您整理目前策略與選中元件的分點籌碼摘要。");
+
+    const [createUrl, createInit] = spy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(createUrl).toBe("https://bff.example.test/bff/agora/servant/sessions");
+    expect(JSON.parse(String(createInit.body))).toEqual({
+      session_type: "interactive",
+      intent: "分析分點",
+      strategy_ref: "strat-winner-v4",
+      metadata: {
+        page: "trading-room",
+        route: "/agora/trading-room/strat-winner-v4",
+        strategy: "strat-winner-v4",
+        selected_widget: "widget-branch-heatmap",
+      },
+    });
+
+    const [msgUrl, msgInit] = spy.mock.calls[1] as unknown as [string, RequestInit];
+    expect(msgUrl).toBe("https://bff.example.test/bff/agora/servant/sessions/sess-001/messages");
+    expect(JSON.parse(String(msgInit.body))).toEqual({
+      content: "分析分點",
+      attachment_refs: refs,
+    });
+
+    const lookedUp = await getServantSession("sess-001");
+    expect(lookedUp.session_id).toBe("sess-001");
+
+    const terminated = await terminateServantSession("sess-001");
+    expect(terminated.state).toBe("canceled");
   });
 });

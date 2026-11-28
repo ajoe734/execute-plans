@@ -1,0 +1,59 @@
+{
+  "schema_version": "pantheon.fe-evidence-cited-pager-kind-line.evidence.v1",
+  "task_id": "FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127",
+  "base_commit": "fb2c4f1bfc18b115f95449b2d3a7445f5b7a3bfe",
+  "timestamp": "2026-11-27T07:18:30Z",
+  "problem_register_binding": {
+    "root_cause_class": "RC6",
+    "summary": "Hosted FE 2b8318dfb / 0a753647b against BFF 9f461b17e: paging the cited evidence list reached page 5 while the pager said '第 5 頁 · 共 1754 筆' even though the BFF caps cited references at 500 (25 pages of 20), and an unnamed meeting_action_ticket row whose source_class is also meeting_action_ticket displayed '會議行動單 · 會議行動單' under its kind name."
+  },
+  "modified_surfaces": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "AC1_cited_pager_browsable_and_full_counts": {
+      "passed": true,
+      "implementation": "Added citedBrowsableTotal in src/management/pages/oversight/_core.tsx and mgmt.evidence.pager.truncatedPageFmt in zh-TW ('第 {{page}} / {{pages}} 頁 · 列出 {{listed}} 筆（共 {{total}} 筆）') and en-US ('Page {{page}} of {{pages}} · {{listed}} of {{total}} listed'). When summary.references_truncated is true, EvidenceCitedList passes browsableTotal (e.g. 500) and browsablePages (e.g. 25) to EvidencePager and disables Next when currentPage >= browsablePages (page 25 of 25). When not truncated or when the new BFF fields are absent, EvidencePager renders the existing mgmt.evidence.pager.pageFmt unchanged.",
+      "tests": [
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > Evidence page: cited list (FE-EVIDENCE-CITED-20261125) > FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127: shows browsable and full counts in the cited pager when references_truncated is true, disables Next on page 25 of 25, names a matching kind/source_class once, and stays unchanged when not truncated or when new BFF fields are absent"
+      ]
+    },
+    "AC2_cited_row_kind_and_source_class_deduplication": {
+      "passed": true,
+      "implementation": "Updated EvidenceCitedList row rendering in src/management/pages/oversight/_core.tsx to compare citedKindLabel(t, row.refKind) and citedSourceClassLabel(t, row.sourceClass). When both labels are the same words (such as meeting_action_ticket / meeting_action_ticket -> '會議行動單' / 'Meeting action ticket'), the kind line renders that label once without repeating '· <sourceClassLabel>'. Rows with different kind and source class labels remain unchanged, and rows with nameMissing keep their kind as the primary name and refId as secondary monospace text.",
+      "tests": [
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > Evidence page: cited list (FE-EVIDENCE-CITED-20261125) > FE-EVIDENCE-CITED-PAGER-KIND-LINE-20261127: shows browsable and full counts in the cited pager when references_truncated is true, disables Next on page 25 of 25, names a matching kind/source_class once, and stays unchanged when not truncated or when new BFF fields are absent"
+      ]
+    },
+    "AC3_recorded_shapes_lint_tsc_and_locale_parity": {
+      "passed": true,
+      "changed_test_assertions_justification": [],
+      "tests": [
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx (31 passed)",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts (17 passed)"
+      ]
+    }
+  },
+  "runtime_budget": {
+    "recurring_jobs_added": 0,
+    "persistent_writers_added": 0,
+    "note": "Pure frontend presentation and localization change; adds no recurring jobs, emitters, or persistent writers."
+  },
+  "residual_findings": [],
+  "verification": {
+    "commands": [
+      "npm run lint -> 0 errors (141 pre-existing warnings), exit 0",
+      "./node_modules/.bin/tsc --noEmit -> 0 errors, exit 0",
+      "./node_modules/.bin/vitest run src/management/pages/oversight/EvidenceExplorerPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts -> 2 files, 48 passed, exit 0"
+    ]
+  }
+}

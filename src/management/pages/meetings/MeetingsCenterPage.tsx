@@ -19,6 +19,7 @@ import { reasonCodeDisplay, resolveBffSubjectDisplay, statusLabel } from "@/lib/
 import { CANONICAL_CENTERS } from "@/management/navigation/managementRouteManifest";
 import {
   conveneMeeting,
+  formatMeetingRosterRule,
   getMeetingCatalogue,
   getMeetingProposals,
   getMeetings,
@@ -31,6 +32,24 @@ import {
   type MeetingSummaryItem,
 } from "@/lib/bff-v1/meetings";
 
+import {
+  collectGatePanelReviewers,
+  extractGatePanelPoolVersion,
+  formatGatePanelConclusionText,
+  formatGatePanelDecisionLabel,
+  formatGatePanelTitle,
+  formatMeetingDateTimeText,
+  isFailedMeeting,
+  isGatePanelHistoryItem,
+  isGatePanelMeeting,
+  isGatePanelOperatorDecisionRequired,
+  isGatePanelTypeFilter,
+  matchesMeetingTypeFilter,
+  meetingLastError,
+  meetingTopicText,
+  resolveGatePanelSubjectPersona,
+} from "./meetingDisplay";
+
 const CENTER = CANONICAL_CENTERS.meetings;
 
 const MEETING_TYPES = [
@@ -42,30 +61,15 @@ const MEETING_TYPES = [
   { id: "MT-6", label: "MT-6 Quarterly Review (季度檢討會議)" },
 ] as const;
 
-const FAILED_EXECUTION_STATES = new Set(["dead_letter", "execution_failed"]);
-
-export function meetingExecutionStatus(meeting: Pick<MeetingSummaryItem, "execution_state">): string {
-  const state = meeting.execution_state;
-  const raw = state && typeof state === "object" ? state.status : state;
-  return String(raw ?? "").trim().toLowerCase();
-}
-
-export function meetingLastError(
-  meeting: Pick<MeetingSummaryItem, "execution_state" | "last_error">,
-): string {
-  const state = meeting.execution_state;
-  const nested = state && typeof state === "object" ? state.last_error : null;
-  return String(nested ?? meeting.last_error ?? "").trim();
-}
-
-export function isFailedMeeting(
-  meeting: Pick<MeetingSummaryItem, "execution_state" | "effective_status">,
-): boolean {
-  return (
-    FAILED_EXECUTION_STATES.has(meetingExecutionStatus(meeting)) ||
-    FAILED_EXECUTION_STATES.has(String(meeting.effective_status ?? "").trim().toLowerCase())
-  );
-}
+export const FILTERABLE_MEETING_TYPES = [
+  "MT-1",
+  "MT-2",
+  "MT-3",
+  "MT-4",
+  "MT-5",
+  "MT-6",
+  "gate_panel",
+] as const;
 
 const CLOSED_STATUSES = new Set(["closed", "completed"]);
 const TERMINAL_NON_OPEN = new Set(["closed", "completed", "refused", "cancelled", "canceled"]);
@@ -172,6 +176,101 @@ function MeetingRowCard({
 }) {
   const { t } = useTranslation();
   const href = meeting.href || `/management/meetings/${encodeURIComponent(meeting.meeting_id)}`;
+
+  if (isGatePanelMeeting(meeting)) {
+    const titleText = formatGatePanelTitle(meeting, t);
+    const conclusionText = formatGatePanelConclusionText(meeting, t);
+    const decisionLabel = formatGatePanelDecisionLabel(meeting, t);
+    const operatorRequired = isGatePanelOperatorDecisionRequired(meeting);
+    const panelTimestamp = meeting.completed_at ?? meeting.closed_at ?? meeting.created_at ?? null;
+    const formattedDateTime = formatMeetingDateTimeText(panelTimestamp);
+    const subject = resolveGatePanelSubjectPersona(meeting, t);
+    const poolVersion = extractGatePanelPoolVersion(meeting);
+    const reviewers = collectGatePanelReviewers(meeting, t);
+
+    return (
+      <Card
+        className="p-4 space-y-2"
+        data-testid={testId}
+        data-session-class="gate_panel"
+      >
+        <div
+          className="text-sm font-semibold text-foreground"
+          data-testid={`meeting-title-${meeting.meeting_id}`}
+        >
+          <Link to={href} className="hover:underline">
+            {titleText}
+          </Link>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" data-testid={`meeting-type-badge-${meeting.meeting_id}`}>
+              {t("meetingsCenter.typeName.gate_panel")}
+            </Badge>
+            <Badge variant="outline">{statusLabel(meeting.status, t)}</Badge>
+            <Badge
+              variant={operatorRequired ? "destructive" : "secondary"}
+              data-testid={`meeting-gate-decision-${meeting.meeting_id}`}
+            >
+              {decisionLabel}
+            </Badge>
+            <Link
+              to={href}
+              className="text-xs text-primary underline"
+              data-testid={`meeting-link-${meeting.meeting_id}`}
+            >
+              {t("meetingsCenter.gatePanel.viewDetail")}
+            </Link>
+          </div>
+          <time
+            dateTime={panelTimestamp ?? undefined}
+            className="text-xs font-mono text-muted-foreground"
+            data-testid={`meeting-datetime-${meeting.meeting_id}`}
+          >
+            {formattedDateTime}
+          </time>
+        </div>
+        <p
+          className="text-sm text-foreground"
+          data-testid={`meeting-conclusion-${meeting.meeting_id}`}
+        >
+          {conclusionText}
+        </p>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            {t("meetingsCenter.gatePanel.subjectPersonaLabel")}:{" "}
+            <span
+              className="font-sans font-medium text-foreground"
+              data-testid={`meeting-subject-${meeting.meeting_id}-primary`}
+            >
+              {subject.name}
+            </span>
+          </span>
+          {poolVersion ? (
+            <span>
+              {t("meetingsCenter.gatePanel.poolVersionLabel")}:{" "}
+              <code className="text-foreground">
+                {t("meetingsCenter.gatePanel.poolVersionFmt", { version: poolVersion })}
+              </code>
+            </span>
+          ) : null}
+          {reviewers.length > 0 ? (
+            <span className="inline-flex flex-wrap items-center gap-1.5">
+              {t("meetingsCenter.gatePanel.reviewersLabel")}:{" "}
+              {reviewers.map((rev, idx) => (
+                <span key={`${rev.key}-${idx}`} className="inline-flex items-center gap-1">
+                  {idx > 0 ? <span>、</span> : null}
+                  <span className="font-medium text-foreground">{rev.displayName}</span>
+                  <span>（{rev.roleLabel}）</span>
+                </span>
+              ))}
+            </span>
+          ) : null}
+        </div>
+      </Card>
+    );
+  }
+
   const isReview =
     String(meeting.outcome ?? "").toUpperCase() === "REVIEW" ||
     String(meeting.status ?? "").toUpperCase() === "REVIEW";
@@ -186,29 +285,7 @@ function MeetingRowCard({
     },
     t,
   );
-  const topicObj =
-    meeting.topic_summary && typeof meeting.topic_summary === "object" ? meeting.topic_summary : null;
-  let topicText = "";
-  if (topicObj) {
-    const kind = String(topicObj.kind ?? "").trim();
-    const personaName =
-      topicObj.subject_persona_display_name ||
-      meeting.subject_persona_display_name ||
-      meeting.persona_display_name ||
-      topicObj.subject_persona_id ||
-      "";
-    if (kind) {
-      topicText = t(`meetingsCenter.topicSummary.${kind}`, {
-        persona: personaName,
-        period: topicObj.period ?? "",
-        count: topicObj.lesson_count ?? 0,
-        defaultValue: kind.replace(/_/g, " "),
-      });
-    }
-  } else {
-    const topicRaw = String(meeting.topic_summary ?? meeting.topic ?? "").trim();
-    topicText = topicRaw ? t(`meetingsCenter.topicSummary.${topicRaw}`, { defaultValue: topicRaw }) : "";
-  }
+  const topicText = meetingTopicText(meeting, t);
   const titleParts = [typeLabel, chair.primaryText !== "—" ? chair.primaryText : ""].filter(Boolean);
   const lastErrorRaw = meetingLastError(meeting);
   const lastErrorText = lastErrorRaw ? reasonCodeDisplay(lastErrorRaw, t).text : "";
@@ -406,7 +483,7 @@ function ProposalRowCard({ proposal }: { proposal: MeetingProposalItem }) {
 export const MeetingsCenterPage = () => {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const activeTab = normalizeMeetingsTab(params.get("tab"));
+  const rawTabParam = params.get("tab");
   const typeFilter = (params.get("type") ?? "").trim();
   const personaFilter = (params.get("persona_id") ?? params.get("persona") ?? "").trim();
   const includeFailed = params.get("include_failed") === "true";
@@ -464,6 +541,20 @@ export const MeetingsCenterPage = () => {
     [params, setParams],
   );
 
+  const setTypeFilter = useCallback(
+    (nextType: string) => {
+      const next = new URLSearchParams(params);
+      const clean = nextType.trim();
+      if (clean) {
+        next.set("type", clean);
+      } else {
+        next.delete("type");
+      }
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
+
   const handleConvene = async (event: FormEvent) => {
     event.preventDefault();
     if (!writeAllowed) {
@@ -502,8 +593,11 @@ export const MeetingsCenterPage = () => {
 
   const visibleMeetings = useMemo(() => {
     if (meetingsRead?.state !== "ok") return [];
-    return includeFailed ? meetingsRead.data.items : meetingsRead.data.items.filter((m) => !isFailedMeeting(m));
-  }, [meetingsRead, includeFailed]);
+    const base = includeFailed
+      ? meetingsRead.data.items
+      : meetingsRead.data.items.filter((m) => !isFailedMeeting(m));
+    return base.filter((m) => matchesMeetingTypeFilter(m, typeFilter));
+  }, [meetingsRead, includeFailed, typeFilter]);
 
   const deadLetterCount = useMemo(() => {
     if (meetingsRead?.state !== "ok") return undefined;
@@ -521,14 +615,44 @@ export const MeetingsCenterPage = () => {
   }, [params, setParams, includeFailed]);
 
   const upcomingItems = useMemo(
-    () => visibleMeetings.filter((m) => !TERMINAL_NON_OPEN.has(String(m.status ?? "").trim().toLowerCase()) || isFailedMeeting(m)),
+    () =>
+      visibleMeetings.filter((m) => {
+        if (isGatePanelMeeting(m)) {
+          return !isGatePanelHistoryItem(m);
+        }
+        return (
+          !TERMINAL_NON_OPEN.has(String(m.status ?? "").trim().toLowerCase()) ||
+          isFailedMeeting(m)
+        );
+      }),
     [visibleMeetings],
   );
 
   const historyItems = useMemo(
-    () => visibleMeetings.filter((m) => CLOSED_STATUSES.has(String(m.status ?? "").trim().toLowerCase()) && !isFailedMeeting(m)),
+    () =>
+      visibleMeetings.filter((m) => {
+        if (isGatePanelMeeting(m)) {
+          return isGatePanelHistoryItem(m);
+        }
+        return (
+          CLOSED_STATUSES.has(String(m.status ?? "").trim().toLowerCase()) &&
+          !isFailedMeeting(m)
+        );
+      }),
     [visibleMeetings],
   );
+
+  const activeTab = useMemo(() => {
+    if (
+      rawTabParam === null &&
+      meetingsRead?.state === "ok" &&
+      upcomingItems.length === 0 &&
+      historyItems.length > 0
+    ) {
+      return "history";
+    }
+    return normalizeMeetingsTab(rawTabParam);
+  }, [rawTabParam, meetingsRead, upcomingItems.length, historyItems.length]);
 
   return (
     <section
@@ -712,6 +836,52 @@ export const MeetingsCenterPage = () => {
         </Card>
       ) : null}
 
+      {/* Meeting Type Filter (six deliberative types + persona review panels) */}
+      <div
+        role="group"
+        aria-label={t("meetingsCenter.filter.typeLabel")}
+        data-testid="meetings-type-filter"
+        className="flex flex-wrap items-center gap-1.5"
+      >
+        <span className="text-xs font-medium text-muted-foreground mr-1">
+          {t("meetingsCenter.filter.typeLabel")}:
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant={typeFilter === "" ? "default" : "outline"}
+          aria-pressed={typeFilter === ""}
+          data-testid="meetings-type-filter-all"
+          className="h-7 px-2.5 text-xs"
+          onClick={() => setTypeFilter("")}
+        >
+          {t("meetingsCenter.filter.allTypes")}
+        </Button>
+        {FILTERABLE_MEETING_TYPES.map((typeId) => {
+          const isGate = typeId === "gate_panel";
+          const selected = isGate
+            ? isGatePanelTypeFilter(typeFilter)
+            : typeFilter.toUpperCase() === typeId;
+          const label = isGate
+            ? t("meetingsCenter.typeName.gate_panel")
+            : `${typeId} ${t(`meetingsCenter.typeName.${typeId}`)}`;
+          return (
+            <Button
+              key={typeId}
+              type="button"
+              size="sm"
+              variant={selected ? "default" : "outline"}
+              aria-pressed={selected}
+              data-testid={`meetings-type-filter-${typeId}`}
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setTypeFilter(typeId)}
+            >
+              {label}
+            </Button>
+          );
+        })}
+      </div>
+
       {/* Four canonical tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex h-auto flex-wrap justify-start" data-testid="meetings-center-tabs">
@@ -860,7 +1030,7 @@ export const MeetingsCenterPage = () => {
                         </div>
                         <div>
                           Cadence: <code>{mt.cadence ?? "—"}</code> · Roster:{" "}
-                          <code>{mt.roster_rule ?? "—"}</code>
+                          <code>{formatMeetingRosterRule(mt.roster_rule)}</code>
                         </div>
                         {mt.budget ? (
                           <div className="text-muted-foreground font-mono">

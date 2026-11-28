@@ -846,7 +846,76 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage />);
     const entry = await screen.findByTestId("trading-room-default-entry");
     expect(entry.getAttribute("data-entry-state")).toBe("empty");
-    expect(screen.getByTestId("trading-room-workshop-empty-entry")).toBeDefined();
+    const emptySection = screen.getByTestId("trading-room-workshop-empty-entry");
+    expect(emptySection).toBeDefined();
+    expect(emptySection).toHaveTextContent("你還沒有工坊策略");
+    expect(emptySection).toHaveTextContent("交易操盤室會顯示你在策略工坊完成並加入的策略。");
+    expect(screen.getByTestId("trading-room-open-workshop")).toHaveTextContent("前往策略工坊");
+    expect(screen.queryByTestId("trading-room-operational-readiness")).toBeNull();
+    expect(screen.queryByTestId("trading-room-operational-readiness-loading")).toBeNull();
+    expect(screen.queryByTestId("trading-room-readiness-producer")).toBeNull();
+    expect(screen.queryByTestId("candidate-review-context")).toBeNull();
+    expect(screen.queryByTestId("queue-summary-strip")).toBeNull();
+    expect(screen.queryByTestId("strategy-lens-switcher")).toBeNull();
+  });
+
+  it("never draws readiness not_configured with reason no_workshop_strategies as a red UNAVAILABLE badge", async () => {
+    operationalReadinessMocks.getAgoraOperationalReadiness.mockResolvedValue({
+      ...MOCK_OPERATIONAL_READINESS,
+      status: "not_configured",
+      source: {
+        ...MOCK_OPERATIONAL_READINESS.source,
+        snapshot_id: null,
+        source_instance_id: null,
+        freshness: "not_configured",
+        desired_state: "not_configured",
+        observed_state: "not_configured",
+      },
+      signal_producer: {
+        ...MOCK_OPERATIONAL_READINESS.signal_producer,
+        status: "not_configured",
+        active_binding: null,
+        consumed_snapshot_id: null,
+        last_success_at: null,
+        enqueued: 0,
+        reason: "no_workshop_strategies",
+      },
+      surfaces: {
+        signals: { status: "not_configured", count: 0, reason: "no_workshop_strategies", freshness: "not_configured", cursor: null },
+        decision_events: { status: "not_configured", count: 0, reason: "no_workshop_strategies", freshness: "not_configured", cursor: null },
+        candidates: { status: "not_configured", count: 0, reason: "no_workshop_strategies", freshness: "not_configured", cursor: null },
+      },
+    });
+    const view = render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    expect(screen.queryByTestId("trading-room-operational-readiness")).toBeNull();
+    expect(view.container.textContent).not.toMatch(/UNAVAILABLE/i);
+  });
+
+  it("renders zh-TW readiness labels without duplicated words and one plain phrase when source identity is missing", async () => {
+    operationalReadinessMocks.getAgoraOperationalReadiness.mockResolvedValue({
+      ...MOCK_OPERATIONAL_READINESS,
+      status: "degraded",
+      source: {
+        ...MOCK_OPERATIONAL_READINESS.source,
+        snapshot_id: null,
+        source_instance_id: null,
+        freshness: "degraded",
+      },
+      signal_producer: {
+        ...MOCK_OPERATIONAL_READINESS.signal_producer,
+        status: "degraded",
+        active_binding: null,
+        reason: "source_snapshot_stale",
+      },
+    });
+    render(<TradingRoomPage />);
+
+    const readiness = await screen.findByTestId("trading-room-operational-readiness");
+    expect(readiness).toHaveTextContent("營運就緒狀態");
+    expect(screen.getByTestId("trading-room-readiness-source").textContent).toBe("資料來源：未回報");
+    expect(readiness.textContent).not.toMatch(/snapshot\s+snapshot/i);
+    expect(readiness.textContent).not.toMatch(/快照\s*快照/);
   });
 
   it("routes the default entry workshop CTA through the parent callback", async () => {
@@ -939,7 +1008,7 @@ describe("TradingRoomPage", () => {
 
     const readiness = await screen.findByTestId("trading-room-operational-readiness");
     expect(readiness).toHaveAttribute("data-source-freshness", "stale");
-    expect(readiness).toHaveTextContent("Source snapshot is stale");
+    expect(readiness).toHaveTextContent("資料來源快照已過期");
     expect(screen.getByTestId("trading-room-readiness-source")).toHaveTextContent("source-twse-daily");
     expect(screen.getByTestId("trading-room-readiness-producer")).toHaveTextContent("paper-signal-producer");
     expect(screen.getByTestId("trading-room-readiness-surface-signals")).toHaveTextContent("upstream_stale");
@@ -956,8 +1025,8 @@ describe("TradingRoomPage", () => {
 
     const readiness = await screen.findByTestId("trading-room-operational-readiness");
     expect(readiness).toHaveAttribute("data-source-freshness", "empty_fresh");
-    expect(readiness).toHaveTextContent("fresh but produced zero qualifying signals");
-    expect(readiness).not.toHaveTextContent("cannot be confirmed");
+    expect(readiness).toHaveTextContent("資料來源為最新，但目前沒有符合條件的訊號");
+    expect(readiness).not.toHaveTextContent("目前無法確認資料來源可用性");
   });
 
   it("shows position action queue panel", async () => {

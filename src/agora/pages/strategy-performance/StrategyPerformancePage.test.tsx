@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
@@ -539,5 +539,88 @@ describe("StrategyPerformancePage", () => {
     expect(await screen.findByText("已套用")).toBeDefined();
     expect(screen.queryByRole("button", { name: "套用" })).toBeNull();
     expect(performanceMocks.actOnPerformanceSuggestion).not.toHaveBeenCalled();
+  });
+
+  it("shows the zh-TW empty state when the trader has no workshop strategy and hides internal source names", async () => {
+    const emptyAggregate: TradingRoomAggregate = {
+      ...baseAggregate,
+      strategies: [],
+    };
+    const emptyAttribution = attributionResponse({
+      data: {
+        ...attributionResponse().data,
+        items: [],
+      },
+      meta: {
+        composition_sources: ["strategy_directory", "telemetry", "trade_journeys"],
+        policy: "read_only_performance_attribution",
+        snapshot_at: "2026-11-26T15:00:00Z",
+        surfaces: {
+          strategy_directory: { status: "empty_fresh", reason: "no_workshop_strategies" },
+          telemetry: { status: "empty_fresh", reason: "no_workshop_strategies" },
+          trade_journeys: { status: "empty_fresh", reason: "no_workshop_strategies" },
+        },
+      },
+    });
+    arrangeLoaded(emptyAggregate, emptyAttribution, performanceEnvelope());
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    expect(await screen.findByText("你還沒有工坊策略")).toBeDefined();
+    expect(screen.getByText("策略執行與績效會顯示你在策略工坊完成並加入的策略。")).toBeDefined();
+    const workshopLink = screen.getByTestId("strategy-performance-open-workshop");
+    expect(workshopLink).toHaveTextContent("前往策略工坊");
+    expect(workshopLink.getAttribute("href")).toBe("/agora/strategy-workshop");
+    expect(screen.getByTestId("strategy-performance-page")).toBeDefined();
+    const bodyText = screen.getByTestId("strategy-performance-page").textContent ?? "";
+    expect(bodyText).not.toContain("strategy_directory");
+    expect(bodyText).not.toContain("telemetry");
+    expect(bodyText).not.toContain("trade_journeys");
+    expect(bodyText).not.toContain("read_only_performance_attribution");
+  });
+
+  it("never renders internal snake_case source or policy identifiers even when strategies are present", async () => {
+    const populatedAttribution = attributionResponse({
+      meta: {
+        composition_sources: ["strategy_directory", "telemetry", "trade_journeys"],
+        policy: "read_only_performance_attribution",
+        snapshot_at: "2026-11-26T15:00:00Z",
+        surfaces: {
+          strategy_directory: { status: "available" },
+          telemetry: { status: "available" },
+          trade_journeys: { status: "available" },
+        },
+      },
+    });
+    arrangeLoaded(baseAggregate, populatedAttribution, performanceEnvelope());
+    render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+
+    await screen.findByText("Policy compliance");
+    const bodyText = screen.getByTestId("strategy-performance-page").textContent ?? "";
+    expect(bodyText).not.toContain("strategy_directory");
+    expect(bodyText).not.toContain("telemetry");
+    expect(bodyText).not.toContain("trade_journeys");
+    expect(bodyText).not.toContain("read_only_performance_attribution");
+  });
+
+  it("shows a timeout message with a retry button after 10 s when the performance request stays pending", async () => {
+    vi.useFakeTimers();
+    try {
+      tradingRoomMocks.getTradingRoom.mockReturnValue(new Promise(() => {}));
+      performanceMocks.getAgoraPerformanceAttribution.mockReturnValue(new Promise(() => {}));
+
+      render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
+      expect(screen.getByTestId("strategy-performance-page")).toBeDefined();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      vi.useRealTimers();
+
+      expect(await screen.findByText("載入績效資料逾時（超過 10 秒），請重試。")).toBeDefined();
+      expect(screen.getByTestId("strategy-performance-retry")).toHaveTextContent("重試");
+      expect(screen.getByTestId("strategy-performance-page")).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

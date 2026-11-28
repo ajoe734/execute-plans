@@ -4,7 +4,8 @@ export type EnumCategory =
   | "action"
   | "risk"
   | "reason"
-  | "lineageEdge";
+  | "lineageEdge"
+  | "lineageNodeType";
 
 export type EnumTone =
   | "success"
@@ -207,6 +208,24 @@ export const BFF_STATUS_VALUES = [
   "disqualified",
   "not_running",
   "connecting",
+  "not_submitted",
+  "unverified",
+  "empty_fresh",
+  "available",
+  "review_requested",
+  "support",
+  "oppose",
+  "conditional",
+  "approve_with_conditions",
+  "hold",
+  "request_more_research",
+  "operator_decision",
+  "adopt_eligible",
+  "escalate",
+  "escalated",
+  "veto",
+  "vetoed",
+  "dead_lettered",
 ] as const;
 
 export const BFF_OUTCOME_VALUES = [
@@ -244,6 +263,13 @@ export const BFF_OUTCOME_VALUES = [
   "submit_reweight_proposal",
   "propose_harness_patch",
   "recorded",
+  "operator_decision",
+  "adopt_eligible",
+  "request_more_research",
+  "escalate",
+  "escalated",
+  "veto",
+  "vetoed",
 ] as const;
 
 export const BFF_ACTION_VALUES = [
@@ -290,6 +316,13 @@ export const BFF_ACTION_VALUES = [
   "buy",
   "sell",
   "hold",
+  "scaffold_spec",
+  "run_replication",
+  "submit_review",
+  "mark_degraded",
+  "replace_strategy",
+  "retire_live",
+  "rollback_to_paper",
 ] as const;
 
 export const BFF_RISK_VALUES = [
@@ -380,11 +413,28 @@ export const BFF_REASON_CODES = [
   "raw_control_diff_withheld",
   "sd_persona_meetings_12_2_private_memory_boundary",
   "management_persona_intent_public_summary",
+  "no_workshop_strategies",
+  "no_trader_meetings",
+  "no_current_rows",
+  "workshop_store_unavailable",
+  "operator_decision",
+  "adopt_eligible",
+  "request_more_research",
+  "escalate",
+  "vetoed",
+  "no_panel_transcript",
+  "gate_decision_not_recorded",
+  "no_case_file_recorded",
+  "case_file_invalid",
+  "invalid_transcript_response",
+  "gate_panel_reader_unavailable",
+  "claim_uncited",
 ] as const;
 
 export const BFF_LINEAGE_EDGE_TYPES = [
   "parent",
   "source_strategy_spec",
+  "source_dataset",
   "source_run",
   "persona",
   "capital_pool",
@@ -402,6 +452,28 @@ export const BFF_LINEAGE_EDGE_TYPES = [
   "experiment",
   "dataset",
   "runtime",
+  "rebalance",
+  "binds",
+  "scaffolds",
+] as const;
+
+export const BFF_LINEAGE_NODE_TYPES = [
+  "strategy",
+  "strategy_spec",
+  "persona",
+  "artifact",
+  "execution_bundle",
+  "capital_pool",
+  "experiment",
+  "run",
+  "dataset",
+  "feature_set",
+  "model_weights",
+  "evaluation_report",
+  "rebalance",
+  "deployment",
+  "runtime",
+  "unknown",
 ] as const;
 
 const TONE_BADGE_CLASS: Record<EnumTone, string> = {
@@ -508,6 +580,9 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   registered: "success",
   good: "success",
   improved: "success",
+  available: "success",
+  support: "success",
+  adopt_eligible: "success",
   read_ok: "success",
   readback_ok: "success",
   smoke_ok: "success",
@@ -541,9 +616,18 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   declared: "pending",
   not_checked: "pending",
   proposal_waiting_for_operator: "pending",
+  review_requested: "pending",
 
   // Warning / Degraded / Mitigating
   canary_running: "warning",
+  empty_fresh: "warning",
+  conditional: "warning",
+  approve_with_conditions: "warning",
+  hold: "warning",
+  request_more_research: "warning",
+  operator_decision: "warning",
+  escalate: "warning",
+  escalated: "warning",
   warning: "warning",
   watch: "warning",
   degraded: "warning",
@@ -572,6 +656,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   no_proposal: "warning",
   no_action: "warning",
   no_candidate: "warning",
+  unverified: "warning",
 
   // Danger / Failed / Rejected / Critical
   failed: "danger",
@@ -589,6 +674,10 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   invalidated: "danger",
   disqualified: "danger",
   bad: "danger",
+  oppose: "danger",
+  veto: "danger",
+  vetoed: "danger",
+  dead_lettered: "danger",
   evaluation_rejected: "danger",
   insufficient_participants: "danger",
 
@@ -612,6 +701,7 @@ const STATUS_TONE_MAP: Record<string, EnumTone> = {
   private_interpretation_withheld: "paused",
   raw_control_diff_withheld: "paused",
   management_persona_intent_public_summary: "paused",
+  not_submitted: "paused",
 };
 
 const KNOWN_STATUS_SET = new Set<string>(BFF_STATUS_VALUES);
@@ -620,6 +710,7 @@ const KNOWN_ACTION_SET = new Set<string>(BFF_ACTION_VALUES);
 const KNOWN_RISK_SET = new Set<string>(BFF_RISK_VALUES);
 const KNOWN_REASON_SET = new Set<string>(BFF_REASON_CODES);
 const KNOWN_LINEAGE_EDGE_SET = new Set<string>(BFF_LINEAGE_EDGE_TYPES);
+const KNOWN_LINEAGE_NODE_TYPE_SET = new Set<string>(BFF_LINEAGE_NODE_TYPES);
 
 /**
  * Fallback English labels used only when no `t` function is supplied or when a key is not present in a custom test mock.
@@ -763,6 +854,24 @@ const EN_FALLBACK_STATUS: Record<string, string> = {
   disqualified: "Disqualified",
   not_running: "Not Running",
   connecting: "Connecting",
+  not_submitted: "Not Submitted",
+  unverified: "Unverified",
+  empty_fresh: "Fresh (0 signals)",
+  available: "Available",
+  review_requested: "Review Requested",
+  support: "Support",
+  oppose: "Oppose",
+  conditional: "Conditional",
+  approve_with_conditions: "Approve with Conditions",
+  hold: "Hold",
+  request_more_research: "Recommend More Research",
+  operator_decision: "Operator Decision Required",
+  adopt_eligible: "Eligible for Adoption",
+  escalate: "Escalate",
+  escalated: "Escalated",
+  veto: "Veto",
+  vetoed: "Vetoed",
+  dead_lettered: "Dead Lettered",
 };
 
 const EN_FALLBACK_OUTCOMES: Record<string, string> = {
@@ -800,6 +909,13 @@ const EN_FALLBACK_OUTCOMES: Record<string, string> = {
   submit_reweight_proposal: "Submit Reweight Proposal",
   propose_harness_patch: "Propose Harness Patch",
   recorded: "Recorded",
+  operator_decision: "Operator Decision Required",
+  adopt_eligible: "Eligible for Adoption",
+  request_more_research: "Recommend More Research",
+  escalate: "Escalate",
+  escalated: "Escalated",
+  veto: "Veto",
+  vetoed: "Vetoed",
 };
 
 const EN_FALLBACK_ACTIONS: Record<string, string> = {
@@ -846,6 +962,13 @@ const EN_FALLBACK_ACTIONS: Record<string, string> = {
   buy: "Buy",
   sell: "Sell",
   hold: "Hold",
+  scaffold_spec: "Scaffold Specification",
+  run_replication: "Run Replication",
+  submit_review: "Submit for Review",
+  mark_degraded: "Mark as Degraded",
+  replace_strategy: "Replace Strategy",
+  retire_live: "Retire Live Strategy",
+  rollback_to_paper: "Roll Back to Paper",
 };
 
 const EN_FALLBACK_RISK: Record<string, string> = {
@@ -937,11 +1060,28 @@ const EN_FALLBACK_REASONS: Record<string, string> = {
   raw_control_diff_withheld: "Raw trainer control diff is withheld from audit summary",
   sd_persona_meetings_12_2_private_memory_boundary: "Only session facts are shown; private memory and private interpretations are withheld (SD §12.2)",
   management_persona_intent_public_summary: "Public summary policy applied",
+  no_workshop_strategies: "No Strategy Workshop strategies",
+  no_trader_meetings: "No meetings convened by this trader",
+  no_current_rows: "No current rows",
+  workshop_store_unavailable: "Strategy Workshop store unavailable",
+  operator_decision: "Operator decision required",
+  adopt_eligible: "Eligible for adoption (approved)",
+  request_more_research: "Recommend more research",
+  escalate: "Escalate for operator decision",
+  vetoed: "Vetoed by reviewer",
+  no_panel_transcript: "No review panel transcript recorded",
+  gate_decision_not_recorded: "Review panel conclusion not recorded",
+  no_case_file_recorded: "No decision case file recorded",
+  case_file_invalid: "Decision case file is invalid",
+  invalid_transcript_response: "Review panel transcript response is invalid",
+  gate_panel_reader_unavailable: "Review panel reader is unavailable",
+  claim_uncited: "Claim did not cite any case-file item",
 };
 
 const EN_FALLBACK_LINEAGE_EDGES: Record<string, string> = {
   parent: "Parent",
   source_strategy_spec: "Source Strategy Spec",
+  source_dataset: "Source Dataset",
   source_run: "Source Run",
   persona: "Persona",
   capital_pool: "Capital Pool",
@@ -959,6 +1099,28 @@ const EN_FALLBACK_LINEAGE_EDGES: Record<string, string> = {
   experiment: "Experiment",
   dataset: "Dataset",
   runtime: "Runtime",
+  rebalance: "Rebalance",
+  binds: "Binds",
+  scaffolds: "Scaffolds",
+};
+
+const EN_FALLBACK_LINEAGE_NODE_TYPES: Record<string, string> = {
+  strategy: "Strategy",
+  strategy_spec: "Strategy",
+  persona: "Persona",
+  artifact: "Artifact",
+  execution_bundle: "Artifact",
+  capital_pool: "Capital Pool",
+  experiment: "Experiment",
+  run: "Experiment",
+  dataset: "Dataset",
+  feature_set: "Feature Set",
+  model_weights: "Model Weights",
+  evaluation_report: "Evaluation Report",
+  rebalance: "Rebalance",
+  deployment: "Deployment",
+  runtime: "Runtime",
+  unknown: "Object",
 };
 
 export function isNanLike(value: unknown): boolean {
@@ -1182,6 +1344,17 @@ export function resolveEnumLabel(
     return { label, code: raw, tone, badgeClass, isKnown };
   }
 
+  if (category === "lineageNodeType") {
+    const nodeTypeKey = raw
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+    const isKnown = KNOWN_LINEAGE_NODE_TYPE_SET.has(nodeTypeKey);
+    const fallback = EN_FALLBACK_LINEAGE_NODE_TYPES[nodeTypeKey] ?? humanizeEnumToken(raw);
+    const label = t ? t(`enumLabels.lineageNodeTypes.${nodeTypeKey}`, { defaultValue: fallback }) : fallback;
+    return { label, code: raw, tone, badgeClass, isKnown };
+  }
+
   // category === "reason"
   const i18nReasonKey = key.replace(/:/g, "__");
   const isKnown =
@@ -1247,6 +1420,60 @@ export function riskLabel(value: unknown, t?: TranslateFn): string {
 
 export function lineageEdgeLabel(value: unknown, t?: TranslateFn): string {
   return resolveEnumLabel("lineageEdge", value, t).label;
+}
+
+export function lineageNodeTypeLabel(value: unknown, t?: TranslateFn): string {
+  return resolveEnumLabel("lineageNodeType", value, t).label;
+}
+
+export function shortLineageNodeId(value: unknown): string {
+  const raw = sanitizeRawText(value);
+  if (!raw) return "";
+  const hexMatch = /(?:^|[-_:])([0-9a-f]{12,64})(?:[-_:](v\d+|[0-9]{1,4}))?$/i.exec(raw);
+  if (hexMatch) {
+    const shortHex = hexMatch[1].slice(0, 8);
+    const verSuffix = hexMatch[2] ? `-${hexMatch[2]}` : "";
+    const baselinePrefix = /(?:^|[-_:])baseline[-_:]/i.test(raw) ? "baseline-" : "";
+    return `${baselinePrefix}${shortHex}${verSuffix}`;
+  }
+  if (raw.length <= 16) return raw;
+  const parts = raw.split(/[-_:]/).filter(Boolean);
+  if (parts.length >= 2) {
+    const tail = parts.slice(-2).join("-");
+    if (tail.length <= 16) return tail;
+  }
+  return raw.slice(-12);
+}
+
+export interface LineageNodeDisplayInput {
+  id?: string | null;
+  label?: string | null;
+  type?: string | null;
+  display_name?: string | null;
+  displayName?: string | null;
+  name_missing?: boolean | null;
+  nameMissing?: boolean | null;
+}
+
+export function resolveLineageNodeLabel(
+  input: LineageNodeDisplayInput,
+  t?: TranslateFn,
+): string {
+  const rawId = sanitizeRawText(input.id) ?? "";
+  const displayName = sanitizeRawText(input.display_name ?? input.displayName);
+  const rawLabel = sanitizeRawText(input.label);
+  const isMissing = input.name_missing === true || input.nameMissing === true;
+
+  if (!isMissing && displayName && displayName !== rawId) {
+    return displayName;
+  }
+  if (!isMissing && rawLabel && rawLabel !== rawId) {
+    return rawLabel;
+  }
+
+  const kindLabel = lineageNodeTypeLabel(input.type || "unknown", t);
+  const shortId = shortLineageNodeId(rawId || rawLabel);
+  return shortId ? `${kindLabel} ${shortId}` : kindLabel;
 }
 
 export function reasonCodeLabel(value: unknown, t?: TranslateFn): string {
@@ -1466,6 +1693,297 @@ export function strategyOperationalStatusClass(
   if (status === "unknown") return "border-status-warning/40 text-status-warning";
   if (status === "idle") return "border-border text-foreground";
   return "border-muted text-muted-foreground";
+}
+
+// --- FE-REGISTRY-LISTS-CURRENT-FIRST-20261125 --------------------------------
+// Runtime status (BFF-STRATEGY-METRICS-RUNTIME-20261125 `runtimeStatus`), the
+// recorded metric reason (`metricsReason`), registry list scope (`listScope` /
+// `list_scope`, BFF-PERSONA-ARTIFACT-LIST-SCOPE-20261125) and artifact kind /
+// source words. Every helper returns `undefined` when the field is absent so
+// pages stay usable against an older BFF that does not send it.
+
+export const STRATEGY_RUNTIME_STATUSES = [
+  "running",
+  "paused_market_input",
+  "paused_operator",
+  "none",
+  "unknown",
+] as const;
+export type StrategyRuntimeStatus = (typeof STRATEGY_RUNTIME_STATUSES)[number];
+
+export function normalizeStrategyRuntimeStatus(value: unknown): StrategyRuntimeStatus | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  return (STRATEGY_RUNTIME_STATUSES as readonly string[]).includes(trimmed)
+    ? (trimmed as StrategyRuntimeStatus)
+    : "unknown";
+}
+
+export function strategyRuntimeStatusClass(status: StrategyRuntimeStatus): string {
+  if (status === "running") return "border-status-success/40 text-status-success";
+  if (status === "paused_market_input" || status === "paused_operator") {
+    return "border-status-warning/40 text-status-warning";
+  }
+  if (status === "unknown") return "border-status-warning/40 text-status-warning";
+  return "border-muted text-muted-foreground";
+}
+
+const KNOWN_RUNTIME_REASON_KEYS = new Set([
+  "runtime_bindings_unavailable",
+  "runtime_truth_unavailable",
+  "scope_unavailable",
+]);
+
+/**
+ * Plain sentence for `runtimeStatusReason`. The raw code is returned next to
+ * the sentence so the cell can keep it as a tooltip; it is never the only text.
+ */
+export function strategyRuntimeReasonText(
+  reason: unknown,
+  t: TranslateFn,
+): { text: string; code: string } | undefined {
+  if (typeof reason !== "string" || !reason.trim()) return undefined;
+  const code = reason.trim();
+  const lower = code.toLowerCase();
+  if (lower.startsWith("market_input_")) {
+    return { text: t("strategy.runtimeReason.marketInput"), code };
+  }
+  if (lower.startsWith("binding_status_")) {
+    return {
+      text: t("strategy.runtimeReason.bindingStatus", { status: lower.slice("binding_status_".length) }),
+      code,
+    };
+  }
+  if (KNOWN_RUNTIME_REASON_KEYS.has(lower)) {
+    return { text: t(`strategy.runtimeReason.${lower}`), code };
+  }
+  return { text: t("strategy.runtimeReason.other"), code };
+}
+
+const KNOWN_METRICS_REASONS = new Set([
+  "no_fills",
+  "marks_unavailable",
+  "no_admitted_binding",
+  "not_observed",
+  "stale",
+  "runtime_bindings_unavailable",
+  "runtime_truth_unavailable",
+  "scope_unavailable",
+  "source_unavailable",
+]);
+
+/** Plain words for a recorded `metricsReason` such as `no_fills`. */
+export function strategyMetricsReasonText(
+  reason: unknown,
+  t: TranslateFn,
+): { text: string; code: string } | undefined {
+  if (typeof reason !== "string" || !reason.trim()) return undefined;
+  const code = reason.trim();
+  const lower = code.toLowerCase();
+  if (KNOWN_METRICS_REASONS.has(lower)) {
+    return { text: t(`strategy.metricsReason.${lower}`), code };
+  }
+  return { text: code, code };
+}
+
+export const REGISTRY_LIST_SCOPES = ["current", "test", "retired", "research", "unbound", "unknown"] as const;
+export type RegistryListScope = (typeof REGISTRY_LIST_SCOPES)[number];
+
+/**
+ * Reads `listScope` / `list_scope`. A missing or unrecognised value is
+ * `unknown`: the list keeps such rows on the default (current) view so nothing
+ * disappears when the BFF field is absent or the persona directory was down.
+ */
+export function normalizeRegistryListScope(row: unknown): RegistryListScope {
+  if (!row || typeof row !== "object") return "unknown";
+  const record = row as { listScope?: unknown; list_scope?: unknown };
+  const raw = record.listScope ?? record.list_scope;
+  if (typeof raw !== "string") return "unknown";
+  const lower = raw.trim().toLowerCase();
+  return (REGISTRY_LIST_SCOPES as readonly string[]).includes(lower)
+    ? (lower as RegistryListScope)
+    : "unknown";
+}
+
+const KNOWN_ARTIFACT_KINDS = new Set([
+  "execution_bundle",
+  "strategy_spec",
+  "factor_eval_report",
+  "backtest_report",
+  "model",
+  "dataset",
+  "report",
+  "container",
+]);
+
+function humanizeCode(code: string): string {
+  const words = code.replace(/[_\-.]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : code;
+}
+
+/** Artifact `kind` as words; the raw code is kept for the tooltip. */
+export function artifactKindText(kind: unknown, t: TranslateFn): { text: string; code: string } | undefined {
+  if (typeof kind !== "string" || !kind.trim()) return undefined;
+  const code = kind.trim();
+  const lower = code.toLowerCase();
+  if (KNOWN_ARTIFACT_KINDS.has(lower)) {
+    return { text: t(`artifact.kindLabel.${lower}`), code };
+  }
+  return { text: humanizeCode(code), code };
+}
+
+/** Artifact `source_kind` as words; the raw code is kept for the tooltip. */
+export function artifactSourceText(source: unknown, t: TranslateFn): { text: string; code: string } | undefined {
+  if (typeof source !== "string" || !source.trim()) return undefined;
+  const code = source.trim();
+  const lower = code.toLowerCase();
+  if (lower === "registry") return { text: t("artifact.sources.registry"), code };
+  if (lower === "research_run_output" || lower === "research") {
+    return { text: t("artifact.sources.research_run_output"), code };
+  }
+  return { text: humanizeCode(code), code };
+}
+
+export const KNOWN_PERSONA_ARCHETYPES = ["momentum", "generalist", "agora_servant"] as const;
+export type KnownPersonaArchetype = (typeof KNOWN_PERSONA_ARCHETYPES)[number];
+
+export interface PersonaArchetypeDisplay {
+  text: string;
+  tooltip: string;
+  code?: string;
+  isSentence: boolean;
+  isKnown: boolean;
+}
+
+/**
+ * FE-PERSONA-LIST-PLAIN-WORDS-20261125 — Recorded persona archetype codes
+ * (`momentum`, `generalist`, `agora_servant`) are shown as localized words with
+ * the raw code as tooltip; an unknown code is shown as it is; a value that is a
+ * sentence and not a code is flagged `isSentence: true` so the cell renders one
+ * line cut with an ellipsis and the full text as tooltip.
+ */
+export function personaArchetypeText(
+  archetype: unknown,
+  t: TranslateFn,
+): PersonaArchetypeDisplay | undefined {
+  if (typeof archetype !== "string" || !archetype.trim()) return undefined;
+  const raw = archetype.trim();
+  const lower = raw.toLowerCase();
+  if ((KNOWN_PERSONA_ARCHETYPES as readonly string[]).includes(lower)) {
+    return {
+      text: t(`registryLists.personaType.${lower}`),
+      tooltip: raw,
+      code: raw,
+      isSentence: false,
+      isKnown: true,
+    };
+  }
+  if (/\s/.test(raw)) {
+    return {
+      text: raw,
+      tooltip: raw,
+      isSentence: true,
+      isKnown: false,
+    };
+  }
+  return {
+    text: raw,
+    tooltip: raw,
+    code: raw,
+    isSentence: false,
+    isKnown: false,
+  };
+}
+
+export interface OwnerCellDisplay {
+  text: string;
+  full: string;
+}
+
+const SHARED_OWNER_PREFIX = /^pantheon-(?:dev|staging|prod)-(.+)$/i;
+
+/**
+ * FE-PERSONA-LIST-PLAIN-WORDS-20261125 — Shows the part of an owner ID that
+ * tells owners apart (without the shared `pantheon-dev-` prefix) while keeping
+ * the full ID for the tooltip.
+ */
+export function shortOwnerText(owner: unknown): OwnerCellDisplay | undefined {
+  if (typeof owner !== "string" || !owner.trim()) return undefined;
+  const full = owner.trim();
+  const match = SHARED_OWNER_PREFIX.exec(full);
+  const text = match && match[1].trim() ? match[1].trim() : full;
+  return { text, full };
+}
+
+const KNOWN_STRATEGY_LIFECYCLE_VALUES = new Set([
+  "discovered",
+  "scaffolded",
+  "replicated",
+  "approved",
+  "paper",
+  "live",
+  "degraded",
+  "replaced",
+  "retired",
+  "archived",
+]);
+
+export function strategyLifecycleLabel(
+  lifecycle: string | undefined | null,
+  t: TranslateFn,
+): string {
+  const raw = typeof lifecycle === "string" ? lifecycle.trim().toLowerCase() : "";
+  if (!raw) return "—";
+  if (KNOWN_STRATEGY_LIFECYCLE_VALUES.has(raw)) {
+    return t(`strategyDetail.tripleState.lifecycleValues.${raw}`);
+  }
+  return statusLabel(raw, t);
+}
+
+const KNOWN_STRATEGY_REVIEW_VALUES = new Set([
+  "none",
+  "pending",
+  "changes_requested",
+  "approved",
+]);
+
+export function strategyReviewLabel(
+  review: string | undefined | null,
+  t: TranslateFn,
+): string {
+  const raw = typeof review === "string" ? review.trim().toLowerCase() : "";
+  if (!raw) return t("strategyDetail.tripleState.reviewValues.none");
+  if (KNOWN_STRATEGY_REVIEW_VALUES.has(raw)) {
+    return t(`strategyDetail.tripleState.reviewValues.${raw}`);
+  }
+  return statusLabel(raw, t);
+}
+
+export function strategyDeploymentLabel(
+  deployment: string | undefined | null,
+  t: TranslateFn,
+  options?: { runsThroughPersonaPool?: boolean },
+): string {
+  const raw = typeof deployment === "string" ? deployment.trim().toLowerCase() : "";
+  if (!raw || raw === "none" || raw === "not_deployed") {
+    return options?.runsThroughPersonaPool
+      ? t("strategyDetail.tripleState.deploymentValues.persona_pool")
+      : t("strategyDetail.tripleState.deploymentValues.none");
+  }
+  if (raw === "paper_running" || raw === "paper_active") {
+    return t("strategyDetail.tripleState.deploymentValues.paper_running");
+  }
+  if (raw === "live_running") {
+    return t("strategyDetail.tripleState.deploymentValues.live_running");
+  }
+  if (raw === "stopped") {
+    return t("strategyDetail.tripleState.deploymentValues.stopped");
+  }
+  if (raw === "rollback_required") {
+    return t("strategyDetail.tripleState.deploymentValues.rollback_required");
+  }
+  return statusLabel(raw, t);
 }
 
 // --- BFF-owned display names & localized incident summaries (RC6 WP6.1/6.2) ---

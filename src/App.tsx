@@ -57,6 +57,9 @@ const TradeJourneysRoute = lazyNamedRoute(() => import("@/routes/management/trad
 const TradeJourneyDetailRoute = lazyNamedRoute(() => import("@/routes/management/tradeJourneys"), "TradeJourneyDetailRoute", "Trade journey detail");
 const MeetingsCenterRoute = lazyNamedRoute(() => import("@/routes/management/meetings"), "MeetingsCenterRoute", "Meetings center");
 const MeetingDetailRoute = lazyNamedRoute(() => import("@/routes/management/meetings"), "MeetingDetailRoute", "Meeting detail");
+const PersonaMemoryReviewRoute = lazyNamedRoute(() => import("@/routes/management/personaTools"), "PersonaMemoryReviewRoute", "Persona memory review");
+const PersonaLabRoute = lazyNamedRoute(() => import("@/routes/management/personaTools"), "PersonaLabRoute", "Persona lab");
+const PersonaFeedbackRoute = lazyNamedRoute(() => import("@/routes/management/personaTools"), "PersonaFeedbackRoute", "Persona feedback");
 
 // MGMT-PERF-IA-001 — portfolio-book, promotion-allocation, persona-league,
 // performance-attribution, and quarterly-ranking no longer mount their own
@@ -147,10 +150,17 @@ const AgoraLayoutRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraLa
 const AgoraTradingRoomRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraTradingRoomRoute", "Agora trading room");
 const AgoraStrategyWorkshopRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraStrategyWorkshopRoute", "Agora strategy workshop");
 const AgoraCommitteeRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraCommitteeRoute", "Agora committee");
-const AgoraMemoryRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraMemoryRoute", "Agora memory review");
-const AgoraPersonaLabRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraPersonaLabRoute", "Agora persona lab");
-const AgoraFeedbackRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraFeedbackRoute", "Agora human feedback");
+const AgoraMemoryRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraMemoryRoute", "Agora memory review redirect");
+const AgoraPersonaLabRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraPersonaLabRoute", "Agora persona lab redirect");
+const AgoraFeedbackRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraFeedbackRoute", "Agora human feedback redirect");
 const AgoraStrategyPerformanceRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraStrategyPerformanceRoute", "Agora strategy performance");
+const AgoraDailyLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraDailyLegacyRoute", "Agora daily redirect");
+const AgoraWatchlistLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraWatchlistLegacyRoute", "Agora watchlist redirect");
+const AgoraSignalsLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraSignalsLegacyRoute", "Agora signals redirect");
+const AgoraNotebookLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraNotebookLegacyRoute", "Agora notebook redirect");
+const AgoraAskLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraAskLegacyRoute", "Agora ask redirect");
+const AgoraJournalLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraJournalLegacyRoute", "Agora journal redirect");
+const AgoraTrainerLegacyRoute = lazyNamedRoute(() => import("@/routes/agora"), "AgoraTrainerLegacyRoute", "Agora trainer redirect");
 
 function DeploymentAliasRedirect() {
   const { id } = useParams<{ id?: string }>();
@@ -278,6 +288,9 @@ const App = () => (
                 <Route path="evolution/:id" element={<EvolutionDetailRoute />} />
                 <Route path="meetings" element={<MeetingsCenterRoute />} />
                 <Route path="meetings/:id" element={<MeetingDetailRoute />} />
+                <Route path="persona-tools/memory" element={<PersonaMemoryReviewRoute />} />
+                <Route path="persona-tools/lab" element={<PersonaLabRoute />} />
+                <Route path="persona-tools/feedback" element={<PersonaFeedbackRoute />} />
                 <Route path="experiments" element={<ResearchListRoute />} />
                 <Route path="experiments/:id" element={<ResearchDetailRoute />} />
                 <Route path="research" element={<Navigate to="/management/experiments" replace />} />
@@ -346,9 +359,18 @@ const App = () => (
               <Route path="strategy-workshop/:workshopId" element={<AgoraStrategyWorkshopRoute />} />
               <Route path="strategy-performance" element={<AgoraStrategyPerformanceRoute />} />
               <Route path="committee" element={<AgoraCommitteeRoute />} />
+              {/* FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: operator tools moved to
+                  Management; these legacy paths redirect by role. */}
               <Route path="memory" element={<AgoraMemoryRoute />} />
               <Route path="persona-lab" element={<AgoraPersonaLabRoute />} />
               <Route path="feedback" element={<AgoraFeedbackRoute />} />
+              <Route path="daily" element={<AgoraDailyLegacyRoute />} />
+              <Route path="watchlist" element={<AgoraWatchlistLegacyRoute />} />
+              <Route path="signals" element={<AgoraSignalsLegacyRoute />} />
+              <Route path="notebook" element={<AgoraNotebookLegacyRoute />} />
+              <Route path="ask" element={<AgoraAskLegacyRoute />} />
+              <Route path="journal" element={<AgoraJournalLegacyRoute />} />
+              <Route path="trainer" element={<AgoraTrainerLegacyRoute />} />
               <Route path="*" element={<Navigate to="/agora/trading-room" replace />} />
             </Route>
 

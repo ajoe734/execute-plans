@@ -7,6 +7,8 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { RuleDescription } from "@/management/components/detail/RuleDescription";
 import { useT } from "@/platform/hooks";
+import { safeDateTime } from "@/lib/utils";
+import { demandMeasureText, demandReasonText } from "@/management/pages/researchPresentation";
 import type {
   PersonaManagementEnvelope,
   PoolMemberBookRow,
@@ -298,11 +300,41 @@ export function PersonaStrategyPoolPanel({ management, managementUnavailable }: 
           </div>
         ) : (
           <ul className="space-y-1" data-testid="pool-demands">
-            {pool.openDemands!.map((d) => (
-              <li key={d.demand_id} className="text-sm">
-                <span className="font-mono text-xs">{d.demand_id}</span> · {d.mandate ?? "—"} · {d.short_measure ?? "—"}
-              </li>
-            ))}
+            {pool.openDemands!.map((d) => {
+              const discovery = (d.discovery ?? {}) as {
+                template_search?: { reason?: unknown } | null;
+                last_run?: { reason?: unknown } | null;
+              };
+              const code = [discovery.template_search?.reason, discovery.last_run?.reason].find(
+                (v): v is string => typeof v === "string" && v.trim() !== "",
+              );
+              const reason = demandReasonText(code, t);
+              const tried = Array.isArray(d.tried_families) ? (d.tried_families as unknown[]).filter((f): f is string => typeof f === "string") : [];
+              return (
+                <li key={d.demand_id} className="text-sm" data-testid="pool-demand-row">
+                  <div>
+                    <span className="font-mono text-xs">{d.demand_id}</span> · {d.mandate ?? "—"} ·{" "}
+                    {t("research.demand.lacking", { measure: demandMeasureText(d.short_measure, t) })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {tried.length > 0 ? t("research.demand.tried", { families: tried.join("、") }) : t("research.demand.triedNone")}
+                    {d.created_at ? <> · {t("research.demand.since", { date: safeDateTime(d.created_at) })}</> : null}
+                    {" · "}
+                    {d.expires_at ? t("research.demand.expires", { date: safeDateTime(d.expires_at) }) : t("research.demand.expiresUnknown")}
+                  </div>
+                  <div className="text-xs" data-testid="pool-demand-outcome">
+                    {reason ? (
+                      <>
+                        {t("research.demand.outcome", { reason: reason.text })}
+                        {reason.raw && <span className="ml-1 font-mono text-muted-foreground">{t("research.demand.rawCode", { code: reason.raw })}</span>}
+                      </>
+                    ) : (
+                      t("research.demand.outcomeNone")
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

@@ -12,6 +12,8 @@
  * - JobProgressDrawer does not duplicate /bff/jobs before first row.
  */
 import { expect, test, type Page, type Route } from "@playwright/test";
+// @ts-expect-error plain ESM readability helper
+import { detectReadability } from "../scripts/lib/management-readability.mjs";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const EVIDENCE_PATH = "/management/evidence";
@@ -108,6 +110,54 @@ const EVIDENCE_RESPONSE = {
   meta: { snapshot_at: nowIso(), surfaces: { management_evidence: { status: "ok" } } },
 };
 
+// FE-EVIDENCE-CITED-20261125: the default Evidence list reads
+// GET /bff/management/evidence?scope=cited (BFF-EVIDENCE-CITED-LIST-20261125);
+// EVIDENCE_RESPONSE stays the scope=ingested answer.
+const CITED_SOURCES = Object.fromEntries(
+  ["meeting_proposals", "meeting_positions", "governance_approvals", "evolution_proposals", "research_demands", "research_tickets", "persona_cycles"].map(
+    (key) => [key, { status: "ok", reason: null, read_count: 1, truncated: false, failed_count: 0, citation_count: key === "meeting_positions" ? 1 : 0, withheld_count: 0, calls: 1, response_bytes: 900 }],
+  ),
+);
+const CITED_EVIDENCE_RESPONSE = {
+  data: {
+    id: "management-evidence-cited",
+    scope: "cited",
+    items: [
+      {
+        id: "evref-load-003",
+        ref_id: "evref-load-003",
+        ref_kind: "evidence_item",
+        source_owner: "source_ingest",
+        label: "Shell fanout evidence packet",
+        name_missing: false,
+        label_parts: {},
+        source_class: "evidence",
+        resolved_link: { route_href: "/management/evidence/evref-load-003", evidence_ref_id: "evref-load-003" },
+        route_href: "/management/evidence/evref-load-003",
+        cited_as: ["evref-load-003"],
+        cited_by: [
+          {
+            entity_type: "meeting_position",
+            entity_ref: "mtg-6edaff7d0ff76275",
+            label: "Shell fanout review",
+            parts: { meeting_id: "mtg-6edaff7d0ff76275", round: 1, position: "A", persona_id: "persona-ee7112a829d38b9135ac" },
+            route_href: "/management/meetings/mtg-6edaff7d0ff76275",
+            time: nowIso(),
+            source: "meeting_positions",
+          },
+        ],
+        citation_count: 1,
+        last_cited_at: nowIso(),
+        redacted: false,
+      },
+    ],
+    summary: { scope: "cited", complete: true, incomplete: false, reference_total: 1, returned: 1, references_truncated: false, max_references: 500, redacted_count: 0 },
+    sources: CITED_SOURCES,
+  },
+  page_info: { next_page_token: null, total: 1, page_size: 20 },
+  meta: { snapshot_at: nowIso(), surfaces: { cited_evidence: { status: "ok" }, cited_evidence_sources: CITED_SOURCES } },
+};
+
 const EMPTY_ENVELOPE = { items: [], cursor: {}, pageSize: 0, estimatedTotal: 0, totalCountExact: true, meta: { snapshot_at: nowIso() } };
 
 // Shape must satisfy src/lib/v4/session/me.ts's `isMeResponse` guard
@@ -145,7 +195,8 @@ async function installBaseFixtures(page: Page, options: { evidenceDelayMs?: numb
   await onRoute(page, PRIMARY_API_PATTERN, async (route) => {
     counters.evidence += 1;
     if (options.evidenceDelayMs) await delay(options.evidenceDelayMs);
-    await fulfillJson(route, EVIDENCE_RESPONSE);
+    const cited = new URL(route.request().url()).searchParams.get("scope") === "cited";
+    await fulfillJson(route, cited ? CITED_EVIDENCE_RESPONSE : EVIDENCE_RESPONSE);
   });
   // PlatformShell/useRealtimeStatus open a live SSE connection
   // (connectLiveSse()) on every management route mount. Left unmocked, the
@@ -298,4 +349,48 @@ test.describe("MGMT-LOAD-003 shell fanout reduction", () => {
     expect(counters.approvals).toBe(0);
     expect(counters.alerts).toBe(0);
   });
+});
+
+// FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127: memory review, persona lab and
+// per-persona feedback are Management pages now. Each mounts in the shell with
+// the persona picker by name, adds no shell fanout, is reachable from the
+// sidebar, and reads in words (no raw id as the only name, no enum codes).
+const PERSONA_TOOL_PAGES: Array<{ path: string; title: RegExp }> = [
+  { path: "/management/persona-tools/memory", title: /Persona memory review|人格記憶審核/ },
+  { path: "/management/persona-tools/lab", title: /Persona Lab|人格實驗室/ },
+  { path: "/management/persona-tools/feedback", title: /Persona feedback|人格回饋/ },
+];
+
+test.describe("FE-MGMT-PERSONA-TOOLS-FROM-AGORA-20261127 persona tools in Management", () => {
+  for (const { path, title } of PERSONA_TOOL_PAGES) {
+    test(`${path} mounts with a named persona picker, sidebar entry and readable text`, async ({ page }) => {
+      const counters = await installBaseFixtures(page);
+      await onRoute(page, SHELL_SUMMARY_PATTERN, async (route) => {
+        counters.shellSummary += 1;
+        await fulfillJson(route, shellSummaryResponse("ok"));
+      });
+      await onRoute(page, /\/bff\/personas(?:\?.*)?$/, async (route) => {
+        await fulfillJson(route, {
+          items: [{ id: "persona-e2e-0001", name: "Momentum Desk Persona", archetype: "momentum", owner: "ops", updatedAt: nowIso(), state: "active", risk: "low", routedStrategies: 0, successRate: null }],
+          cursor: {}, pageSize: 1, estimatedTotal: 1, totalCountExact: true, meta: { snapshot_at: nowIso() },
+        });
+      });
+      await onRoute(page, /\/bff\/agora\/memory(?:\?.*)?$/, async (route) => {
+        await fulfillJson(route, { status: "unavailable", reason: "no_memory_records", owner: "memory", data: { entries: [], lesson_candidates: [] } });
+      });
+
+      await page.goto(frontendUrl(path), { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await expect(page.locator("main h1").first()).toHaveText(title, { timeout: 10_000 });
+      const picker = page.getByTestId("persona-tools-picker").getByRole("combobox");
+      await expect(picker).toBeVisible();
+
+      const mainText = await page.locator("main").innerText();
+      const findings = (detectReadability(mainText) as Array<{ detector: string; samples: string[] }>)
+        .filter((f) => ["enum_code", "translation_key", "internal_id"].includes(f.detector));
+      expect(findings, `readability findings on ${path}`).toEqual([]);
+
+      expect(counters.approvals).toBe(0);
+      expect(counters.alerts).toBe(0);
+    });
+  }
 });
