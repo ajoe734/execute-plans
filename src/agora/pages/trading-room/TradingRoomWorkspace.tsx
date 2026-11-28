@@ -4,8 +4,10 @@ import type { TFunction } from "i18next";
 import {
   acceptTradingRoomWorkspaceProposalWithMeta,
   createTradingRoomWorkspaceProposal,
+  getTradingRoomPaperBook,
   getTradingRoomWorkspaceByStrategyWithMeta,
   type TradingRoomAggregate,
+  type TradingRoomPaperBookReadback,
   type TradingRoomStrategyEntry,
   type TradingDecisionEvent,
   type TradingRoomWorkspaceResult,
@@ -21,6 +23,15 @@ import { ShadowComparisonPanel } from "./ShadowComparisonPanel";
 
 function newUUID(): string {
   return crypto.randomUUID();
+}
+
+function safeResolveFn<T>(getter: () => T): T | null {
+  try {
+    const fn = getter();
+    return typeof fn === "function" ? fn : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface TradingRoomUiError {
@@ -235,31 +246,134 @@ export function TradingEventQueue({ events, loading, eventsEtag, onSelectEvent, 
 
 export interface PositionActionQueueProps {
   positionSummaries: unknown[];
+  paperBook?: TradingRoomPaperBookReadback | null;
 }
 
-export function PositionActionQueue({ positionSummaries }: PositionActionQueueProps): JSX.Element {
+export function PositionActionQueue({ positionSummaries, paperBook }: PositionActionQueueProps): JSX.Element {
   const { t } = useTranslation();
+  const hasPaperPositions = Boolean(paperBook && paperBook.positions.length > 0);
+  const hasPaperFills = Boolean(paperBook && paperBook.fills.length > 0);
   return (
     <div
       data-testid="position-action-queue"
-      style={{ background: "#171b22", borderLeft: "1px solid #2a2e38", flexShrink: 0, overflow: "auto", width: 240 }}
+      style={{ background: "#171b22", borderLeft: "1px solid #2a2e38", flexShrink: 0, overflow: "auto", width: 280 }}
     >
       <div style={{ borderBottom: "1px solid #2a2e38", fontSize: 13, fontWeight: 600, padding: "8px 12px" }}>
-        {t("agora.tradingRoom.page.positionActions")}
-      </div>
-      {positionSummaries.length === 0 ? (
-        <div style={{ color: "#737d8e", fontSize: 13, padding: 12 }}>
-          {t("agora.tradingRoom.page.noPositions")}
+        <div>{t("agora.tradingRoom.page.positionActions")}</div>
+        <div style={{ color: "#e8b750", fontSize: 11, fontWeight: 600, marginTop: 2 }}>
+          {t("agora.tradingRoom.page.paperBook.title")}
         </div>
-      ) : (
-        <ul style={{ listStyle: "none", margin: 0, padding: "8px 12px" }}>
-          {positionSummaries.map((p, i) => (
-            <li key={i} style={{ borderBottom: "1px solid #2a2e38", fontSize: 13, padding: "4px 0" }}>
-              {JSON.stringify(p)}
-            </li>
-          ))}
-        </ul>
-      )}
+        <div
+          data-testid="paper-book-proxy-badge"
+          style={{ color: "#38bdf8", fontFamily: "monospace", fontSize: 10, marginTop: 2 }}
+        >
+          {t("agora.tradingRoom.page.paperBook.proxyBadge")}
+        </div>
+        <div
+          data-testid="paper-book-no-order-action"
+          style={{ color: "#43cf94", fontSize: 10, marginTop: 2 }}
+        >
+          {t("agora.tradingRoom.page.paperBook.noOrderNotice")}
+        </div>
+      </div>
+
+      <div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2e38" }}>
+        <div style={{ color: "#8c96a6", fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+          {t("agora.tradingRoom.page.paperBook.positionsHeading", {
+            count: hasPaperPositions ? paperBook!.positions.length : positionSummaries.length,
+          })}
+        </div>
+        {hasPaperPositions ? (
+          <ul
+            data-testid="paper-book-positions-list"
+            style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}
+          >
+            {paperBook!.positions.map((pos) => (
+              <li
+                key={pos.position_id}
+                data-testid={`paper-book-position-${pos.symbol}`}
+                style={{
+                  background: "#12161f",
+                  border: "1px solid #2a2e38",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "6px 8px",
+                }}
+              >
+                <div style={{ color: "#f0ece4", fontWeight: 600 }}>
+                  {t("agora.tradingRoom.page.paperBook.positionLine", {
+                    symbol: pos.symbol,
+                    side: pos.side,
+                    qty: pos.quantity,
+                    avgPrice: pos.avg_entry_price ?? "—",
+                    markPrice: pos.mark_price ?? "—",
+                  })}
+                </div>
+                <div style={{ color: "#8c96a6", fontFamily: "monospace", fontSize: 10, marginTop: 2 }}>
+                  {pos.settlement_source} · PnL: {pos.unrealized_pnl ?? 0}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : positionSummaries.length === 0 ? (
+          <div style={{ color: "#737d8e", fontSize: 13, padding: "4px 0" }}>
+            {t("agora.tradingRoom.page.noPositions")}
+          </div>
+        ) : (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {positionSummaries.map((p, i) => (
+              <li key={i} style={{ borderBottom: "1px solid #2a2e38", fontSize: 13, padding: "4px 0" }}>
+                {JSON.stringify(p)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div style={{ padding: "8px 12px" }}>
+        <div style={{ color: "#8c96a6", fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+          {t("agora.tradingRoom.page.paperBook.fillsHeading", {
+            count: paperBook?.fills.length ?? 0,
+          })}
+        </div>
+        {hasPaperFills ? (
+          <ul
+            data-testid="paper-book-fills-list"
+            style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}
+          >
+            {paperBook!.fills.map((fill) => (
+              <li
+                key={fill.fill_id}
+                data-testid={`paper-book-fill-${fill.fill_id}`}
+                style={{
+                  background: "#12161f",
+                  border: "1px solid #2a2e38",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "6px 8px",
+                }}
+              >
+                <div style={{ color: "#f0ece4" }}>
+                  {t("agora.tradingRoom.page.paperBook.fillLine", {
+                    symbol: fill.symbol,
+                    side: fill.side,
+                    qty: fill.quantity,
+                    price: fill.price ?? "—",
+                    filledAt: fill.filled_at ?? "—",
+                  })}
+                </div>
+                <div style={{ color: "#8c96a6", fontFamily: "monospace", fontSize: 10, marginTop: 2 }}>
+                  {fill.fill_id} · {fill.settlement_source}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div data-testid="paper-book-fills-empty" style={{ color: "#737d8e", fontSize: 11 }}>
+            {t("agora.tradingRoom.page.paperBook.noFills")}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -404,9 +518,28 @@ export function TradingRoomWorkspace({
   const [selectedDecisionEventId, setSelectedDecisionEventId] = useState<string | null>(
     () => filteredEvents[0]?.decision_event_id ?? null,
   );
+  const [paperBook, setPaperBook] = useState<TradingRoomPaperBookReadback | null>(null);
   // Revision created by an explicit user regeneration: skip the saved-workspace
   // restore for that revision only (StrictMode-safe: never consumed/reset).
   const regenerateRevisionRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const paperBookFn = safeResolveFn(() => getTradingRoomPaperBook);
+    if (!paperBookFn) return;
+    let cancelled = false;
+    void Promise.resolve(paperBookFn({ strategyId }))
+      .then((res) => {
+        if (!cancelled && res) {
+          setPaperBook(res);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPaperBook(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [strategyId]);
 
   const activeDecisionEvent =
     filteredEvents.find((ev) => ev.decision_event_id === selectedDecisionEventId) ??
@@ -717,7 +850,10 @@ export function TradingRoomWorkspace({
           </div>
         </div>
         <div data-mobile-pane-hidden={mobilePane !== "decisions"} data-testid="trading-room-position-surface">
-          <PositionActionQueue positionSummaries={aggregate.position_summaries ?? []} />
+          <PositionActionQueue
+            paperBook={paperBook}
+            positionSummaries={aggregate.position_summaries ?? []}
+          />
         </div>
       </div>
     </div>

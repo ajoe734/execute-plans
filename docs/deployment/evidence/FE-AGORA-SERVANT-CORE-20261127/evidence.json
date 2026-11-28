@@ -1,0 +1,167 @@
+{
+  "schema_version": "pantheon.frontend.task-evidence.v1",
+  "task_id": "FE-AGORA-SERVANT-CORE-20261127",
+  "title": "Agora UI for cited data and clarification and habits and paper book and imitation and reports",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "review_independence": {
+    "owner_family": "Antigravity",
+    "reviewer_family": "Claude",
+    "independent": true
+  },
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-AGORA-SERVANT-CORE-20261127",
+  "register_instance": "RC4",
+  "dependencies_verified": [
+    "FE-AGORA-TRADING-ROOM-PERFORMANCE-ALIGN-20261127",
+    "FE-AGORA-GLOBAL-DRAWERS-20261127",
+    "AGORA-SERVANT-CLARIFY-20261127",
+    "AGORA-SERVANT-REVISIONS-AND-REPORT-20261127"
+  ],
+  "runtime_budget": {
+    "recurring_jobs_added_or_changed": 0,
+    "persistent_writers_added_or_changed": 0,
+    "notes": "Frontend Agora UI consuming existing BFF v1.13/v1.14 servant and trading-room endpoints; adds no recurring job, emitter, or persistent writer."
+  },
+  "acceptance_coverage": {
+    "AC1": "All new text is zh-TW (via src/i18n/locales/zh-TW.ts with exact key parity in src/i18n/locales/en-US.ts enforced by src/agora/i18n.guard.test.ts). Citations (source, as_of, freshness) and stated assumptions are rendered under each servant answer in both the 交易僕人任務 drawer command task history ([data-testid='servant-answer-citations'], [data-testid='servant-stated-assumptions']) and the session message stream ([data-testid^='servant-stream-citations-']), with an honest zh-TW empty state ([data-testid='servant-answer-citations-empty']) before interactive turns.",
+    "AC2": "Single-question clarification cards ([data-testid='servant-clarification-card']) display question, why_it_matters, servant_default, and clickable option buttons ([data-testid^='servant-clarification-option-']) that send clarification_choice (decision_id, question_id, option_id, selected_option_id, option_label, resolves) back via POST /bff/agora/servant/sessions/{session_id}/messages and confirm the choice ([data-testid='servant-clarification-selected']), with an honest zh-TW empty state ([data-testid='servant-clarification-empty']) when no single-question clarification is pending.",
+    "AC3": "The trader habits view ([data-testid='personalization-servant-habits-section']) in the 個人化紀錄 drawer reads GET /bff/agora/servant/habits, displays the 7 deterministic habit features with sample sizes (sample_size/min_sample) and 樣本不足 labels when below min_sample, shows private servant interpretations (persona_private) or an honest empty state ([data-testid='servant-habits-interpretations-empty']), and lets the trader reject, replace, or add habit rules via PATCH /bff/agora/servant/habits with immediate readback confirmation ([data-testid='servant-habit-correction-saved']).",
+    "AC4": "Paper fills and positions from GET /bff/agora/trading-room/paper-book are rendered in PositionActionQueue ([data-testid='position-action-queue'], [data-testid='paper-book-positions-list'], [data-testid='paper-book-fills-list'], [data-testid='paper-book-fills-empty']) and on Strategy Performance ([data-testid='performance-paper-book-section'], [data-testid='performance-paper-book-proxy-badge'], [data-testid='performance-paper-book-no-order-action']) with pantheon_paper_proxy ([data-testid='paper-book-proxy-badge']), agora_paper_book_readback_only ([data-testid='paper-book-no-order-action']), honest empty states when live positions/fills are absent, and zero order buttons.",
+    "AC5": "「僕人模仿您」 ([data-testid='performance-servant-imitation-section']) on Strategy Performance reads GET /bff/agora/trading-room/imitation-comparison and renders comparison status ([data-testid='imitation-comparison-status']), agreement rate, outcome gap, 1,000-resample 95% bootstrap confidence intervals ([data-testid='imitation-agreement-rate-interval'], [data-testid='imitation-outcome-gap-interval']), the explicit luck label 可能是運氣 ([data-testid='imitation-agreement-rate-luck-label'], [data-testid='imitation-outcome-gap-luck-label']) when an interval contains zero, and the decision differences table ([data-testid='imitation-differences-list']) or honest empty state ([data-testid='imitation-differences-empty']).",
+    "AC6": "Report history ([data-testid='performance-trader-reports-section'], [data-testid='trader-report-history-list'], [data-testid='trader-reports-empty']) and a compact drawer report card ([data-testid='servant-drawer-report-card']) read GET /bff/agora/servant/reports, display report narrative ([data-testid='trader-report-narrative']), cited owner facts with owner/source/as_of ([data-testid='trader-report-citations']), suggested next steps ([data-testid='trader-report-suggestions']), daily quota ([data-testid='trader-reports-quota']), honest empty states when no reports exist yet, and request on-demand reports via POST /bff/agora/servant/reports ([data-testid='request-trader-report-btn'], [data-testid='servant-drawer-request-report']).",
+    "AC7": "The persona consult control ([data-testid='servant-optional-persona-consult-control'], [data-testid='servant-open-optional-persona-consult']) is optional and off by default; unit tests, recorded-fixture Playwright E2E, and the live-BFF candidate browser proof all verify that the default flow makes zero persona_opinion calls, zero meeting calls, and zero /bff/management calls (SD §10).",
+    "AC8": "Pre-merge candidate browser proof as dev trader admintest against the live Pantheon dev BFF (https://api.dev.mvl-cap.tw) at https://app.dev.mvl-cap.tw (serving only this task's dist via request interception; see candidate_browser_proof and screenshots candidate-01-* through candidate-05-*), plus deterministic recorded-fixture Playwright E2E proof for write-path flows (e2e/agora-servant-core-hosted.spec.ts, screenshots 01-* through 06-*). Pre-merge candidate proof and recorded-fixture proof are not a dev deployment claim; final post-deploy hosted dev acceptance against the deployed dev commit without candidate asset interception is bound under post_deploy_acceptance (required_before_done: true)."
+  },
+  "candidate_browser_proof": {
+    "status": "passed",
+    "exit_status": 0,
+    "operator": "admintest",
+    "method": "Real Chromium session logged into https://app.dev.mvl-cap.tw as dev trader admintest (read-only, VITE_BFF_REAL_WRITES=false). Before candidate override, observed currently deployed FE 0a0ce540597647809dc0c0f2886cfc376d73c025 on /agora/strategy-performance with 0 imitation sections, 0 trader report sections, and 0 paper book sections. With candidate dist override, only frontend navigation/assets were served from this task's dist via browser request interception while /runtime-config.js, /deployment.json, and every /bff/* request used the live dev hosts (https://app.dev.mvl-cap.tw and https://api.dev.mvl-cap.tw). This is pre-merge candidate browser proof against the live dev BFF, not a dev deployment claim.",
+    "fe": "https://app.dev.mvl-cap.tw",
+    "bff": "https://api.dev.mvl-cap.tw",
+    "served_deployment_at_check": {
+      "fe_commit": "0a0ce540597647809dc0c0f2886cfc376d73c025",
+      "bff_commit": "94ee2f78bed6929a9314498ec678303b92b4b481",
+      "pair_id": "2bb7af604624662001d2f42ee6925afb72a3e1da6fe7d4a8d75e76e37ba12a57",
+      "deployment_state": "accepted",
+      "accepted_at": "2026-11-28T05:32:14Z"
+    },
+    "currently_served_hosted_fe_before_override": {
+      "served_fe_commit": "0a0ce540597647809dc0c0f2886cfc376d73c025",
+      "imitation_section_count": 0,
+      "reports_section_count": 0,
+      "paper_book_section_count": 0
+    },
+    "candidate_build_command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+    "candidate_index_sha256": "23425153abb59c2945f91f3044fd3bdfc706991c215ffa81f7b717ccc199f211",
+    "candidate_bundle_digest_sha256": "a4aa283494aa93f18496a9bb2aa9e69d63fe69da2ffcd72341701fb61ad16622",
+    "command": "HOME=/home/chloe_ong_dev_cctech_support_com CANDIDATE_DIST=$PWD/dist PROOF_OUT=/tmp/agora-servant-core-20261127/candidate EVIDENCE_SCREENSHOTS_DIR=$PWD/docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots timeout 240 node /tmp/agora-servant-core-browser-proof.mjs",
+    "proof": "/tmp/agora-servant-core-20261127/candidate/proof.json",
+    "screenshots_directory": "/tmp/agora-servant-core-20261127/candidate",
+    "committed_screenshots": [
+      "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-01-strategy-performance-imitation.png",
+      "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-02-strategy-performance-reports-and-paper-book.png",
+      "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-03-servant-drawer-citations-clarification-optional-consult.png",
+      "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-04-personalization-habits.png",
+      "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-05-trading-room-paper-book-read-only.png"
+    ],
+    "observed_live_surfaces": {
+      "ac1_ac2_ac7_servant_drawer": {
+        "live_bff_request": "GET /bff/agora/servant -> 200 OK",
+        "live_servant_persona_id": "agora-servant-799a3ce8c021b91cbb54",
+        "live_servant_status": "paper_only",
+        "citations_surface_text": "資料出處與新鮮度 — 目前尚無回答出處紀錄；每次僕人回答下方將列出資料來源（source）、資料時間（as_of）與新鮮度（freshness）。",
+        "clarification_surface_text": "需要您釐清的單一問題 — 目前無待回覆的單題釐清問題；當僕人需要確認單一策略偏好時，將在此顯示可點選選項與預設假設。",
+        "optional_persona_consult_text": "選用：諮詢 Persona 意見（預設關閉） — 預設問答、釐清、習慣、模擬帳本、僕人模仿與報告皆由您的私人助理獨立完成，絕不自動呼叫任何 Persona 或審議會議。",
+        "honest_empty_state": "Read-only candidate session (VITE_BFF_REAL_WRITES=false) does not issue POST /bff/agora/servant/sessions mutations; citations ([data-testid='servant-answer-citations']) and single-question clarification card ([data-testid='servant-clarification-card']) render their zh-TW empty-state surfaces ready for interactive turns."
+      },
+      "ac3_personalization_habits": {
+        "live_bff_request": "GET /bff/agora/servant/habits -> 200 OK",
+        "live_profile_user_id": "pantheon-dev-admin-test",
+        "live_features_observed": [
+          "持有期間: 樣本不足 (樣本 0/10)",
+          "進場時機（相對訊號）: 樣本不足 (樣本 0/10)",
+          "對規則的加減碼／出場紀律: 樣本不足 (樣本 0/10)",
+          "部位大小: 樣本不足 (樣本 0/10)",
+          "被剔除的候選: 樣本不足 (樣本 0/10)",
+          "看資料的順序: 樣本不足 (樣本 1/10)",
+          "介入頻率與方向: 樣本不足 (樣本 0/10)"
+        ],
+        "live_interpretations_empty_text": "目前尚無習慣推論項目，您可在下方直接新增習慣規則。",
+        "correction_controls_visible": true,
+        "honest_empty_state": "Live GET /bff/agora/servant/habits returns 200 OK for pantheon-dev-admin-test with all 7 deterministic habit features below min_sample=10 (rendered with 樣本不足 and 樣本 n/10 badges) and 0 private servant interpretations (rendered with honest empty state 目前尚無習慣推論項目，您可在下方直接新增習慣規則。)."
+      },
+      "ac4_paper_book_read_only": {
+        "live_bff_request": "GET /bff/agora/trading-room/paper-book?strategy_id=26037823-b24e-43c5-ab67-90098c555a6c -> 404 RESOURCE_NOT_FOUND on currently deployed BFF 94ee2f78bed",
+        "trading_room_proxy_badge": "模擬成交代理（pantheon_paper_proxy）",
+        "trading_room_no_order_notice": "僅供唯讀檢視 · 無任何下單按鈕（agora_paper_book_readback_only）",
+        "trading_room_fills_empty_text": "尚無模擬成交紀錄。",
+        "trading_room_button_count": 0,
+        "performance_proxy_badge": "模擬成交代理（pantheon_paper_proxy）",
+        "performance_no_order_notice": "僅供唯讀檢視 · 無任何下單按鈕（agora_paper_book_readback_only）",
+        "performance_button_count": 0,
+        "honest_empty_state": "Currently deployed dev BFF 94ee2f78bed6929a9314498ec678303b92b4b481 (built 2026-11-28T03:34:04Z before AGORA-PAPER-BOOK-READBACK-20261127 merged at 03:37:42Z) returns 404 on GET /bff/agora/trading-room/paper-book; both PositionActionQueue and StrategyPerformancePage gracefully render the read-only paper book empty state (目前模擬部位 (0) 沒有未平倉部位。, 模擬成交紀錄 (0) 尚無模擬成交紀錄。) with pantheon_paper_proxy, agora_paper_book_readback_only, and 0 order buttons."
+      },
+      "ac5_servant_imitation": {
+        "live_bff_request": "GET /bff/agora/trading-room/imitation-comparison?strategy_id=26037823-b24e-43c5-ab67-90098c555a6c -> 200 OK",
+        "live_comparison_state": "not_enough_decisions",
+        "live_status_label_zh": "決策數不足（至少需 30 筆決策才啟動僕人模仿訓練）",
+        "agreement_rate_luck_label": "可能是運氣",
+        "agreement_rate_interval_text": "95% 區間：[未回報, 未回報]（1000 次重抽樣 · n=0）",
+        "outcome_gap_luck_label": "可能是運氣",
+        "outcome_gap_interval_text": "95% 區間：[未回報, 未回報]（1000 次重抽樣 · n=0）",
+        "differences_empty_text": "目前期間內尚無已結算的差異紀錄。",
+        "honest_empty_state": "Live GET /bff/agora/trading-room/imitation-comparison returns 200 OK with comparison_state=not_enough_decisions (0/30 decisions for admintest), status_label_zh 決策數不足（至少需 30 筆決策才啟動僕人模仿訓練）, 可能是運氣 luck labels on both agreement rate and outcome gap cards, 1000-resample bootstrap interval labels, and 目前期間內尚無已結算的差異紀錄。"
+      },
+      "ac6_trader_reports": {
+        "live_bff_request": "GET /bff/agora/servant/reports?strategy_id=26037823-b24e-43c5-ab67-90098c555a6c&limit=10 -> 404 RESOURCE_NOT_FOUND on currently deployed BFF 94ee2f78bed",
+        "request_button_text": "整理本週報表",
+        "reports_empty_text": "目前尚無報告歷史，請點擊「整理本週報表」產生第一份報告。",
+        "honest_empty_state": "Currently deployed dev BFF 94ee2f78bed6929a9314498ec678303b92b4b481 (built 2026-11-28T03:34:04Z before AGORA-SERVANT-REVISIONS-AND-REPORT-20261127 merged at 06:37:47Z) returns 404 on GET /bff/agora/servant/reports; both StrategyPerformancePage and the Servant drawer report card gracefully render the honest empty state (目前尚無報告歷史，請點擊「整理本週報表」產生第一份報告。) and the 整理本週報表 request button."
+      }
+    },
+    "page_errors": 0,
+    "non_get_requests_after_auth": 0,
+    "persona_opinion_calls": 0,
+    "management_calls": 0
+  },
+  "post_deploy_acceptance": {
+    "status": "pending_after_independent_review_merge_and_dev_deploy",
+    "required_before_done": true,
+    "served_commit_at_candidate_check": "0a0ce540597647809dc0c0f2886cfc376d73c025",
+    "served_bff_commit_at_candidate_check": "94ee2f78bed6929a9314498ec678303b92b4b481",
+    "reason": "Per .orchestrator/skills/task-closeout-finalization.md § Per-Task PR Flow and AGENTS.md § Branch And Dev Deployment Policy, only the supervisor canonical_auto_integrator merges an independently approved PR into dev, and Pantheon dev FE deployment only deploys commits on dev. Hosted AC8 against the deployed dev commit without candidate asset interception is verified during owner closeout (review_approved -> done) before running ai-status.sh done.",
+    "steps": [
+      "Verify approved task head merged into dev; wait for Pantheon FE-BFF Integration Gate and Pantheon Dev FE Deploy success for the target commit (paired with a deployed Pantheon dev BFF commit containing AGORA-PAPER-BOOK-READBACK-20261127 and AGORA-SERVANT-REVISIONS-AND-REPORT-20261127)",
+      "Verify https://app.dev.mvl-cap.tw/deployment.json reports the merged dev commit",
+      "Run HOME=/home/chloe_ong_dev_cctech_support_com EXPECTED_DEPLOYED_SHA=<deployed-dev-commit> PROOF_OUT=/tmp/agora-servant-core-20261127/hosted timeout 240 node /tmp/agora-servant-core-browser-proof.mjs without CANDIDATE_DIST, and/or PANTHEON_FE_BASE_URL=https://app.dev.mvl-cap.tw BFF_AUTH_TOKEN=<dev-operator-token> npx playwright test e2e/agora-servant-core-hosted.spec.ts --grep 'hosted dev proof', collecting terminal exit status and screenshots",
+      "Record external hosted proof and deployment run links in governed closeout; retain this reviewed manifest unchanged"
+    ]
+  },
+  "screenshots": [
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-01-strategy-performance-imitation.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-02-strategy-performance-reports-and-paper-book.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-03-servant-drawer-citations-clarification-optional-consult.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-04-personalization-habits.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/candidate-05-trading-room-paper-book-read-only.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/01-trading-room-paper-book-read-only.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/02-servant-answer-citations-and-clarification-card.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/03-servant-clarification-choice-sent.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/04-personalization-habits-profile-and-correction.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/05-performance-servant-imitation-bootstrap-luck.png",
+    "docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots/06-performance-trader-reports-and-paper-book.png"
+  ],
+  "verification": {
+    "typecheck": "npm run typecheck:agora: 0 errors",
+    "eslint": "npx eslint on all changed files: 0 errors",
+    "contract_drift": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-worker-worktrees/pantheon/agora-servant-revisions-and-report-20261127 npm run test:contract: 11/11 passed (49 schemas, 99 routes, 75 sha256 entries)",
+    "build_and_credential_scan": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build && npm run scan:bundle-credentials: exit 0 (digest a4aa283494aa93f18496a9bb2aa9e69d63fe69da2ffcd72341701fb61ad16622)",
+    "i18n_guard": "npx vitest run src/agora/i18n.guard.test.ts: 8/8 passed",
+    "unit_tests": "npx vitest run src/lib/bff-v1/agora/servant.test.ts src/lib/bff-v1/agora/tradingRoom.test.ts src/agora/i18n.guard.test.ts src/agora/TradingDeskLayout.test.tsx src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx: 6 files, 174/174 passed",
+    "playwright_recorded_fixture_e2e": "npx playwright test e2e/agora-servant-core-hosted.spec.ts: 1 passed, 1 skipped (hosted dev proof requires PANTHEON_FE_BASE_URL + BFF_AUTH_TOKEN), 6 fixture screenshots captured",
+    "candidate_browser_proof_live_dev_bff": "HOME=/home/chloe_ong_dev_cctech_support_com CANDIDATE_DIST=$PWD/dist PROOF_OUT=/tmp/agora-servant-core-20261127/candidate EVIDENCE_SCREENSHOTS_DIR=$PWD/docs/deployment/evidence/FE-AGORA-SERVANT-CORE-20261127/screenshots timeout 240 node /tmp/agora-servant-core-browser-proof.mjs: exit 0, passed=true, 5 live-BFF candidate screenshots captured, page_errors=0, non_get_requests_after_auth=0, persona_opinion_calls=0, management_calls=0"
+  },
+  "residual_findings": []
+}

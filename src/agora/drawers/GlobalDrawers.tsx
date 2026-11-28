@@ -15,10 +15,19 @@ import {
   type SubmitInteractionResponse,
 } from "@/lib/bff-v1/agora/interaction";
 import {
+  createServantTraderReport,
+  getServantHabits,
   getServantSession,
   getServantSessionStream,
+  listServantTraderReports,
+  patchServantHabits,
+  sendServantSessionMessage,
   terminateServantSession,
+  type ServantClarificationCard,
+  type ServantClarificationOption,
+  type ServantHabitsResponse,
   type ServantSessionStreamSnapshot,
+  type ServantTraderReport,
 } from "@/lib/bff-v1/agora/servant";
 import {
   getTradingRoom,
@@ -34,6 +43,15 @@ import type {
   TradingRoomWorkspace,
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import { ServantCorrectionSection } from "./ServantCorrectionSection";
+
+function safeResolveFn<T>(getter: () => T): T | null {
+  try {
+    const fn = getter();
+    return typeof fn === "function" ? fn : null;
+  } catch {
+    return null;
+  }
+}
 
 export type GlobalDrawerId =
   | "servant"
@@ -84,6 +102,46 @@ export function ServantSessionTasksSection({
   const { t } = useTranslation();
   const [messageInput, setMessageInput] = useState("");
   const [detailsBySession, setDetailsBySession] = useState<Record<string, SessionLiveDetail>>({});
+  const [sentClarificationBySession, setSentClarificationBySession] = useState<Record<string, string>>({});
+  const [quickReports, setQuickReports] = useState<ServantTraderReport[]>([]);
+  const [requestingReport, setRequestingReport] = useState(false);
+
+  useEffect(() => {
+    const listReportsFn = safeResolveFn(() => listServantTraderReports);
+    if (!listReportsFn) return;
+    let active = true;
+    void Promise.resolve(listReportsFn({ limit: 3 }))
+      .then((res) => {
+        if (active && Array.isArray(res?.items)) {
+          setQuickReports(res.items);
+        }
+      })
+      .catch(() => {
+        // Optional quick report preview inside drawer.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleRequestQuickReport = useCallback(async () => {
+    const createReportFn = safeResolveFn(() => createServantTraderReport);
+    if (!createReportFn || requestingReport) return;
+    setRequestingReport(true);
+    try {
+      const report = await createReportFn({ report_kind: "on_demand" });
+      if (report) {
+        setQuickReports((prev) => [
+          report,
+          ...prev.filter((item) => item.report_id !== report.report_id),
+        ]);
+      }
+    } catch {
+      // Ignore error in compact card; main report history lives on Strategy Performance.
+    } finally {
+      setRequestingReport(false);
+    }
+  }, [requestingReport]);
 
   const refreshSessionDetail = useCallback(async (sessionId: string) => {
     setDetailsBySession((prev) => ({
@@ -163,6 +221,38 @@ export function ServantSessionTasksSection({
       }));
     }
   }, []);
+
+  const handleStreamClarificationOption = useCallback(
+    async (
+      sessionId: string,
+      card: ServantClarificationCard,
+      option: ServantClarificationOption,
+    ) => {
+      const sendMsgFn = safeResolveFn(() => sendServantSessionMessage);
+      if (!sendMsgFn) return;
+      setSentClarificationBySession((prev) => ({
+        ...prev,
+        [sessionId]: option.label,
+      }));
+      try {
+        await sendMsgFn(sessionId, {
+          content: option.label,
+          clarification_choice: {
+            decision_id: card.decision_id ?? undefined,
+            question_id: card.question_id ?? undefined,
+            option_id: option.option_id,
+            selected_option_id: option.option_id,
+            option_label: option.label,
+            resolves: card.resolves,
+          },
+        });
+        await refreshSessionDetail(sessionId);
+      } catch {
+        // Error surfaced by refreshSessionDetail if session read fails.
+      }
+    },
+    [refreshSessionDetail],
+  );
 
   return (
     <div
@@ -400,6 +490,92 @@ export function ServantSessionTasksSection({
                             : t("agora.drawers.servantTasks.roleUser")}
                         </strong>
                         : {msg.content ?? "—"}
+                        {msg.citations && msg.citations.length > 0 ? (
+                          <div
+                            data-testid={`servant-stream-citations-${msg.message_id}`}
+                            style={{
+                              marginTop: 4,
+                              paddingTop: 4,
+                              borderTop: "1px solid #2a2e38",
+                              color: "#8c96a6",
+                              fontSize: 10,
+                            }}
+                          >
+                            <div style={{ color: "#e8b750", fontWeight: 600 }}>
+                              {t("agora.drawers.servantTasks.citationsHeading")}
+                            </div>
+                            <ul style={{ margin: "2px 0 0", paddingLeft: 14 }}>
+                              {msg.citations.map((cit, cIdx) => (
+                                <li key={`${msg.message_id}-cit-${cIdx}`}>
+                                  {t("agora.drawers.servantTasks.citationBadge", {
+                                    source: cit.source,
+                                    asOf: cit.as_of,
+                                    freshness: cit.freshness,
+                                  })}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {msg.clarification ? (
+                          <div
+                            data-testid={`servant-stream-clarification-${msg.message_id}`}
+                            style={{
+                              marginTop: 6,
+                              padding: 6,
+                              borderRadius: 4,
+                              border: "1px solid rgba(232,183,80,0.4)",
+                              background: "#171b22",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 4,
+                            }}
+                          >
+                            <div style={{ color: "#e8b750", fontWeight: 700, fontSize: 10 }}>
+                              {t("agora.drawers.servantTasks.clarificationHeading")}
+                            </div>
+                            <div style={{ color: "#f0ece4", fontSize: 11 }}>
+                              {msg.clarification.question}
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              {msg.clarification.options.map((opt) => (
+                                <button
+                                  key={opt.option_id}
+                                  type="button"
+                                  data-testid={`servant-stream-clarification-option-${opt.option_id}`}
+                                  onClick={() => {
+                                    void handleStreamClarificationOption(
+                                      sid,
+                                      msg.clarification!,
+                                      opt,
+                                    );
+                                  }}
+                                  style={{
+                                    background: "#12161f",
+                                    border: "1px solid #e8b750",
+                                    borderRadius: 4,
+                                    color: "#e8b750",
+                                    cursor: "pointer",
+                                    fontSize: 10,
+                                    padding: "2px 6px",
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                            {sentClarificationBySession[sid] ? (
+                              <div
+                                data-testid={`servant-stream-clarification-sent-${sid}`}
+                                style={{ color: "#43cf94", fontSize: 10 }}
+                              >
+                                {t("agora.drawers.servantTasks.clarificationSent", {
+                                  label: sentClarificationBySession[sid],
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -409,6 +585,79 @@ export function ServantSessionTasksSection({
           </div>
         );
       })}
+
+      <div
+        data-testid="servant-drawer-report-card"
+        style={{
+          background: "#171b22",
+          border: "1px solid #2a2e38",
+          borderRadius: 6,
+          padding: 10,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          fontSize: 11,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 6,
+            flexWrap: "wrap",
+          }}
+        >
+          <strong style={{ color: "#e8b750", fontSize: 11 }}>
+            {t("agora.drawers.servantTasks.reportQuickTitle")}
+          </strong>
+          <button
+            type="button"
+            data-testid="servant-drawer-request-report"
+            disabled={requestingReport}
+            onClick={() => {
+              void handleRequestQuickReport();
+            }}
+            style={{
+              background: "#e8b750",
+              border: "1px solid #e8b750",
+              borderRadius: 4,
+              color: "#111417",
+              cursor: requestingReport ? "wait" : "pointer",
+              fontSize: 11,
+              fontWeight: 700,
+              padding: "3px 8px",
+            }}
+          >
+            {requestingReport
+              ? t("agora.drawers.servantTasks.reportQuickRequesting")
+              : t("agora.drawers.servantTasks.reportQuickRequest")}
+          </button>
+        </div>
+        {quickReports.length === 0 ? (
+          <div style={{ color: "#8c96a6", fontSize: 11 }}>
+            {t("agora.drawers.servantTasks.reportQuickEmpty")}
+          </div>
+        ) : (
+          <div
+            data-testid="servant-drawer-latest-report"
+            style={{
+              background: "#12161f",
+              border: "1px solid #2a2e38",
+              borderRadius: 4,
+              padding: "6px 8px",
+              color: "#c5cad2",
+            }}
+          >
+            <div style={{ color: "#f0ece4", fontWeight: 600 }}>
+              {quickReports[0].title}
+            </div>
+            <div style={{ marginTop: 2, color: "#8c96a6", fontSize: 10 }}>
+              {quickReports[0].narrative}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1734,6 +1983,14 @@ export function PersonalizationGlobalDrawer({
   const [learnedLoading, setLearnedLoading] = useState<boolean>(false);
   const [learnedError, setLearnedError] = useState<string | null>(null);
 
+  const [habitsData, setHabitsData] = useState<ServantHabitsResponse | null>(null);
+  const [habitsLoading, setHabitsLoading] = useState<boolean>(false);
+  const [habitsError, setHabitsError] = useState<string | null>(null);
+  const [habitFeatureKey, setHabitFeatureKey] = useState<string>("holding_horizon");
+  const [habitStatementInput, setHabitStatementInput] = useState<string>("");
+  const [habitSubmitting, setHabitSubmitting] = useState<boolean>(false);
+  const [habitSavedReceiptId, setHabitSavedReceiptId] = useState<string | null>(null);
+
   const loadPersonalization = useCallback(async () => {
     setVersionsLoading(true);
     setVersionsError(null);
@@ -1770,26 +2027,57 @@ export function PersonalizationGlobalDrawer({
       setVersionsLoading(false);
     }
 
-    if (!servantPersonaId) {
+    if (servantPersonaId) {
+      setLearnedLoading(true);
+      setLearnedError(null);
+      try {
+        const logRes = await getChangeLog(servantPersonaId);
+        if (logRes.state === "ok") {
+          setChangeLog(logRes.data);
+        } else {
+          setChangeLog(null);
+          setLearnedError(logRes.reason);
+        }
+      } catch (err) {
+        setChangeLog(null);
+        setLearnedError(err instanceof Error ? err.message : "change_log_unavailable");
+      } finally {
+        setLearnedLoading(false);
+      }
+    } else {
       setChangeLog(null);
       setLearnedError(null);
-      return;
     }
-    setLearnedLoading(true);
-    setLearnedError(null);
-    try {
-      const logRes = await getChangeLog(servantPersonaId);
-      if (logRes.state === "ok") {
-        setChangeLog(logRes.data);
-      } else {
-        setChangeLog(null);
-        setLearnedError(logRes.reason);
+
+    const getHabitsFn = safeResolveFn(() => getServantHabits);
+    if (getHabitsFn) {
+      setHabitsLoading(true);
+      setHabitsError(null);
+      try {
+        const habitsRes = await getHabitsFn();
+        const resolvedProfile = habitsRes?.habit_profile ?? habitsRes?.profile;
+        if (habitsRes && resolvedProfile && Array.isArray(resolvedProfile.features)) {
+          setHabitsData({
+            ...habitsRes,
+            profile: resolvedProfile,
+            habit_profile: resolvedProfile,
+            interpretations:
+              habitsRes.servant_interpretations ?? habitsRes.interpretations ?? [],
+            servant_interpretations:
+              habitsRes.servant_interpretations ?? habitsRes.interpretations ?? [],
+          });
+          if (resolvedProfile.features[0]?.key) {
+            setHabitFeatureKey((prev) => prev || resolvedProfile.features[0].key);
+          }
+        } else {
+          setHabitsData(null);
+        }
+      } catch (err) {
+        setHabitsData(null);
+        setHabitsError(err instanceof Error ? err.message : "habits_unavailable");
+      } finally {
+        setHabitsLoading(false);
       }
-    } catch (err) {
-      setChangeLog(null);
-      setLearnedError(err instanceof Error ? err.message : "change_log_unavailable");
-    } finally {
-      setLearnedLoading(false);
     }
   }, [strategyId, servantPersonaId]);
 
@@ -1798,6 +2086,58 @@ export function PersonalizationGlobalDrawer({
   }, [loadPersonalization]);
 
   const entries = Array.isArray(changeLog?.entries) ? changeLog.entries : [];
+
+  const handleHabitCorrection = async (
+    action: "reject" | "replace" | "add",
+    options?: {
+      interpretationId?: string;
+      featureKey?: string;
+      statementOverride?: string;
+    },
+  ) => {
+    const patchHabitsFn = safeResolveFn(() => patchServantHabits);
+    if (!patchHabitsFn || habitSubmitting) return;
+    const effectiveStatement = (options?.statementOverride ?? habitStatementInput).trim();
+    if ((action === "add" || action === "replace") && !effectiveStatement) return;
+    setHabitSubmitting(true);
+    setHabitsError(null);
+    try {
+      const updated = await patchHabitsFn({
+        action,
+        interpretation_id: options?.interpretationId,
+        feature_key: options?.featureKey ?? habitFeatureKey,
+        statement:
+          action === "add" || action === "replace" ? effectiveStatement : undefined,
+      });
+      const resolvedProfile = updated?.habit_profile ?? updated?.profile;
+      if (updated && resolvedProfile) {
+        setHabitsData({
+          ...updated,
+          profile: resolvedProfile,
+          habit_profile: resolvedProfile,
+          interpretations:
+            updated.servant_interpretations ?? updated.interpretations ?? [],
+          servant_interpretations:
+            updated.servant_interpretations ?? updated.interpretations ?? [],
+        });
+      }
+      if (action === "add" || action === "replace") {
+        setHabitStatementInput("");
+      }
+      const teObj = (updated?.training_example ??
+        updated?.correction?.training_example ??
+        null) as { id?: string } | null;
+      const receiptId =
+        teObj?.id ??
+        updated?.correction_receipt?.correction_id ??
+        "habit-updated";
+      setHabitSavedReceiptId(String(receiptId));
+    } catch (err) {
+      setHabitsError(err instanceof Error ? err.message : "habit_patch_failed");
+    } finally {
+      setHabitSubmitting(false);
+    }
+  };
 
   return (
     <DrawerContainer
@@ -2011,6 +2351,363 @@ export function PersonalizationGlobalDrawer({
             )}
           </>
         )}
+      </section>
+
+      <section
+        data-testid="personalization-servant-habits-section"
+        style={{
+          background: "#171b22",
+          border: "1px solid #2a2e38",
+          borderRadius: 8,
+          padding: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+        }}
+      >
+        <div>
+          <strong style={{ color: "#e8b750", fontSize: 13 }}>
+            {t("agora.drawers.personalization.habitsTitle")}
+          </strong>
+          <div style={{ color: "#8c96a6", fontSize: 11, marginTop: 2, lineHeight: 1.45 }}>
+            {t("agora.drawers.personalization.habitsSubtitle")}
+          </div>
+        </div>
+
+        {habitsLoading ? (
+          <div data-testid="personalization-habits-loading" style={{ color: "#8c96a6", fontSize: 12 }}>
+            {t("agora.drawers.personalization.habitsLoading")}
+          </div>
+        ) : habitsError ? (
+          <div
+            data-testid="personalization-habits-error"
+            role="status"
+            style={{ color: "#f87171", fontSize: 12 }}
+          >
+            {t("agora.drawers.personalization.habitsError", { reason: habitsError })}
+          </div>
+        ) : habitsData && (habitsData.habit_profile ?? habitsData.profile) ? (
+          (() => {
+            const habitProfile = (habitsData.habit_profile ?? habitsData.profile)!;
+            const habitInterpretations =
+              habitsData.servant_interpretations ?? habitsData.interpretations ?? [];
+            return (
+              <>
+                <div
+                  data-testid="personalization-habits-window"
+                  style={{ color: "#8c96a6", fontSize: 11, fontFamily: "monospace" }}
+                >
+                  {t("agora.drawers.personalization.habitsWindowLine", {
+                    window: habitProfile.window ?? "90d",
+                    minSample: habitProfile.min_sample,
+                    asOf: habitProfile.as_of ?? habitProfile.computed_at,
+                  })}
+                </div>
+
+                <ul
+                  data-testid="servant-habits-features-list"
+                  style={{
+                    listStyle: "none",
+                    margin: 0,
+                    padding: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  {habitProfile.features.map((feat) => {
+                    const isInsufficient =
+                      feat.status === "insufficient_sample" || feat.shown === false;
+                    const formattedValue = isInsufficient
+                      ? t("agora.drawers.personalization.habitsInsufficient")
+                      : typeof feat.value === "number"
+                        ? `${feat.value}${feat.unit ? ` ${feat.unit}` : ""}`
+                        : typeof feat.value === "object" && feat.value !== null
+                          ? JSON.stringify(feat.value)
+                          : String(
+                              feat.value ??
+                                t("agora.drawers.personalization.habitsInsufficient"),
+                            );
+                    return (
+                      <li
+                        key={feat.key}
+                        data-testid={`servant-habit-feature-${feat.key}`}
+                        style={{
+                          background: "#12161f",
+                          border: "1px solid #2a2e38",
+                          borderRadius: 6,
+                          padding: "6px 10px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          fontSize: 12,
+                        }}
+                      >
+                        <div>
+                          <div style={{ color: "#f0ece4", fontWeight: 600 }}>
+                            {feat.label_zh_tw ?? feat.label}
+                          </div>
+                          <div
+                            style={{
+                              color: isInsufficient ? "#8c96a6" : "#43cf94",
+                              fontSize: 11,
+                            }}
+                          >
+                            {formattedValue}
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            background: "#171b22",
+                            border: "1px solid #2a2e38",
+                            borderRadius: 4,
+                            color: "#c5cad2",
+                            fontFamily: "monospace",
+                            fontSize: 10,
+                            padding: "2px 6px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {t("agora.drawers.personalization.habitsSampleBadge", {
+                            sample: feat.sample_size,
+                            minSample: feat.min_sample,
+                          })}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ color: "#e8b750", fontSize: 12, fontWeight: 600 }}>
+                    {t("agora.drawers.personalization.habitsInterpretationsTitle")}
+                  </div>
+                  {habitInterpretations.length === 0 ? (
+                    <div
+                      data-testid="servant-habits-interpretations-empty"
+                      style={{ color: "#8c96a6", fontSize: 11 }}
+                    >
+                      {t("agora.drawers.personalization.habitsInterpretationsEmpty")}
+                    </div>
+                  ) : (
+                    <ul
+                      data-testid="servant-habits-interpretations-list"
+                      style={{
+                        listStyle: "none",
+                        margin: 0,
+                        padding: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      {habitInterpretations.map((interp) => {
+                        const statusText =
+                          interp.status === "rejected"
+                            ? t("agora.drawers.personalization.habitsStatusRejected")
+                            : interp.status === "replaced"
+                              ? t("agora.drawers.personalization.habitsStatusReplaced")
+                              : t("agora.drawers.personalization.habitsStatusActive");
+                        return (
+                          <li
+                            key={interp.interpretation_id}
+                            data-testid={`servant-habit-interpretation-${interp.interpretation_id}`}
+                            style={{
+                              background: "#12161f",
+                              border: "1px solid #2a2e38",
+                              borderRadius: 6,
+                              padding: "8px 10px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 6,
+                              fontSize: 12,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: 6,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: "#8c96a6",
+                                  fontFamily: "monospace",
+                                  fontSize: 10,
+                                }}
+                              >
+                                {interp.feature_key} · {interp.visibility ?? "persona_private"}
+                              </span>
+                              <span
+                                data-testid={`servant-habit-status-${interp.interpretation_id}`}
+                                style={{
+                                  color:
+                                    interp.status === "rejected"
+                                      ? "#f87171"
+                                      : interp.status === "replaced"
+                                        ? "#38bdf8"
+                                        : "#43cf94",
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {statusText}
+                              </span>
+                            </div>
+                            <div style={{ color: "#f0ece4", lineHeight: 1.45 }}>
+                              {interp.statement}
+                            </div>
+                            {interp.status === "active" ? (
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <button
+                                  type="button"
+                                  data-testid={`servant-habit-reject-${interp.interpretation_id}`}
+                                  disabled={habitSubmitting}
+                                  onClick={() => {
+                                    void handleHabitCorrection("reject", {
+                                      interpretationId: interp.interpretation_id,
+                                      featureKey: interp.feature_key,
+                                    });
+                                  }}
+                                  style={{
+                                    background: "#231418",
+                                    border: "1px solid #5c2b33",
+                                    borderRadius: 4,
+                                    color: "#f87171",
+                                    cursor: habitSubmitting ? "wait" : "pointer",
+                                    fontSize: 11,
+                                    padding: "3px 8px",
+                                  }}
+                                >
+                                  {t("agora.drawers.personalization.habitsRejectBtn")}
+                                </button>
+                                <button
+                                  type="button"
+                                  data-testid={`servant-habit-replace-${interp.interpretation_id}`}
+                                  disabled={habitSubmitting || !habitStatementInput.trim()}
+                                  onClick={() => {
+                                    void handleHabitCorrection("replace", {
+                                      interpretationId: interp.interpretation_id,
+                                      featureKey: interp.feature_key,
+                                    });
+                                  }}
+                                  style={{
+                                    background: "#171b22",
+                                    border: "1px solid #e8b750",
+                                    borderRadius: 4,
+                                    color: "#e8b750",
+                                    cursor:
+                                      habitSubmitting || !habitStatementInput.trim()
+                                        ? "not-allowed"
+                                        : "pointer",
+                                    fontSize: 11,
+                                    padding: "3px 8px",
+                                  }}
+                                >
+                                  {t("agora.drawers.personalization.habitsReplaceBtn")}
+                                </button>
+                              </div>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <form
+                  data-testid="servant-habit-correction-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleHabitCorrection("add");
+                  }}
+                  style={{
+                    background: "#12161f",
+                    border: "1px solid #2a2e38",
+                    borderRadius: 6,
+                    padding: 10,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ color: "#e8b750", fontSize: 11, fontWeight: 700 }}>
+                    {t("agora.drawers.personalization.habitsAddTitle")}
+                  </div>
+                  <select
+                    data-testid="servant-habit-feature-select"
+                    value={habitFeatureKey}
+                    onChange={(e) => setHabitFeatureKey(e.target.value)}
+                    style={{
+                      background: "#171b22",
+                      border: "1px solid #2a2e38",
+                      borderRadius: 4,
+                      color: "#f0ece4",
+                      fontSize: 11,
+                      padding: "4px 8px",
+                    }}
+                  >
+                    {habitProfile.features.map((feat) => (
+                      <option key={feat.key} value={feat.key}>
+                        {feat.label_zh_tw ?? feat.label} ({feat.key})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    data-testid="servant-habit-statement-input"
+                    value={habitStatementInput}
+                    onChange={(e) => setHabitStatementInput(e.target.value)}
+                    placeholder={t("agora.drawers.personalization.habitsInputPlaceholder")}
+                    style={{
+                      background: "#171b22",
+                      border: "1px solid #2a2e38",
+                      borderRadius: 4,
+                      color: "#f0ece4",
+                      fontSize: 12,
+                      padding: "5px 8px",
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    data-testid="servant-habit-submit-btn"
+                    disabled={habitSubmitting || !habitStatementInput.trim()}
+                    style={{
+                      background: "#e8b750",
+                      border: "1px solid #e8b750",
+                      borderRadius: 4,
+                      color: "#111417",
+                      cursor:
+                        habitSubmitting || !habitStatementInput.trim()
+                          ? "not-allowed"
+                          : "pointer",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: "5px 10px",
+                    }}
+                  >
+                    {habitSubmitting
+                      ? t("agora.drawers.personalization.habitsSubmitting")
+                      : t("agora.drawers.personalization.habitsAddSubmit")}
+                  </button>
+                  {habitSavedReceiptId ? (
+                    <div
+                      data-testid="servant-habit-correction-saved"
+                      style={{ color: "#43cf94", fontSize: 11 }}
+                    >
+                      {t("agora.drawers.personalization.habitsCorrectionSaved", {
+                        id: habitSavedReceiptId,
+                      })}
+                    </div>
+                  ) : null}
+                </form>
+              </>
+            );
+          })()
+        ) : null}
       </section>
 
       <ServantCorrectionSection

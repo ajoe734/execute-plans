@@ -32,6 +32,8 @@ import {
   filterValidatedSystemSuggestions,
   getTradingRoomShadowComparison,
   getTradingRoomDecisionLock,
+  getTradingRoomPaperBook,
+  getTraderImitationComparison,
   classifyShadowSettlementSource,
   isPaperProxySettlement,
   sanitizeShadowExecutionLabel,
@@ -2025,6 +2027,191 @@ describe("subscribeTradingRoomStream (SA AD-AG-06)", () => {
     close();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(changes).toHaveLength(2);
+  });
+});
+
+describe("getTradingRoomPaperBook & getTraderImitationComparison (FE-AGORA-SERVANT-CORE-20261127)", () => {
+  it("reads the caller's paper fills and positions labelled pantheon_paper_proxy with no order route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        status: "ok",
+        environment: "paper",
+        execution_observation_kind: "pantheon_paper_proxy",
+        execution_display_label: "交易員決策（紙上代理）",
+        actual_fill_claimed: false,
+        execution_verified: false,
+        is_real_fill: false,
+        paper_book: {
+          capital_pool_id: "pool-trader-001",
+          runtime_binding_id: "rb-trader-001",
+          runtime_id: "rt-trader-001",
+          starting_capital: 10000000,
+          currency: "TWD",
+        },
+        binding_telemetry: {
+          available: true,
+          status: "active",
+          equity: 10045000,
+          cash: 8995000,
+          realized_pnl: 15000,
+          unrealized_pnl: 30000,
+          last_event_at: "2026-11-28T05:00:00Z",
+        },
+        fills: [
+          {
+            fill_id: "pfill-2330-01",
+            symbol: "2330.TW",
+            action: "enter",
+            side: "Buy",
+            fill_qty: 1000,
+            fill_price: 1020,
+            filled_at: "2026-11-28T01:30:00Z",
+            fill_status: "filled",
+            environment: "paper",
+            execution_observation_kind: "pantheon_paper_proxy",
+            execution_display_label: "交易員決策（紙上代理）",
+            execution_verified: false,
+            actual_fill_claimed: false,
+            is_real_fill: false,
+            no_order_route_proof: "agora_paper_book_readback_only",
+          },
+        ],
+        positions: [
+          {
+            symbol: "2330.TW",
+            side: "Buy",
+            direction: "long",
+            quantity: 1000,
+            net_qty: 1000,
+            avg_price: 1020,
+            average_price: 1020,
+            mark_price: 1050,
+            market_value: 1050000,
+            unrealized_pnl: 30000,
+            realized_pnl: 0,
+            fill_count: 1,
+            last_filled_at: "2026-11-28T01:30:00Z",
+            environment: "paper",
+            execution_observation_kind: "pantheon_paper_proxy",
+            execution_display_label: "交易員決策（紙上代理）",
+            actual_fill_claimed: false,
+            is_real_position: false,
+          },
+        ],
+        total_fills: 1,
+        total_positions: 1,
+        no_order_route_proof: "agora_paper_book_readback_only",
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const book = await getTradingRoomPaperBook(undefined, BASE);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/bff/agora/trading-room/paper-book`);
+    expect(book).not.toBeNull();
+    expect(book?.execution_observation_kind).toBe("pantheon_paper_proxy");
+    expect(book?.actual_fill_claimed).toBe(false);
+    expect(book?.no_order_route_proof).toBe("agora_paper_book_readback_only");
+    expect(book?.fills[0].symbol).toBe("2330.TW");
+    expect(book?.fills[0].is_real_fill).toBe(false);
+    expect(book?.positions[0].net_qty).toBe(1000);
+    expect(book?.positions[0].avg_price).toBe(1020);
+  });
+
+  it("reads the owner-scoped trader imitation comparison with 1,000-resample bootstrap intervals and luck label", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        status: "ok",
+        owner: "agora",
+        comparison_state: "ready",
+        data: {
+          comparison_state: "ready",
+          status_label_zh: "已就緒（32 筆決策對照完成）",
+          strategy_id: "strat-winner-v4",
+          decision_count: 32,
+          minimum_decisions_required: 30,
+          remaining_decisions_needed: 0,
+          training_approved: true,
+          compared_decision_count: 32,
+          settled_comparison_count: 30,
+          agreement_rate: 0.78125,
+          agreement_count: 25,
+          disagreement_count: 7,
+          agreement_interval: {
+            sample_size: 32,
+            resamples: 1000,
+            confidence_level: 0.9,
+            mean: 0.78125,
+            ci_lower: 0.65625,
+            ci_upper: 0.90625,
+            contains_zero: false,
+            is_luck: false,
+            label: "significant",
+            label_zh: "統計顯著",
+          },
+          agreement_label: "significant",
+          agreement_label_zh: "統計顯著",
+          outcome_gap: 0.0024,
+          outcome_gap_interval: {
+            sample_size: 30,
+            resamples: 1000,
+            confidence_level: 0.9,
+            mean: 0.0024,
+            ci_lower: -0.0041,
+            ci_upper: 0.0089,
+            contains_zero: true,
+            is_luck: true,
+            label: "luck",
+            label_zh: "可能是運氣",
+          },
+          outcome_gap_label: "luck",
+          outcome_gap_label_zh: "可能是運氣",
+          finding_stated: false,
+          differences: [
+            {
+              decision_event_id: "evt-diff-01",
+              lock_id: "lock-01",
+              symbol: "2454.TW",
+              strategy_id: "strat-winner-v4",
+              cutoff_at: "2026-11-27T05:30:00Z",
+              human_action: "enter",
+              trader_imitation_action: "no_trade",
+              trader_imitation_confidence: 0.64,
+              candidate_id: "cand-imit-v2",
+              agreed: false,
+              human_return_pct: 0.018,
+              trader_imitation_return_pct: 0.0,
+              outcome_gap_pct: -0.018,
+            },
+          ],
+          decisions: [],
+          candidate: {
+            candidate_id: "cand-imit-v2",
+            version_id: "v2",
+            strategy_id: "strat-winner-v4",
+            status: "processed",
+            decision_count: 32,
+          },
+          candidate_count: 2,
+          max_candidates_kept: 3,
+          snapshot_at: "2026-11-28T05:00:00Z",
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const cmp = await getTraderImitationComparison({ strategyId: "strat-winner-v4" }, BASE);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/trading-room/imitation-comparison?strategy_id=strat-winner-v4`,
+    );
+    expect(cmp.comparison_state).toBe("ready");
+    expect(cmp.agreement_rate).toBe(0.78125);
+    expect(cmp.agreement_interval.ci_lower).toBe(0.65625);
+    expect(cmp.agreement_interval.ci_upper).toBe(0.90625);
+    expect(cmp.outcome_gap_interval.contains_zero).toBe(true);
+    expect(cmp.outcome_gap_interval.is_luck).toBe(true);
+    expect(cmp.outcome_gap_label_zh).toBe("可能是運氣");
+    expect(cmp.differences).toHaveLength(1);
+    expect(cmp.differences[0].symbol).toBe("2454.TW");
   });
 });
 

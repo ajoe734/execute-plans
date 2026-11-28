@@ -19,14 +19,23 @@ import {
   type SuggestionActionReceipt,
 } from "@/lib/bff-v1/agora/performance";
 import {
+  getTraderImitationComparison,
   getTradingRoom,
+  getTradingRoomPaperBook,
   listDecisionEvents,
+  type TraderImitationComparison,
   type TradingDecisionEvent,
   type TradingRoomAggregate,
+  type TradingRoomPaperBookReadback,
   type TradingRoomPerformanceAttributionResponse,
   type TradingRoomPerformanceAttributionRow,
   type TradingRoomStrategyEntry,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import {
+  createServantTraderReport,
+  listServantTraderReports,
+  type ServantTraderReportsListResponse,
+} from "@/lib/bff-v1/agora/servant";
 import { BffError } from "@/lib/bff-v1/errors";
 import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import { cn } from "@/lib/utils";
@@ -80,6 +89,15 @@ const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 
 
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function safeResolveFn<T>(getter: () => T): T | null {
+  try {
+    const fn = getter();
+    return typeof fn === "function" ? fn : null;
+  } catch {
+    return null;
+  }
 }
 
 function formatCurrency(value: unknown, missing: string): string {
@@ -486,6 +504,13 @@ function StrategyPerformanceLoaded({
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
   const [actionReasons, setActionReasons] = useState<Record<string, string>>({});
   const [receipts, setReceipts] = useState<Record<string, SuggestionActionReceipt>>({});
+  const [imitationData, setImitationData] = useState<TraderImitationComparison | null>(null);
+  const [imitationLoading, setImitationLoading] = useState(false);
+  const [reportsData, setReportsData] = useState<ServantTraderReportsListResponse | null>(null);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [requestingReport, setRequestingReport] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [paperBookData, setPaperBookData] = useState<TradingRoomPaperBookReadback | null>(null);
   const attemptKeys = useRef(new Map<string, string>());
 
   useEffect(() => {
@@ -537,6 +562,100 @@ function StrategyPerformanceLoaded({
     () => decisionEvents.filter((event) => !activeRow || event.strategy_id === activeRow.strategyId),
     [decisionEvents, activeRow],
   );
+
+  useEffect(() => {
+    if (!activeRow) return;
+    let cancelled = false;
+    const imitationFn = safeResolveFn(() => getTraderImitationComparison);
+    if (imitationFn) {
+      setImitationLoading(true);
+      void Promise.resolve(imitationFn({ strategyId: activeRow.strategyId }))
+        .then((res) => {
+          if (!cancelled && res) setImitationData(res);
+        })
+        .catch(() => {
+          if (!cancelled) setImitationData(null);
+        })
+        .finally(() => {
+          if (!cancelled) setImitationLoading(false);
+        });
+    }
+    const listReportsFn = safeResolveFn(() => listServantTraderReports);
+    if (listReportsFn) {
+      setReportsLoading(true);
+      void Promise.resolve(listReportsFn({ strategyId: activeRow.strategyId, limit: 10 }))
+        .then((res) => {
+          if (!cancelled && res && Array.isArray(res.items)) {
+            setReportsData(res);
+            setSelectedReportId((prev) => prev ?? res.items[0]?.report_id ?? null);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setReportsData(null);
+        })
+        .finally(() => {
+          if (!cancelled) setReportsLoading(false);
+        });
+    }
+    const paperBookFn = safeResolveFn(() => getTradingRoomPaperBook);
+    if (paperBookFn) {
+      void Promise.resolve(paperBookFn({ strategyId: activeRow.strategyId }))
+        .then((res) => {
+          if (!cancelled && res) setPaperBookData(res);
+        })
+        .catch(() => {
+          if (!cancelled) setPaperBookData(null);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRow]);
+
+  const handleRequestTraderReport = async () => {
+    const createReportFn = safeResolveFn(() => createServantTraderReport);
+    if (!createReportFn || requestingReport) return;
+    setRequestingReport(true);
+    try {
+      const created = await createReportFn({
+        report_kind: "on_demand",
+        strategy_id: activeRow?.strategyId,
+      });
+      if (!created) return;
+      setReportsData((prev) => {
+        const prevItems = prev?.items ?? [];
+        const nextItems = [
+          created,
+          ...prevItems.filter((item) => item.report_id !== created.report_id),
+        ];
+        const usedToday = (prev?.quota?.used_today ?? prev?.on_demand_daily_used ?? 0) + 1;
+        const dailyLimit = prev?.quota?.daily_limit ?? prev?.on_demand_daily_cap ?? 5;
+        return {
+          items: nextItems,
+          total: nextItems.length,
+          servant_persona_id: prev?.servant_persona_id ?? created.servant_persona_id ?? "",
+          on_demand_daily_used: usedToday,
+          on_demand_daily_cap: dailyLimit,
+          weekly_history_cap: prev?.weekly_history_cap ?? 26,
+          quota: {
+            daily_limit: dailyLimit,
+            used_today: usedToday,
+            remaining_today: Math.max(0, dailyLimit - usedToday),
+          },
+        };
+      });
+      setSelectedReportId(created.report_id);
+    } catch {
+      // Keep existing report list if request fails.
+    } finally {
+      setRequestingReport(false);
+    }
+  };
+
+  const selectedReport = useMemo(() => {
+    const items = reportsData?.items ?? [];
+    return items.find((item) => item.report_id === selectedReportId) ?? items[0] ?? null;
+  }, [reportsData, selectedReportId]);
 
   const projection = detailState.status === "ready" ? detailState.envelope.data : null;
   const detailDisplayState = detailState.status === "ready"
@@ -869,6 +988,397 @@ function StrategyPerformanceLoaded({
                         </div>
                       ) : null}
                       <StrategyComparison rows={rows} selectedStrategyId={selectedStrategyId} onSelect={setSelectedStrategyId} summary={summary} data={data} />
+
+                      {/* ── AC5: 「僕人模仿您」 with 1,000-resample bootstrap intervals & luck label ── */}
+                      <section
+                        className="shrink-0 rounded-xl border border-[#2a2e38] bg-[#101318]/40 p-4"
+                        data-testid="performance-servant-imitation-section"
+                      >
+                        <div className="mb-3">
+                          <h3 className="text-sm font-bold text-[#e8b750]">
+                            {t("agora.performance.imitation.title")}
+                          </h3>
+                          <p className="mt-1 text-xs text-[#8c96a6]">
+                            {t("agora.performance.imitation.subtitle")}
+                          </p>
+                        </div>
+                        {imitationLoading ? (
+                          <p className="text-xs text-[#8c96a6]" data-testid="imitation-loading">
+                            {t("agora.performance.imitation.loading")}
+                          </p>
+                        ) : !imitationData ? (
+                          <p className="text-xs text-[#8c96a6]" data-testid="imitation-unavailable">
+                            {t("agora.performance.imitation.unavailable")}
+                          </p>
+                        ) : (
+                          (() => {
+                            const agrInterval =
+                              typeof imitationData.agreement_rate === "object" &&
+                              imitationData.agreement_rate !== null
+                                ? imitationData.agreement_rate
+                                : imitationData.agreement_interval;
+                            const agrPoint =
+                              typeof imitationData.agreement_rate === "number"
+                                ? imitationData.agreement_rate
+                                : agrInterval?.point_estimate ?? agrInterval?.mean ?? null;
+                            const gapInterval =
+                              imitationData.outcome_gap_vs_trader ??
+                              imitationData.outcome_gap_interval;
+                            const gapPoint =
+                              typeof imitationData.outcome_gap === "number"
+                                ? imitationData.outcome_gap
+                                : gapInterval?.point_estimate ?? gapInterval?.mean ?? null;
+                            return (
+                              <div className="space-y-3">
+                                {imitationData.status_label_zh ? (
+                                  <p
+                                    className="rounded border border-[#2a2e38] bg-[#171b22] px-3 py-1.5 text-xs text-[#c5cad2]"
+                                    data-testid="imitation-comparison-status"
+                                  >
+                                    {imitationData.status_label_zh}
+                                  </p>
+                                ) : null}
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                  <div
+                                    className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3"
+                                    data-testid="imitation-agreement-rate-card"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-semibold text-[#c5cad2]">
+                                        {t("agora.performance.imitation.agreementRate")}
+                                      </span>
+                                      <span
+                                        className="rounded border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200"
+                                        data-testid="imitation-agreement-rate-luck-label"
+                                      >
+                                        {agrInterval?.luck_label_zh_tw ||
+                                          imitationData.agreement_label_zh ||
+                                          (agrInterval?.contains_zero
+                                            ? t("agora.performance.imitation.luckLabel")
+                                            : t("agora.performance.imitation.significantLabel"))}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 font-mono text-lg font-bold text-[#f0ece4]">
+                                      {formatPercent(agrPoint, missing)}
+                                    </div>
+                                    <div
+                                      className="mt-1 font-mono text-[11px] text-[#8c96a6]"
+                                      data-testid="imitation-agreement-rate-interval"
+                                    >
+                                      {t("agora.performance.imitation.intervalFormat", {
+                                        lower: formatPercent(agrInterval?.ci_lower, missing),
+                                        upper: formatPercent(agrInterval?.ci_upper, missing),
+                                        resamples: agrInterval?.resamples ?? 1000,
+                                        sampleSize: agrInterval?.sample_size ?? 0,
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  <div
+                                    className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3"
+                                    data-testid="imitation-outcome-gap-card"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-semibold text-[#c5cad2]">
+                                        {t("agora.performance.imitation.outcomeGap")}
+                                      </span>
+                                      <span
+                                        className="rounded border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200"
+                                        data-testid="imitation-outcome-gap-luck-label"
+                                      >
+                                        {gapInterval?.luck_label_zh_tw ||
+                                          imitationData.outcome_gap_label_zh ||
+                                          (gapInterval?.contains_zero
+                                            ? t("agora.performance.imitation.luckLabel")
+                                            : t("agora.performance.imitation.significantLabel"))}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 font-mono text-lg font-bold text-[#f0ece4]">
+                                      {formatPercent(gapPoint, missing)}
+                                    </div>
+                                    <div
+                                      className="mt-1 font-mono text-[11px] text-[#8c96a6]"
+                                      data-testid="imitation-outcome-gap-interval"
+                                    >
+                                      {t("agora.performance.imitation.intervalFormat", {
+                                        lower: formatPercent(gapInterval?.ci_lower, missing),
+                                        upper: formatPercent(gapInterval?.ci_upper, missing),
+                                        resamples: gapInterval?.resamples ?? 1000,
+                                        sampleSize: gapInterval?.sample_size ?? 0,
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="mb-1.5 text-xs font-semibold text-[#c5cad2]">
+                                    {t("agora.performance.imitation.differencesTitle")}
+                                  </div>
+                                  {imitationData.differences.length === 0 ? (
+                                    <p className="text-xs text-[#8c96a6]" data-testid="imitation-differences-empty">
+                                      {t("agora.performance.imitation.differencesEmpty")}
+                                    </p>
+                                  ) : (
+                                    <div className="overflow-x-auto" data-testid="imitation-differences-list">
+                                      <table className="w-full text-left text-xs">
+                                        <thead className="border-b border-[#2a2e38] text-[10px] text-[#8c96a6]">
+                                          <tr>
+                                            <th className="px-2 py-1">{t("agora.performance.imitation.colSymbol")}</th>
+                                            <th className="px-2 py-1">{t("agora.performance.imitation.colTrader")}</th>
+                                            <th className="px-2 py-1">{t("agora.performance.imitation.colServant")}</th>
+                                            <th className="px-2 py-1">{t("agora.performance.imitation.colRule")}</th>
+                                            <th className="px-2 py-1">{t("agora.performance.imitation.colGap")}</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {imitationData.differences.map((diff, idx) => {
+                                            const rowId = diff.decision_id ?? diff.decision_event_id ?? `diff-${idx}`;
+                                            return (
+                                              <tr
+                                                className="border-b border-[#2a2e38]/50"
+                                                data-testid={`imitation-diff-row-${rowId}`}
+                                                key={rowId}
+                                              >
+                                                <td className="px-2 py-1.5 font-mono text-[#f0ece4]">{diff.symbol}</td>
+                                                <td className="px-2 py-1.5 text-[#c5cad2]">{diff.trader_choice ?? diff.human_action}</td>
+                                                <td className="px-2 py-1.5 text-[#e8b750]">{diff.servant_choice ?? diff.trader_imitation_action}</td>
+                                                <td className="px-2 py-1.5 text-[#8c96a6]">{diff.rule_choice ?? "—"}</td>
+                                                <td className="px-2 py-1.5 font-mono text-[#f0ece4]">
+                                                  {formatPercent(diff.outcome_gap ?? diff.outcome_gap_pct, missing)}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                      </section>
+
+                      {/* ── AC6: Report history & on-demand report request ── */}
+                      <section
+                        className="shrink-0 rounded-xl border border-[#2a2e38] bg-[#101318]/40 p-4"
+                        data-testid="performance-trader-reports-section"
+                      >
+                        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h3 className="text-sm font-bold text-[#e8b750]">
+                              {t("agora.performance.reports.title")}
+                            </h3>
+                            <p className="mt-1 text-xs text-[#8c96a6]">
+                              {t("agora.performance.reports.subtitle")}
+                            </p>
+                            {reportsData?.quota ? (
+                              <p
+                                className="mt-1 font-mono text-[11px] text-[#8c96a6]"
+                                data-testid="trader-reports-quota"
+                              >
+                                {t("agora.performance.reports.quotaLine", {
+                                  used: reportsData.quota.used_today,
+                                  limit: reportsData.quota.daily_limit,
+                                  remaining: reportsData.quota.remaining_today,
+                                })}
+                              </p>
+                            ) : null}
+                          </div>
+                          <button
+                            className="rounded-md bg-[#e8b750] px-3 py-1.5 text-xs font-bold text-[#111417] disabled:cursor-not-allowed disabled:opacity-60"
+                            data-testid="request-trader-report-btn"
+                            disabled={requestingReport}
+                            onClick={() => void handleRequestTraderReport()}
+                            type="button"
+                          >
+                            {requestingReport
+                              ? t("agora.performance.reports.requestingButton")
+                              : t("agora.performance.reports.requestButton")}
+                          </button>
+                        </div>
+
+                        {reportsLoading ? (
+                          <p className="text-xs text-[#8c96a6]" data-testid="trader-reports-loading">
+                            {t("agora.performance.reports.loading")}
+                          </p>
+                        ) : !reportsData || reportsData.items.length === 0 ? (
+                          <p className="text-xs text-[#8c96a6]" data-testid="trader-reports-empty">
+                            {t("agora.performance.reports.empty")}
+                          </p>
+                        ) : (
+                          <div className="space-y-3">
+                            <div
+                              className="flex flex-wrap gap-2"
+                              data-testid="trader-report-history-list"
+                            >
+                              {reportsData.items.map((rep) => {
+                                const isSelected = selectedReport?.report_id === rep.report_id;
+                                return (
+                                  <button
+                                    aria-pressed={isSelected}
+                                    className={cn(
+                                      "rounded-lg border px-3 py-1.5 text-left text-xs transition-colors",
+                                      isSelected
+                                        ? "border-[#e8b750] bg-[rgba(232,183,80,0.16)] text-[#f0ece4]"
+                                        : "border-[#2a2e38] bg-[#171b22] text-[#c5cad2] hover:border-[#e8b750]",
+                                    )}
+                                    data-testid={`trader-report-item-${rep.report_id}`}
+                                    key={rep.report_id}
+                                    onClick={() => setSelectedReportId(rep.report_id)}
+                                    type="button"
+                                  >
+                                    <div className="font-semibold">{rep.title}</div>
+                                    <div className="mt-0.5 text-[10px] text-[#8c96a6]">
+                                      {rep.report_kind === "scheduled_weekly"
+                                        ? t("agora.performance.reports.kindScheduled")
+                                        : t("agora.performance.reports.kindOnDemand")}{" "}
+                                      · {rep.generated_at}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {selectedReport ? (
+                              <div
+                                className="space-y-2.5 rounded-lg border border-[#2a2e38] bg-[#171b22] p-3 text-xs"
+                                data-testid="trader-report-detail"
+                              >
+                                <p
+                                  className="leading-relaxed text-[#f0ece4]"
+                                  data-testid="trader-report-narrative"
+                                >
+                                  {selectedReport.narrative}
+                                </p>
+                                {selectedReport.citations.length > 0 ? (
+                                  <div data-testid="trader-report-citations">
+                                    <div className="mb-1 text-[11px] font-semibold text-[#e8b750]">
+                                      {t("agora.performance.reports.citationsTitle")}
+                                    </div>
+                                    <ul className="space-y-1">
+                                      {selectedReport.citations.map((fact) => (
+                                        <li
+                                          className="rounded border border-[#2a2e38] bg-[#12161f] px-2.5 py-1.5 text-[11px]"
+                                          data-testid={`trader-report-fact-${fact.fact_id}`}
+                                          key={fact.fact_id}
+                                        >
+                                          <div className="text-[#f0ece4]">{fact.statement}</div>
+                                          <div className="mt-0.5 font-mono text-[10px] text-[#8c96a6]">
+                                            {fact.owner} · {fact.source} · {fact.as_of}
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                                {selectedReport.suggested_next_steps.length > 0 ? (
+                                  <div data-testid="trader-report-suggestions">
+                                    <div className="mb-1 text-[11px] font-semibold text-[#e8b750]">
+                                      {t("agora.performance.reports.suggestionsTitle")}
+                                    </div>
+                                    <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-[#c5cad2]">
+                                      {selectedReport.suggested_next_steps.map((step, idx) => (
+                                        <li key={`${selectedReport.report_id}-step-${idx}`}>
+                                          {step.label}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </section>
+
+                      {/* ── AC4: Read-only Paper Book fills & positions summary ── */}
+                      <section
+                        className="shrink-0 rounded-xl border border-[#2a2e38] bg-[#101318]/40 p-4"
+                        data-testid="performance-paper-book-section"
+                      >
+                        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h3 className="text-sm font-bold text-[#e8b750]">
+                              {t("agora.performance.paperBook.title")}
+                            </h3>
+                            <p className="mt-1 text-xs text-[#8c96a6]">
+                              {t("agora.performance.paperBook.subtitle")}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span
+                              className="font-mono text-[10px] text-[#38bdf8]"
+                              data-testid="performance-paper-book-proxy-badge"
+                            >
+                              {t("agora.tradingRoom.page.paperBook.proxyBadge")}
+                            </span>
+                            <span
+                              className="text-[10px] text-[#43cf94]"
+                              data-testid="performance-paper-book-no-order-action"
+                            >
+                              {t("agora.tradingRoom.page.paperBook.noOrderNotice")}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3 text-xs">
+                            <div className="mb-1.5 font-semibold text-[#c5cad2]">
+                              {t("agora.tradingRoom.page.paperBook.positionsHeading", {
+                                count: paperBookData?.positions.length ?? 0,
+                              })}
+                            </div>
+                            {!paperBookData || paperBookData.positions.length === 0 ? (
+                              <p
+                                className="text-xs text-[#8c96a6]"
+                                data-testid="performance-paper-book-positions-empty"
+                              >
+                                {t("agora.tradingRoom.page.noPositions")}
+                              </p>
+                            ) : (
+                              paperBookData.positions.map((pos) => (
+                                <div className="border-b border-[#2a2e38]/50 py-1 text-[11px]" key={pos.position_id}>
+                                  {t("agora.tradingRoom.page.paperBook.positionLine", {
+                                    symbol: pos.symbol,
+                                    side: pos.side,
+                                    qty: pos.quantity,
+                                    avgPrice: pos.avg_entry_price ?? "—",
+                                    markPrice: pos.mark_price ?? "—",
+                                  })}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div className="rounded-lg border border-[#2a2e38] bg-[#171b22] p-3 text-xs">
+                            <div className="mb-1.5 font-semibold text-[#c5cad2]">
+                              {t("agora.tradingRoom.page.paperBook.fillsHeading", {
+                                count: paperBookData?.fills.length ?? 0,
+                              })}
+                            </div>
+                            {!paperBookData || paperBookData.fills.length === 0 ? (
+                              <p
+                                className="text-xs text-[#8c96a6]"
+                                data-testid="performance-paper-book-fills-empty"
+                              >
+                                {t("agora.tradingRoom.page.paperBook.noFills")}
+                              </p>
+                            ) : (
+                              paperBookData.fills.map((fill) => (
+                                <div className="border-b border-[#2a2e38]/50 py-1 text-[11px]" key={fill.fill_id}>
+                                  {t("agora.tradingRoom.page.paperBook.fillLine", {
+                                    symbol: fill.symbol,
+                                    side: fill.side,
+                                    qty: fill.quantity,
+                                    price: fill.price ?? "—",
+                                    filledAt: fill.filled_at ?? "—",
+                                  })}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </section>
                     </>
                   ) : null}
 

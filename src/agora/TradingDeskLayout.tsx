@@ -32,7 +32,11 @@ import {
   buildServantContextAttachmentRefs,
   createServantSession,
   formatServantDisplayName,
+  getServantSessionStream,
   sendServantSessionMessage,
+  type ServantCitation,
+  type ServantClarificationCard,
+  type ServantClarificationOption,
   type ServantCommandContext,
   type ServantProfile,
 } from "@/lib/bff-v1/agora/servant";
@@ -109,6 +113,15 @@ const V6_QUICK_TASK_KEYS = [
   "agora.shell.command.shortcuts.addChart",
   "agora.shell.command.shortcuts.sendToShadow",
 ] as const;
+
+function safeResolveFn<T>(getter: () => T): T | null {
+  try {
+    const fn = getter();
+    return typeof fn === "function" ? fn : null;
+  } catch {
+    return null;
+  }
+}
 
 function tabFromPath(pathname: string): AgoraTab {
   if (
@@ -227,6 +240,11 @@ export interface ServantCommandTask {
   messageId?: string;
   reply?: string;
   error?: string;
+  citations?: ServantCitation[];
+  clarification?: ServantClarificationCard | null;
+  statedAssumptions?: string[];
+  selectedClarificationOptionId?: string | null;
+  selectedClarificationLabel?: string | null;
 }
 
 // ─── CommandBar (Header + Persistent 交代僕人 Command Bar + 10 Quick Tasks) ───
@@ -694,6 +712,8 @@ function ServantDrawer({
   context,
   isNarrow,
   onOpenChange,
+  onOpenOptionalPersonaConsult,
+  onSelectClarificationOption,
   onSubmitCommand,
   open,
   servantState,
@@ -708,6 +728,12 @@ function ServantDrawer({
   context: ServantCommandContext;
   isNarrow: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenOptionalPersonaConsult: () => void;
+  onSelectClarificationOption: (
+    task: ServantCommandTask,
+    card: ServantClarificationCard,
+    option: ServantClarificationOption,
+  ) => Promise<void>;
   onSubmitCommand: (text: string) => Promise<void>;
   open: boolean;
   servantState: ServantStatusState;
@@ -807,7 +833,31 @@ function ServantDrawer({
           {t("agora.shell.servant.currentTask")}
         </p>
         {tasks.length === 0 ? (
-          <p className="text-xs text-[#737d8e]">{t("agora.shell.servant.noTasks")}</p>
+          <div className="space-y-2" data-testid="servant-command-empty-state">
+            <p className="text-xs text-[#737d8e]">{t("agora.shell.servant.noTasks")}</p>
+            <div
+              className="rounded border border-[#2a2e38] bg-[#12161f] p-2 text-[11px] text-[#c5cad2]"
+              data-testid="servant-answer-citations"
+            >
+              <p className="font-semibold text-[#e8b750]">
+                {t("agora.shell.servant.citationsTitle")}
+              </p>
+              <p className="mt-1 text-[11px] text-[#8c96a6]" data-testid="servant-answer-citations-empty">
+                {t("agora.shell.servant.citationsEmpty")}
+              </p>
+            </div>
+            <div
+              className="space-y-1 rounded border border-[rgba(232,183,80,0.4)] bg-[#171b22] p-2.5 text-xs"
+              data-testid="servant-clarification-card"
+            >
+              <p className="text-[11px] font-semibold text-[#e8b750]">
+                {t("agora.shell.servant.clarificationTitle")}
+              </p>
+              <p className="text-[11px] text-[#8c96a6]" data-testid="servant-clarification-empty">
+                {t("agora.shell.servant.clarificationEmpty")}
+              </p>
+            </div>
+          </div>
         ) : (
           tasks.map((task) => (
             <div
@@ -840,6 +890,111 @@ function ServantDrawer({
                   {task.reply}
                 </p>
               )}
+              {task.statedAssumptions && task.statedAssumptions.length > 0 && (
+                <div
+                  className="rounded border border-[#2a2e38] bg-[#12161f] p-2 text-[11px] text-[#c5cad2]"
+                  data-testid="servant-stated-assumptions"
+                >
+                  <p className="font-semibold text-[#e8b750]">
+                    {t("agora.shell.servant.statedAssumptionsTitle")}
+                  </p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {task.statedAssumptions.map((assumption, idx) => (
+                      <li key={`${task.id}-assumption-${idx}`}>{assumption}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {task.citations && task.citations.length > 0 && (
+                <div
+                  className="rounded border border-[#2a2e38] bg-[#12161f] p-2 text-[11px] text-[#c5cad2]"
+                  data-testid="servant-answer-citations"
+                >
+                  <p className="font-semibold text-[#e8b750]">
+                    {t("agora.shell.servant.citationsTitle")}
+                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {task.citations.map((citation, idx) => (
+                      <li
+                        className="font-mono text-[10px] text-[#8c96a6]"
+                        data-testid="servant-citation-item"
+                        key={`${task.id}-citation-${idx}`}
+                      >
+                        {t("agora.shell.servant.citationLine", {
+                          source: citation.source,
+                          asOf: citation.as_of,
+                          freshness: citation.freshness,
+                        })}
+                        {citation.detail ? ` · ${citation.detail}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {task.clarification && (
+                <div
+                  className="space-y-1.5 rounded border border-[rgba(232,183,80,0.4)] bg-[#171b22] p-2.5 text-xs"
+                  data-testid="servant-clarification-card"
+                >
+                  <p className="text-[11px] font-semibold text-[#e8b750]">
+                    {t("agora.shell.servant.clarificationTitle")}
+                  </p>
+                  <p className="font-medium text-[#f0ece4]" data-testid="servant-clarification-question">
+                    {task.clarification.question}
+                  </p>
+                  {task.clarification.why_it_matters && (
+                    <p className="text-[11px] text-[#c5cad2]" data-testid="servant-clarification-why">
+                      {t("agora.shell.servant.clarificationWhy", {
+                        why: task.clarification.why_it_matters,
+                      })}
+                    </p>
+                  )}
+                  {task.clarification.servant_default && (
+                    <p className="text-[11px] text-[#8c96a6]" data-testid="servant-clarification-default">
+                      {t("agora.shell.servant.clarificationDefault", {
+                        defaultChoice: task.clarification.servant_default,
+                      })}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5 pt-1" data-testid="servant-clarification-options">
+                    {task.clarification.options.map((opt) => {
+                      const isSelected = task.selectedClarificationOptionId === opt.option_id;
+                      const card = task.clarification!;
+                      return (
+                        <button
+                          aria-pressed={isSelected}
+                          className={cn(
+                            "rounded border px-2.5 py-1 text-left text-[11px] font-medium transition-colors",
+                            isSelected
+                              ? "border-[#e8b750] bg-[rgba(232,183,80,0.18)] text-[#e8b750]"
+                              : "border-[#2a2e38] bg-[#12161f] text-[#f0ece4] hover:border-[#e8b750]",
+                          )}
+                          data-testid={`servant-clarification-option-${opt.option_id}`}
+                          disabled={commandSubmitting}
+                          key={opt.option_id}
+                          onClick={() => void onSelectClarificationOption(task, card, opt)}
+                          type="button"
+                        >
+                          <span>{opt.label}</span>
+                          {opt.description ? (
+                            <span className="block text-[10px] text-[#8c96a6]">{opt.description}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {task.selectedClarificationLabel && (
+                    <p
+                      className="text-[11px] font-medium text-[#43cf94]"
+                      data-testid="servant-clarification-selected"
+                    >
+                      {t("agora.shell.servant.clarificationSelected", {
+                        label: task.selectedClarificationLabel,
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
               {task.error && (
                 <p className="text-xs text-[#f87171]" data-testid="servant-command-error" role="alert">
                   {task.error}
@@ -849,6 +1004,26 @@ function ServantDrawer({
             </div>
           ))
         )}
+      </section>
+
+      <section
+        className="space-y-1.5 rounded-md border border-[#2a2e38] bg-[#14171d] p-2.5 text-xs"
+        data-testid="servant-optional-persona-consult-control"
+      >
+        <p className="text-[11px] font-semibold text-[#c5cad2]">
+          {t("agora.shell.servant.optionalPersonaConsultTitle")}
+        </p>
+        <p className="text-[11px] leading-relaxed text-[#8c96a6]">
+          {t("agora.shell.servant.optionalPersonaConsultHint")}
+        </p>
+        <button
+          className="inline-flex items-center rounded border border-[#2a2e38] bg-[#171b22] px-2.5 py-1 text-[11px] font-medium text-[#c5cad2] hover:border-[#e8b750] hover:text-[#e8b750]"
+          data-testid="servant-open-optional-persona-consult"
+          onClick={onOpenOptionalPersonaConsult}
+          type="button"
+        >
+          {t("agora.shell.servant.optionalPersonaConsultButton")}
+        </button>
       </section>
 
       {open && (
@@ -1214,9 +1389,58 @@ export function TradingDeskLayout({
         attachment_refs: buildServantContextAttachmentRefs(snapshotContext),
       });
 
+      let answerText = receipt.provider?.answer ?? null;
+      let citations: ServantCitation[] = Array.isArray(receipt.citations)
+        ? receipt.citations
+        : Array.isArray(receipt.provider?.citations)
+          ? receipt.provider.citations
+          : [];
+      let clarification: ServantClarificationCard | null =
+        receipt.clarification ?? receipt.provider?.clarification ?? null;
+      let statedAssumptions: string[] = Array.isArray(receipt.stated_assumptions)
+        ? receipt.stated_assumptions
+        : Array.isArray(receipt.provider?.stated_assumptions)
+          ? receipt.provider.stated_assumptions
+          : [];
+
+      const streamFn = safeResolveFn(() => getServantSessionStream);
+      if (streamFn && (!answerText || citations.length === 0)) {
+        try {
+          const streamSnap = await streamFn(receipt.session_id);
+          const assistantMsgs = Array.isArray(streamSnap?.messages)
+            ? streamSnap.messages.filter((m) => m.role === "assistant")
+            : [];
+          const latestAssistant = assistantMsgs[assistantMsgs.length - 1];
+          if (latestAssistant) {
+            if (!answerText && latestAssistant.content) {
+              answerText = latestAssistant.content;
+            }
+            if (
+              citations.length === 0 &&
+              Array.isArray(latestAssistant.citations) &&
+              latestAssistant.citations.length > 0
+            ) {
+              citations = latestAssistant.citations;
+            }
+            if (!clarification && latestAssistant.clarification) {
+              clarification = latestAssistant.clarification;
+            }
+            if (
+              statedAssumptions.length === 0 &&
+              Array.isArray(latestAssistant.stated_assumptions) &&
+              latestAssistant.stated_assumptions.length > 0
+            ) {
+              statedAssumptions = latestAssistant.stated_assumptions;
+            }
+          }
+        } catch {
+          // Stream hydration is best-effort; receipt truth remains primary.
+        }
+      }
+
       const isDegraded = receipt.provider.status === "degraded";
-      const reply = receipt.provider.answer
-        ? receipt.provider.answer
+      const reply = answerText
+        ? answerText
         : isDegraded
           ? t("agora.shell.command.degradedReply", {
               message: receipt.provider.error?.message || receipt.provider.status,
@@ -1233,6 +1457,9 @@ export function TradingDeskLayout({
                 messageId: receipt.message_id,
                 status: isDegraded ? "degraded" : "completed",
                 reply,
+                citations,
+                clarification,
+                statedAssumptions,
               }
             : task,
         ),
@@ -1248,6 +1475,121 @@ export function TradingDeskLayout({
                 error: message,
               }
             : task,
+        ),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSelectClarificationOption = async (
+    targetTask: ServantCommandTask,
+    card: ServantClarificationCard,
+    option: ServantClarificationOption,
+  ) => {
+    if (!targetTask.sessionId || submitting) return;
+    setSubmitting(true);
+    setTasks((prev) =>
+      prev.map((item) =>
+        item.id === targetTask.id
+          ? {
+              ...item,
+              selectedClarificationOptionId: option.option_id,
+              selectedClarificationLabel: option.label,
+            }
+          : item,
+      ),
+    );
+    try {
+      const receipt = await sendServantSessionMessage(targetTask.sessionId, {
+        content: option.label,
+        attachment_refs: buildServantContextAttachmentRefs(targetTask.context),
+        clarification_choice: {
+          decision_id: card.decision_id ?? undefined,
+          question_id: card.question_id ?? undefined,
+          option_id: option.option_id,
+          selected_option_id: option.option_id,
+          option_label: option.label,
+          resolves: card.resolves,
+        },
+        context: {
+          page: targetTask.context.page,
+          route: targetTask.context.route ?? null,
+          strategy: targetTask.context.strategy ?? null,
+          selected_widget: targetTask.context.selectedWidget ?? null,
+        },
+      });
+
+      let nextAnswer = receipt.provider?.answer ?? null;
+      let nextCitations: ServantCitation[] = Array.isArray(receipt.citations)
+        ? receipt.citations
+        : Array.isArray(receipt.provider?.citations)
+          ? receipt.provider.citations
+          : [];
+      let nextAssumptions: string[] = Array.isArray(receipt.stated_assumptions)
+        ? receipt.stated_assumptions
+        : Array.isArray(receipt.provider?.stated_assumptions)
+          ? receipt.provider.stated_assumptions
+          : [];
+
+      const streamFn = safeResolveFn(() => getServantSessionStream);
+      if (streamFn && (!nextAnswer || nextCitations.length === 0)) {
+        try {
+          const streamSnap = await streamFn(receipt.session_id);
+          const assistantMsgs = Array.isArray(streamSnap?.messages)
+            ? streamSnap.messages.filter((m) => m.role === "assistant")
+            : [];
+          const latestAssistant = assistantMsgs[assistantMsgs.length - 1];
+          if (latestAssistant) {
+            if (!nextAnswer && latestAssistant.content) {
+              nextAnswer = latestAssistant.content;
+            }
+            if (
+              nextCitations.length === 0 &&
+              Array.isArray(latestAssistant.citations) &&
+              latestAssistant.citations.length > 0
+            ) {
+              nextCitations = latestAssistant.citations;
+            }
+            if (
+              nextAssumptions.length === 0 &&
+              Array.isArray(latestAssistant.stated_assumptions) &&
+              latestAssistant.stated_assumptions.length > 0
+            ) {
+              nextAssumptions = latestAssistant.stated_assumptions;
+            }
+          }
+        } catch {
+          // Best-effort stream hydration.
+        }
+      }
+
+      setTasks((prev) =>
+        prev.map((item) =>
+          item.id === targetTask.id
+            ? {
+                ...item,
+                reply: nextAnswer || item.reply,
+                citations:
+                  nextCitations.length > 0 ? nextCitations : item.citations,
+                statedAssumptions:
+                  nextAssumptions.length > 0 ? nextAssumptions : item.statedAssumptions,
+                selectedClarificationOptionId: option.option_id,
+                selectedClarificationLabel: option.label,
+              }
+            : item,
+        ),
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : t("agora.shell.command.failed");
+      setTasks((prev) =>
+        prev.map((item) =>
+          item.id === targetTask.id
+            ? {
+                ...item,
+                error: message,
+              }
+            : item,
         ),
       );
     } finally {
@@ -1349,6 +1691,11 @@ export function TradingDeskLayout({
             setActiveDrawer(open ? "servant" : null);
             if (!open) setTrainerActive(false);
           }}
+          onOpenOptionalPersonaConsult={() => {
+            setTrainerActive(false);
+            setActiveDrawer("expert-review");
+          }}
+          onSelectClarificationOption={handleSelectClarificationOption}
           onSubmitCommand={(text) => submitServantCommand(text)}
           open={activeDrawer === "servant"}
           servantState={servant.state}
