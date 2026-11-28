@@ -20,8 +20,7 @@ import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposal
 import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
 import { TradeDecisionCard } from "@/agora/components/TradeDecisionCard";
 import { SystemSuggestionsPanel } from "./SystemSuggestionsPanel";
-import { ShadowComparisonPanel } from "./ShadowComparisonPanel";
-import { PaperBookRow } from "./paperBookDisplay";
+import { ShadowComparisonPanel, PaperBookRow } from "./ShadowComparisonPanel";
 
 function newUUID(): string {
   return crypto.randomUUID();

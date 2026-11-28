@@ -40,8 +40,7 @@ import { BffError } from "@/lib/bff-v1/errors";
 import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import { cn } from "@/lib/utils";
 import { RuleVsHumanComparison } from "./RuleVsHumanComparison";
-import { ShadowComparisonPanel } from "@/agora/pages/trading-room/ShadowComparisonPanel";
-import { PaperBookRow } from "@/agora/pages/trading-room/paperBookDisplay";
+import { ShadowComparisonPanel, PaperBookRow } from "@/agora/pages/trading-room/ShadowComparisonPanel";
 
 type LoadState =
   | { status: "loading" }

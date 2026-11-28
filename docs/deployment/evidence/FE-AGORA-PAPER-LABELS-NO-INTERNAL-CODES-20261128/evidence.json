@@ -38,7 +38,7 @@
     ]
   },
   "scope": {
-    "owned": "Agora paper/shadow presentation, parity copy, focused tests, and task evidence. A shared paperBookDisplay.tsx keeps the two paper surfaces consistent.",
+    "owned": "Agora paper/shadow presentation, parity copy, focused tests, and task evidence. Shared PaperBookRow presentation in the scoped ShadowComparisonPanel.tsx keeps the two paper surfaces consistent.",
     "unchanged": "BFF fields, requests, adapter types, first-use ensure action/testid, and all existing data attributes."
   },
   "criteria": {
@@ -55,7 +55,7 @@
       "command": "timeout 180 npm run test -- src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx src/agora/i18n.guard.test.ts src/agora/pages/trading-room/TradingRoomPage.test.tsx src/agora/pages/trading-room/SystemSuggestionsPanel.test.tsx",
       "exit_status": 0,
       "log": "/tmp/fe-paper-tests-final.log",
-      "sha256": "63a4445cbf93118ff8b97d36b5bbfd526ddb68542194b199a2d1995106739065",
+      "sha256": "24acced8b73a769f92d5b3343a5aff07401ee41dd7fc852a4ff03a3de2e59d77",
       "passed": 153,
       "suites": 6
     },
@@ -69,15 +69,15 @@
       "command": "timeout 180 npm run lint",
       "exit_status": 0,
       "log": "/tmp/fe-paper-lint-final.log",
-      "sha256": "6cc78ea6196091f07a7f18ed689f58fdc8e1e72b672f4fa8cfe157df3174b743",
+      "sha256": "865d89e65deb1295be8c2f799310f1d17a421e1495723ba56f662bc9bbb776d5",
       "errors": 0,
-      "warnings": 157
+      "warnings": 155
     },
     {
       "command": "timeout 180 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
       "exit_status": 0,
       "log": "/tmp/fe-paper-build-final.log",
-      "sha256": "42b636a828554a7857ca40ead55b06de438d995e88aa2955aae19cd1b7f29771",
+      "sha256": "3f79a34459b38907fd3079957eccc6c25f7560f8a45bc5d68448a5177842ebde",
       "warnings": "Existing chunk-size advisory"
     }
   ],
@@ -87,12 +87,11 @@
   },
   "source_sha256": {
     "src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx": "947f538f3ea4bae1e9ebd381fa57192a15524f400e58b1cf98f5c0e66d52a6fc",
-    "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx": "8d6d9b392689befc4e5d7cc71d2f02a20af8a5ce9e555b2e4b65e91fb5bcdb5b",
+    "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx": "63c8091e12e0a5c2d6aa00d59865383e3b84f17c3191cce6d9634b731328ee68",
     "src/agora/pages/trading-room/ShadowComparisonPanel.test.tsx": "be8ba00d17eab50ebbcd35bb9b2de16ab2e503a605ed4e71c11fce465c417663",
-    "src/agora/pages/trading-room/ShadowComparisonPanel.tsx": "c5cd8991de3d87c1fc32b775e63bbe516555d6b6701f27d94e0fe092ef330123",
+    "src/agora/pages/trading-room/ShadowComparisonPanel.tsx": "c01b225631396c1d6d311fcdac606a2c0fb790cee7abac8e1b51d124baad329c",
     "src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx": "5c79dd2a93991d50c3aac5eaa5f121741d9d3066036ba5ae77dc978697fb849b",
-    "src/agora/pages/trading-room/TradingRoomWorkspace.tsx": "df56973ac881b3cf59aeeae043be515282b3d63daa317891f5766613519b9df4",
-    "src/agora/pages/trading-room/paperBookDisplay.tsx": "bf394c6ded1b6eca6abffa381e0204abf192e1ecd0c9ee0f665ea24874a0615c",
+    "src/agora/pages/trading-room/TradingRoomWorkspace.tsx": "ab1972ca1fa9e1070bb7c6cb181a6c661ce71b1e067451348253ae9c70580370",
     "src/i18n/locales/en-US.ts": "258c46d2641508755c717204e5d93a9c3c966375886abd7fafe430b3c55f9605",
     "src/i18n/locales/zh-TW.ts": "01f5eaf47de5d1ff3a4c3f235b0865abb576d107e73c60155f0094f2f5ba6260"
   },
@@ -102,12 +101,12 @@
     "passed": false,
     "method": "Authenticated Chromium as admintest at the maintained dev FE origin. Only candidate navigation/assets replaced; runtime config and all BFF responses remain hosted. Product mutations blocked; no fixture responses and no product writes.",
     "proof_file": "/tmp/fe-paper-labels-review-browser/proof.json",
-    "proof_sha256": "835c809f4a953425d34c9283227df402c342ed0842b40678cbd7e929e52226ab",
+    "proof_sha256": "5f907fca9145d7fe877d77bbfc46726a97c23b6ec0e4878d5d16397a2be5032d",
     "script": "/tmp/fe-paper-labels-browser-proof.mjs",
     "script_sha256": "32f9e1cb73c6191aef4fb423b85f3682a02e9f9ac004a45a3a7960585ff39d05",
-    "candidate_index_sha256": "fe32f1e281299f5eaa9b34ab17b4a26fc842667e975da62f44aace54b24d5b5e",
-    "started_at": "2026-11-28T18:33:21.127Z",
-    "finished_at": "2026-11-28T18:33:50.729Z",
+    "candidate_index_sha256": "f294f2c2ab4b3b4d4ac3b78bef8c2650ce09216bf634477872de939a88c36899",
+    "started_at": "2026-11-28T18:37:46.311Z",
+    "finished_at": "2026-11-28T18:38:14.164Z",
     "observed_fe_sha": "281b6355f1153a6dfe617c0719ca5046495b9f70",
     "observed_bff_sha": "25edbe5be61d893d63ca72e8ad4d3676630271d1",
     "paper_readback": {
@@ -151,7 +150,7 @@
       },
       {
         "path": "/tmp/fe-paper-labels-review-browser/strategy-performance-paper-book.png",
-        "sha256": "ec732b3183f46786798e59cfdf8df42c1441b4a3ff26838b122ee4778988ca27"
+        "sha256": "3af2eff58988c5145330c905cb3302b329dc0900a097b764f9c2f709fdf48f92"
       }
     ],
     "page_errors": [],
