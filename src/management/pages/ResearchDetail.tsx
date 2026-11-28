@@ -17,7 +17,8 @@ import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { statusLabel } from "@/lib/enumLabels";
-import { collectorCheckStatus, isCollectorQueryPlan, isNonRealRun, researchTitle } from "./researchPresentation";
+import { collectorCheckStatus, isCollectorQueryPlan, isNonRealRun, researchTitle, runReasonCode, templateSearchCounts } from "./researchPresentation";
+import { ReasonText } from "./ResearchReasonText";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
 type ResearchExperimentLive = ResearchTask & {
@@ -483,14 +484,19 @@ export const ResearchDetail = () => {
                         const createdBy = run.createdBy ?? run.created_by ?? "";
                         const createdAt = run.createdAt ?? run.created_at ?? "";
                         const nonReal = isNonRealRun(adapter, dispatchMode);
+                        const searchCounts = run.template_search ? templateSearchCounts(run.template_search) : null;
                         return (
                           <div
                             key={runId}
                             data-testid={`research-task-run-${runId}`}
+                            data-run-status={run.status}
                             className="rounded-md border p-3 space-y-2"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <Badge variant="outline">{statusLabel(run.status, t)}</Badge>
+                              {run.status === "failed" && (
+                                <ReasonText code={runReasonCode(run) || "reason_not_recorded"} testId="research-task-run-reason" />
+                              )}
                               {nonReal && (
                                 <Badge
                                   variant="outline"
@@ -500,6 +506,22 @@ export const ResearchDetail = () => {
                                 </Badge>
                               )}
                             </div>
+                            <p className="text-sm text-muted-foreground" data-testid="research-task-run-start">
+                              {t("research.detail.runStarted", { date: createdAt ? safeDateTime(createdAt) : notReported })}
+                            </p>
+                            {searchCounts && (
+                              <div className="text-sm space-y-1" data-testid="research-task-run-search-counts">
+                                <p>{searchCounts.attempted === null
+                                  ? t("research.detail.templatesTriedNotRecorded")
+                                  : t("research.detail.templatesTried", { count: searchCounts.attempted })}</p>
+                                {Object.entries(searchCounts.excluded).map(([reason, count]) => (
+                                  <p key={reason}>{t("research.detail.templatesExcluded", {
+                                    count,
+                                    reason: t(`research.detail.exclusionReasons.${reason}`, { defaultValue: reason }),
+                                  })}</p>
+                                ))}
+                              </div>
+                            )}
                             <details className="text-xs text-muted-foreground">
                               <summary className="cursor-pointer">{t("research.detail.technicalDetails")}</summary>
                               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -508,7 +530,6 @@ export const ResearchDetail = () => {
                                 <Field label={t("research.detail.dispatchMode")} value={present(dispatchMode) ?? notReported} mono />
                                 <Field label={t("research.detail.requestedMode")} value={present(requestedMode) ?? notReported} mono />
                                 <Field label={t("research.detail.createdBy")} value={present(createdBy) ?? notReported} mono />
-                                <Field label={t("research.detail.createdAt")} value={createdAt ? safeDateTime(createdAt) : notReported} mono />
                               </div>
                             </details>
                           </div>

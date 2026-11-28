@@ -25,6 +25,8 @@
 //   node scripts/accept-management-hosted-production.mjs --load-gate-only
 //   node scripts/accept-management-hosted-production.mjs --readability-only true  (read-only advisory probe;
 //     PANTHEON_FE_BASE_URL + viewer token via BFF_AUTH_TOKEN; writes management-readability-*.json)
+//     Optional --routes /management/experiments/rtask-20261125-014 (comma-separated paths;
+//     replaces baseline routes in readability-only mode).
 //
 // Env overrides mirror the sibling hosted probes (see
 // scripts/probe-hosted-browser-bff.mjs / scripts/validate-management-live-deep.mjs):
@@ -649,6 +651,13 @@ async function crawlRoute(page, route, { source, transport }) {
     };
   }
 
+  const researchRunCards = typeof readabilityResult === "function" ? await page.evaluate(() =>
+    Array.from(document.querySelectorAll('[data-testid="research-task-runs"] [data-run-status]')).map((card) => ({
+      status: card.getAttribute("data-run-status"),
+      hasReason: Boolean(card.querySelector('[data-testid="research-task-run-reason"]')),
+    })),
+  ).catch(() => []) : [];
+
   return {
     path: route.path,
     kind: route.kind || "unknown",
@@ -679,7 +688,7 @@ async function crawlRoute(page, route, { source, transport }) {
     detailHonestyViolations: findings.honesty,
     textSampleLen: bodyText.trim().length,
     // typeof guard: the attribution harness evaluates this file with imports stripped.
-    readability: typeof readabilityResult === "function" ? readabilityResult(route.path, bodyText) : null,
+    readability: typeof readabilityResult === "function" ? readabilityResult(route.path, bodyText, researchRunCards) : null,
   };
 }
 
@@ -961,7 +970,13 @@ async function main() {
 
   if (READABILITY_ONLY) {
     const crawled = [];
-    for (const route of BASELINE_ROUTES) {
+    const routes = argv.routes
+      ? argv.routes.split(",").map((route) => ({ path: route.trim(), kind: "readability-custom" }))
+      : BASELINE_ROUTES;
+    if (routes.some((route) => !route.path.startsWith("/management/") || route.path.includes("://"))) {
+      throw new Error("--routes must contain comma-separated /management/ paths");
+    }
+    for (const route of routes) {
       crawled.push((await crawlRoute(page, { path: route.path, kind: route.kind }, { source: "readability-only", transport })).readability);
     }
     let closeFailed = false;

@@ -901,6 +901,13 @@ export interface ResearchTaskRun {
   productionActivation?: Record<string, unknown>;
   production_activation?: Record<string, unknown>;
   rejection?: unknown;
+  template_search?: {
+    reason?: string | null;
+    attempts?: Record<string, unknown>;
+    templates_attempted?: number;
+    excluded?: Array<{ template_id?: string; reason?: string }>;
+    excluded_by_reason?: Record<string, number>;
+  } | null;
   events?: ResearchTaskRunEvent[];
 }
 
