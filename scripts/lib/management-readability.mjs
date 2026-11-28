@@ -65,11 +65,17 @@ export function detectReadability(rawText) {
   return findings.filter(Boolean);
 }
 
-export function readabilityResult(path, text) {
+// Input is a DOM snapshot, keeping this advisory calculation pure and testable.
+export function countFailedResearchRunsWithoutReason(cards = []) {
+  return cards.filter((card) => card.status === "failed" && !card.hasReason).length;
+}
+
+export function readabilityResult(path, text, researchRunCards = []) {
   const findings = detectReadability(text);
   return {
     path,
     advisory: true,
+    failedResearchRunsWithoutReason: countFailedResearchRunsWithoutReason(researchRunCards),
     textLength: String(text ?? "").length,
     findingCount: findings.reduce((s, f) => s + f.count, 0),
     findings,
@@ -102,5 +108,7 @@ export function readabilityMarkdown(results, summary = summarizeReadability(resu
     lines.push(``, `Top pages:`, ``);
     for (const r of worst) lines.push(`- \`${r.path}\`: ${r.findingCount} (${r.findings.map((f) => f.detector).join(", ")})`);
   }
+  lines.push(``, `| Page | Failed research runs without a reason (advisory) |`, `|---|---:|`,
+    ...results.map((r) => `| ${r.path} | ${r.failedResearchRunsWithoutReason ?? 0} |`));
   return lines.join("\n");
 }

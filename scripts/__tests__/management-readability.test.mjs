@@ -3,11 +3,26 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import {
-  detectReadability, readabilityResult, summarizeReadability, readabilityMarkdown,
+  detectReadability, readabilityResult, summarizeReadability, readabilityMarkdown, countFailedResearchRunsWithoutReason,
 } from "../lib/management-readability.mjs";
 
 const fx = (name) => readFileSync(resolve("scripts/__tests__/fixtures/management-readability", name), "utf8");
 const find = (text, detector) => detectReadability(text).find((f) => f.detector === detector);
+
+test("failed research cards without a reason are counted per page and remain advisory", () => {
+  const cards = [
+    { status: "failed", hasReason: false },
+    { status: "failed", hasReason: true },
+    { status: "completed", hasReason: false },
+    { status: "failed", hasReason: false },
+  ];
+  assert.equal(countFailedResearchRunsWithoutReason(cards), 2);
+  assert.equal(countFailedResearchRunsWithoutReason([]), 0);
+  const result = readabilityResult("/management/experiments/rtask-20261125-014", "", cards);
+  assert.equal(result.failedResearchRunsWithoutReason, 2);
+  assert.equal(result.advisory, true);
+  assert.match(readabilityMarkdown([result]), /rtask-20261125-014 \| 2/);
+});
 
 test("human inbox: internal ids, snake_case codes, key=value dumps", () => {
   const text = fx("human-inbox.txt");

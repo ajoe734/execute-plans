@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -576,5 +576,93 @@ describe("ResearchDetail empty values (FE-RISK-STRATEGY-RESEARCH-UI-20261120)", 
     expect(container.textContent ?? "").toContain("未回報");
     expect(container.textContent ?? "").not.toMatch(/\bnan\b/i);
     await i18n.changeLanguage("en-US");
+  });
+});
+
+// Shapes transcribed from the task's read-only hosted facts; no hosted calls.
+describe("ResearchDetail hosted template search run cards", () => {
+  const missing = "template_search_unavailable:ValueError:mandate_universe_missing";
+  const boundary = "template_search_unavailable:ValueError:market_boundary_empty: no symbol passes the boundary of 43572 stored symbols";
+  const checksumRows = Array.from({ length: 171 }, (_, index) => ({ template_id: `alpha101:#${index + 1}`, reason: "template_checksum_mismatch" }));
+  const hostedRuns = [
+    { run_id: "rrun-20261125-026", created_at: "2026-11-25T10:04:51Z", status: "failed",
+      rejection: { reason: "retrain_failed", step: "template_search", detail: missing }, template_search: { reason: missing, excluded: [] } },
+    { run_id: "rrun-20261125-027", created_at: "2026-11-25T10:04:53Z", status: "failed",
+      rejection: { reason: "retrain_failed", step: "template_search", detail: missing }, template_search: { reason: missing, excluded: [] } },
+    { run_id: "rrun-20261126-030", created_at: "2026-11-26T10:06:13Z", status: "failed",
+      rejection: { reason: "retrain_failed", step: "template_search", detail: boundary } },
+    { run_id: "rrun-20261127-032", created_at: "2026-11-27T10:07:58Z", status: "completed", rejection: null,
+      outcome: "template_search_completed", template_search: { reason: "search_completed", attempts: {}, excluded: checksumRows } },
+  ];
+  const loadRuns = (runs: unknown[]) => {
+    mocks.researchGet.mockResolvedValue(normalizeResearchTask({
+      id: "rtask-20261125-014", title: "Search registered templates for rd-796e24e24bf2055d3c42", status: "completed", runs,
+    }));
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+    return renderDetail();
+  };
+
+  it.each(["en-US", "zh-TW"])("explains all four hosted runs and new run-local counts in %s", async (language) => {
+    vi.useRealTimers();
+    await i18n.changeLanguage(language);
+    const integrity = "template_search_unavailable:template_integrity_mismatch:171";
+    loadRuns([...hostedRuns,
+      { run_id: "new-counts", status: "completed", template_search: { reason: "search_completed", templates_attempted: 2,
+        attempts: { historical: {}, current: {}, another: {} }, excluded: checksumRows,
+        excluded_by_reason: { template_checksum_mismatch: 4, template_tenant_mismatch: 3 } } },
+      { run_id: "new-integrity", status: "failed", rejection: { reason: "retrain_failed", detail: integrity },
+        template_search: { reason: integrity, templates_attempted: 0, attempts: { historical: {} },
+          excluded_by_reason: { template_checksum_mismatch: 171 } } },
+    ]);
+    await screen.findByTestId("research-task-runs");
+    const t = i18n.getFixedT(language);
+    for (const [id, token, count] of [
+      ["rrun-20261125-026", "mandate_universe_missing", 0],
+      ["rrun-20261125-027", "mandate_universe_missing", 0],
+      ["rrun-20261126-030", "market_boundary_empty", 0],
+      ["new-integrity", "template_integrity_mismatch", 171],
+    ] as const) {
+      const card = screen.getByTestId(`research-task-run-${id}`);
+      expect(card).toHaveAttribute("data-run-status", "failed");
+      expect(within(card).getByTestId("research-task-run-reason")).toHaveTextContent(t(`research.demand.reasons.${token}`, { count }));
+      expect(within(card).queryByTestId("research-reason-raw")).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText(t("research.demand.reasonUnknown"))).not.toBeInTheDocument();
+    for (const run of hostedRuns) {
+      const card = screen.getByTestId(`research-task-run-${run.run_id}`);
+      const start = within(card).getByTestId("research-task-run-start");
+      expect(start.textContent).toMatch(/2026/);
+      expect(start.closest("details")).toBeNull();
+      expect(within(card).getByText(run.run_id).closest("details")).not.toBeNull();
+    }
+    const completed = screen.getByTestId("research-task-run-rrun-20261127-032");
+    expect(within(completed).queryByTestId("research-task-run-reason")).not.toBeInTheDocument();
+    expect(completed).toHaveTextContent(t("research.detail.templatesTried", { count: 0 }));
+    expect(completed).toHaveTextContent(t("research.detail.templatesExcluded", { count: 171, reason: t("research.detail.exclusionReasons.template_checksum_mismatch") }));
+    const recorded = screen.getByTestId("research-task-run-new-counts");
+    expect(recorded).toHaveTextContent(t("research.detail.templatesTried", { count: 2 }));
+    expect(recorded).toHaveTextContent(t("research.detail.templatesExcluded", { count: 4, reason: t("research.detail.exclusionReasons.template_checksum_mismatch") }));
+    expect(recorded).toHaveTextContent(t("research.detail.templatesExcluded", { count: 3, reason: t("research.detail.exclusionReasons.template_tenant_mismatch") }));
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("uses detail before search reason, never the wrapper, and keeps old cumulative attempt counts unknown", async () => {
+    await i18n.changeLanguage("en-US");
+    loadRuns([
+      { ...hostedRuns[0], template_search: { reason: boundary, attempts: { previous_run_receipt: {} } } },
+      { ...hostedRuns[1], rejection: { reason: "retrain_failed" } },
+      { run_id: "unknown", status: "failed", rejection: { reason: "retrain_failed", detail: "future_search_error:503" } },
+      { run_id: "completed-stale-rejection", status: "completed", rejection: { detail: missing } },
+    ]);
+    await screen.findByTestId("research-task-runs");
+    const first = screen.getByTestId("research-task-run-rrun-20261125-026");
+    expect(within(first).getByTestId("research-task-run-reason")).toHaveTextContent(i18n.t("research.demand.reasons.mandate_universe_missing"));
+    expect(first).toHaveTextContent(i18n.t("research.detail.templatesTriedNotRecorded"));
+    expect(within(screen.getByTestId("research-task-run-rrun-20261125-027")).getByTestId("research-task-run-reason")).toHaveTextContent(i18n.t("research.demand.reasons.mandate_universe_missing"));
+    const unknown = within(screen.getByTestId("research-task-run-unknown"));
+    expect(unknown.getByTestId("research-task-run-reason")).toHaveTextContent(i18n.t("research.demand.reasonUnknown"));
+    expect(unknown.getByTestId("research-reason-raw")).toHaveTextContent("future_search_error:503");
+    expect(within(screen.getByTestId("research-task-run-completed-stale-rejection")).queryByTestId("research-task-run-reason")).not.toBeInTheDocument();
   });
 });
