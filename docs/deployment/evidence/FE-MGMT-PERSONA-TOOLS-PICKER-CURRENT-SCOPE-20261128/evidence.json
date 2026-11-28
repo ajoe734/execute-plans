@@ -8,10 +8,10 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-MGMT-PERSONA-TOOLS-PICKER-CURRENT-SCOPE-20261128",
-  "implementation_commit": "ed921a1c7",
+  "implementation_commit": "26182ea51",
   "base_commit": "0a0ce540597647809dc0c0f2886cfc376d73c025",
   "scope": {
-    "behavior": "The shared PersonaPicker filters bffV1.personas.list() through the existing classifyCurrentFirstScope(row, PERSONA_SCOPE_TABS) === current. PERSONA_SCOPE_TABS is now exported by Lists.tsx so both consumers use the same tab configuration. Missing and unknown listScope remain current.",
+    "behavior": "The shared PersonaPicker filters bffV1.personas.list() through the existing classifyCurrentFirstScope with the Persona list's current/test/retired/research/all tab values, keeping only current. Lists.tsx remains byte-identical to the base. Missing and unknown listScope remain current.",
     "adapter": "No adapter change required: normalizeBaseObjectFields spreads the owner row and preserves listScope unchanged. Added a listPersonas regression for current/test/retired/research/unknown/null/missing scope.",
     "manual_id": "Manual id input and the unlisted selected option remain available for any id, including filtered test, retired, or research personas.",
     "unchanged": [
@@ -53,7 +53,7 @@
     {
       "command": "npm run lint",
       "exit_status": 0,
-      "result": "0 errors, 154 warnings",
+      "result": "0 errors, 153 warnings",
       "log": "/tmp/persona-picker-lint.log"
     },
     {
