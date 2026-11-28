@@ -22,6 +22,7 @@ import {
   RiskBanner,
   TradingRoomWorkspace,
   StrategyWorkspaceView,
+  PaperBookPanel,
 } from "./TradingRoomWorkspace";
 
 export { TradingRoomWorkspace };
@@ -631,13 +632,14 @@ export function TradingRoomPage({
     return (
       <div
         data-testid="trading-room-page"
-        style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "#111417", color: "#f0ece4" }}
+        style={{ display: "flex", flexWrap: "wrap", height: "100%", minHeight: 0, overflow: "auto", background: "#111417", color: "#f0ece4" }}
       >
         <TradingRoomDefaultEntry
           aggregate={aggregate}
           onOpenWorkshop={handleOpenWorkshop}
           onStrategySelect={(id) => handleStrategySelect(id)}
         />
+        <PaperBookPanel positionSummaries={aggregate.position_summaries ?? []} />
       </div>
     );
   }
@@ -761,11 +763,14 @@ export function TradingRoomPage({
           queueUpdatedAt={queueUpdatedAt}
         />
       ) : (
-        <TradingRoomDefaultEntry
-          aggregate={aggregate}
-          onOpenWorkshop={handleOpenWorkshop}
-          onStrategySelect={(id) => handleStrategySelect(id)}
-        />
+        <div style={{ display: "flex", flexWrap: "wrap", flex: 1, minHeight: 0, overflow: "auto" }}>
+          <TradingRoomDefaultEntry
+            aggregate={aggregate}
+            onOpenWorkshop={handleOpenWorkshop}
+            onStrategySelect={(id) => handleStrategySelect(id)}
+          />
+          <PaperBookPanel positionSummaries={aggregate.position_summaries ?? []} />
+        </div>
       )}
 
       {candidatePoolId && (

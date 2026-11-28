@@ -2405,7 +2405,15 @@ export async function getTradingRoomPaperBook(
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
   });
-  if (res.status === 404) return null;
+  if (res.status === 404) {
+    const body = await parseJson(res);
+    const root = recordFrom(body);
+    const detail = recordFrom(root.detail);
+    const error = recordFrom(detail.error ?? root.error);
+    if (detail.reason === "paper_book_not_found" || error.code === "paper_book_not_found" ||
+      recordFrom(error.details).reason === "paper_book_not_found") return null;
+    throw makeTypedBffError(res, body, "Paper book read failed HTTP 404");
+  }
   if (!res.ok) {
     await throwTypedBffError(res, "GET", url);
   }

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TradingRoomWorkspace,
+  PaperBookPanel,
   RiskBanner,
   TradingEventQueue,
   PositionActionQueue,
@@ -18,6 +19,7 @@ import type {
 import "@/i18n";
 import { BffError } from "@/lib/bff-v1/errors";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
+import { ensurePaperBook } from "@/lib/bff-v1/agora/paperBook";
 import type { TradingRoomWorkspaceProposal, TradingRoomWorkspace as TradingRoomWorkspaceType } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import type { TradingRoomWorkspaceResult } from "@/lib/bff-v1/agora/tradingRoom";
 
@@ -49,6 +51,8 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   patchTradingRoomWorkspaceLayout: vi.fn(),
   rollbackTradingRoomWorkspaceVersion: vi.fn(),
 }));
+
+vi.mock("@/lib/bff-v1/agora/paperBook", () => ({ ensurePaperBook: vi.fn() }));
 
 vi.mock("@/agora/trading-room/WorkspaceProposalPreview", () => ({
   WorkspaceProposalPreview: ({ proposal, onAccept, onRegenerate, busy, error }: MockProposalPreviewProps) => (
@@ -551,5 +555,76 @@ describe("TradingRoomWorkspace component suite", () => {
     expect(
       screen.getByTestId("position-action-queue").querySelectorAll("button").length,
     ).toBe(0);
+  });
+});
+
+describe("Paper book first use", () => {
+  const read = vi.mocked(tradingRoomModule.getTradingRoomPaperBook);
+  const ensure = vi.mocked(ensurePaperBook);
+  beforeEach(() => {
+    vi.resetAllMocks();
+    read.mockResolvedValue(null);
+  });
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+  it("offers explicit setup for a missing book and never ensures on mount", async () => {
+    render(<PaperBookPanel />);
+    expect(await screen.findByRole("button", { name: "開通我的 paper 帳本" })).toBeEnabled();
+    expect(screen.getByText(/營運者設定的起始資金/)).toHaveTextContent("名目模擬資金，不是真實金錢");
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it("sends one attempt during a two-minute wait, then re-reads and hides setup", async () => {
+    let finish!: () => void;
+    ensure.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<PaperBookPanel strategyId="strat-001" />);
+    const button = await screen.findByTestId("paper-book-ensure");
+    vi.useFakeTimers();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(ensure).toHaveBeenCalledTimes(1);
+    const key = ensure.mock.calls[0][0];
+    expect(key).toMatch(/^[\da-f-]{36}$/);
+    expect(button).toBeDisabled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+    expect(screen.getByRole("status")).toHaveTextContent("可能需要約兩分鐘");
+    expect(ensure.mock.calls[0][0]).toBe(key);
+    read.mockResolvedValue({ fills: [], positions: [] } as unknown as Awaited<ReturnType<typeof read>>);
+    await act(async () => { finish(); });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenLastCalledWith({ strategyId: "strat-001" });
+    expect(screen.queryByTestId("paper-book-ensure")).not.toBeInTheDocument();
+  });
+
+  it.each(["conflict", "timeout"])("shows %s reason and retries with a new attempt key", async (kind) => {
+    const error = kind === "timeout"
+      ? new DOMException("deadline", "TimeoutError")
+      : new BffError(409, { error: { code: "STATE_CONFLICT", message: "Provisioning failed", details: { error: "paper_only" }, i18nKey: "errors.STATE_CONFLICT", retryable: true, userActionable: true, correlationId: "test" } });
+    ensure.mockRejectedValueOnce(error).mockImplementation(() => new Promise(() => {}));
+    render(<PaperBookPanel />);
+    fireEvent.click(await screen.findByTestId("paper-book-ensure"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(kind === "timeout" ? "paper_book_ensure_timeout" : "409 · STATE_CONFLICT · paper_only");
+    fireEvent.click(screen.getByRole("button", { name: "重試開通我的 paper 帳本" }));
+    expect(ensure).toHaveBeenCalledTimes(2);
+    expect(ensure.mock.calls[1][0]).not.toBe(ensure.mock.calls[0][0]);
+  });
+
+  it("keeps the existing book readback without a setup action", async () => {
+    read.mockResolvedValue({ fills: [], positions: [] } as unknown as Awaited<ReturnType<typeof read>>);
+    render(<PaperBookPanel />);
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("paper-book-ensure")).not.toBeInTheDocument();
+    expect(screen.getByTestId("paper-book-fills-empty")).toBeInTheDocument();
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it("read failures offer a read retry without provisioning", async () => {
+    read.mockRejectedValueOnce(new Error("network_down"));
+    render(<PaperBookPanel />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("network_down");
+    expect(screen.queryByTestId("paper-book-ensure")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新讀取帳本" }));
+    expect(await screen.findByTestId("paper-book-ensure")).toBeEnabled();
+    expect(ensure).not.toHaveBeenCalled();
   });
 });
