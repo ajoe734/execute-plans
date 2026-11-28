@@ -13,7 +13,8 @@ import {
   type TradingRoomWorkspaceResult,
   type TradingRoomStreamMode,
 } from "@/lib/bff-v1/agora/tradingRoom";
-import { BffError } from "@/lib/bff-v1/errors";
+import { BffError, isTimeoutError } from "@/lib/bff-v1/errors";
+import { ensurePaperBook } from "@/lib/bff-v1/agora/paperBook";
 import type { TradingRoomWorkspaceProposal } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
 import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
@@ -247,6 +248,88 @@ export function TradingEventQueue({ events, loading, eventsEtag, onSelectEvent, 
 export interface PositionActionQueueProps {
   positionSummaries: unknown[];
   paperBook?: TradingRoomPaperBookReadback | null;
+}
+
+/** Owner-scoped first-use action, available even before a strategy is ready. */
+export function PaperBookPanel({ strategyId, positionSummaries = [] }: {
+  strategyId?: string;
+  positionSummaries?: unknown[];
+}): JSX.Element {
+  const { t } = useTranslation();
+  const [book, setBook] = useState<TradingRoomPaperBookReadback | null>(null);
+  const [state, setState] = useState<"loading" | "missing" | "ready" | "ensuring" | "readError">("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const attempt = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
+
+  const describeError = (err: unknown): string => {
+    if (isTimeoutError(err)) return t("agora.tradingRoom.page.paperBook.timeout");
+    if (err instanceof BffError) {
+      const reason = err.details?.reason ?? err.envelope.error.cause ?? err.message;
+      return `${err.status} · ${err.code} · ${String(reason)}`;
+    }
+    return err instanceof Error ? err.message : t("agora.tradingRoom.page.paperBook.failed");
+  };
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; attempt.current?.abort(); };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBook(null);
+    setState("loading");
+    setError(null);
+    const read = safeResolveFn(() => getTradingRoomPaperBook);
+    if (read) void Promise.resolve(read({ strategyId })).then((result) => {
+      if (cancelled) return;
+      setBook(result);
+      setState(result ? "ready" : "missing");
+    }).catch((err) => {
+      if (cancelled) return;
+      setState("readError");
+      setError(describeError(err));
+    });
+    return () => { cancelled = true; };
+    // Error text is captured for this read; language changes must not trigger reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategyId, revision]);
+
+  const openBook = async () => {
+    if (attempt.current || state !== "missing") return;
+    const controller = new AbortController();
+    attempt.current = controller;
+    setState("ensuring");
+    setError(null);
+    try {
+      await ensurePaperBook(newUUID(), controller.signal);
+      if (!mounted.current) return;
+      // Re-read authoritative state, including the operator's starting capital.
+      setRevision((value) => value + 1);
+    } catch (err) {
+      if (!mounted.current) return;
+      setError(describeError(err));
+      setState("missing");
+    } finally {
+      attempt.current = null;
+    }
+  };
+
+  return <div data-testid="paper-book-panel" style={{ background: "#171b22", width: 280, flexShrink: 0 }}>
+    {state !== "ready" && <section aria-busy={state === "ensuring"} style={{ padding: 12, color: "#c5cad2", fontSize: 12 }}>
+      <h3>{t("agora.tradingRoom.page.paperBook.setupTitle")}</h3>
+      {(state === "missing" || state === "ensuring") && <p>{t("agora.tradingRoom.page.paperBook.startingCapitalNotice")}</p>}
+      {(state === "loading" || state === "ensuring") && <p role="status">{t(`agora.tradingRoom.page.paperBook.${state === "ensuring" ? "opening" : "loading"}`)}</p>}
+      {error && <p role="alert">{t("agora.tradingRoom.page.paperBook.failed")} {error}</p>}
+      {(state === "missing" || state === "ensuring") && <button type="button" disabled={state === "ensuring"} onClick={() => void openBook()} data-testid="paper-book-ensure" className="rounded bg-[#e8b750] px-3 py-2 font-semibold text-[#111417] disabled:opacity-50">
+        {t(`agora.tradingRoom.page.paperBook.${error ? "retry" : "open"}`)}
+      </button>}
+      {state === "readError" && <button type="button" onClick={() => setRevision((value) => value + 1)}>{t("agora.tradingRoom.page.paperBook.reload")}</button>}
+    </section>}
+    <PositionActionQueue paperBook={book} positionSummaries={positionSummaries} />
+  </div>;
 }
 
 export function PositionActionQueue({ positionSummaries, paperBook }: PositionActionQueueProps): JSX.Element {
@@ -518,28 +601,10 @@ export function TradingRoomWorkspace({
   const [selectedDecisionEventId, setSelectedDecisionEventId] = useState<string | null>(
     () => filteredEvents[0]?.decision_event_id ?? null,
   );
-  const [paperBook, setPaperBook] = useState<TradingRoomPaperBookReadback | null>(null);
   // Revision created by an explicit user regeneration: skip the saved-workspace
   // restore for that revision only (StrictMode-safe: never consumed/reset).
   const regenerateRevisionRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    const paperBookFn = safeResolveFn(() => getTradingRoomPaperBook);
-    if (!paperBookFn) return;
-    let cancelled = false;
-    void Promise.resolve(paperBookFn({ strategyId }))
-      .then((res) => {
-        if (!cancelled && res) {
-          setPaperBook(res);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setPaperBook(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [strategyId]);
 
   const activeDecisionEvent =
     filteredEvents.find((ev) => ev.decision_event_id === selectedDecisionEventId) ??
@@ -850,8 +915,9 @@ export function TradingRoomWorkspace({
           </div>
         </div>
         <div data-mobile-pane-hidden={mobilePane !== "decisions"} data-testid="trading-room-position-surface">
-          <PositionActionQueue
-            paperBook={paperBook}
+          <PaperBookPanel
+            key={strategyId}
+            strategyId={strategyId}
             positionSummaries={aggregate.position_summaries ?? []}
           />
         </div>

@@ -22,6 +22,7 @@ import {
   RiskBanner,
   TradingRoomWorkspace,
   StrategyWorkspaceView,
+  PaperBookPanel,
 } from "./TradingRoomWorkspace";
 
 export { TradingRoomWorkspace };
@@ -761,11 +762,14 @@ export function TradingRoomPage({
           queueUpdatedAt={queueUpdatedAt}
         />
       ) : (
+        <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "auto" }}>
         <TradingRoomDefaultEntry
           aggregate={aggregate}
           onOpenWorkshop={handleOpenWorkshop}
           onStrategySelect={(id) => handleStrategySelect(id)}
         />
+        <PaperBookPanel positionSummaries={aggregate.position_summaries ?? []} />
+        </div>
       )}
 
       {candidatePoolId && (
