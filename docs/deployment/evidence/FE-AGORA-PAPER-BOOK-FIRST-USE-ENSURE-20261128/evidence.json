@@ -2,11 +2,11 @@
   "schema_version": "pantheon.task-evidence.v1",
   "task_id": "FE-AGORA-PAPER-BOOK-FIRST-USE-ENSURE-20261128",
   "owner": "Codex2",
-  "reviewer": "Antigravity",
+  "reviewer": "Claude2",
   "delivery_repository": "ajoe734/execute-plans",
   "target_branch": "dev",
-  "base_sha": "b8ee387399289a11d55d2ae9ca4f39ddcb8daa45",
-  "status": "implementation_complete_hosted_acceptance_blocked",
+  "base_sha": "db8c31cfa6b42cebb795558f8acd1f68b709eead",
+  "status": "ready_for_independent_review_hosted_acceptance_pending",
   "scope": {
     "owned": "Explicit first-paper-use panel, paper-only client, timeout/error/retry behavior, locales and focused tests.",
     "unchanged": "BFF provisioning and confirm paths, live/canary stages, backend deployment, runtime activation."
@@ -17,8 +17,8 @@
     "AC3": "Passed existing provisioned fills/positions test and new provisioned-book no-action test; existing assertions retained.",
     "AC4": "Passed client request contract: POST /bff/agora/servant/paper-book/ensure, target_stage paper only, session credentials and caller-owned Idempotency-Key.",
     "AC5": "Passed locales/parity guard, lint 0 errors, tsc and build.",
-    "AC6": "BLOCKED: no post-deploy proof or real absent-trader proof claimed. Deployed BFF lacks the trading-room book route; admintest servant book read also fails because its binding is paused. Browser screenshots distinguish real hosted failure from controlled missing-book fixture.",
-    "AC7": "Assigned reviewer Antigravity is a different model family from Codex2; independent review has not occurred."
+    "AC6": "PENDING POST-DEPLOY: no post-deploy proof or real absent-trader proof claimed. Coordinator read-only observation at 13:11Z confirms the trading-room book route is now deployed. Its typed 404 for paused admintest is a separate BFF defect. AC6 does not block review or merge; the admintest proof awaits the owning backend repair tasks. Earlier candidate screenshots distinguish hosted failure from the controlled missing-book fixture.",
+    "AC7": "Assigned reviewer Claude2 is a different model family from Codex2; independent review has not occurred."
   },
   "local_validation": [
     {
@@ -54,6 +54,38 @@
       "warnings": "Existing chunk size advisory."
     }
   ],
+  "review_refresh_validation": {
+    "date": "2026-11-28",
+    "base_sha": "db8c31cfa6b42cebb795558f8acd1f68b709eead",
+    "product_change": "Merged current dev without conflicts; first-use implementation unchanged.",
+    "dependency_setup": "npm ci --no-audit --no-fund passed (exit 0). The initial validation launch had missing executables (exit 127); all checks were rerun after installation.",
+    "checks": [
+      {
+        "command": "timeout 180 npm run test -- src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx src/lib/bff-v1/agora/paperBook.test.ts src/lib/bff-v1/agora/tradingRoom.test.ts src/agora/i18n.guard.test.ts",
+        "exit_status": 0,
+        "passed": 181,
+        "log": "/tmp/paper-book-review-refresh-tests.log"
+      },
+      {
+        "command": "timeout 180 npm run typecheck",
+        "exit_status": 0,
+        "log": "/tmp/paper-book-review-refresh-types.log"
+      },
+      {
+        "command": "timeout 180 npm run lint",
+        "exit_status": 0,
+        "errors": 0,
+        "warnings": 155,
+        "log": "/tmp/paper-book-review-refresh-lint.log"
+      },
+      {
+        "command": "timeout 180 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+        "exit_status": 0,
+        "log": "/tmp/paper-book-review-refresh-build.log",
+        "warnings": "Existing chunk size advisory."
+      }
+    ]
+  },
   "candidate_browser_proof": {
     "command": "timeout 180 env PROOF_OUT=/tmp/paper-book-candidate-final CANDIDATE_DIST=$PWD/dist node /tmp/paper-book-browser-proof.mjs",
     "exit_status": 0,
@@ -138,10 +170,26 @@
     "source_observation": "The deployed 94ee2f78 intents.py lacks the paper-book route; current backend dev intents.py contains it. No backend/runtime writes performed.",
     "inventory_limit": "The read-only capital-pool inventory returned the first 20 of 173 records; it does not prove that admintest is the only provisioned trader."
   },
+  "coordinator_update": {
+    "source": "Canonical task next read via governed show on 2026-11-28; coordinator 70b5f70f update.",
+    "hosted_observed_at": "2026-11-28T13:11Z",
+    "root_run": "46136811413",
+    "served_fe_commit_prefix": "b8ee38739",
+    "served_bff_commit_prefix": "1ae1c6af9",
+    "trading_room_book": "Route exists; admintest returns typed 404 paper_book_not_found despite an existing paused book.",
+    "servant_book": "409: rb-77d962be4e324032808324109f2c154e is paused.",
+    "backend_followups": [
+      "PAPER-TRADER-BOOK-LEGACY-BOOK-REPAIR-20261128",
+      "AGORA-TRADER-PAPER-BOOK-READBACK-PAUSED-NOT-MISSING-20261128"
+    ],
+    "review_instruction": "Hand off to Claude2; AC6 is post-deploy proof and does not block review or merge. No FE workaround for the BFF paused-book defect.",
+    "hosted_write_boundary": "Each hosted ensure call requires explicit operator approval; no hosted ensure call has been made by this task.",
+    "historical_hosted_environment": "The hosted_environment section above records the earlier candidate proof, not the current deployment."
+  },
   "required_before_done": [
-    "Restore a dev BFF containing the trading-room paper-book readback route and resolve the paused admintest paper-binding condition through its owning workflow.",
+    "Resolve the paused admintest paper-book readback defect through the owning backend repair tasks; do not add a FE workaround.",
     "Obtain real no-book trader evidence, or authoritative evidence that only admintest has a book; capture the action and provisioned admintest book on the deployed FE.",
-    "Independent Antigravity exact-head review, supervisor merge, successful integration/deploy workflows and matching deployment.json.",
+    "Independent Claude2 exact-head review, supervisor merge, successful integration/deploy workflows and matching deployment.json.",
     "Direct post-deploy browser/BFF gate without candidate asset override; record screenshots before owner closeout."
   ]
 }
