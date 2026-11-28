@@ -36,7 +36,29 @@
     "failing_head": "c915205e65971fcefccb3a1c1b2038f431c37e72",
     "diagnosis": "The full application typecheck includes the rail test, unlike typecheck:agora. The 12-dimension fixture used arbitrary dimension names in the canonical StrategyCompleteness DTO, whose dimension field allows only seven names.",
     "resolution": "Supply the 12 dimension updates through the existing flexible completeness_update card payload using the twelve block identifiers. Preserve the 2 complete, 7 partial, 3 incomplete regression, its 46% expectation, and its 2/7/3 counts without type assertions or production changes.",
-    "scope": "Rail test fixture and this evidence manifest only; no product, BFF, DTO, typecheck configuration or workflow change."
+    "scope": "Rail test fixture and this evidence manifest only; no product, BFF, DTO, typecheck configuration or workflow change.",
+    "base_refresh": {
+      "reason": "Initial re-handoff correctly rejected the delivery because dev advanced during validation.",
+      "base_sha": "f74a56c08",
+      "merge_commit": "5d0f0ab9ba98c86894de21c23418281c7eedb756",
+      "validation": [
+        {
+          "command": "timeout 180 npm run typecheck:app",
+          "exit_code": 0,
+          "log": "/tmp/rail-progress-fixture-refreshed-typecheck-app.log"
+        },
+        {
+          "command": "timeout 180 npm test -- src/agora/i18n.guard.test.ts src/agora/components/StrategyCompletenessRail.test.tsx src/agora/components/WorkshopCardRenderer.test.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+          "exit_code": 0,
+          "passed": 100,
+          "log": "/tmp/rail-progress-fixture-refreshed-tests.log"
+        },
+        {
+          "command": "git diff --check",
+          "exit_code": 0
+        }
+      ]
+    }
   },
   "validation": [
     {
