@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { StrategyCompletenessRail } from "./StrategyCompletenessRail";
 import type { StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
 import type { WorkshopCard, WorkshopCompletenessSnapshot } from "@/lib/bff-v1/agora/workshops";
+import { V10_TWELVE_BLOCK_DEFS } from "./workshopCompletenessDisplay";
+import type { WorkshopV10BlockState } from "@/lib/bff-v1/agora/workshops";
 
 afterEach(cleanup);
 
@@ -92,6 +94,8 @@ describe("StrategyCompletenessRail", () => {
       />
     );
     expect(screen.getByTestId("completeness-empty")).toBeDefined();
+    expect(screen.getByText("策略完整度尚未評估")).toBeInTheDocument();
+    expect(screen.queryByTestId("completeness-progress-counts")).toBeNull();
     expect(screen.getByTestId("readiness-gates-empty")).toBeDefined();
   });
 
@@ -109,7 +113,7 @@ describe("StrategyCompletenessRail", () => {
     expect(screen.getByText("50%")).toBeDefined();
   });
 
-  it("renders the exact hosted raw snapshot as 100% from its shared completeness card", () => {
+  it("keeps the hosted card's complete gate label while showing its actual block progress", () => {
     const liveSnapshot: WorkshopCompletenessSnapshot = {
       snapshot_id: "8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
       workshop_id: "b888fb96-12b4-46e1-8def-ffe4f29b5ad7",
@@ -156,9 +160,66 @@ describe("StrategyCompletenessRail", () => {
     );
 
     expect(screen.getByTestId("completeness-overall-grade").textContent).toBe("完整");
-    expect(screen.getByText("100%")).toBeDefined();
+    expect(screen.getByText("58%")).toBeDefined();
+    expect(screen.getByTestId("completeness-progress-counts")).toHaveTextContent("已確認 7・部分 0・尚缺 5");
     expect(screen.queryByText("NaN%")).toBeNull();
     expect(screen.getByText("研究就緒").nextElementSibling?.textContent).toBe("是");
+  });
+
+  it.each([
+    { name: "partly defined despite an incomplete gate", states: ["confirmed", ...Array(10).fill("inferred"), "missing"], percent: 50, counts: "已確認 1・部分 10・尚缺 1" },
+    { name: "all confirmed", states: Array(12).fill("confirmed"), percent: 100, counts: "已確認 12・部分 0・尚缺 0" },
+    { name: "all missing", states: Array(12).fill("missing"), percent: 0, counts: "已確認 0・部分 0・尚缺 12" },
+    { name: "weak and conflict", states: ["confirmed", "inferred", "weak", "conflict", ...Array(8).fill("missing")], percent: 17, counts: "已確認 1・部分 2・尚缺 9" },
+  ])("shows block progress for $name", ({ states, percent, counts }) => {
+    render(<StrategyCompletenessRail completeness={{
+      ...mockCompleteness,
+      overall_grade: "incomplete",
+      twelve_blocks: V10_TWELVE_BLOCK_DEFS.map((definition, index) => ({
+        block_id: definition.v10_block_id,
+        title_zh: definition.generic_title,
+        state: states[index] as WorkshopV10BlockState,
+      })),
+    }} />);
+
+    expect(screen.getByText(`${percent}%`)).toBeInTheDocument();
+    expect(screen.getByTestId("completeness-progress-counts")).toHaveTextContent(counts);
+    expect(screen.getByTestId("completeness-overall-grade")).toHaveTextContent("不完整");
+    expect(screen.getByTestId("completeness-overall-grade")).toHaveClass("text-rose-400");
+    const bar = screen.getByText("整體完整度").parentElement?.nextElementSibling?.firstElementChild;
+    expect(bar).toHaveStyle({ width: `${percent}%` });
+  });
+
+  it("falls back to dimensions and rounds 2 complete, 7 partial, 3 incomplete to 46%", () => {
+    // Twelve dimension updates belong to the flexible card payload; the
+    // canonical StrategyCompleteness DTO has only seven dimension names.
+    const grades = ["complete", "complete", ...Array(7).fill("partial"), ...Array(3).fill("incomplete")];
+    render(<StrategyCompletenessRail
+      completeness={{ ...mockCompleteness, overall_grade: "incomplete", dimensions: [] }}
+      completenessCard={{
+        ...mockNextQuestionCard,
+        card_type: "completeness_update",
+        payload: {
+          overall_grade: "incomplete",
+          dimension_updates: V10_TWELVE_BLOCK_DEFS.map((definition, index) => ({
+            dimension: definition.v10_block_id,
+            current_grade: grades[index],
+            gaps: [],
+            required_actions: [],
+          })),
+        },
+      }}
+    />);
+
+    expect(screen.getByText("46%")).toBeInTheDocument();
+    expect(screen.getByTestId("completeness-progress-counts")).toHaveTextContent("已確認 2・部分 7・尚缺 3");
+    expect(screen.queryByTestId("v10-twelve-blocks-section")).toBeNull();
+  });
+
+  it("shows zero progress with no blocks or dimensions", () => {
+    render(<StrategyCompletenessRail completeness={{ ...mockCompleteness, dimensions: [] }} />);
+    expect(screen.getByText("0%")).toBeInTheDocument();
+    expect(screen.getByTestId("completeness-progress-counts")).toHaveTextContent("已確認 0・部分 0・尚缺 0");
   });
 
   it("renders all three dimensions with their grades", () => {

@@ -613,7 +613,8 @@ describe("StrategyWorkshopPage", () => {
 
     expect((await screen.findByTestId("completeness-overall-grade")).textContent).toBe("完整");
     expect(screen.getByTestId("completeness-overall-grade")).toBeVisible();
-    expect(screen.getByText("100%")).toBeDefined();
+    expect(screen.getByText("58%")).toBeDefined();
+    expect(screen.getByTestId("completeness-progress-counts")).toHaveTextContent("已確認 7・部分 0・尚缺 5");
     expect(screen.queryByText("NaN%")).toBeNull();
     expect(screen.queryByTestId("completeness-grade")).toBeNull();
     expect(screen.queryByTestId("workshop-readiness")).toBeNull();

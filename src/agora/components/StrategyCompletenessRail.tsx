@@ -81,12 +81,23 @@ function DimensionIcon({ grade }: { grade: string }) {
   return <CircleAlert className="h-3.5 w-3.5 text-rose-400" />;
 }
 
-const OVERALL_PROGRESS: Record<StrategyCompleteness["overall_grade"], number> = {
-  complete: 100,
-  mostly_complete: 75,
-  partial: 50,
-  incomplete: 0,
-};
+function completenessProgress(completeness: {
+  twelve_blocks?: WorkshopStrategyBlock[];
+  dimensions: Array<{ grade: string }>;
+}) {
+  const blocks = completeness.twelve_blocks ?? [];
+  const states = blocks.length > 0
+    ? blocks.map((block) => block.state)
+    : completeness.dimensions.map((dimension) => dimension.grade);
+  const confirmed = states.filter((state) => state === "confirmed" || state === "complete").length;
+  const partial = states.filter((state) => state === "inferred" || state === "weak" || state === "partial").length;
+  return {
+    confirmed,
+    partial,
+    missing: states.length - confirmed - partial,
+    percent: states.length > 0 ? Math.round(((confirmed + partial * 0.5) / states.length) * 100) : 0,
+  };
+}
 
 function ReadinessPanel({
   readiness,
@@ -359,7 +370,7 @@ export function StrategyCompletenessRail({
     );
   }
 
-  const progress = OVERALL_PROGRESS[displayCompleteness.overall_grade] ?? 0;
+  const progress = completenessProgress(displayCompleteness);
 
   return (
     <div className="flex flex-col gap-4 overflow-y-auto p-3 text-foreground" data-testid="strategy-completeness-rail">
@@ -377,8 +388,15 @@ export function StrategyCompletenessRail({
         </div>
         <ProgressBar
           label={workshopCopy("agora.workshop.rail.overallCompleteness", "整體完整度")}
-          value={progress}
+          value={progress.percent}
         />
+        <p className="text-[11px] text-muted-foreground" data-testid="completeness-progress-counts">
+          {workshopCopy(
+            "agora.workshop.rail.progressCounts",
+            "已確認 {{confirmed}}・部分 {{partial}}・尚缺 {{missing}}",
+            progress,
+          )}
+        </p>
       </div>
 
       <KeyValueGrid

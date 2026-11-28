@@ -627,9 +627,13 @@ export function materializeWorkshopCompleteness(
   if (!overallGrade) return null;
 
   const stateMap = recordFrom(record.state_map_json);
+  // Dimension-only assessments retain their own denominator for rail progress.
+  // Project twelve blocks only when the snapshot actually supplies block states.
   const twelveBlocks = explicitBlocks.length > 0
     ? explicitBlocks
-    : projectFallbackTwelveBlocks(stateMap, dimensions, isBranch);
+    : Object.keys(stateMap).length > 0
+      ? projectFallbackTwelveBlocks(stateMap, dimensions, isBranch)
+      : [];
 
   const nextDecision =
     normalizeNextDecision(cardPayload.next_decision)
