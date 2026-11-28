@@ -8,6 +8,52 @@ import type {
   TradingRoomShadowComparisonRead,
 } from "@/lib/bff-v1/agora/tradingRoom";
 
+function displayNumber(value: unknown, locale: string): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? new Intl.NumberFormat(locale, { maximumFractionDigits: 6 }).format(value)
+    : "—";
+}
+
+function displayTime(value: unknown, locale: string): string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(value)) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(locale, {
+    timeZone: "UTC", timeZoneName: "short", year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
+}
+
+/** Present only business fields; IDs and provenance remain in the readback. */
+export function PaperBookRow({ value, currency, fill = false, asOf }: {
+  value: unknown; currency?: string; fill?: boolean; asOf?: string;
+}) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || "zh-TW";
+  const row = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+  const side = typeof row.side === "string" ? row.side.toLowerCase() : typeof row.direction === "string" ? row.direction.toLowerCase() : "";
+  const sideKey = ["buy", "sell", "long", "short", "flat"].includes(side) ? side : "unknown";
+  const unit = currency && /^[A-Z]{3}$/.test(currency) ? currency : t("agora.tradingRoom.page.paperBook.currencyUnknown");
+  const money = (v: unknown) => `${displayNumber(v, locale)} ${unit}`;
+  const symbol = typeof row.symbol === "string" && /^[A-Za-z0-9.^=-]{1,32}$/.test(row.symbol) ? row.symbol : "—";
+  return <>
+    <div>{t(`agora.tradingRoom.page.paperBook.${fill ? "fillLine" : "positionLine"}`, {
+      symbol, side: t(`agora.tradingRoom.page.paperBook.sides.${sideKey}`),
+      qty: displayNumber(row.quantity ?? row.net_qty, locale),
+      avgPrice: money(row.avg_entry_price ?? row.avg_price ?? row.average_price),
+      markPrice: money(row.mark_price), price: money(row.price),
+      filledAt: displayTime(row.filled_at, locale),
+    })}</div>
+    {!fill && <div>{t("agora.tradingRoom.page.paperBook.positionDetail", {
+      pnl: money(row.unrealized_pnl),
+      time: displayTime(row.updated_at ?? row.last_filled_at ?? asOf, locale),
+    })}</div>}
+    {!fill && (row.market_value !== undefined || row.value !== undefined) && <div>
+      {t("agora.tradingRoom.page.paperBook.marketValue", { value: money(row.market_value ?? row.value) })}
+    </div>}
+  </>;
+}
+
 function getBffExport<K extends keyof typeof tradingRoomBff>(
   key: K,
 ): (typeof tradingRoomBff)[K] | undefined {
@@ -64,27 +110,58 @@ function localClassifySettlementSource(
   return "unsettled";
 }
 
-function localSanitizeExecutionLabel(
-  label: unknown,
-  kind: ShadowSettlementSourceKind,
-): string {
-  const text = typeof label === "string" ? label.trim() : "";
-  if (!text) return "—";
-  if (kind === "actual_fill") return text;
-  const lower = text.toLowerCase();
-  const claimsActualFill =
-    (text.includes("實際成交") && !text.includes("非實際成交")) ||
-    (lower.includes("actual fill") && !lower.includes("not an actual fill"));
-  if (claimsActualFill) {
-    return "交易員決策（紙上代理）";
-  }
-  return text;
-}
+// Settlement fractions and legacy pnl are return ratios; realized/unrealized P&L are amounts.
+const PERCENT_FIELDS = new Set(["pnl", "underlying_return_pct", "gross_return_pct", "cost_pct", "return_pct", "max_drawdown_pct", "weight", "exposure", "confidence"]);
+const MONEY_FIELDS = new Set(["realized_pnl", "unrealized_pnl", "decision_price", "entry_price", "exit_price", "benchmark_exit_price"]);
+const TIME_FIELDS = new Set(["decision_time", "window_start_date", "window_end_date", "data_cutoff"]);
+const ACTION_FIELDS = new Set(["action", "decision", "suggested_action", "trading_room_verdict"]);
+const ACTIONS = new Set(["enter", "exit", "buy", "sell", "hold", "reduce", "add", "approve", "reject", "defer", "no_trade", "abstain"]);
 
-function formatValue(val: unknown): string {
-  if (val === null || val === undefined || val === "") return "—";
-  if (typeof val === "object") return JSON.stringify(val);
-  return String(val);
+function ShadowFields({ value, sourceLabel }: { value: unknown; sourceLabel: string }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || "zh-TW";
+  if (value === null || value === undefined) return <>—</>;
+  const record = typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  const entries: [string, unknown][] = record ? Object.entries(record) : [["unknown", value]];
+  const currency = typeof record?.currency === "string" && /^[A-Z]{3}$/.test(record.currency)
+    ? record.currency : t("agora.tradingRoom.page.paperBook.currencyUnknown");
+  let omitted = 0;
+  const rows: { key: string; text: string }[] = [];
+  for (const [key, val] of entries) {
+    if (key === "available" || key === "unavailable_reason" || key === "currency") continue;
+    let text: string | undefined;
+    if (PERCENT_FIELDS.has(key) && typeof val === "number" && Number.isFinite(val)) {
+      text = `${displayNumber(val * 100, locale)}%`;
+    } else if (MONEY_FIELDS.has(key) && typeof val === "number" && Number.isFinite(val)) {
+      text = `${displayNumber(val, locale)} ${currency}`;
+    } else if (TIME_FIELDS.has(key) && displayTime(val, locale) !== "—") {
+      text = displayTime(val, locale);
+    } else if (ACTION_FIELDS.has(key) && typeof val === "string" && ACTIONS.has(val)) {
+      text = t(`agora.tradingRoom.shadowComparison.actions.${val}`);
+    } else if (["execution_observation_kind", "execution_display_label"].includes(key)) {
+      text = sourceLabel;
+    } else if (["verified", "execution_verified", "actual_fill_claimed"].includes(key) && typeof val === "boolean") {
+      text = t(`agora.tradingRoom.shadowComparison.${val ? "yes" : "no"}`);
+    } else if (key === "direction" && typeof val === "number" && [-1, 0, 1].includes(val)) {
+      text = t(`agora.tradingRoom.page.paperBook.sides.${val > 0 ? "long" : val < 0 ? "short" : "flat"}`);
+    } else if (["slippage_bps", "turnover", "window_sessions"].includes(key) && typeof val === "number" && Number.isFinite(val)) {
+      text = t(`agora.tradingRoom.shadowComparison.units.${key}`, { value: displayNumber(val, locale) });
+    } else if (key === "observation_window" && typeof val === "string" && /^\d+d$/.test(val)) {
+      text = t("agora.tradingRoom.shadowComparison.units.window_sessions", { value: val.slice(0, -1) });
+    } else if (key === "rationale" && typeof val === "string" && !/[{}]|\b[a-z]+(?:_[a-z0-9]+)+\b/i.test(val)) {
+      text = val;
+    }
+    if (text === undefined) { omitted++; continue; }
+    rows.push({ key, text });
+  }
+  return <>
+    <dl>{rows.map(({ key, text }) => <div key={key}>
+      <dt style={{ display: "inline" }}>{t(`agora.tradingRoom.shadowComparison.fields.${key}`)}: </dt>
+      <dd style={{ display: "inline", margin: 0 }}>{text}</dd>
+    </div>)}</dl>
+    {omitted > 0 && <small>{t("agora.tradingRoom.shadowComparison.omittedFields", { count: omitted })}</small>}
+    {rows.length === 0 && omitted === 0 && "—"}
+  </>;
 }
 
 const DEFAULT_ARM_LABELS: Record<string, string> = {
@@ -109,7 +186,7 @@ export function ShadowComparisonPanel({
   onSelectDecisionId,
   baseUrl,
 }: ShadowComparisonPanelProps): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const initialDecisionId =
     (decisionId ?? decisionEvents[0]?.decision_event_id ?? "").trim();
   const [activeDecisionId, setActiveDecisionId] =
@@ -283,15 +360,6 @@ export function ShadowComparisonPanel({
                 defaultValue: "Read-only · Does not place orders",
               })}
             </span>
-            <span
-              style={{
-                color: "#8c96a6",
-                fontFamily: "monospace",
-                fontSize: 11,
-              }}
-            >
-              agora_decision_support_only
-            </span>
           </div>
           <div style={{ color: "#8c96a6", fontSize: 12, marginTop: 2 }}>
             {t("agora.tradingRoom.shadowComparison.subtitle", {
@@ -420,6 +488,7 @@ export function ShadowComparisonPanel({
       ) : read.state === "not_found" ? (
         <div
           data-testid="shadow-comparison-not-found"
+          data-reason={read.reason}
           role="status"
           style={{
             background: "#1a2030",
@@ -435,20 +504,11 @@ export function ShadowComparisonPanel({
               defaultValue: `Shadow comparison for decision ${activeDecisionId} was not found.`,
             })}
           </div>
-          <div
-            style={{
-              color: "#8c96a6",
-              fontFamily: "monospace",
-              fontSize: 12,
-              marginTop: 4,
-            }}
-          >
-            reason: {read.reason}
-          </div>
         </div>
       ) : read.state === "unavailable" ? (
         <div
           data-testid="shadow-comparison-unavailable"
+          data-reason={read.reason}
           role="status"
           style={{
             background: "#231418",
@@ -462,16 +522,6 @@ export function ShadowComparisonPanel({
             {t("agora.tradingRoom.shadowComparison.unavailable", {
               defaultValue: "Shadow comparison is currently unavailable.",
             })}
-          </div>
-          <div
-            style={{
-              color: "#fca5a5",
-              fontFamily: "monospace",
-              fontSize: 12,
-              marginTop: 4,
-            }}
-          >
-            reason: {read.reason}
           </div>
         </div>
       ) : (
@@ -524,9 +574,7 @@ export function ShadowComparisonPanel({
               })}
               :{" "}
               <span style={{ fontFamily: "monospace" }}>
-                {Object.entries(read.degraded)
-                  .map(([k, v]) => `${k}=${v}`)
-                  .join(", ")}
+                {t("agora.tradingRoom.shadowComparison.omittedFields", { count: Object.keys(read.degraded).length })}
               </span>
             </div>
           )}
@@ -573,18 +621,9 @@ export function ShadowComparisonPanel({
                   >
                     <strong style={{ fontSize: 13 }}>
                       {t(`agora.tradingRoom.shadowComparison.arms.${arm.arm}`, {
-                        defaultValue: DEFAULT_ARM_LABELS[arm.arm] ?? arm.arm,
+                        defaultValue: DEFAULT_ARM_LABELS[arm.arm] ?? t("agora.tradingRoom.shadowComparison.otherArm"),
                       })}
                     </strong>
-                    <span
-                      style={{
-                        color: "#8c96a6",
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                      }}
-                    >
-                      {arm.arm}
-                    </span>
                   </div>
 
                   <div>
@@ -621,7 +660,6 @@ export function ShadowComparisonPanel({
                       }}
                     >
                       {label}
-                      {arm.settlement_source ? ` · ${arm.settlement_source}` : ""}
                     </span>
                   </div>
 
@@ -635,9 +673,7 @@ export function ShadowComparisonPanel({
                       })}
                       :
                     </strong>{" "}
-                    <span style={{ fontFamily: "monospace" }}>
-                      {formatValue(arm.outcome)}
-                    </span>
+                    <ShadowFields value={arm.outcome} sourceLabel={label} />
                   </div>
 
                   <div
@@ -650,10 +686,10 @@ export function ShadowComparisonPanel({
                     {t("agora.tradingRoom.shadowComparison.settledAt", {
                       defaultValue: "Settled at",
                     })}
-                    : {formatValue(arm.settled_at)}
+                    : {displayTime(arm.settled_at, i18n.resolvedLanguage || "zh-TW")}
                   </div>
 
-                  <ul
+                  <div
                     data-testid={`shadow-arm-detail-${arm.arm}`}
                     style={{
                       color: "#9aa4b4",
@@ -663,23 +699,8 @@ export function ShadowComparisonPanel({
                       padding: 0,
                     }}
                   >
-                    {Object.entries(detail)
-                      .filter(
-                        ([k]) => k !== "available" && k !== "unavailable_reason",
-                      )
-                      .map(([k, v]) => {
-                        const displayVal =
-                          k === "execution_display_label"
-                            ? localSanitizeExecutionLabel(v, kind)
-                            : formatValue(v);
-                        return (
-                          <li key={k} style={{ padding: "1px 0" }}>
-                            <span style={{ fontFamily: "monospace" }}>{k}</span>:{" "}
-                            {displayVal}
-                          </li>
-                        );
-                      })}
-                  </ul>
+                    <ShadowFields value={detail} sourceLabel={label} />
+                  </div>
 
                   {unavailReason ? (
                     <div
@@ -690,7 +711,7 @@ export function ShadowComparisonPanel({
                         fontSize: 11,
                       }}
                     >
-                      reason: {unavailReason}
+                      {t("agora.tradingRoom.shadowComparison.unavailable")}
                     </div>
                   ) : null}
                 </div>

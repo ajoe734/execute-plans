@@ -40,7 +40,7 @@ import { BffError } from "@/lib/bff-v1/errors";
 import { reasonCodeDisplay, statusLabel } from "@/lib/enumLabels";
 import { cn } from "@/lib/utils";
 import { RuleVsHumanComparison } from "./RuleVsHumanComparison";
-import { ShadowComparisonPanel } from "@/agora/pages/trading-room/ShadowComparisonPanel";
+import { ShadowComparisonPanel, PaperBookRow } from "@/agora/pages/trading-room/ShadowComparisonPanel";
 
 type LoadState =
   | { status: "loading" }
@@ -1339,13 +1339,7 @@ function StrategyPerformanceLoaded({
                             ) : (
                               paperBookData.positions.map((pos) => (
                                 <div className="border-b border-[#2a2e38]/50 py-1 text-[11px]" key={pos.position_id}>
-                                  {t("agora.tradingRoom.page.paperBook.positionLine", {
-                                    symbol: pos.symbol,
-                                    side: pos.side,
-                                    qty: pos.quantity,
-                                    avgPrice: pos.avg_entry_price ?? "—",
-                                    markPrice: pos.mark_price ?? "—",
-                                  })}
+                                  <PaperBookRow value={pos} currency={paperBookData?.paper_book?.currency} asOf={paperBookData?.as_of} />
                                 </div>
                               ))
                             )}
@@ -1366,13 +1360,7 @@ function StrategyPerformanceLoaded({
                             ) : (
                               paperBookData.fills.map((fill) => (
                                 <div className="border-b border-[#2a2e38]/50 py-1 text-[11px]" key={fill.fill_id}>
-                                  {t("agora.tradingRoom.page.paperBook.fillLine", {
-                                    symbol: fill.symbol,
-                                    side: fill.side,
-                                    qty: fill.quantity,
-                                    price: fill.price ?? "—",
-                                    filledAt: fill.filled_at ?? "—",
-                                  })}
+                                  <PaperBookRow value={fill} currency={paperBookData?.paper_book?.currency} fill />
                                 </div>
                               ))
                             )}

@@ -173,9 +173,10 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
     expect(traderArm).toHaveAttribute("data-actual-fill", "false");
     const traderSource = screen.getByTestId("shadow-arm-source-trader");
     expect(traderSource.textContent).toContain("Paper proxy (not an actual fill)");
-    expect(traderSource.textContent).toContain("pantheon_paper_proxy");
+    expect(traderSource.textContent).not.toContain("pantheon_paper_proxy");
     expect(traderSource.textContent).not.toContain("Actual fill (verified)");
-    expect(traderArm.textContent).toContain('{"pnl":-0.01}');
+    expect(traderArm).toHaveTextContent("P&L return: -1%");
+    expect(traderArm.textContent).not.toMatch(/pantheon_paper_proxy|execution_observation_kind|[{}]/);
 
     const baseArm = screen.getByTestId("shadow-arm-base_strategy");
     expect(baseArm).toHaveAttribute("data-settlement-kind", "market_data_replay");
@@ -190,12 +191,14 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
     expect(screen.getByTestId("shadow-arm-source-private_servant").textContent).toContain(
       "Settlement source unknown / unsettled",
     );
-    expect(servantArm.textContent).toContain("no_suggestion");
+    expect(screen.getByTestId("shadow-arm-unavailable-private_servant")).toHaveTextContent("Shadow comparison is currently unavailable.");
+    expect(servantArm.textContent).not.toContain("no_suggestion");
 
     const instArm = screen.getByTestId("shadow-arm-institutional_view");
     expect(instArm).toHaveAttribute("data-settlement-kind", "market_data_replay");
     expect(instArm).toHaveAttribute("data-actual-fill", "false");
-    expect(instArm.textContent).toContain('{"pnl":0.02}');
+    expect(instArm).toHaveTextContent("P&L return: 2%");
+    expect(instArm.textContent).not.toMatch(/market_data_replay|[{}]/);
   });
 
   it("sanitizes any false actual-fill label if settlement source or observation kind is paper proxy", async () => {
@@ -231,7 +234,7 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
     expect(traderArm).toHaveAttribute("data-settlement-kind", "paper_proxy");
     expect(traderArm).toHaveAttribute("data-actual-fill", "false");
     expect(traderArm.textContent).not.toContain("實際成交");
-    expect(traderArm.textContent).toContain("交易員決策（紙上代理）");
+    expect(traderArm).toHaveTextContent("Execution description: Paper proxy (not an actual fill)");
   });
 
   it("renders degraded status banner when one upstream owner is degraded", async () => {
@@ -252,8 +255,10 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
 
     const banner = await screen.findByTestId("shadow-comparison-degraded");
     expect(banner.textContent).toContain(
-      "attribution=attribution_owner_unavailable",
+      "Partial shadow data",
     );
+    expect(banner).toHaveTextContent("1 additional fields omitted.");
+    expect(banner.textContent).not.toContain("attribution_owner_unavailable");
   });
 
   it("renders explicit empty state when no decision ID is provided", () => {
@@ -278,7 +283,8 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
 
     const nf = await screen.findByTestId("shadow-comparison-not-found");
     expect(nf.textContent).toContain("dec-foreign-99");
-    expect(nf.textContent).toContain("decision_not_found");
+    expect(nf).toHaveAttribute("data-reason", "decision_not_found");
+    expect(nf.textContent).not.toContain("decision_not_found");
   });
 
   it("renders unavailable state with reason when shadow comparison service is down", async () => {
@@ -295,7 +301,9 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
     render(<ShadowComparisonPanel baseUrl={BASE} decisionId="dec-1" />);
 
     const unavail = await screen.findByTestId("shadow-comparison-unavailable");
-    expect(unavail.textContent).toContain("attribution_owner_unconfigured");
+    expect(unavail).toHaveTextContent("Shadow comparison is currently unavailable.");
+    expect(unavail).toHaveAttribute("data-reason", "attribution_owner_unconfigured");
+    expect(unavail.textContent).not.toContain("attribution_owner_unconfigured");
   });
 
   it("switches decision comparisons via read-only GET and exposes no order or capital controls", async () => {
@@ -437,5 +445,39 @@ describe("ShadowComparisonPanel (FE-AGORA-SYSTEM-SUGGESTIONS-20261116)", () => {
       expect(String(call[0])).toContain("/bff/agora/trading-room/decision-events/");
       expect(String(call[0])).not.toContain("/bff/management");
     }
+  });
+});
+
+
+describe("Shadow outcome business fields", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => { cleanup(); globalThis.fetch = realFetch; });
+  it.each(["zh-TW", "en-US"])("labels settlement fields and counts omitted fields in %s", async (locale) => {
+    await i18n.changeLanguage(locale);
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({
+      ...RECORDED_SHADOW_RESPONSE,
+      data: { ...RECORDED_SHADOW_RESPONSE.data, arms: [{
+        ...RECORDED_SHADOW_RESPONSE.data.arms[0],
+        outcome: { return_pct: -0.0125, gross_return_pct: 0, cost_pct: 0.002, realized_pnl: -125, unrealized_pnl: 0, currency: "TWD", entry_price: 940, exit_price: 930, weight: 0.5, direction: -1, slippage_bps: 5, turnover: 2, window_sessions: 5, window_start_date: "2026-11-11", verified: false, new_private_field: { token: "secret-value" }, fill_refs: ["private-fill-id"] },
+      }] },
+    }));
+    render(<ShadowComparisonPanel baseUrl={BASE} decisionId="dec-1" />);
+    const node = await screen.findByTestId("shadow-arm-outcome-trader");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "淨報酬率: -1.25%" : "Net return: -1.25%");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "成本前報酬率: 0%" : "Gross return: 0%");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "已實現損益: -125 TWD" : "Realized P&L: -125 TWD");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "滑價: 5 基點" : "Slippage: 5 bps");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "5 個交易日" : "5 trading sessions");
+    expect(node).toHaveTextContent(locale === "zh-TW" ? "另有 2 個欄位未顯示。" : "2 additional fields omitted.");
+    expect(node.textContent).not.toMatch(/secret|private|return_pct|fill_refs|[{}]/);
+    expect(screen.getByTestId("shadow-arm-source-trader").textContent).not.toContain("pantheon_paper_proxy");
+  });
+  it.each([null, {}, [], { return_pct: { nested: "raw-secret" } }, "raw-secret"])("handles missing or unsupported outcome %j without JSON", async (outcome) => {
+    await i18n.changeLanguage("en-US");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ ...RECORDED_SHADOW_RESPONSE, data: { ...RECORDED_SHADOW_RESPONSE.data, arms: [{ ...RECORDED_SHADOW_RESPONSE.data.arms[0], outcome }] } }));
+    render(<ShadowComparisonPanel baseUrl={BASE} decisionId="dec-1" />);
+    const node = await screen.findByTestId("shadow-arm-outcome-trader");
+    expect(node.textContent).not.toMatch(/raw-secret|nested|[{}[\]]/);
+    expect(node.textContent).toMatch(/—|additional fields omitted/);
   });
 });
