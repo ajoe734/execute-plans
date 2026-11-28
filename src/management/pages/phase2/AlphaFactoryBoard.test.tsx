@@ -426,6 +426,23 @@ describe("AlphaFactoryBoardPage pipeline truth (FE-ALPHA-FACTORY-PIPELINE-TRUTH-
     vi.restoreAllMocks();
   });
 
+  it.each(["en-US", "zh-TW"])("shares market-boundary and counted integrity explanations in %s", async (language) => {
+    await i18n.changeLanguage(language);
+    const rows = ["market_boundary_empty", "template_integrity_mismatch"].map((code) => ({
+      ...SEARCH_FAILED_KNOWN,
+      id: `template-search:${code}`, demand_id: code,
+      reason_code: code,
+      reason: code === "template_integrity_mismatch" ? `template_search_unavailable:${code}:171` : `template_search_unavailable:ValueError:${code}: no symbol passes the boundary of 43572 stored symbols`,
+    }));
+    mockFetch(buildBffAlphaFactoryPayload({ scaffolded: rows }));
+    renderBoard();
+    for (const code of ["market_boundary_empty", "template_integrity_mismatch"]) {
+      const reason = await screen.findByTestId(`alpha-factory-item-reason-template-search:${code}`);
+      expect(reason).toHaveTextContent(i18n.t(`research.demand.reasons.${code}`, { count: 171 }));
+      expect(screen.queryByTestId(`alpha-factory-item-reason-template-search:${code}-raw`)).not.toBeInTheDocument();
+    }
+  });
+
   it("populated: reads only GET /bff/alpha-factory and shows stage counts, plain titles, links and a real pass", async () => {
     const nonReplicatedStrategy: Strategy = {
       id: "strategy-persona-fd1281847a3b1c6a9735",
@@ -487,7 +504,7 @@ describe("AlphaFactoryBoardPage pipeline truth (FE-ALPHA-FACTORY-PIPELINE-TRUTH-
     );
     expect(within(demand).getByTestId("alpha-factory-item-id-rd-momentum")).toHaveTextContent("rd-momentum · persona-momentum");
     expect(within(demand).getByTestId("alpha-factory-item-reason-rd-momentum")).toHaveTextContent(
-      "The persona's mandate has no tradable universe, so no template could be searched.",
+      "The persona mandate has no tradable universe, so templates cannot be searched.",
     );
     expect(within(demand).queryByText(/template_search_unavailable/)).not.toBeInTheDocument();
     expect(within(demand).getByRole("link", { name: /Open persona/ })).toHaveAttribute("href", "/management/personas/persona-momentum");
@@ -505,7 +522,7 @@ describe("AlphaFactoryBoardPage pipeline truth (FE-ALPHA-FACTORY-PIPELINE-TRUTH-
     );
     expect(known).toHaveTextContent("3 attempts");
     expect(within(known).getByTestId("alpha-factory-item-reason-template-search:rd-momentum")).toHaveTextContent(
-      "The persona's mandate has no tradable universe",
+      "The persona mandate has no tradable universe",
     );
     expect(within(known).queryByTestId("alpha-factory-item-reason-template-search:rd-momentum-raw")).not.toBeInTheDocument();
     const unknown = within(scaffolded).getByTestId("alpha-factory-item-template-search:rd-unnamed");

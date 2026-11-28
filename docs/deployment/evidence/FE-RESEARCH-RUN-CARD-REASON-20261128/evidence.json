@@ -1,0 +1,96 @@
+{
+  "task_id": "FE-RESEARCH-RUN-CARD-REASON-20261128",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "delivery_repository": "ajoe734/execute-plans",
+  "branch": "task/FE-RESEARCH-RUN-CARD-REASON-20261128",
+  "base_commit": "b8ee387399289a11d55d2ae9ca4f39ddcb8daa45",
+  "presentation_anchor": "0379119a9",
+  "status": "implementation_anchored_pending_artifact_contract_repair",
+  "scope": {
+    "owned": "Frontend reason rendering, run-local template counts, visible run start time and advisory readability probe",
+    "unchanged": [
+      "BFF/backend",
+      "hosted data",
+      "problem register",
+      "deployment workflows",
+      "credentials"
+    ]
+  },
+  "functional_evidence": [
+    "ResearchDetail tests transcribe all four hosted rtask-20261125-014 run shapes supplied in the task brief, including 171 checksum exclusions and the 43572-symbol boundary detail.",
+    "Both locales render missing-universe, empty-boundary and counted integrity reasons without raw code. Unknown detail renders the generic sentence and secondary code.",
+    "New per-run counts override cumulative receipts and old excluded rows; old nonempty receipts show count not recorded. Completed runs never render a failure reason, including stale rejection data.",
+    "Alpha Factory resolves template search tokens and sentences through the shared research presentation table, including integrity count from detailed reason when the projection code omits it.",
+    "Readability-only --routes replaces baseline routes; per-page failedResearchRunsWithoutReason is computed by a tested pure function and is advisory only."
+  ],
+  "validation": [
+    {
+      "command": "npm ci --no-audit --no-fund",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run typecheck:app (before npm ci)",
+      "exit_code": 127,
+      "result": "tsc was not installed; superseded by successful post-install run"
+    },
+    {
+      "command": "timeout 120s npm run typecheck:app",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 180s npm test -- src/management/pages/ResearchDetail.test.tsx src/management/pages/Lists.test.tsx src/management/pages/ResearchList.test.tsx src/management/pages/phase2/AlphaFactoryBoard.test.tsx",
+      "exit_code": 1,
+      "passed": 59,
+      "failed": 2,
+      "result": "One scope-blocking ResearchList assertion and one Alpha Factory wording mismatch; Alpha Factory assertion subsequently aligned with shared text."
+    },
+    {
+      "command": "DEBUG_PRINT_LIMIT=500 timeout 120s npm test -- src/management/pages/ResearchDetail.test.tsx src/management/pages/phase2/AlphaFactoryBoard.test.tsx",
+      "exit_code": 0,
+      "passed": 25,
+      "failed": 0
+    },
+    {
+      "command": "DEBUG_PRINT_LIMIT=500 timeout 60s npm test -- src/management/pages/ResearchList.test.tsx",
+      "exit_code": 1,
+      "passed": 10,
+      "failed": 1,
+      "result": "ResearchList.test.tsx:224 requires raw text for known template_search_unavailable wrapper, contrary to AC2. File left unchanged because absent from artifact contract."
+    },
+    {
+      "command": "timeout 60s node --test scripts/__tests__/management-readability.test.mjs",
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "command": "node --check scripts/accept-management-hosted-production.mjs",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "changed_existing_assertions": [
+    {
+      "file": "src/management/pages/phase2/AlphaFactoryBoard.test.tsx",
+      "reason": "Two exact English mandate-universe sentence assertions now require the shared research.demand wording. They still assert the same failure meaning and raw-code suppression; no test was removed or weakened."
+    }
+  ],
+  "blocker": {
+    "required_actor": "Human/Ops",
+    "missing_artifact": "execute-plans:src/management/pages/ResearchList.test.tsx",
+    "reason": "AC2 changes known-code raw suppression in shared demandReasonText. Existing ResearchList.test.tsx:224 asserts the previous raw-code behavior. The task brief explicitly requires blocking when a needed file is missing from the artifact contract.",
+    "required_action": "Add execute-plans:src/management/pages/ResearchList.test.tsx to the canonical task artifact contract, then reopen for updating and strengthening this assertion in line with AC2. No scope workaround applied."
+  },
+  "hosted_acceptance": {
+    "status": "pending coordinator after frontend release; not executed by worker",
+    "command": "PANTHEON_FE_BASE_URL=https://app.dev.mvl-cap.tw PANTHEON_BFF_BASE_URL=https://api.dev.mvl-cap.tw node scripts/accept-management-hosted-production.mjs --readability-only true --routes /management/experiments/rtask-20261125-014 --out-dir /tmp/fe-research-run-card-reason-20261128",
+    "authentication": "Coordinator supplies the existing read-only viewer token through BFF_AUTH_TOKEN; no token is recorded here.",
+    "expected": "pages entry for /management/experiments/rtask-20261125-014 has failedResearchRunsWithoutReason = 0",
+    "release_claim": "No dev deployment or hosted success is claimed."
+  },
+  "runtime_budget": "No job or persistent writer added. Manual readability-only probe writes only its existing report file. No VM/SSH access or operator key reads performed."
+}

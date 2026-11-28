@@ -94,7 +94,10 @@ function documentCheckText(reason: string | null | undefined, t: TFn): { text: s
 
 function ReasonLine({ code, fallback, testId }: { code: string | null | undefined; fallback?: string | null; testId: string }) {
   const t = useT();
-  const reason = alphaReasonText(code, t) ?? alphaReasonText(fallback, t);
+  // The short projection code omits integrity counts; retain the recorded detail.
+  const detailedCode = includes(KNOWN_REASON_TOKENS, code) && fallback?.split(":").map((part) => part.trim()).includes(code)
+    ? fallback : code;
+  const reason = alphaReasonText(detailedCode, t) ?? alphaReasonText(fallback, t);
   if (!reason) return null;
   return (
     <div className="text-xs" data-testid={testId}>
